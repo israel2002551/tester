@@ -145,8 +145,6 @@ html { scroll-behavior: smooth; }
 .status-shipped { background: #c7d2fe; color: #3730a3; }
 .status-delivered { background: #d1fae5; color: #065f46; }
 .status-cancelled { background: #fee2e2; color: #991b1b; }
-.status-active { background: #d1fae5; color: #065f46; }
-.status-expired { background: #fee2e2; color: #991b1b; }
 .chatbot-button {
   position: fixed;
   bottom: 6rem;
@@ -265,6 +263,14 @@ html { scroll-behavior: smooth; }
   background: #0284c7;
   color: white;
 }
+.supplier-card {
+  border: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+.supplier-card:hover, .supplier-card.selected {
+  border-color: #10b981;
+  background: #f0fdf4;
+}
 .account-suspended {
   position: fixed;
   inset: 0;
@@ -275,24 +281,6 @@ html { scroll-behavior: smooth; }
   justify-content: center;
 }
 .account-suspended.active { display: flex; }
-.supplier-card {
-  border: 2px solid transparent;
-  transition: all 0.2s ease;
-}
-.supplier-card:hover, .supplier-card.selected {
-  border-color: #10b981;
-  background: #f0fdf4;
-}
-.video-preview {
-  position: relative;
-  background: #000;
-  border-radius: 0.5rem;
-  overflow: hidden;
-}
-.video-preview video {
-  width: 100%;
-  max-height: 200px;
-}
 </style>
 </head>
 <body class="bg-neutral-50 text-neutral-900">
@@ -343,7 +331,7 @@ html { scroll-behavior: smooth; }
             <span class="text-xs font-medium bg-brand-500/30 px-3 py-1 rounded-full text-white">1 Month Free</span>
           </div>
           <h2 class="text-3xl font-heading font-bold text-white mb-3">I'm a Seller</h2>
-          <p class="text-neutral-300 mb-6 leading-relaxed">Open your store FREE for 1 month! Upload products with videos, sell anything, or start dropshipping with affiliate earnings.</p>
+          <p class="text-neutral-300 mb-6 leading-relaxed">Open your store FREE for 1 month! Upload products with videos, sell anything, or start dropshipping.</p>
           <div class="flex items-center gap-4 mb-6">
             <div class="flex items-center gap-2 text-sm text-neutral-300">
               <i class="fa-solid fa-calendar-check text-brand-400"></i>
@@ -370,7 +358,7 @@ html { scroll-behavior: smooth; }
   </div>
 </div>
 
-<!-- ================= ACCOUNT SUSPENDED MODAL (NEW) ================= -->
+<!-- ================= ACCOUNT SUSPENDED MODAL ================= -->
 <div id="account-suspended" class="account-suspended">
   <div class="bg-white rounded-2xl p-8 max-w-md w-full mx-4 text-center">
     <div class="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -885,7 +873,7 @@ html { scroll-behavior: smooth; }
       </div>
     </div>
 
-    <!-- Dropshipping Section (NEW - FULLY FUNCTIONAL) -->
+    <!-- Dropshipping Section -->
     <div id="seller-dropshipping" class="seller-section hidden-section">
       <div class="mb-8">
         <h1 class="text-3xl font-heading font-bold mb-2">
@@ -956,7 +944,7 @@ html { scroll-behavior: smooth; }
       </div>
     </div>
 
-    <!-- Settings Section (NEW - WITH BANK ACCOUNT) -->
+    <!-- Settings Section -->
     <div id="seller-settings" class="seller-section hidden-section">
       <div class="mb-8">
         <h1 class="text-3xl font-heading font-bold mb-2">Store Settings</h1>
@@ -999,7 +987,7 @@ html { scroll-behavior: smooth; }
       </div>
     </div>
 
-    <!-- Add Product Section (NEW - WITH VIDEO UPLOAD) -->
+    <!-- Add Product Section -->
     <div id="seller-add-product" class="seller-section hidden-section">
       <div class="mb-8">
         <h1 class="text-3xl font-heading font-bold mb-2">Add New Product</h1>
@@ -1066,7 +1054,7 @@ html { scroll-behavior: smooth; }
           </div>
           <button type="submit" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg w-full flex justify-center items-center gap-2">
             <span id="upload-btn-text">Publish Product</span>
-            <div id="upload-spinner" class="loading-spinner hidden border-white border-t-transparent"></div>
+            <div id="upload-spinner" class="loading-spinner hidden border-white border-t-transparent inline-block ml-2"></div>
           </button>
         </form>
       </div>
@@ -1158,7 +1146,7 @@ html { scroll-behavior: smooth; }
 </div>
 
 <!-- ================= MODALS ================= -->
-<!-- Login/Register Modal (NEW - WITH SELLER ACCOUNT FIELD) -->
+<!-- Login/Register Modal -->
 <div id="auth-modal" class="modal">
   <div class="modal-content p-6 relative max-w-md">
     <button onclick="closeModal('auth-modal')" class="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600">
@@ -1233,7 +1221,7 @@ html { scroll-behavior: smooth; }
   </div>
 </div>
 
-<!-- Checkout Modal (NEW - SHOWS SELLER ACCOUNT) -->
+<!-- Checkout Modal -->
 <div id="checkout-modal" class="modal">
   <div class="modal-content p-6 relative max-w-3xl max-h-[90vh] overflow-y-auto">
     <button onclick="closeModal('checkout-modal')" class="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600">
@@ -1337,7 +1325,7 @@ html { scroll-behavior: smooth; }
       </div>
       <button type="submit" class="btn-primary text-white font-semibold px-6 py-4 rounded-lg w-full flex items-center justify-center gap-2">
         <span id="checkout-btn-text">Submit Order</span>
-        <div id="checkout-spinner" class="loading-spinner hidden"></div>
+        <div id="checkout-spinner" class="loading-spinner hidden border-white border-t-transparent inline-block ml-2"></div>
       </button>
     </form>
   </div>
@@ -1481,10 +1469,10 @@ const COMMISSION_AMOUNT = 5000;
 const FREE_TRIAL_DAYS = 30;
 
 const chatbotQA = {
-  'how do i buy': 'To buy: 1️⃣ Browse products 2️⃣ Add to cart 3️⃣ Checkout 4️⃣ Pay directly to seller\'s account 5️⃣ Upload receipt 6️⃣ Seller contacts you on WhatsApp! 🛒',
-  'how do i sell': 'To sell: 1️⃣ Sign up as seller 2️⃣ Add your bank account 3️⃣ List products (FREE for 1 month) 4️⃣ Receive payments directly 5️⃣ Pay ₦5,000 after trial ends! 💰',
-  'payment': 'Buyers pay sellers DIRECTLY via bank transfer. Each seller provides their account number during checkout. Upload receipt as proof! 💳',
-  'commission': 'Sellers get 1 month FREE trial. After that, pay ₦5,000 to OPay: 9061484256 (Efe Israel). Upload receipt to continue! 💵',
+  'how do i buy': 'To buy: 1️⃣ Browse products 2️⃣ Add to cart 3️⃣ Checkout 4️⃣ Pay to seller 5️⃣ Upload receipt 6️⃣ Seller contacts you! 🛒',
+  'how do i sell': 'To sell: 1️⃣ Sign up 2️⃣ Add bank account 3️⃣ List products (FREE 1 month) 4️⃣ Receive payments 5️⃣ Pay ₦5,000 after trial! 💰',
+  'payment': 'Buyers pay sellers DIRECTLY via bank transfer. Upload receipt as proof! 💳',
+  'commission': 'Sellers get 1 month FREE. After that, pay ₦5,000 to OPay: 9061484256 (Efe Israel). Upload receipt to continue! 💵',
   'dropshipping': 'Yes! Import from AliExpress, CJ Dropshipping, or any supplier. Set your margin (30-50%), list on BUYSELL, and when you get an order, forward it to your supplier. They ship directly to your customer! 🌍',
   'default': 'Contact WhatsApp support: +234 906 148 4256 📱'
 };
@@ -1514,9 +1502,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   startCarousel();
 });
 
+// ==========================================
+// AUTHENTICATION
+// ==========================================
 async function checkAuth() {
   try {
-    const { data: { session } } = await supabaseClient.auth.getSession();
+    const response = await supabaseClient.auth.getSession();
+    const session = response.data?.session;
     currentUser = session?.user || null;
     updateAuthUI();
     if (currentUser) {
@@ -1531,11 +1523,8 @@ async function checkAuth() {
 async function checkSellerSubscription() {
   if (!currentUser) return;
   try {
-    const {  sellerData } = await supabaseClient
-      .from('sellers')
-      .select('*')
-      .eq('user_id', currentUser.id)
-      .single();
+    const response = await supabaseClient.from('sellers').select('*').eq('user_id', currentUser.id).single();
+    const sellerData = response.data;
     
     if (sellerData) {
       const trialEndDate = new Date(sellerData.trial_end_date);
@@ -1553,60 +1542,162 @@ async function checkSellerSubscription() {
   }
 }
 
-// ==========================================
-// CHATBOT FUNCTIONS
-// ==========================================
-function toggleChatbot() {
-  chatbotOpen = !chatbotOpen;
-  const chatWindow = document.getElementById('chatbot-window');
-  if (chatbotOpen) {
-    chatWindow.classList.add('active');
+function showLoginModal() {
+  document.getElementById('auth-modal').classList.add('active');
+}
+
+function closeModal(modalId) {
+  document.getElementById(modalId).classList.remove('active');
+}
+
+function toggleAuthMode(mode) {
+  const loginForm = document.getElementById('login-form');
+  const registerForm = document.getElementById('register-form');
+  if (mode === 'register') {
+    loginForm.classList.add('hidden');
+    registerForm.classList.remove('hidden');
   } else {
-    chatWindow.classList.remove('active');
+    loginForm.classList.remove('hidden');
+    registerForm.classList.add('hidden');
   }
 }
 
-function handleChatInput(e) {
-  if (e.key === 'Enter') sendChatMessage();
-}
-
-function sendChatMessage() {
-  const input = document.getElementById('chatbot-input');
-  const message = input.value.trim();
-  if (!message) return;
-  addChatMessage(message, 'user');
-  input.value = '';
-  setTimeout(() => {
-    const response = getChatbotResponse(message);
-    addChatMessage(response, 'bot');
-  }, 500);
-}
-
-function askQuestion(question) {
-  addChatMessage(question, 'user');
-  setTimeout(() => {
-    const response = getChatbotResponse(question);
-    addChatMessage(response, 'bot');
-  }, 500);
-}
-
-function addChatMessage(message, sender) {
-  const messagesContainer = document.getElementById('chatbot-messages');
-  const messageHTML = `
-    <div class="chat-message ${sender}">
-      ${sender === 'bot' ? `<div class="w-8 h-8 bg-brand-100 rounded-full flex items-center justify-center flex-shrink-0"><i class="fa-solid fa-robot text-brand-600 text-sm"></i></div>` : ''}
-      <div class="chat-message-content">${message}</div>
-    </div>`;
-  messagesContainer.innerHTML += messageHTML;
-  messagesContainer.scrollTop = messagesContainer.scrollHeight;
-}
-
-function getChatbotResponse(question) {
-  const lowerQuestion = question.toLowerCase();
-  for (const [key, answer] of Object.entries(chatbotQA)) {
-    if (lowerQuestion.includes(key)) return answer;
+function toggleSellerField() {
+  const userType = document.getElementById('reg-usertype').value;
+  const sellerField = document.getElementById('seller-account-field');
+  if (userType === 'seller' || userType === 'both') {
+    sellerField.classList.remove('hidden');
+  } else {
+    sellerField.classList.add('hidden');
   }
-  return chatbotQA['default'];
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
+  
+  const response = await supabaseClient.auth.signInWithPassword({ email, password });
+  
+  if (response.error) {
+    showToast(response.error.message, 'error');
+    return;
+  }
+  
+  currentUser = response.data.user;
+  closeModal('auth-modal');
+  updateAuthUI();
+  showToast('Welcome back! 👋', 'success');
+  loadUserProfile();
+}
+
+async function handleRegister(e) {
+  e.preventDefault();
+  const firstName = document.getElementById('reg-firstname').value;
+  const lastName = document.getElementById('reg-lastname').value;
+  const email = document.getElementById('reg-email').value;
+  const password = document.getElementById('reg-password').value;
+  const userType = document.getElementById('reg-usertype').value;
+  const whatsapp = document.getElementById('reg-whatsapp').value;
+  const accountNumber = document.getElementById('reg-account-number')?.value || '';
+
+  const response = await supabaseClient.auth.signUp({
+    email: email,
+    password: password,
+    options: {
+      data: {
+        first_name: firstName,
+        last_name: lastName,
+        user_type: userType,
+        whatsapp_number: whatsapp
+      }
+    }
+  });
+
+  if (response.error) {
+    showToast(response.error.message, 'error');
+    return;
+  }
+
+  if (response.data.user) {
+    await supabaseClient.from('users').insert({
+      id: response.data.user.id,
+      email: email,
+      first_name: firstName,
+      last_name: lastName,
+      user_type: userType,
+      whatsapp_number: whatsapp,
+      created_at: new Date().toISOString()
+    });
+
+    if (userType === 'seller' || userType === 'both') {
+      const trialEndDate = new Date();
+      trialEndDate.setDate(trialEndDate.getDate() + FREE_TRIAL_DAYS);
+      await supabaseClient.from('sellers').insert({
+        user_id: response.data.user.id,
+        account_number: accountNumber,
+        trial_start_date: new Date().toISOString(),
+        trial_end_date: trialEndDate.toISOString(),
+        commission_paid: false,
+        status: 'active'
+      });
+    }
+  }
+
+  currentUser = response.data.user;
+  closeModal('auth-modal');
+  updateAuthUI();
+  showToast('Account created! Welcome to BUYSELL 🎉', 'success');
+}
+
+async function logoutUser() {
+  await supabaseClient.auth.signOut();
+  currentUser = null;
+  updateAuthUI();
+  location.reload();
+}
+
+function updateAuthUI() {
+  const authButtons = document.getElementById('auth-buttons');
+  const userActions = document.getElementById('user-actions');
+  if (currentUser) {
+    authButtons.classList.add('hidden');
+    userActions.classList.remove('hidden');
+  } else {
+    authButtons.classList.remove('hidden');
+    userActions.classList.add('hidden');
+  }
+}
+
+async function loadUserProfile() {
+  if (!currentUser) return;
+  try {
+    const response = await supabaseClient.from('users').select('*').eq('id', currentUser.id).single();
+    const userData = response.data;
+    if (userData) {
+      document.getElementById('seller-name').textContent = userData.first_name || currentUser.email?.split('@')[0] || 'User';
+      document.getElementById('seller-email').textContent = currentUser.email;
+    }
+
+    const sellerResponse = await supabaseClient.from('sellers').select('*').eq('user_id', currentUser.id).single();
+    const sellerData = sellerResponse.data;
+    if (sellerData) {
+      document.getElementById('seller-account-number').value = sellerData.account_number || '';
+      document.getElementById('seller-bank-name').value = sellerData.bank_name || '';
+      document.getElementById('seller-account-name').value = sellerData.account_name || '';
+      
+      const trialEndDate = new Date(sellerData.trial_end_date);
+      const today = new Date();
+      const daysLeft = Math.ceil((trialEndDate - today) / (1000 * 60 * 60 * 24));
+      
+      document.getElementById('trial-end-date').textContent = trialEndDate.toLocaleDateString();
+      document.getElementById('stat-days-left').textContent = daysLeft > 0 ? `${daysLeft} days left` : 'Expired';
+      document.getElementById('commission-status-badge').textContent = sellerData.commission_paid ? 'Paid' : 'Active';
+      document.getElementById('commission-status-badge').className = `px-3 py-1 rounded-full text-sm font-medium ${sellerData.commission_paid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`;
+    }
+  } catch (e) {
+    console.log('Profile load error:', e);
+  }
 }
 
 // ==========================================
@@ -1666,164 +1757,63 @@ function showSellerSection(sectionId) {
 }
 
 // ==========================================
-// AUTHENTICATION
+// CHATBOT
 // ==========================================
-function showLoginModal() {
-  document.getElementById('auth-modal').classList.add('active');
-}
-
-function closeModal(modalId) {
-  document.getElementById(modalId).classList.remove('active');
-}
-
-function toggleAuthMode(mode) {
-  const loginForm = document.getElementById('login-form');
-  const registerForm = document.getElementById('register-form');
-  if (mode === 'register') {
-    loginForm.classList.add('hidden');
-    registerForm.classList.remove('hidden');
+function toggleChatbot() {
+  chatbotOpen = !chatbotOpen;
+  const chatWindow = document.getElementById('chatbot-window');
+  if (chatbotOpen) {
+    chatWindow.classList.add('active');
   } else {
-    loginForm.classList.remove('hidden');
-    registerForm.classList.add('hidden');
+    chatWindow.classList.remove('active');
   }
 }
 
-function toggleSellerField() {
-  const userType = document.getElementById('reg-usertype').value;
-  const sellerField = document.getElementById('seller-account-field');
-  if (userType === 'seller' || userType === 'both') {
-    sellerField.classList.remove('hidden');
-  } else {
-    sellerField.classList.add('hidden');
-  }
+function handleChatInput(e) {
+  if (e.key === 'Enter') sendChatMessage();
 }
 
-async function handleLogin(e) {
-  e.preventDefault();
-  const email = document.getElementById('login-email').value;
-  const password = document.getElementById('login-password').value;
-  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-  if (error) {
-    showToast(error.message, 'error');
-    return;
-  }
-  currentUser = data.user;
-  closeModal('auth-modal');
-  updateAuthUI();
-  await checkSellerSubscription();
-  showToast('Welcome back! 👋', 'success');
-  loadUserProfile();
+function sendChatMessage() {
+  const input = document.getElementById('chatbot-input');
+  const message = input.value.trim();
+  if (!message) return;
+  addChatMessage(message, 'user');
+  input.value = '';
+  setTimeout(() => {
+    const response = getChatbotResponse(message);
+    addChatMessage(response, 'bot');
+  }, 500);
 }
 
-async function handleRegister(e) {
-  e.preventDefault();
-  const firstName = document.getElementById('reg-firstname').value;
-  const lastName = document.getElementById('reg-lastname').value;
-  const email = document.getElementById('reg-email').value;
-  const password = document.getElementById('reg-password').value;
-  const userType = document.getElementById('reg-usertype').value;
-  const whatsapp = document.getElementById('reg-whatsapp').value;
-  const accountNumber = document.getElementById('reg-account-number')?.value || '';
-
-  const { data, error } = await supabaseClient.auth.signUp({
-    email,
-    password,
-    options: {
-       {
-        first_name: firstName,
-        last_name: lastName,
-        user_type: userType,
-        whatsapp_number: whatsapp
-      }
-    }
-  });
-
-  if (error) {
-    showToast(error.message, 'error');
-    return;
-  }
-
-  if (data.user) {
-    await supabaseClient.from('users').insert({
-      id: data.user.id,
-      email: email,
-      first_name: firstName,
-      last_name: lastName,
-      user_type: userType,
-      whatsapp_number: whatsapp,
-      created_at: new Date().toISOString()
-    });
-
-    if (userType === 'seller' || userType === 'both') {
-      const trialEndDate = new Date();
-      trialEndDate.setDate(trialEndDate.getDate() + FREE_TRIAL_DAYS);
-      await supabaseClient.from('sellers').insert({
-        user_id: data.user.id,
-        account_number: accountNumber,
-        trial_start_date: new Date().toISOString(),
-        trial_end_date: trialEndDate.toISOString(),
-        commission_paid: false,
-        status: 'active'
-      });
-    }
-  }
-
-  currentUser = data.user;
-  closeModal('auth-modal');
-  updateAuthUI();
-  showToast('Account created! Welcome to BUYSELL 🎉', 'success');
+function askQuestion(question) {
+  addChatMessage(question, 'user');
+  setTimeout(() => {
+    const response = getChatbotResponse(question);
+    addChatMessage(response, 'bot');
+  }, 500);
 }
 
-async function logoutUser() {
-  await supabaseClient.auth.signOut();
-  currentUser = null;
-  updateAuthUI();
-  location.reload();
+function addChatMessage(message, sender) {
+  const messagesContainer = document.getElementById('chatbot-messages');
+  const messageHTML = `
+    <div class="chat-message ${sender}">
+      ${sender === 'bot' ? `<div class="w-8 h-8 bg-brand-100 rounded-full flex items-center justify-center flex-shrink-0"><i class="fa-solid fa-robot text-brand-600 text-sm"></i></div>` : ''}
+      <div class="chat-message-content">${message}</div>
+    </div>`;
+  messagesContainer.innerHTML += messageHTML;
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-function updateAuthUI() {
-  const authButtons = document.getElementById('auth-buttons');
-  const userActions = document.getElementById('user-actions');
-  if (currentUser) {
-    authButtons.classList.add('hidden');
-    userActions.classList.remove('hidden');
-  } else {
-    authButtons.classList.remove('hidden');
-    userActions.classList.add('hidden');
+function getChatbotResponse(question) {
+  const lowerQuestion = question.toLowerCase();
+  for (const [key, answer] of Object.entries(chatbotQA)) {
+    if (lowerQuestion.includes(key)) return answer;
   }
-}
-
-async function loadUserProfile() {
-  if (!currentUser) return;
-  try {
-    const {  userData } = await supabaseClient.from('users').select('*').eq('id', currentUser.id).single();
-    if (userData) {
-      document.getElementById('seller-name').textContent = userData.first_name || currentUser.email?.split('@')[0] || 'User';
-      document.getElementById('seller-email').textContent = currentUser.email;
-    }
-
-    const {  sellerData } = await supabaseClient.from('sellers').select('*').eq('user_id', currentUser.id).single();
-    if (sellerData) {
-      document.getElementById('seller-account-number').value = sellerData.account_number || '';
-      document.getElementById('seller-bank-name').value = sellerData.bank_name || '';
-      document.getElementById('seller-account-name').value = sellerData.account_name || '';
-      
-      const trialEndDate = new Date(sellerData.trial_end_date);
-      const today = new Date();
-      const daysLeft = Math.ceil((trialEndDate - today) / (1000 * 60 * 60 * 24));
-      
-      document.getElementById('trial-end-date').textContent = trialEndDate.toLocaleDateString();
-      document.getElementById('stat-days-left').textContent = daysLeft > 0 ? `${daysLeft} days left` : 'Expired';
-      document.getElementById('commission-status-badge').textContent = sellerData.commission_paid ? 'Paid' : 'Active';
-      document.getElementById('commission-status-badge').className = `px-3 py-1 rounded-full text-sm font-medium ${sellerData.commission_paid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`;
-    }
-  } catch (e) {
-    console.log('Profile load error:', e);
-  }
+  return chatbotQA['default'];
 }
 
 // ==========================================
-// PRODUCT FUNCTIONS
+// PRODUCTS
 // ==========================================
 async function loadProducts(filters = {}) {
   document.getElementById('loading-products').classList.remove('hidden');
@@ -1833,12 +1823,9 @@ async function loadProducts(filters = {}) {
     if (filters.category && filters.category !== 'all') {
       query = query.eq('category', filters.category);
     }
-    if (filters.hasVideo) {
-      query = query.eq('has_video', true);
-    }
-    const { data, error } = await query;
-    if (error) throw error;
-    products = data || [];
+    const response = await query;
+    if (response.error) throw response.error;
+    products = response.data || [];
     document.getElementById('product-count').textContent = products.length;
     document.getElementById('loading-products').classList.add('hidden');
     if (products.length === 0) {
@@ -1865,7 +1852,7 @@ function renderProducts(productsToRender) {
           <img src="${product.image_url || 'https://via.placeholder.com/300'}" class="w-full h-40 object-cover" onerror="this.src='https://via.placeholder.com/300?text=No+Image'">
           ${product.has_video ? `<span class="absolute top-2 right-2 video-badge text-xs px-2 py-1 rounded text-white"><i class="fa-solid fa-video"></i></span>` : ''}
           ${discount > 0 ? `<span class="absolute top-2 left-2 price-badge text-white text-xs font-bold px-2 py-1 rounded">-${discount}%</span>` : ''}
-          ${product.category === 'dropship' ? `<span class="absolute bottom-2 left-2 dropship-badge text-white text-xs px-2 py-1 rounded flex items-center gap-1"><i class="fa-solid fa-globe"></i> Dropship</span>` : ''}
+          ${product.category === 'dropship' ? `<span class="absolute bottom-2 left-2 dropship-badge text-white text-xs px-2 py-1 rounded"><i class="fa-solid fa-globe"></i> Dropship</span>` : ''}
           <button onclick="event.stopPropagation(); addToCart('${product.id}')" class="absolute bottom-2 right-2 bg-brand-600 hover:bg-brand-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition opacity-0 group-hover:opacity-100">
             <i class="fa-solid fa-cart-plus mr-1"></i> Add
           </button>
@@ -1875,10 +1862,6 @@ function renderProducts(productsToRender) {
           <div class="flex items-baseline gap-2">
             <span class="text-lg font-bold text-neutral-900">₦${product.price?.toLocaleString() || '0'}</span>
             ${product.original_price ? `<span class="text-sm text-neutral-400 line-through">₦${product.original_price.toLocaleString()}</span>` : ''}
-          </div>
-          <div class="flex items-center gap-1 mt-2 text-xs text-neutral-500">
-            <i class="fa-solid fa-location-dot text-brand-600"></i>
-            <span class="truncate">${product.location || 'Nigeria'}</span>
           </div>
           <button onclick="event.stopPropagation(); addToCart('${product.id}')" class="w-full mt-3 bg-brand-600 hover:bg-brand-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition md:hidden">
             <i class="fa-solid fa-cart-plus mr-1"></i> Add to Cart
@@ -1990,7 +1973,8 @@ async function showCheckout() {
   
   // Get seller account info
   if (cart[0]?.seller_id) {
-    const {  sellerData } = await supabaseClient.from('sellers').select('*').eq('user_id', cart[0].seller_id).single();
+    const response = await supabaseClient.from('sellers').select('*').eq('user_id', cart[0].seller_id).single();
+    const sellerData = response.data;
     if (sellerData) {
       document.getElementById('seller-account').textContent = sellerData.account_number || 'Not provided';
       document.getElementById('seller-bank').textContent = sellerData.bank_name || 'Not provided';
@@ -2034,7 +2018,8 @@ function removeReceipt() {
 
 async function submitOrder(event) {
   event.preventDefault();
-  if (!receiptFile) {
+  const receiptInput = document.getElementById('receipt-file');
+  if (!receiptInput.files[0]) {
     showToast('Please upload payment receipt', 'error');
     return;
   }
@@ -2049,11 +2034,13 @@ async function submitOrder(event) {
   checkoutSpinner.classList.remove('hidden');
 
   try {
+    const receiptFile = receiptInput.files[0];
     const receiptFileName = `receipts/${currentUser.id}-${Date.now()}.${receiptFile.name.split('.').pop()}`;
-    const { error: uploadError } = await supabaseClient.storage.from('receipts').upload(receiptFileName, receiptFile);
-    if (uploadError) throw uploadError;
+    const uploadResponse = await supabaseClient.storage.from('receipts').upload(receiptFileName, receiptFile);
+    if (uploadResponse.error) throw uploadResponse.error;
 
-    const {  urlData } = supabaseClient.storage.from('receipts').getPublicUrl(receiptFileName);
+    const urlResponse = supabaseClient.storage.from('receipts').getPublicUrl(receiptFileName);
+    const publicUrl = urlResponse.data.publicUrl;
 
     const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const buyerName = document.getElementById('buyer-name').value;
@@ -2063,7 +2050,7 @@ async function submitOrder(event) {
     const buyerCity = document.getElementById('buyer-city').value;
     const buyerAddress = document.getElementById('buyer-address').value;
 
-    const { error: orderError } = await supabaseClient.from('orders').insert([{
+    const orderResponse = await supabaseClient.from('orders').insert([{
       buyer_id: currentUser.id,
       seller_id: cart[0].seller_id,
       total_amount: total,
@@ -2075,11 +2062,11 @@ async function submitOrder(event) {
       delivery_state: buyerState,
       delivery_city: buyerCity,
       delivery_address: buyerAddress,
-      payment_receipt_url: urlData.publicUrl,
+      payment_receipt_url: publicUrl,
       created_at: new Date().toISOString()
     }]);
 
-    if (orderError) throw orderError;
+    if (orderResponse.error) throw orderResponse.error;
 
     showToast('Order placed! Seller will contact you on WhatsApp 🎉', 'success');
     closeModal('checkout-modal');
@@ -2117,10 +2104,6 @@ function filterByCategory(category) {
   } else {
     loadProducts({ category });
   }
-}
-
-function filterByVideo() {
-  loadProducts({ hasVideo: true });
 }
 
 function sortProducts() {
@@ -2181,8 +2164,9 @@ async function loadSellerDashboard() {
 async function loadSellerStats() {
   if (!currentUser) return;
   try {
-    const { count: productsCount } = await supabaseClient.from('products').select('*', { count: 'exact', head: true }).eq('seller_id', currentUser.id).eq('status', 'active');
-    if(document.getElementById('stat-products')) document.getElementById('stat-products').textContent = productsCount || 0;
+    const response = await supabaseClient.from('products').select('*', { count: 'exact', head: true }).eq('seller_id', currentUser.id).eq('status', 'active');
+    const productsCount = response.count || 0;
+    if(document.getElementById('stat-products')) document.getElementById('stat-products').textContent = productsCount;
   } catch(e) {
     console.log("Could not load seller stats");
   }
@@ -2202,9 +2186,9 @@ async function loadSellerProducts() {
     if (filter !== 'all') {
       query = query.eq('status', filter);
     }
-    const { data, error } = await query.order('created_at', { ascending: false });
-    if (error) throw error;
-    sellerProducts = data || [];
+    const response = await query.order('created_at', { ascending: false });
+    if (response.error) throw response.error;
+    sellerProducts = response.data || [];
     loading.classList.add('hidden');
     if (sellerProducts.length === 0) {
       empty.classList.remove('hidden');
@@ -2233,14 +2217,9 @@ function renderSellerProducts(products) {
         </div>
       </div>
       <div class="flex flex-col gap-2">
-        <button onclick="editProduct('${product.id}')" class="text-blue-600 hover:text-blue-800 text-sm"><i class="fa-solid fa-pen"></i> Edit</button>
         <button onclick="deleteProduct('${product.id}')" class="text-red-600 hover:text-red-800 text-sm"><i class="fa-solid fa-trash"></i> Delete</button>
       </div>
     </div>`).join('');
-}
-
-async function editProduct(productId) {
-  showToast('Edit product feature coming soon!', 'info');
 }
 
 async function deleteProduct(productId) {
@@ -2263,8 +2242,9 @@ async function loadSellerOrders() {
   list.classList.add('hidden');
   empty.classList.add('hidden');
   try {
-    const { data, error } = await supabaseClient.from('orders').select('*, buyer:users(first_name, last_name, phone, whatsapp_number)').eq('seller_id', currentUser.id).order('created_at', { ascending: false });
-    if (error) throw error;
+    const response = await supabaseClient.from('orders').select('*, buyer:users(first_name, last_name, phone, whatsapp_number)').eq('seller_id', currentUser.id).order('created_at', { ascending: false });
+    if (response.error) throw response.error;
+    const data = response.data;
     loading.classList.add('hidden');
     if (!data || data.length === 0) {
       empty.classList.remove('hidden');
@@ -2297,44 +2277,19 @@ function renderOrders(orders) {
           </div>
           <span class="px-3 py-1 rounded-full text-xs font-medium ${statusClass}">${order.status}</span>
         </div>
-        <div class="grid md:grid-cols-2 gap-4 mb-3">
-          <div>
-            <div class="text-sm font-medium mb-1">Buyer</div>
-            <div class="text-sm">${order.buyer?.first_name || 'N/A'} ${order.buyer?.last_name || ''}</div>
-            <div class="text-sm text-neutral-500">${order.buyer?.phone || order.buyer?.whatsapp_number || 'N/A'}</div>
-          </div>
-          <div class="text-right">
-            <div class="text-sm font-medium mb-1">Total</div>
-            <div class="text-lg font-bold text-brand-600">₦${order.total_amount?.toLocaleString()}</div>
-          </div>
-        </div>
         <div class="flex gap-2 flex-wrap">
-          ${order.status === 'pending' ? `<button onclick="updateOrderStatus('${order.id}', 'paid')" class="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">Confirm Payment</button>` : ''}
-          ${order.status === 'paid' ? `<button onclick="updateOrderStatus('${order.id}', 'processing')" class="px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700">Start Processing</button>` : ''}
-          ${order.status === 'processing' ? `<button onclick="updateOrderStatus('${order.id}', 'shipped')" class="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700">Mark as Shipped</button>` : ''}
-          ${order.status === 'shipped' ? `<button onclick="updateOrderStatus('${order.id}', 'delivered')" class="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">Mark as Delivered</button>` : ''}
           <a href="https://wa.me/${order.buyer?.whatsapp_number || order.buyer?.phone}" target="_blank" class="px-3 py-1.5 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 flex items-center gap-1"><i class="fa-brands fa-whatsapp"></i> Contact Buyer</a>
         </div>
       </div>`;
   }).join('');
 }
 
-async function updateOrderStatus(orderId, newStatus) {
-  try {
-    await supabaseClient.from('orders').update({ status: newStatus }).eq('id', orderId);
-    showToast(`Order marked as ${newStatus}`, 'success');
-    loadSellerOrders();
-  } catch(e) {
-    showToast('Failed to update order', 'error');
-  }
-}
-
 async function loadCommissionStatus() {
   if (!currentUser) return;
   try {
-    const {  commission } = await supabaseClient.from('seller_commissions').select('*').eq('seller_id', currentUser.id).single();
+    const response = await supabaseClient.from('seller_commissions').select('*').eq('seller_id', currentUser.id).single();
+    const commission = response.data;
     if (commission) {
-      document.getElementById('commission-due-date').textContent = new Date(commission.commission_due_date).toLocaleDateString();
       document.getElementById('commission-status-badge').textContent = commission.commission_paid ? 'Paid' : 'Active';
     }
   } catch(e) {
@@ -2348,37 +2303,39 @@ function showCommissionModal() {
 
 async function submitCommissionPayment(event) {
   event.preventDefault();
-  const receiptFile = document.getElementById('commission-receipt').files[0];
-  if (!receiptFile) {
+  const receiptInput = document.getElementById('commission-receipt');
+  if (!receiptInput.files[0]) {
     showToast('Please upload receipt', 'error');
     return;
   }
 
   try {
+    const receiptFile = receiptInput.files[0];
     const receiptFileName = `commissions/${currentUser.id}-${Date.now()}.${receiptFile.name.split('.').pop()}`;
-    const { error: uploadError } = await supabaseClient.storage.from('receipts').upload(receiptFileName, receiptFile);
-    if (uploadError) throw uploadError;
+    const uploadResponse = await supabaseClient.storage.from('receipts').upload(receiptFileName, receiptFile);
+    if (uploadResponse.error) throw uploadResponse.error;
 
-    const { data: urlData } = supabaseClient.storage.from('receipts').getPublicUrl(receiptFileName);
+    const urlResponse = supabaseClient.storage.from('receipts').getPublicUrl(receiptFileName);
+    const publicUrl = urlResponse.data.publicUrl;
     const reference = document.getElementById('commission-reference').value;
 
-    const { error: dbError } = await supabaseClient.from('seller_commissions').upsert([{
+    const dbResponse = await supabaseClient.from('seller_commissions').upsert([{
       seller_id: currentUser.id,
       commission_amount: COMMISSION_AMOUNT,
       commission_paid: false,
-      payment_receipt_url: urlData.publicUrl,
+      payment_receipt_url: publicUrl,
       transaction_reference: reference,
       paid_at: new Date().toISOString(),
       status: 'pending_verification'
     }]);
 
-    if (dbError) throw dbError;
+    if (dbResponse.error) throw dbResponse.error;
 
-    showToast('Payment receipt submitted! Admin will verify and restore access within 24 hours ✅', 'success');
+    showToast('Payment receipt submitted! Admin will verify within 24 hours ✅', 'success');
     closeModal('commission-modal');
     
     // Notify admin via WhatsApp
-    const message = `🔔 *NEW COMMISSION PAYMENT*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n👤 Seller: ${currentUser.email}\n💵 Amount: ₦${COMMISSION_AMOUNT}\n📅 Date: ${new Date().toLocaleString()}\n📝 Reference: ${reference || 'N/A'}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nPlease verify and restore seller access.`;
+    const message = `🔔 *NEW COMMISSION PAYMENT*\n👤 Seller: ${currentUser.email}\n💵 Amount: ₦${COMMISSION_AMOUNT}\n📅 Date: ${new Date().toLocaleString()}\nPlease verify and restore seller access.`;
     const whatsappURL = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent(message)}`;
     window.open(whatsappURL, '_blank');
     
@@ -2416,7 +2373,7 @@ async function loadAffiliateEarnings() {
 }
 
 function requestWithdrawal() {
-  const message = `💰 *WITHDRAWAL REQUEST*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n👤 Seller: ${currentUser.email}\n💵 Amount: ₦0\n📅 Date: ${new Date().toLocaleString()}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nPlease process withdrawal to my account.`;
+  const message = `💰 *WITHDRAWAL REQUEST*\n👤 Seller: ${currentUser.email}\n💵 Amount: ₦0\n📅 Date: ${new Date().toLocaleString()}\nPlease process withdrawal to my account.`;
   const whatsappURL = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent(message)}`;
   window.open(whatsappURL, '_blank');
   showToast('Withdrawal request sent via WhatsApp!', 'success');
@@ -2439,19 +2396,20 @@ async function handleProductUpload(event) {
   try {
     const imageFile = document.getElementById('prod-image').files[0];
     const fileName = `${currentUser.id}-${Date.now()}.${imageFile.name.split('.').pop()}`;
-    const { error: uploadError } = await supabaseClient.storage.from('products').upload(fileName, imageFile);
-    if (uploadError) throw uploadError;
+    const uploadResponse = await supabaseClient.storage.from('products').upload(fileName, imageFile);
+    if (uploadResponse.error) throw uploadResponse.error;
 
-    const { data: { publicUrl } } = supabaseClient.storage.from('products').getPublicUrl(fileName);
+    const urlResponse = supabaseClient.storage.from('products').getPublicUrl(fileName);
+    const publicUrl = urlResponse.data.publicUrl;
 
     let videoUrl = null;
     const videoFile = document.getElementById('prod-video').files[0];
     if (videoFile) {
       const videoFileName = `${currentUser.id}-video-${Date.now()}.${videoFile.name.split('.').pop()}`;
-      const { error: videoError } = await supabaseClient.storage.from('products').upload(videoFileName, videoFile);
-      if (!videoError) {
-        const {  { publicUrl: videoPublicUrl } } = supabaseClient.storage.from('products').getPublicUrl(videoFileName);
-        videoUrl = videoPublicUrl;
+      const videoUploadResponse = await supabaseClient.storage.from('products').upload(videoFileName, videoFile);
+      if (!videoUploadResponse.error) {
+        const videoUrlResponse = supabaseClient.storage.from('products').getPublicUrl(videoFileName);
+        videoUrl = videoUrlResponse.data.publicUrl;
       }
     }
 
@@ -2471,8 +2429,8 @@ async function handleProductUpload(event) {
       status: 'active'
     };
 
-    const { error: dbError } = await supabaseClient.from('products').insert([newProduct]);
-    if (dbError) throw dbError;
+    const dbResponse = await supabaseClient.from('products').insert([newProduct]);
+    if (dbResponse.error) throw dbResponse.error;
 
     showToast('Product published successfully! 🎉', 'success');
     document.getElementById('add-product-form').reset();
@@ -2488,17 +2446,10 @@ async function handleProductUpload(event) {
   }
 }
 
-// ==========================================
-// DROPSHIPPING (NEW - FULLY FUNCTIONAL)
-// ==========================================
 function selectSupplier(supplier) {
-  selectedSupplier = supplier;
   showToast(`Connecting to ${supplier === 'aliexpress' ? 'AliExpress' : 'CJ Dropshipping'}...`, 'info');
-  
-  // In production, this would open OAuth or API connection
   setTimeout(() => {
     showToast('Supplier connected! You can now import products.', 'success');
-    // Show import interface
     showSellerSection('add-product');
   }, 2000);
 }
@@ -2514,13 +2465,13 @@ function showToast(message, type = 'success') {
   toastMessage.textContent = type === 'success' ? 'Success!' : type === 'error' ? 'Error' : 'Info';
   toastDetails.textContent = message;
   if (type === 'success') {
-    toastIcon.className = 'fa-solid fa-circle-check text-green-500 text-lg mt-0.5';
+    toastIcon.className = 'fa-solid fa-circle-check text-green-500 text-lg';
     toast.style.borderLeftColor = '#10b981';
   } else if (type === 'error') {
-    toastIcon.className = 'fa-solid fa-circle-xmark text-red-500 text-lg mt-0.5';
+    toastIcon.className = 'fa-solid fa-circle-xmark text-red-500 text-lg';
     toast.style.borderLeftColor = '#dc2626';
   } else {
-    toastIcon.className = 'fa-solid fa-circle-info text-blue-500 text-lg mt-0.5';
+    toastIcon.className = 'fa-solid fa-circle-info text-blue-500 text-lg';
     toast.style.borderLeftColor = '#3b82f6';
   }
   toast.classList.add('show');
