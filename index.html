@@ -43,7 +43,7 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Plus Jakarta Sans', sans-serif; font-weig
 html { scroll-behavior: smooth; }
 .product-card { transition: all 0.2s ease; border: 1px solid transparent; position: relative; }
 .product-card:hover { border-color: #e5e7eb; box-shadow: 0 10px 40px -10px rgba(0,0,0,0.1); transform: translateY(-2px); }
-.product-card.sold-out { opacity: 0.7; pointer-events: none; }
+.product-card.sold-out { opacity: 0.7; }
 .product-card.sold-out::after {
   content: 'SOLD OUT';
   position: absolute;
@@ -56,7 +56,6 @@ html { scroll-behavior: smooth; }
   font-weight: 700;
   font-size: 0.875rem;
   z-index: 10;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 .product-card.sold-out::before {
   content: '';
@@ -168,7 +167,6 @@ html { scroll-behavior: smooth; }
 .status-shipped { background: #c7d2fe; color: #3730a3; }
 .status-delivered { background: #d1fae5; color: #065f46; }
 .status-cancelled { background: #fee2e2; color: #991b1b; }
-.status-expired { background: #fee2e2; color: #991b1b; }
 .status-active { background: #d1fae5; color: #065f46; }
 .status-sold-out { background: #fee2e2; color: #991b1b; }
 .chatbot-button {
@@ -297,21 +295,15 @@ html { scroll-behavior: smooth; }
   border-color: #10b981;
   background: #f0fdf4;
 }
-.video-preview {
-  position: relative;
-  background: #000;
-  border-radius: 0.5rem;
-  overflow: hidden;
-}
-.video-preview video {
-  width: 100%;
-  max-height: 200px;
-}
 .admin-badge {
   background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
 }
 .checkout-step { display: none; }
 .checkout-step.active { display: block; animation: fadeIn 0.3s ease-out; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .progress-bar {
   height: 4px;
   background: #e5e7eb;
@@ -1307,6 +1299,79 @@ html { scroll-behavior: smooth; }
       </div>
     </div>
 
+    <!-- Add Product Section -->
+    <div id="seller-add-product" class="seller-section hidden-section">
+      <div class="mb-8">
+        <h1 class="text-3xl font-heading font-bold mb-2">Add New Product</h1>
+        <p class="text-neutral-500">List an item for sale. Include videos for better conversion!</p>
+      </div>
+      <div class="bg-white rounded-xl border border-neutral-200 p-6 max-w-3xl">
+        <form id="add-product-form" onsubmit="handleProductUpload(event)" class="space-y-6">
+          <div>
+            <label class="block text-sm font-medium mb-1">Product Name <span class="text-red-500">*</span></label>
+            <input type="text" id="prod-name" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="e.g., iPhone 13 Pro Max">
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium mb-1">Price (₦) <span class="text-red-500">*</span></label>
+              <input type="number" id="prod-price" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="500000">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Original Price (Optional)</label>
+              <input type="number" id="prod-original-price" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="For discount">
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium mb-1">Category <span class="text-red-500">*</span></label>
+              <select id="prod-category" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg">
+                <option value="electronics">Electronics</option>
+                <option value="fashion">Fashion</option>
+                <option value="home">Home & Kitchen</option>
+                <option value="phones">Phones & Tablets</option>
+                <option value="beauty">Beauty & Health</option>
+                <option value="sports">Sports</option>
+                <option value="dropship">Dropshipping</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Condition <span class="text-red-500">*</span></label>
+              <select id="prod-condition" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg">
+                <option value="new">Brand New</option>
+                <option value="used-like-new">Used - Like New</option>
+                <option value="used-good">Used - Good</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Description <span class="text-red-500">*</span></label>
+            <textarea id="prod-desc" required rows="4" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="Describe the item..."></textarea>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Item Location <span class="text-red-500">*</span></label>
+            <input type="text" id="prod-location" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="e.g., Ikeja, Lagos">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Product Image <span class="text-red-500">*</span></label>
+            <input type="file" id="prod-image" accept="image/*" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg bg-neutral-50">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Product Video (Optional)</label>
+            <input type="file" id="prod-video" accept="video/*" class="w-full px-4 py-2 border border-neutral-300 rounded-lg bg-neutral-50">
+            <p class="text-xs text-neutral-500 mt-1">Upload video demo (max 50MB). Products with videos get 3x more sales!</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="checkbox" id="prod-negotiable" class="w-5 h-5 text-brand-600 rounded">
+            <label class="text-sm font-medium">Price is Negotiable (Allow Haggling)</label>
+          </div>
+          <button type="submit" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg w-full flex justify-center items-center gap-2">
+            <span id="upload-btn-text">Publish Product</span>
+            <div id="upload-spinner" class="loading-spinner hidden border-white border-t-transparent inline-block ml-2"></div>
+          </button>
+        </form>
+      </div>
+    </div>
+
     <!-- SUPER ADMIN PANEL -->
     <div id="seller-admin" class="seller-section hidden-section">
       <div class="mb-8">
@@ -1409,7 +1474,7 @@ html { scroll-behavior: smooth; }
   </div>
 </div>
 
-<!-- Product Detail Modal (NEW - IMMERSIVE) -->
+<!-- Product Detail Modal (IMMERSIVE) -->
 <div id="product-detail-modal" class="modal product-detail-modal">
   <div class="modal-content p-0 relative max-w-5xl">
     <button onclick="closeModal('product-detail-modal')" class="absolute top-4 right-4 z-10 bg-white/90 hover:bg-white p-2 rounded-full shadow-lg">
@@ -1488,7 +1553,7 @@ html { scroll-behavior: smooth; }
   </div>
 </div>
 
-<!-- Multi-Step Checkout Modal (NEW) -->
+<!-- Multi-Step Checkout Modal -->
 <div id="checkout-modal" class="modal">
   <div class="modal-content p-6 relative max-w-3xl max-h-[90vh] overflow-y-auto">
     <button onclick="closeModal('checkout-modal')" class="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600">
@@ -1859,8 +1924,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ==========================================
 async function checkAuth() {
   try {
-    const response = await supabaseClient.auth.getSession();
-    const session = response.data?.session;
+    const { data: { session } } = await supabaseClient.auth.getSession();
     currentUser = session?.user || null;
     updateAuthUI();
     if (currentUser) {
@@ -1940,14 +2004,14 @@ async function handleLogin(e) {
   const email = document.getElementById('login-email').value;
   const password = document.getElementById('login-password').value;
   
-  const response = await supabaseClient.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
   
-  if (response.error) {
-    showToast(response.error.message, 'error');
+  if (error) {
+    showToast(error.message, 'error');
     return;
   }
   
-  currentUser = response.data.user;
+  currentUser = data.user;
   closeModal('auth-modal');
   updateAuthUI();
   checkAdminAccess();
@@ -1963,13 +2027,13 @@ async function handleRegister(e) {
   const password = document.getElementById('reg-password').value;
   const userType = document.getElementById('reg-usertype').value;
   const whatsapp = document.getElementById('reg-whatsapp').value;
-  const accountNumber = document.getElementById('reg-account-number')?.value || '';
-
-  const response = await supabaseClient.auth.signUp({
-    email: email,
-    password: password,
+  
+  // ✅ FIXED: Added 'data:' key in options
+  const { data, error } = await supabaseClient.auth.signUp({
+    email,
+    password,
     options: {
-       {
+      data: {
         first_name: firstName,
         last_name: lastName,
         user_type: userType,
@@ -1978,14 +2042,14 @@ async function handleRegister(e) {
     }
   });
 
-  if (response.error) {
-    showToast(response.error.message, 'error');
+  if (error) {
+    showToast(error.message, 'error');
     return;
   }
 
-  if (response.data.user) {
+  if (data.user) {
     await supabaseClient.from('users').insert({
-      id: response.data.user.id,
+      id: data.user.id,
       email: email,
       first_name: firstName,
       last_name: lastName,
@@ -1993,22 +2057,9 @@ async function handleRegister(e) {
       whatsapp_number: whatsapp,
       created_at: new Date().toISOString()
     });
-
-    if (userType === 'seller' || userType === 'both') {
-      const trialEndDate = new Date();
-      trialEndDate.setDate(trialEndDate.getDate() + FREE_TRIAL_DAYS);
-      await supabaseClient.from('sellers').insert({
-        user_id: response.data.user.id,
-        account_number: accountNumber,
-        trial_start_date: new Date().toISOString(),
-        trial_end_date: trialEndDate.toISOString(),
-        commission_paid: false,
-        status: 'active'
-      });
-    }
   }
 
-  currentUser = response.data.user;
+  currentUser = data.user;
   closeModal('auth-modal');
   updateAuthUI();
   checkAdminAccess();
@@ -2775,7 +2826,6 @@ async function loadSellerOrders() {
     try {
       const response = await supabaseClient.from('orders').select('*, buyer:users(first_name, last_name, phone, whatsapp_number)').eq('seller_id', currentUser.id).order('created_at', { ascending: false });
       if (!response.error && response.data) {
-        // Merge with local orders
         const supabaseOrders = response.data;
         const allOrders = [...localOrders, ...supabaseOrders.filter(o => !localOrders.find(lo => lo.order_number === o.order_number))];
         renderOrders(allOrders);
