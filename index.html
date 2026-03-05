@@ -41,8 +41,31 @@ tailwind.config = {
 body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
 h1, h2, h3, h4, h5, h6 { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 600; }
 html { scroll-behavior: smooth; }
-.product-card { transition: all 0.2s ease; border: 1px solid transparent; }
+.product-card { transition: all 0.2s ease; border: 1px solid transparent; position: relative; }
 .product-card:hover { border-color: #e5e7eb; box-shadow: 0 10px 40px -10px rgba(0,0,0,0.1); transform: translateY(-2px); }
+.product-card.sold-out { opacity: 0.7; pointer-events: none; }
+.product-card.sold-out::after {
+  content: 'SOLD OUT';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: #dc2626;
+  color: white;
+  padding: 0.5rem 1.5rem;
+  border-radius: 9999px;
+  font-weight: 700;
+  font-size: 0.875rem;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.product-card.sold-out::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 5;
+  border-radius: inherit;
+}
 .video-badge { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
 .price-badge { background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); }
 .dropship-badge { background: linear-gradient(135deg, #ff4747 0%, #ff6b00 100%); }
@@ -145,6 +168,9 @@ html { scroll-behavior: smooth; }
 .status-shipped { background: #c7d2fe; color: #3730a3; }
 .status-delivered { background: #d1fae5; color: #065f46; }
 .status-cancelled { background: #fee2e2; color: #991b1b; }
+.status-expired { background: #fee2e2; color: #991b1b; }
+.status-active { background: #d1fae5; color: #065f46; }
+.status-sold-out { background: #fee2e2; color: #991b1b; }
 .chatbot-button {
   position: fixed;
   bottom: 6rem;
@@ -271,16 +297,61 @@ html { scroll-behavior: smooth; }
   border-color: #10b981;
   background: #f0fdf4;
 }
-.account-suspended {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  background: rgba(0,0,0,0.8);
-  display: none;
+.video-preview {
+  position: relative;
+  background: #000;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+.video-preview video {
+  width: 100%;
+  max-height: 200px;
+}
+.admin-badge {
+  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+}
+.checkout-step { display: none; }
+.checkout-step.active { display: block; animation: fadeIn 0.3s ease-out; }
+.progress-bar {
+  height: 4px;
+  background: #e5e7eb;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  transition: width 0.3s ease;
+}
+.product-detail-modal .modal-content {
+  max-width: 1000px;
+  max-height: 95vh;
+}
+.product-gallery {
+  aspect-ratio: 1;
+  background: #f9fafb;
+  border-radius: 0.75rem;
+  display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
-.account-suspended.active { display: flex; }
+.product-gallery img, .product-gallery video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.verified-badge {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
 </style>
 </head>
 <body class="bg-neutral-50 text-neutral-900">
@@ -331,7 +402,7 @@ html { scroll-behavior: smooth; }
             <span class="text-xs font-medium bg-brand-500/30 px-3 py-1 rounded-full text-white">1 Month Free</span>
           </div>
           <h2 class="text-3xl font-heading font-bold text-white mb-3">I'm a Seller</h2>
-          <p class="text-neutral-300 mb-6 leading-relaxed">Open your store FREE for 1 month! Upload products with videos, sell anything, or start dropshipping.</p>
+          <p class="text-neutral-300 mb-6 leading-relaxed">Open your store FREE for 1 month! Upload products with videos, sell anything, or start dropshipping with affiliate earnings.</p>
           <div class="flex items-center gap-4 mb-6">
             <div class="flex items-center gap-2 text-sm text-neutral-300">
               <i class="fa-solid fa-calendar-check text-brand-400"></i>
@@ -359,8 +430,8 @@ html { scroll-behavior: smooth; }
 </div>
 
 <!-- ================= ACCOUNT SUSPENDED MODAL ================= -->
-<div id="account-suspended" class="account-suspended">
-  <div class="bg-white rounded-2xl p-8 max-w-md w-full mx-4 text-center">
+<div id="account-suspended" class="fixed inset-0 z-[1000] bg-black/80 hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl p-8 max-w-md w-full text-center">
     <div class="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
       <i class="fa-solid fa-triangle-exclamation text-4xl text-red-600"></i>
     </div>
@@ -726,6 +797,11 @@ html { scroll-behavior: smooth; }
         <i class="fa-solid fa-gear w-5"></i>
         <span>Store Settings</span>
       </a>
+      <!-- SUPER ADMIN LINK - Only visible to admin -->
+      <a href="#" id="admin-link" class="sidebar-link hidden flex items-center gap-3 px-4 py-3 rounded-lg text-neutral-700 admin-badge text-white" onclick="showSellerSection('admin')">
+        <i class="fa-solid fa-shield-halved w-5"></i>
+        <span>Super Admin</span>
+      </a>
     </nav>
     <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-neutral-200">
       <div class="flex items-center gap-3 mb-4">
@@ -837,6 +913,7 @@ html { scroll-behavior: smooth; }
           <select id="seller-product-filter" class="border border-neutral-300 rounded-lg px-3 py-2 text-sm" onchange="loadSellerProducts()">
             <option value="all">All Status</option>
             <option value="active">Active</option>
+            <option value="sold-out">Sold Out</option>
             <option value="inactive">Inactive</option>
           </select>
           <button onclick="showSellerSection('add-product')" class="btn-primary text-white px-4 py-2 rounded-lg text-sm">
@@ -878,11 +955,14 @@ html { scroll-behavior: smooth; }
       <div class="mb-8">
         <h1 class="text-3xl font-heading font-bold mb-2">
           <i class="fa-solid fa-globe text-brand-600 mr-2"></i>
-          Dropshipping
+          Global Dropshipping
         </h1>
-        <p class="text-neutral-500">Import products from global suppliers</p>
+        <p class="text-neutral-500">Import products from AliExpress & CJ Dropshipping</p>
       </div>
-      <div class="bg-white rounded-xl border border-neutral-200 p-6">
+      
+      <!-- Supplier Connection -->
+      <div class="bg-white rounded-xl border border-neutral-200 p-6 mb-6">
+        <h3 class="text-lg font-bold mb-4">Connect Suppliers</h3>
         <div class="grid md:grid-cols-2 gap-6">
           <div class="supplier-card p-6 rounded-xl border cursor-pointer" onclick="selectSupplier('aliexpress')">
             <div class="flex items-center gap-4 mb-4">
@@ -913,150 +993,76 @@ html { scroll-behavior: smooth; }
             </button>
           </div>
         </div>
-        <div class="mt-8 p-6 bg-neutral-50 rounded-xl">
-          <h3 class="font-bold mb-4">How Dropshipping Works</h3>
-          <ol class="space-y-3 text-sm text-neutral-600">
-            <li class="flex items-start gap-3">
-              <span class="w-6 h-6 bg-brand-100 text-brand-600 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-xs">1</span>
-              <span>Connect your supplier account (AliExpress, CJ, etc.)</span>
-            </li>
-            <li class="flex items-start gap-3">
-              <span class="w-6 h-6 bg-brand-100 text-brand-600 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-xs">2</span>
-              <span>Import products to your BUYSELL store with your markup</span>
-            </li>
-            <li class="flex items-start gap-3">
-              <span class="w-6 h-6 bg-brand-100 text-brand-600 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-xs">3</span>
-              <span>When customer orders, you order from supplier</span>
-            </li>
-            <li class="flex items-start gap-3">
-              <span class="w-6 h-6 bg-brand-100 text-brand-600 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-xs">4</span>
-              <span>Supplier ships directly to your customer</span>
-            </li>
-            <li class="flex items-start gap-3">
-              <span class="w-6 h-6 bg-brand-100 text-brand-600 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-xs">5</span>
-              <span>You keep the profit margin!</span>
-            </li>
-          </ol>
-          <div class="mt-6 p-4 bg-brand-50 border border-brand-200 rounded-lg">
-            <p class="text-sm text-brand-700"><i class="fa-solid fa-lightbulb mr-2"></i><strong>Recommended Markup:</strong> 30-50% for optimal profit while staying competitive</p>
+      </div>
+
+      <!-- Hot Items Catalog -->
+      <div class="bg-white rounded-xl border border-neutral-200 p-6 mb-6">
+        <h3 class="text-lg font-bold mb-4">🔥 Hot Items for Nigeria</h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="border rounded-lg p-4 hover:border-brand-500 transition cursor-pointer" onclick="importDropshipItem('Mini Projector', 45000, 120000)">
+            <div class="w-full h-32 bg-neutral-100 rounded-lg mb-3 flex items-center justify-center">
+              <i class="fa-solid fa-video text-3xl text-neutral-400"></i>
+            </div>
+            <h4 class="font-medium text-sm mb-1">Mini Projector</h4>
+            <div class="flex items-baseline gap-2">
+              <span class="text-xs text-neutral-500">Cost: ₦45,000</span>
+              <span class="text-xs font-bold text-green-600">Sell: ₦120,000</span>
+            </div>
+            <div class="mt-2 text-xs text-brand-600 font-medium">Profit: ₦75,000 (167%)</div>
+          </div>
+          <div class="border rounded-lg p-4 hover:border-brand-500 transition cursor-pointer" onclick="importDropshipItem('Kitchen Gadget Set', 8500, 25000)">
+            <div class="w-full h-32 bg-neutral-100 rounded-lg mb-3 flex items-center justify-center">
+              <i class="fa-solid fa-utensils text-3xl text-neutral-400"></i>
+            </div>
+            <h4 class="font-medium text-sm mb-1">Kitchen Gadget Set</h4>
+            <div class="flex items-baseline gap-2">
+              <span class="text-xs text-neutral-500">Cost: ₦8,500</span>
+              <span class="text-xs font-bold text-green-600">Sell: ₦25,000</span>
+            </div>
+            <div class="mt-2 text-xs text-brand-600 font-medium">Profit: ₦16,500 (194%)</div>
+          </div>
+          <div class="border rounded-lg p-4 hover:border-brand-500 transition cursor-pointer" onclick="importDropshipItem('Wireless Earbuds', 12000, 35000)">
+            <div class="w-full h-32 bg-neutral-100 rounded-lg mb-3 flex items-center justify-center">
+              <i class="fa-solid fa-headphones text-3xl text-neutral-400"></i>
+            </div>
+            <h4 class="font-medium text-sm mb-1">Wireless Earbuds</h4>
+            <div class="flex items-baseline gap-2">
+              <span class="text-xs text-neutral-500">Cost: ₦12,000</span>
+              <span class="text-xs font-bold text-green-600">Sell: ₦35,000</span>
+            </div>
+            <div class="mt-2 text-xs text-brand-600 font-medium">Profit: ₦23,000 (192%)</div>
+          </div>
+          <div class="border rounded-lg p-4 hover:border-brand-500 transition cursor-pointer" onclick="importDropshipItem('Smart Watch', 18000, 55000)">
+            <div class="w-full h-32 bg-neutral-100 rounded-lg mb-3 flex items-center justify-center">
+              <i class="fa-solid fa-watch text-3xl text-neutral-400"></i>
+            </div>
+            <h4 class="font-medium text-sm mb-1">Smart Watch</h4>
+            <div class="flex items-baseline gap-2">
+              <span class="text-xs text-neutral-500">Cost: ₦18,000</span>
+              <span class="text-xs font-bold text-green-600">Sell: ₦55,000</span>
+            </div>
+            <div class="mt-2 text-xs text-brand-600 font-medium">Profit: ₦37,000 (206%)</div>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Settings Section -->
-    <div id="seller-settings" class="seller-section hidden-section">
-      <div class="mb-8">
-        <h1 class="text-3xl font-heading font-bold mb-2">Store Settings</h1>
-        <p class="text-neutral-500">Manage your store and payment details</p>
-      </div>
-      <div class="bg-white rounded-xl border border-neutral-200 p-6 max-w-2xl">
-        <form onsubmit="updateSellerSettings(event)" class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium mb-1">Store Name</label>
-            <input type="text" id="store-name" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="Your store name">
+      <!-- Dropship Analytics -->
+      <div class="bg-white rounded-xl border border-neutral-200 p-6">
+        <h3 class="text-lg font-bold mb-4">📊 Dropship Analytics</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="bg-neutral-50 rounded-lg p-4">
+            <div class="text-2xl font-bold text-brand-600" id="dropship-imported">0</div>
+            <div class="text-sm text-neutral-500">Items Imported</div>
           </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Store Description</label>
-            <textarea id="store-description" rows="3" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="Describe your store"></textarea>
+          <div class="bg-neutral-50 rounded-lg p-4">
+            <div class="text-2xl font-bold text-green-600" id="dropship-sales">₦0</div>
+            <div class="text-sm text-neutral-500">Total Sales</div>
           </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">WhatsApp Number</label>
-            <input type="tel" id="store-whatsapp" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="0801 234 5678">
+          <div class="bg-neutral-50 rounded-lg p-4">
+            <div class="text-2xl font-bold text-purple-600" id="dropship-pending">0</div>
+            <div class="text-sm text-neutral-500">Pending Orders</div>
           </div>
-          <div class="border-t border-neutral-200 pt-4 mt-4">
-            <h3 class="font-bold mb-4">Payment Details (For Receiving Customer Payments)</h3>
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Bank Account Number <span class="text-red-500">*</span></label>
-            <input type="text" id="seller-account-number" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="10-digit account number">
-            <p class="text-xs text-neutral-500 mt-1">Customers will pay directly to this account</p>
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Bank Name</label>
-            <input type="text" id="seller-bank-name" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="e.g., OPay, GTBank">
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Account Name</label>
-            <input type="text" id="seller-account-name" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="Account holder name">
-          </div>
-          <button type="submit" class="btn-primary text-white px-6 py-3 rounded-lg w-full">
-            Save Settings
-          </button>
-        </form>
-      </div>
-    </div>
-
-    <!-- Add Product Section -->
-    <div id="seller-add-product" class="seller-section hidden-section">
-      <div class="mb-8">
-        <h1 class="text-3xl font-heading font-bold mb-2">Add New Product</h1>
-        <p class="text-neutral-500">List an item for sale. Include videos for better conversion!</p>
-      </div>
-      <div class="bg-white rounded-xl border border-neutral-200 p-6 max-w-3xl">
-        <form id="add-product-form" onsubmit="handleProductUpload(event)" class="space-y-6">
-          <div>
-            <label class="block text-sm font-medium mb-1">Product Name <span class="text-red-500">*</span></label>
-            <input type="text" id="prod-name" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="e.g., iPhone 13 Pro Max">
-          </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium mb-1">Price (₦) <span class="text-red-500">*</span></label>
-              <input type="number" id="prod-price" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="500000">
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Original Price (Optional)</label>
-              <input type="number" id="prod-original-price" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="For discount">
-            </div>
-          </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium mb-1">Category <span class="text-red-500">*</span></label>
-              <select id="prod-category" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg">
-                <option value="electronics">Electronics</option>
-                <option value="fashion">Fashion</option>
-                <option value="home">Home & Kitchen</option>
-                <option value="phones">Phones & Tablets</option>
-                <option value="beauty">Beauty & Health</option>
-                <option value="sports">Sports</option>
-                <option value="dropship">Dropshipping</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Condition <span class="text-red-500">*</span></label>
-              <select id="prod-condition" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg">
-                <option value="new">Brand New</option>
-                <option value="used-like-new">Used - Like New</option>
-                <option value="used-good">Used - Good</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Description <span class="text-red-500">*</span></label>
-            <textarea id="prod-desc" required rows="4" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="Describe the item..."></textarea>
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Item Location <span class="text-red-500">*</span></label>
-            <input type="text" id="prod-location" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="e.g., Ikeja, Lagos">
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Product Image <span class="text-red-500">*</span></label>
-            <input type="file" id="prod-image" accept="image/*" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg bg-neutral-50">
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Product Video (Optional)</label>
-            <input type="file" id="prod-video" accept="video/*" class="w-full px-4 py-2 border border-neutral-300 rounded-lg bg-neutral-50">
-            <p class="text-xs text-neutral-500 mt-1">Upload video demo (max 50MB). Products with videos get 3x more sales!</p>
-          </div>
-          <div class="flex items-center gap-2">
-            <input type="checkbox" id="prod-negotiable" class="w-5 h-5 text-brand-600 rounded">
-            <label class="text-sm font-medium">Price is Negotiable (Allow Haggling)</label>
-          </div>
-          <button type="submit" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg w-full flex justify-center items-center gap-2">
-            <span id="upload-btn-text">Publish Product</span>
-            <div id="upload-spinner" class="loading-spinner hidden border-white border-t-transparent inline-block ml-2"></div>
-          </button>
-        </form>
+        </div>
       </div>
     </div>
 
@@ -1064,32 +1070,96 @@ html { scroll-behavior: smooth; }
     <div id="seller-affiliate" class="seller-section hidden-section">
       <div class="mb-8">
         <h1 class="text-3xl font-heading font-bold mb-2">
-          <i class="fa-solid fa-percent text-green-600 mr-2"></i>
-          Affiliate Earnings
+          <i class="fa-solid fa-chart-line text-green-600 mr-2"></i>
+          Affiliate & Referral Earnings
         </h1>
-        <p class="text-neutral-500">Earn commission by sharing products</p>
+        <p class="text-neutral-500">Track commissions from local & external programs</p>
       </div>
+
+      <!-- Referral Section -->
+      <div class="bg-white rounded-xl border border-neutral-200 p-6 mb-6">
+        <h3 class="text-lg font-bold mb-4">🎁 Refer & Earn</h3>
+        <p class="text-sm text-neutral-600 mb-4">Invite new sellers and earn ₦500 for each referral!</p>
+        <div class="flex items-center gap-3 p-4 bg-neutral-50 rounded-lg">
+          <input type="text" id="referral-link" readonly class="flex-1 px-4 py-2 border border-neutral-300 rounded-lg text-sm" value="https://buysell.ng/ref/USER123">
+          <button onclick="copyReferralLink()" class="btn-secondary px-4 py-2 rounded-lg text-sm">
+            <i class="fa-regular fa-copy mr-1"></i> Copy
+          </button>
+        </div>
+        <div class="mt-4 flex items-center gap-2 text-sm text-neutral-600">
+          <span class="font-bold text-green-600">₦500</span>
+          <span>bonus per new seller referral</span>
+        </div>
+      </div>
+
+      <!-- Earnings Stats -->
       <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div class="bg-white rounded-xl border border-neutral-200 p-6">
           <div class="text-3xl font-bold mb-1" id="total-earnings">₦0</div>
           <div class="text-neutral-500 text-sm">Total Earnings</div>
         </div>
         <div class="bg-white rounded-xl border border-neutral-200 p-6">
+          <div class="text-3xl font-bold mb-1" id="pending-payouts">₦0</div>
+          <div class="text-neutral-500 text-sm">Pending Payouts</div>
+        </div>
+        <div class="bg-white rounded-xl border border-neutral-200 p-6">
           <div class="text-3xl font-bold mb-1" id="total-clicks">0</div>
-          <div class="text-neutral-500 text-sm">Affiliate Clicks</div>
+          <div class="text-neutral-500 text-sm">Referral Clicks</div>
         </div>
         <div class="bg-white rounded-xl border border-neutral-200 p-6">
           <div class="text-3xl font-bold mb-1" id="total-conversions">0</div>
           <div class="text-neutral-500 text-sm">Conversions</div>
         </div>
-        <div class="bg-white rounded-xl border border-neutral-200 p-6">
-          <div class="text-3xl font-bold mb-1" id="conversion-rate">0%</div>
-          <div class="text-neutral-500 text-sm">Conversion Rate</div>
+      </div>
+
+      <!-- External Account Sync -->
+      <div class="bg-white rounded-xl border border-neutral-200 p-6 mb-6">
+        <h3 class="text-lg font-bold mb-4">🔗 Connect External Programs</h3>
+        <div class="flex flex-wrap gap-3">
+          <button class="flex items-center gap-2 px-4 py-2 border border-neutral-300 rounded-lg hover:border-brand-500 transition">
+            <i class="fa-brands fa-amazon text-orange-500"></i>
+            <span class="text-sm">Amazon Associates</span>
+          </button>
+          <button class="flex items-center gap-2 px-4 py-2 border border-neutral-300 rounded-lg hover:border-brand-500 transition">
+            <i class="fa-brands fa-ebay text-blue-500"></i>
+            <span class="text-sm">eBay Partner</span>
+          </button>
+          <button class="flex items-center gap-2 px-4 py-2 border border-neutral-300 rounded-lg hover:border-brand-500 transition">
+            <i class="fa-solid fa-link text-green-500"></i>
+            <span class="text-sm">Custom Link</span>
+          </button>
         </div>
       </div>
-      <button onclick="requestWithdrawal()" class="btn-primary text-white px-6 py-3 rounded-lg font-medium">
-        <i class="fa-solid fa-money-bill-transfer mr-2"></i> Request Withdrawal
-      </button>
+
+      <!-- Earnings Log Table -->
+      <div class="bg-white rounded-xl border border-neutral-200 overflow-hidden">
+        <div class="p-6 border-b border-neutral-200">
+          <h2 class="text-xl font-heading font-bold">Recent Earnings</h2>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-neutral-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Date</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Product</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Source</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Amount</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Status</th>
+              </tr>
+            </thead>
+            <tbody id="earnings-table-body" class="divide-y divide-neutral-200">
+              <tr>
+                <td colspan="5" class="px-6 py-8 text-center text-neutral-500">No earnings yet</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="mt-6 flex justify-end">
+        <button onclick="requestWithdrawal()" class="btn-primary text-white px-6 py-3 rounded-lg font-medium">
+          <i class="fa-solid fa-money-bill-transfer mr-2"></i> Request Withdrawal
+        </button>
+      </div>
     </div>
 
     <!-- Commission Section -->
@@ -1140,6 +1210,129 @@ html { scroll-behavior: smooth; }
         <button onclick="showCommissionModal()" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg w-full">
           <i class="fa-solid fa-upload mr-2"></i> Upload Payment Receipt
         </button>
+      </div>
+    </div>
+
+    <!-- Settings Section (COMPREHENSIVE) -->
+    <div id="seller-settings" class="seller-section hidden-section">
+      <div class="mb-8">
+        <h1 class="text-3xl font-heading font-bold mb-2">Store Settings</h1>
+        <p class="text-neutral-500">Manage your store, payments, and preferences</p>
+      </div>
+      <div class="bg-white rounded-xl border border-neutral-200 p-6 max-w-3xl">
+        <form onsubmit="updateSellerSettings(event)" class="space-y-6">
+          <!-- Store Info -->
+          <div class="border-b border-neutral-200 pb-6">
+            <h3 class="font-bold mb-4">Store Information</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium mb-1">Store Name</label>
+                <input type="text" id="store-name" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="Your store name">
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Store Category</label>
+                <select class="w-full px-4 py-2 border border-neutral-300 rounded-lg">
+                  <option>Electronics</option>
+                  <option>Fashion</option>
+                  <option>Home & Kitchen</option>
+                  <option>Beauty</option>
+                  <option>General</option>
+                </select>
+              </div>
+            </div>
+            <div class="mt-4">
+              <label class="block text-sm font-medium mb-1">Store Description</label>
+              <textarea id="store-description" rows="3" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="Describe your store..."></textarea>
+            </div>
+          </div>
+
+          <!-- Contact Info -->
+          <div class="border-b border-neutral-200 pb-6">
+            <h3 class="font-bold mb-4">Contact Information</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium mb-1">WhatsApp Number <span class="text-red-500">*</span></label>
+                <input type="tel" id="store-whatsapp" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="0801 234 5678">
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Email for Notifications</label>
+                <input type="email" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="notifications@example.com">
+              </div>
+            </div>
+          </div>
+
+          <!-- Payment Details -->
+          <div class="border-b border-neutral-200 pb-6">
+            <h3 class="font-bold mb-4 text-brand-600">Payment Details (For Receiving Customer Payments)</h3>
+            <p class="text-sm text-neutral-500 mb-4">Customers will pay directly to this account. Ensure details are accurate.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-sm font-medium mb-1">Bank Name <span class="text-red-500">*</span></label>
+                <input type="text" id="seller-bank-name" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="e.g., OPay, GTBank">
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Account Number <span class="text-red-500">*</span></label>
+                <input type="text" id="seller-account-number" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="10-digit account number">
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Account Name <span class="text-red-500">*</span></label>
+                <input type="text" id="seller-account-name" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="Account holder name">
+              </div>
+            </div>
+          </div>
+
+          <!-- Preferences -->
+          <div>
+            <h3 class="font-bold mb-4">Preferences</h3>
+            <div class="space-y-3">
+              <label class="flex items-center gap-3">
+                <input type="checkbox" class="w-5 h-5 text-brand-600 rounded">
+                <span class="text-sm">Enable price negotiation (allow haggling)</span>
+              </label>
+              <label class="flex items-center gap-3">
+                <input type="checkbox" class="w-5 h-5 text-brand-600 rounded">
+                <span class="text-sm">Show phone number to buyers</span>
+              </label>
+              <label class="flex items-center gap-3">
+                <input type="checkbox" class="w-5 h-5 text-brand-600 rounded">
+                <span class="text-sm">Receive order notifications via WhatsApp</span>
+              </label>
+            </div>
+          </div>
+
+          <button type="submit" class="btn-primary text-white px-6 py-3 rounded-lg w-full">
+            Save All Settings
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- SUPER ADMIN PANEL -->
+    <div id="seller-admin" class="seller-section hidden-section">
+      <div class="mb-8">
+        <h1 class="text-3xl font-heading font-bold mb-2">
+          <i class="fa-solid fa-shield-halved text-purple-600 mr-2"></i>
+          Super Admin Panel
+        </h1>
+        <p class="text-neutral-500">Manage seller accounts and subscriptions</p>
+      </div>
+      <div class="bg-white rounded-xl border border-neutral-200 p-6">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-xl font-bold">All Sellers</h2>
+          <button onclick="loadAllSellers()" class="btn-secondary px-4 py-2 rounded-lg text-sm">
+            <i class="fa-solid fa-rotate mr-1"></i> Refresh
+          </button>
+        </div>
+        <div id="admin-loading" class="grid grid-cols-1 gap-4">
+          <div class="skeleton h-24 rounded-xl"></div>
+          <div class="skeleton h-24 rounded-xl"></div>
+          <div class="skeleton h-24 rounded-xl"></div>
+        </div>
+        <div id="admin-sellers-list" class="hidden space-y-4"></div>
+        <div id="admin-empty" class="hidden text-center py-12">
+          <i class="fa-solid fa-users text-4xl text-neutral-300 mb-4"></i>
+          <p class="text-neutral-500">No sellers found</p>
+        </div>
       </div>
     </div>
   </main>
@@ -1199,11 +1392,6 @@ html { scroll-behavior: smooth; }
           <label class="block text-sm font-medium mb-1">WhatsApp Number</label>
           <input type="tel" id="reg-whatsapp" required class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg" placeholder="0801 234 5678">
         </div>
-        <div id="seller-account-field" class="hidden">
-          <label class="block text-sm font-medium mb-1">Bank Account Number (For Receiving Payments)</label>
-          <input type="text" id="reg-account-number" class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg" placeholder="10-digit account number">
-          <p class="text-xs text-neutral-500 mt-1">Customers will pay directly to this account</p>
-        </div>
         <div>
           <label class="block text-sm font-medium mb-1">I am a:</label>
           <select id="reg-usertype" class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg" onchange="toggleSellerField()">
@@ -1221,91 +1409,206 @@ html { scroll-behavior: smooth; }
   </div>
 </div>
 
-<!-- Checkout Modal -->
+<!-- Product Detail Modal (NEW - IMMERSIVE) -->
+<div id="product-detail-modal" class="modal product-detail-modal">
+  <div class="modal-content p-0 relative max-w-5xl">
+    <button onclick="closeModal('product-detail-modal')" class="absolute top-4 right-4 z-10 bg-white/90 hover:bg-white p-2 rounded-full shadow-lg">
+      <i class="fa-solid fa-xmark text-xl"></i>
+    </button>
+    <div class="grid md:grid-cols-2 gap-0">
+      <!-- Gallery -->
+      <div class="p-6 bg-neutral-50">
+        <div class="product-gallery mb-4">
+          <img id="detail-image" src="" alt="Product" class="w-full h-full object-contain">
+          <video id="detail-video" controls class="hidden w-full h-full"></video>
+        </div>
+        <div id="detail-has-video" class="hidden text-center text-sm text-neutral-500">
+          <i class="fa-solid fa-video mr-1"></i> Video demo available
+        </div>
+      </div>
+      <!-- Details -->
+      <div class="p-6">
+        <div class="flex items-start justify-between mb-4">
+          <div>
+            <span id="detail-category" class="text-xs font-medium text-brand-600 bg-brand-50 px-2 py-1 rounded">Category</span>
+            <h2 id="detail-title" class="text-2xl font-heading font-bold mt-2">Product Title</h2>
+          </div>
+          <span id="detail-condition" class="px-3 py-1 rounded-full text-xs font-medium bg-neutral-100 text-neutral-700">Condition</span>
+        </div>
+        
+        <div class="flex items-baseline gap-3 mb-6">
+          <span id="detail-price" class="text-3xl font-bold text-brand-600">₦0</span>
+          <span id="detail-original-price" class="text-lg text-neutral-400 line-through hidden">₦0</span>
+          <span id="detail-discount" class="text-sm font-bold text-red-600 hidden">-0%</span>
+        </div>
+        
+        <p id="detail-description" class="text-neutral-600 mb-6 leading-relaxed"></p>
+        
+        <div class="flex items-center gap-2 mb-6">
+          <i class="fa-solid fa-location-dot text-brand-600"></i>
+          <span id="detail-location" class="text-sm text-neutral-600">Location</span>
+        </div>
+        
+        <!-- Seller Trust Profile -->
+        <div class="bg-neutral-50 rounded-lg p-4 mb-6">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 bg-neutral-200 rounded-full flex items-center justify-center">
+                <i class="fa-solid fa-user text-neutral-600"></i>
+              </div>
+              <div>
+                <div id="detail-seller" class="font-medium text-sm">Seller Name</div>
+                <div class="flex items-center gap-1">
+                  <span class="verified-badge"><i class="fa-solid fa-check"></i> Verified</span>
+                  <span class="text-xs text-neutral-500">4.8 ★ (124 sales)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Actions -->
+        <div class="flex gap-3 mb-4">
+          <button onclick="addToCartFromDetail()" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg flex-1">
+            <i class="fa-solid fa-cart-plus mr-2"></i> Add to Cart
+          </button>
+          <button onclick="haggleViaWhatsApp()" class="btn-secondary px-4 py-3 rounded-lg">
+            <i class="fa-brands fa-whatsapp text-green-500"></i>
+          </button>
+          <button class="btn-secondary px-4 py-3 rounded-lg">
+            <i class="fa-regular fa-heart"></i>
+          </button>
+        </div>
+        
+        <p class="text-xs text-neutral-500 text-center">
+          <i class="fa-solid fa-shield-check mr-1"></i> Buyer Protection • Pay directly to seller • WhatsApp support
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Multi-Step Checkout Modal (NEW) -->
 <div id="checkout-modal" class="modal">
   <div class="modal-content p-6 relative max-w-3xl max-h-[90vh] overflow-y-auto">
     <button onclick="closeModal('checkout-modal')" class="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600">
       <i class="fa-solid fa-xmark text-xl"></i>
     </button>
-    <h3 class="text-xl font-heading font-bold mb-6">Complete Your Order</h3>
-    <div class="bg-neutral-50 rounded-xl p-4 mb-6">
-      <h4 class="font-semibold mb-3">Order Summary</h4>
-      <div id="checkout-items" class="space-y-3"></div>
-      <div class="border-t border-neutral-200 mt-4 pt-4 flex justify-between">
-        <span class="font-semibold">Total</span>
-        <span id="checkout-total" class="font-bold text-lg">₦0</span>
+    
+    <!-- Progress Bar -->
+    <div class="mb-6">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-sm font-medium text-brand-600">Step <span id="checkout-step-number">1</span> of 3</span>
+        <span class="text-sm text-neutral-500" id="checkout-step-label">Delivery Details</span>
+      </div>
+      <div class="progress-bar">
+        <div id="checkout-progress" class="progress-fill" style="width: 33%"></div>
+      </div>
+      <div class="flex justify-between mt-2 text-xs text-neutral-500">
+        <span>Delivery</span>
+        <span>Payment</span>
+        <span>Confirm</span>
       </div>
     </div>
-    <div class="bg-brand-50 border border-brand-200 rounded-xl p-4 mb-6">
-      <div class="flex items-start gap-3">
-        <div class="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center flex-shrink-0">
-          <i class="fa-solid fa-building-columns text-brand-600"></i>
-        </div>
-        <div class="flex-1">
-          <h4 class="font-semibold text-brand-900 mb-2">💳 Pay Directly to Seller</h4>
-          <p class="text-sm text-brand-700 mb-3">Transfer the total amount to the seller's account below, then upload your payment receipt.</p>
-          <div class="bg-white rounded-lg p-4 space-y-3">
-            <div class="flex justify-between items-center">
-              <span class="text-sm text-neutral-500">Bank Name</span>
-              <span id="seller-bank" class="font-bold text-lg">-</span>
-            </div>
-            <div class="flex justify-between items-center">
-              <span class="text-sm text-neutral-500">Account Number</span>
-              <span id="seller-account" class="font-bold text-2xl text-brand-600">-</span>
-            </div>
-            <div class="flex justify-between items-center">
-              <span class="text-sm text-neutral-500">Account Name</span>
-              <span id="seller-account-name" class="font-semibold">-</span>
-            </div>
-            <div class="flex justify-between items-center">
-              <span class="text-sm text-neutral-500">Amount to Pay</span>
-              <span id="checkout-amount" class="font-bold text-lg text-green-600">₦0</span>
-            </div>
+    
+    <!-- Step 1: Delivery Details -->
+    <div id="checkout-step-1" class="checkout-step active">
+      <h3 class="text-xl font-heading font-bold mb-6">📍 Delivery Information</h3>
+      <div class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Full Name <span class="text-red-500">*</span></label>
+            <input type="text" id="buyer-name" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg" placeholder="Your full name">
           </div>
-          <button onclick="copyAccountNumber()" class="mt-3 text-sm text-brand-600 hover:underline flex items-center gap-1">
-            <i class="fa-regular fa-copy"></i> Copy Account Number
-          </button>
+          <div>
+            <label class="block text-sm font-medium mb-1">Phone Number <span class="text-red-500">*</span></label>
+            <input type="tel" id="buyer-phone" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg" placeholder="0801 234 5678">
+          </div>
         </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">WhatsApp Number <span class="text-red-500">*</span></label>
+          <input type="tel" id="buyer-whatsapp" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg" placeholder="0801 234 5678">
+          <p class="text-xs text-neutral-500 mt-1">Seller will contact you on WhatsApp for delivery</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">State <span class="text-red-500">*</span></label>
+          <select id="buyer-state" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg">
+            <option value="">Select state</option>
+            <option value="Lagos">Lagos</option>
+            <option value="Abuja">Abuja (FCT)</option>
+            <option value="Port Harcourt">Port Harcourt</option>
+            <option value="Kano">Kano</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">City/Area <span class="text-red-500">*</span></label>
+          <input type="text" id="buyer-city" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg" placeholder="e.g., Ikeja, Lekki">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Full Delivery Address <span class="text-red-500">*</span></label>
+          <textarea id="buyer-address" required rows="3" class="w-full px-4 py-3 border border-neutral-300 rounded-lg" placeholder="Street address, landmark, etc."></textarea>
+        </div>
+      </div>
+      <div class="flex justify-end mt-6">
+        <button type="button" onclick="goToCheckoutStep(2)" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg">
+          Continue to Payment <i class="fa-solid fa-arrow-right ml-2"></i>
+        </button>
       </div>
     </div>
-    <form id="checkout-form" onsubmit="submitOrder(event)" class="space-y-4">
-      <h4 class="font-semibold mb-3">📍 Delivery Information</h4>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label class="block text-sm font-medium mb-1">Full Name <span class="text-red-500">*</span></label>
-          <input type="text" id="buyer-name" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg" placeholder="Your full name">
+    
+    <!-- Step 2: Payment & Receipt -->
+    <div id="checkout-step-2" class="checkout-step">
+      <h3 class="text-xl font-heading font-bold mb-6">💳 Payment Details</h3>
+      
+      <!-- Order Summary -->
+      <div class="bg-neutral-50 rounded-xl p-4 mb-6">
+        <h4 class="font-semibold mb-3">Order Summary</h4>
+        <div id="checkout-items" class="space-y-3"></div>
+        <div class="border-t border-neutral-200 mt-4 pt-4 flex justify-between">
+          <span class="font-semibold">Total</span>
+          <span id="checkout-total" class="font-bold text-lg">₦0</span>
         </div>
-        <div>
-          <label class="block text-sm font-medium mb-1">Phone Number <span class="text-red-500">*</span></label>
-          <input type="tel" id="buyer-phone" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg" placeholder="0801 234 5678">
+      </div>
+      
+      <!-- Bank Transfer Instructions -->
+      <div class="bg-brand-50 border border-brand-200 rounded-xl p-4 mb-6">
+        <div class="flex items-start gap-3">
+          <div class="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center flex-shrink-0">
+            <i class="fa-solid fa-building-columns text-brand-600"></i>
+          </div>
+          <div class="flex-1">
+            <h4 class="font-semibold text-brand-900 mb-2">Pay Directly to Seller</h4>
+            <p class="text-sm text-brand-700 mb-3">Transfer the exact amount to the seller's account below. Your order will be processed after payment verification.</p>
+            <div class="bg-white rounded-lg p-4 space-y-3">
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-neutral-500">Bank Name</span>
+                <span id="seller-bank" class="font-bold text-lg">-</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-neutral-500">Account Number</span>
+                <span id="seller-account" class="font-bold text-2xl text-brand-600">-</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-neutral-500">Account Name</span>
+                <span id="seller-account-name" class="font-semibold">-</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-neutral-500">Amount to Pay</span>
+                <span id="checkout-amount" class="font-bold text-lg text-green-600">₦0</span>
+              </div>
+            </div>
+            <button onclick="copyAccountNumber()" class="mt-3 text-sm text-brand-600 hover:underline flex items-center gap-1">
+              <i class="fa-regular fa-copy"></i> Copy Account Number
+            </button>
+          </div>
         </div>
       </div>
-      <div>
-        <label class="block text-sm font-medium mb-1">WhatsApp Number <span class="text-red-500">*</span></label>
-        <input type="tel" id="buyer-whatsapp" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg" placeholder="0801 234 5678">
-        <p class="text-xs text-neutral-500 mt-1">Seller will contact you on WhatsApp for delivery</p>
-      </div>
-      <div>
-        <label class="block text-sm font-medium mb-1">State <span class="text-red-500">*</span></label>
-        <select id="buyer-state" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg">
-          <option value="">Select state</option>
-          <option value="Lagos">Lagos</option>
-          <option value="Abuja">Abuja (FCT)</option>
-          <option value="Port Harcourt">Port Harcourt</option>
-          <option value="Kano">Kano</option>
-          <option value="Other">Other</option>
-        </select>
-      </div>
-      <div>
-        <label class="block text-sm font-medium mb-1">City/Area <span class="text-red-500">*</span></label>
-        <input type="text" id="buyer-city" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg" placeholder="e.g., Ikeja, Lekki">
-      </div>
-      <div>
-        <label class="block text-sm font-medium mb-1">Full Delivery Address <span class="text-red-500">*</span></label>
-        <textarea id="buyer-address" required rows="3" class="w-full px-4 py-3 border border-neutral-300 rounded-lg" placeholder="Street address, landmark, etc."></textarea>
-      </div>
-      <div class="bg-neutral-50 rounded-xl p-4">
+      
+      <!-- Receipt Upload -->
+      <div class="bg-neutral-50 rounded-xl p-4 mb-6">
         <label class="block text-sm font-medium mb-2">📸 Upload Payment Receipt <span class="text-red-500">*</span></label>
+        <p class="text-xs text-neutral-500 mb-3">After transferring, take a screenshot and upload it here for verification.</p>
         <div id="receipt-upload-zone" class="upload-zone rounded-lg p-6 text-center cursor-pointer" onclick="document.getElementById('receipt-file').click()">
           <i class="fa-solid fa-cloud-arrow-up text-3xl text-neutral-400 mb-2"></i>
           <p class="font-medium text-sm">Click to upload receipt</p>
@@ -1317,17 +1620,60 @@ html { scroll-behavior: smooth; }
           <button type="button" onclick="removeReceipt()" class="text-red-600 text-sm mt-2 hover:underline">Remove</button>
         </div>
       </div>
-      <div class="flex items-start gap-2">
+      
+      <div class="flex items-start gap-2 mb-6">
         <input type="checkbox" id="checkout-terms" required class="w-5 h-5 text-brand-600 rounded mt-0.5">
         <label class="text-sm text-neutral-600">
           I confirm that I have made the payment to the seller's account and uploaded the correct receipt.
         </label>
       </div>
-      <button type="submit" class="btn-primary text-white font-semibold px-6 py-4 rounded-lg w-full flex items-center justify-center gap-2">
-        <span id="checkout-btn-text">Submit Order</span>
-        <div id="checkout-spinner" class="loading-spinner hidden border-white border-t-transparent inline-block ml-2"></div>
-      </button>
-    </form>
+      
+      <div class="flex gap-3">
+        <button type="button" onclick="goToCheckoutStep(1)" class="btn-secondary px-6 py-3 rounded-lg font-medium">
+          <i class="fa-solid fa-arrow-left mr-2"></i> Back
+        </button>
+        <button type="button" onclick="goToCheckoutStep(3)" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg flex-1">
+          Review Order <i class="fa-solid fa-arrow-right ml-2"></i>
+        </button>
+      </div>
+    </div>
+    
+    <!-- Step 3: Success Confirmation -->
+    <div id="checkout-step-3" class="checkout-step">
+      <div class="text-center py-8">
+        <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <i class="fa-solid fa-circle-check text-4xl text-green-600"></i>
+        </div>
+        <h3 class="text-2xl font-heading font-bold mb-2">Order Confirmed! 🎉</h3>
+        <p class="text-neutral-600 mb-6">Your order has been placed successfully. The seller will contact you on WhatsApp shortly.</p>
+        
+        <div class="bg-neutral-50 rounded-xl p-6 mb-6 text-left">
+          <div class="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span class="text-neutral-500">Order Number</span>
+              <div id="success-order-number" class="font-bold text-brand-600">ORD-XXXXXX</div>
+            </div>
+            <div>
+              <span class="text-neutral-500">Total Amount</span>
+              <div id="success-total" class="font-bold">₦0</div>
+            </div>
+            <div class="col-span-2">
+              <span class="text-neutral-500">Delivery To</span>
+              <div id="success-delivery" class="font-medium"></div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="flex gap-3 justify-center">
+          <button onclick="closeModal('checkout-modal'); clearCartAfterSuccess()" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg">
+            Continue Shopping
+          </button>
+          <a href="https://wa.me/2349061484256" target="_blank" class="btn-secondary px-6 py-3 rounded-lg font-medium flex items-center gap-2">
+            <i class="fa-brands fa-whatsapp"></i> Contact Support
+          </a>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1462,6 +1808,7 @@ const SUPABASE_URL = 'https://hasairlvjazwhtvylrjl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Z179YOa4aZcA2SR2mqWlfw_sM7Xa9y8';
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const ADMIN_WHATSAPP = '2349061484256';
+const ADMIN_EMAIL = 'israelefe093@gmail.com';
 const PLATFORM_ACCOUNT = '9061484256';
 const PLATFORM_ACCOUNT_NAME = 'Efe Israel';
 const PLATFORM_BANK = 'OPay';
@@ -1473,7 +1820,7 @@ const chatbotQA = {
   'how do i sell': 'To sell: 1️⃣ Sign up 2️⃣ Add bank account 3️⃣ List products (FREE 1 month) 4️⃣ Receive payments 5️⃣ Pay ₦5,000 after trial! 💰',
   'payment': 'Buyers pay sellers DIRECTLY via bank transfer. Upload receipt as proof! 💳',
   'commission': 'Sellers get 1 month FREE. After that, pay ₦5,000 to OPay: 9061484256 (Efe Israel). Upload receipt to continue! 💵',
-  'dropshipping': 'Yes! Import from AliExpress, CJ Dropshipping, or any supplier. Set your margin (30-50%), list on BUYSELL, and when you get an order, forward it to your supplier. They ship directly to your customer! 🌍',
+  'dropshipping': 'Yes! Import from AliExpress, CJ Dropshipping. Set margin (30-50%), list on BUYSELL, forward orders to supplier. They ship to customer! 🌍',
   'default': 'Contact WhatsApp support: +234 906 148 4256 📱'
 };
 
@@ -1492,6 +1839,10 @@ const slides = 3;
 let chatbotOpen = false;
 let carouselInterval;
 let selectedSupplier = null;
+let currentCheckoutStep = 1;
+let orders = JSON.parse(localStorage.getItem('buysell_orders')) || [];
+let dropshipStats = { imported: 0, sales: 0, pending: 0 };
+let affiliateEarnings = { total: 0, pending: 0, clicks: 0, conversions: 0 };
 
 // ==========================================
 // INITIALIZATION
@@ -1500,6 +1851,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await checkAuth();
   updateCartCount();
   startCarousel();
+  loadOrders();
 });
 
 // ==========================================
@@ -1514,9 +1866,19 @@ async function checkAuth() {
     if (currentUser) {
       await checkSellerSubscription();
       await loadUserProfile();
+      checkAdminAccess();
     }
   } catch (e) {
     console.log('Auth check error:', e);
+  }
+}
+
+function checkAdminAccess() {
+  const adminLink = document.getElementById('admin-link');
+  if (currentUser?.email === ADMIN_EMAIL) {
+    adminLink.classList.remove('hidden');
+  } else {
+    adminLink.classList.add('hidden');
   }
 }
 
@@ -1531,7 +1893,8 @@ async function checkSellerSubscription() {
       const today = new Date();
       
       if (!sellerData.commission_paid && today > trialEndDate) {
-        document.getElementById('account-suspended').classList.add('active');
+        document.getElementById('account-suspended').classList.remove('hidden');
+        document.getElementById('account-suspended').style.display = 'flex';
         if (currentView === 'seller') {
           document.getElementById('seller-dashboard').classList.add('hidden-section');
         }
@@ -1587,6 +1950,7 @@ async function handleLogin(e) {
   currentUser = response.data.user;
   closeModal('auth-modal');
   updateAuthUI();
+  checkAdminAccess();
   showToast('Welcome back! 👋', 'success');
   loadUserProfile();
 }
@@ -1605,7 +1969,7 @@ async function handleRegister(e) {
     email: email,
     password: password,
     options: {
-      data: {
+       {
         first_name: firstName,
         last_name: lastName,
         user_type: userType,
@@ -1647,6 +2011,7 @@ async function handleRegister(e) {
   currentUser = response.data.user;
   closeModal('auth-modal');
   updateAuthUI();
+  checkAdminAccess();
   showToast('Account created! Welcome to BUYSELL 🎉', 'success');
 }
 
@@ -1754,6 +2119,7 @@ function showSellerSection(sectionId) {
   if (sectionId === 'overview') loadSellerStats();
   if (sectionId === 'affiliate') loadAffiliateEarnings();
   if (sectionId === 'commission') loadCommissionStatus();
+  if (sectionId === 'admin') loadAllSellers();
 }
 
 // ==========================================
@@ -1846,16 +2212,18 @@ function renderProducts(productsToRender) {
   grid.innerHTML = '';
   productsToRender.forEach(product => {
     const discount = product.original_price ? Math.round((1 - product.price / product.original_price) * 100) : 0;
+    const isSoldOut = product.status === 'sold-out';
     const productHTML = `
-      <div class="product-card bg-white rounded-xl border border-neutral-200 overflow-hidden group">
-        <div class="relative" onclick="showProductDetail('${product.id}')">
+      <div class="product-card bg-white rounded-xl border border-neutral-200 overflow-hidden group ${isSoldOut ? 'sold-out' : ''}" onclick="${isSoldOut ? '' : `showProductDetail('${product.id}')`}">
+        <div class="relative">
           <img src="${product.image_url || 'https://via.placeholder.com/300'}" class="w-full h-40 object-cover" onerror="this.src='https://via.placeholder.com/300?text=No+Image'">
           ${product.has_video ? `<span class="absolute top-2 right-2 video-badge text-xs px-2 py-1 rounded text-white"><i class="fa-solid fa-video"></i></span>` : ''}
           ${discount > 0 ? `<span class="absolute top-2 left-2 price-badge text-white text-xs font-bold px-2 py-1 rounded">-${discount}%</span>` : ''}
           ${product.category === 'dropship' ? `<span class="absolute bottom-2 left-2 dropship-badge text-white text-xs px-2 py-1 rounded"><i class="fa-solid fa-globe"></i> Dropship</span>` : ''}
-          <button onclick="event.stopPropagation(); addToCart('${product.id}')" class="absolute bottom-2 right-2 bg-brand-600 hover:bg-brand-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition opacity-0 group-hover:opacity-100">
+          ${isSoldOut ? `<span class="absolute top-2 left-2 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded">SOLD OUT</span>` : ''}
+          ${!isSoldOut ? `<button onclick="event.stopPropagation(); addToCart('${product.id}')" class="absolute bottom-2 right-2 bg-brand-600 hover:bg-brand-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition opacity-0 group-hover:opacity-100">
             <i class="fa-solid fa-cart-plus mr-1"></i> Add
-          </button>
+          </button>` : ''}
         </div>
         <div class="p-3">
           <h3 class="font-medium text-sm truncate mb-1">${product.name}</h3>
@@ -1863,29 +2231,88 @@ function renderProducts(productsToRender) {
             <span class="text-lg font-bold text-neutral-900">₦${product.price?.toLocaleString() || '0'}</span>
             ${product.original_price ? `<span class="text-sm text-neutral-400 line-through">₦${product.original_price.toLocaleString()}</span>` : ''}
           </div>
-          <button onclick="event.stopPropagation(); addToCart('${product.id}')" class="w-full mt-3 bg-brand-600 hover:bg-brand-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition md:hidden">
+          ${!isSoldOut ? `<button onclick="event.stopPropagation(); addToCart('${product.id}')" class="w-full mt-3 bg-brand-600 hover:bg-brand-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition md:hidden">
             <i class="fa-solid fa-cart-plus mr-1"></i> Add to Cart
-          </button>
+          </button>` : ''}
         </div>
       </div>`;
     grid.innerHTML += productHTML;
   });
 }
 
-function showProductDetail(productId) {
+async function showProductDetail(productId) {
   const product = products.find(p => p.id === productId);
   if (!product) return;
+  
+  // Populate modal
+  document.getElementById('detail-title').textContent = product.name;
+  document.getElementById('detail-price').textContent = `₦${product.price?.toLocaleString()}`;
+  document.getElementById('detail-description').textContent = product.description;
+  document.getElementById('detail-location').textContent = product.location || 'Nigeria';
+  document.getElementById('detail-category').textContent = product.category?.toUpperCase() || 'GENERAL';
+  document.getElementById('detail-condition').textContent = product.condition?.replace('-', ' ') || 'New';
+  document.getElementById('detail-seller').textContent = 'Verified Seller';
+  
+  // Handle image/video
+  const imageEl = document.getElementById('detail-image');
+  const videoEl = document.getElementById('detail-video');
+  const hasVideo = document.getElementById('detail-has-video');
+  
+  if (product.video_url) {
+    imageEl.classList.add('hidden');
+    videoEl.classList.remove('hidden');
+    videoEl.src = product.video_url;
+    hasVideo.classList.remove('hidden');
+  } else {
+    imageEl.classList.remove('hidden');
+    videoEl.classList.add('hidden');
+    videoEl.src = '';
+    imageEl.src = product.image_url || 'https://via.placeholder.com/400';
+    hasVideo.classList.add('hidden');
+  }
+  
+  // Handle original price & discount
+  if (product.original_price) {
+    document.getElementById('detail-original-price').textContent = `₦${product.original_price.toLocaleString()}`;
+    document.getElementById('detail-original-price').classList.remove('hidden');
+    const discount = Math.round((1 - product.price / product.original_price) * 100);
+    document.getElementById('detail-discount').textContent = `-${discount}%`;
+    document.getElementById('detail-discount').classList.remove('hidden');
+  } else {
+    document.getElementById('detail-original-price').classList.add('hidden');
+    document.getElementById('detail-discount').classList.add('hidden');
+  }
+  
+  // Store current product for cart/whatsapp
   currentProduct = product;
-  showToast('Product detail view coming soon!', 'info');
+  
+  document.getElementById('product-detail-modal').classList.add('active');
+}
+
+function addToCartFromDetail() {
+  if (!currentProduct) return;
+  addToCart(currentProduct.id);
+  closeModal('product-detail-modal');
+}
+
+function haggleViaWhatsApp() {
+  if (!currentProduct) return;
+  const message = `Hello! I'm interested in "${currentProduct.name}" listed at ₦${currentProduct.price?.toLocaleString()}. Is the price negotiable?`;
+  const whatsappURL = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent(message)}`;
+  window.open(whatsappURL, '_blank');
 }
 
 // ==========================================
-// CART & CHECKOUT
+// CART & MULTI-STEP CHECKOUT
 // ==========================================
 function addToCart(productId) {
   const product = products.find(p => p.id === productId) || currentProduct;
   if (!product) {
     showToast('Product not found', 'error');
+    return;
+  }
+  if (product.status === 'sold-out') {
+    showToast('This item is sold out', 'error');
     return;
   }
   const existingItem = cart.find(item => item.id === product.id);
@@ -1947,17 +2374,50 @@ function removeFromCart(productId) {
   showToast('Item removed from cart', 'success');
 }
 
-async function showCheckout() {
-  if (!currentUser) {
-    showToast('Please sign in to checkout', 'error');
-    closeModal('cart-modal');
-    showLoginModal();
-    return;
+function goToCheckoutStep(step) {
+  // Validation
+  if (step === 2) {
+    const name = document.getElementById('buyer-name').value;
+    const phone = document.getElementById('buyer-phone').value;
+    const address = document.getElementById('buyer-address').value;
+    if (!name || !phone || !address) {
+      showToast('Please fill in all delivery details', 'error');
+      return;
+    }
   }
-  if (cart.length === 0) {
-    showToast('Your cart is empty', 'error');
-    return;
+  if (step === 3) {
+    if (!receiptFile) {
+      showToast('Please upload payment receipt', 'error');
+      return;
+    }
+    if (!document.getElementById('checkout-terms').checked) {
+      showToast('Please confirm payment', 'error');
+      return;
+    }
   }
+  
+  // Update UI
+  currentCheckoutStep = step;
+  document.querySelectorAll('.checkout-step').forEach(el => el.classList.remove('active'));
+  document.getElementById(`checkout-step-${step}`).classList.add('active');
+  
+  // Update progress
+  document.getElementById('checkout-step-number').textContent = step;
+  const labels = ['Delivery Details', 'Payment & Receipt', 'Confirmation'];
+  document.getElementById('checkout-step-label').textContent = labels[step - 1];
+  document.getElementById('checkout-progress').style.width = `${step * 33.33}%`;
+  
+  // Populate step 2 if navigating to it
+  if (step === 2) {
+    populatePaymentStep();
+  }
+  // Populate step 3 if navigating to it
+  if (step === 3) {
+    populateConfirmationStep();
+  }
+}
+
+async function populatePaymentStep() {
   const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   document.getElementById('checkout-items').innerHTML = cart.map(item => `
     <div class="flex items-center gap-3">
@@ -1981,9 +2441,16 @@ async function showCheckout() {
       document.getElementById('seller-account-name').textContent = sellerData.account_name || 'Not provided';
     }
   }
+}
+
+function populateConfirmationStep() {
+  const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const orderNumber = 'ORD-' + Date.now().toString().slice(-6);
+  const delivery = `${document.getElementById('buyer-city').value}, ${document.getElementById('buyer-state').value}`;
   
-  closeModal('cart-modal');
-  document.getElementById('checkout-modal').classList.add('active');
+  document.getElementById('success-order-number').textContent = orderNumber;
+  document.getElementById('success-total').textContent = `₦${total.toLocaleString()}`;
+  document.getElementById('success-delivery').textContent = delivery;
 }
 
 function copyAccountNumber() {
@@ -2018,61 +2485,78 @@ function removeReceipt() {
 
 async function submitOrder(event) {
   event.preventDefault();
-  const receiptInput = document.getElementById('receipt-file');
-  if (!receiptInput.files[0]) {
-    showToast('Please upload payment receipt', 'error');
-    return;
-  }
+  
   if (!currentUser) {
     showToast('Please sign in to checkout', 'error');
+    closeModal('checkout-modal');
+    showLoginModal();
     return;
   }
-
+  
   const checkoutBtn = document.getElementById('checkout-btn-text');
   const checkoutSpinner = document.getElementById('checkout-spinner');
   checkoutBtn.textContent = 'Processing...';
   checkoutSpinner.classList.remove('hidden');
 
   try {
-    const receiptFile = receiptInput.files[0];
-    const receiptFileName = `receipts/${currentUser.id}-${Date.now()}.${receiptFile.name.split('.').pop()}`;
-    const uploadResponse = await supabaseClient.storage.from('receipts').upload(receiptFileName, receiptFile);
-    if (uploadResponse.error) throw uploadResponse.error;
-
-    const urlResponse = supabaseClient.storage.from('receipts').getPublicUrl(receiptFileName);
-    const publicUrl = urlResponse.data.publicUrl;
-
+    // Generate order number
+    const orderNumber = 'ORD-' + Date.now().toString().slice(-6);
     const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const buyerName = document.getElementById('buyer-name').value;
-    const buyerPhone = document.getElementById('buyer-phone').value;
-    const buyerWhatsapp = document.getElementById('buyer-whatsapp').value;
-    const buyerState = document.getElementById('buyer-state').value;
-    const buyerCity = document.getElementById('buyer-city').value;
-    const buyerAddress = document.getElementById('buyer-address').value;
-
-    const orderResponse = await supabaseClient.from('orders').insert([{
+    
+    // Save order to localStorage (persistence)
+    const newOrder = {
+      id: Date.now().toString(),
+      order_number: orderNumber,
       buyer_id: currentUser.id,
-      seller_id: cart[0].seller_id,
+      seller_id: cart[0]?.seller_id,
+      items: [...cart],
       total_amount: total,
       status: 'pending',
-      order_number: 'ORD-' + Date.now(),
-      delivery_name: buyerName,
-      delivery_phone: buyerPhone,
-      delivery_whatsapp: buyerWhatsapp,
-      delivery_state: buyerState,
-      delivery_city: buyerCity,
-      delivery_address: buyerAddress,
-      payment_receipt_url: publicUrl,
+      delivery: {
+        name: document.getElementById('buyer-name').value,
+        phone: document.getElementById('buyer-phone').value,
+        whatsapp: document.getElementById('buyer-whatsapp').value,
+        state: document.getElementById('buyer-state').value,
+        city: document.getElementById('buyer-city').value,
+        address: document.getElementById('buyer-address').value
+      },
+      payment_receipt: receiptFile?.name || 'receipt.jpg',
       created_at: new Date().toISOString()
-    }]);
-
-    if (orderResponse.error) throw orderResponse.error;
-
+    };
+    
+    orders.push(newOrder);
+    localStorage.setItem('buysell_orders', JSON.stringify(orders));
+    
+    // Also save to Supabase if connected
+    try {
+      const receiptFileName = `receipts/${currentUser.id}-${Date.now()}.${receiptFile.name.split('.').pop()}`;
+      const uploadResponse = await supabaseClient.storage.from('receipts').upload(receiptFileName, receiptFile);
+      if (!uploadResponse.error) {
+        const urlResponse = supabaseClient.storage.from('receipts').getPublicUrl(receiptFileName);
+        await supabaseClient.from('orders').insert([{
+          buyer_id: currentUser.id,
+          seller_id: cart[0].seller_id,
+          total_amount: total,
+          status: 'pending',
+          order_number: orderNumber,
+          delivery_name: newOrder.delivery.name,
+          delivery_phone: newOrder.delivery.phone,
+          delivery_whatsapp: newOrder.delivery.whatsapp,
+          delivery_state: newOrder.delivery.state,
+          delivery_city: newOrder.delivery.city,
+          delivery_address: newOrder.delivery.address,
+          payment_receipt_url: urlResponse.data.publicUrl,
+          created_at: new Date().toISOString()
+        }]);
+      }
+    } catch (e) {
+      console.log('Supabase order save error:', e);
+    }
+    
+    // Go to success step
+    goToCheckoutStep(3);
     showToast('Order placed! Seller will contact you on WhatsApp 🎉', 'success');
-    closeModal('checkout-modal');
-    cart = [];
-    localStorage.setItem('buysell_cart', JSON.stringify(cart));
-    updateCartCount();
+    
   } catch (error) {
     console.error('Order Error:', error);
     showToast('Failed to place order: ' + error.message, 'error');
@@ -2080,6 +2564,29 @@ async function submitOrder(event) {
     checkoutBtn.textContent = 'Submit Order';
     checkoutSpinner.classList.add('hidden');
   }
+}
+
+function clearCartAfterSuccess() {
+  cart = [];
+  localStorage.setItem('buysell_cart', JSON.stringify(cart));
+  updateCartCount();
+  closeModal('checkout-modal');
+}
+
+function showCheckout() {
+  if (!currentUser) {
+    showToast('Please sign in to checkout', 'error');
+    closeModal('cart-modal');
+    showLoginModal();
+    return;
+  }
+  if (cart.length === 0) {
+    showToast('Your cart is empty', 'error');
+    return;
+  }
+  closeModal('cart-modal');
+  goToCheckoutStep(1);
+  document.getElementById('checkout-modal').classList.add('active');
 }
 
 // ==========================================
@@ -2183,7 +2690,7 @@ async function loadSellerProducts() {
   try {
     const filter = document.getElementById('seller-product-filter')?.value || 'all';
     let query = supabaseClient.from('products').select('*').eq('seller_id', currentUser.id);
-    if (filter !== 'all') {
+    if (filter !== 'all' && filter !== 'sold-out') {
       query = query.eq('status', filter);
     }
     const response = await query.order('created_at', { ascending: false });
@@ -2205,21 +2712,40 @@ async function loadSellerProducts() {
 
 function renderSellerProducts(products) {
   const grid = document.getElementById('seller-products-grid');
-  grid.innerHTML = products.map(product => `
+  grid.innerHTML = products.map(product => {
+    const isSoldOut = product.status === 'sold-out';
+    return `
     <div class="bg-white rounded-xl border border-neutral-200 p-4 flex gap-4">
       <img src="${product.image_url || 'https://via.placeholder.com/100'}" class="w-24 h-24 object-cover rounded-lg">
       <div class="flex-1">
         <h3 class="font-semibold mb-1">${product.name}</h3>
         <div class="text-brand-600 font-bold mb-1">₦${product.price?.toLocaleString()}</div>
         <div class="flex items-center gap-2 text-xs text-neutral-500">
-          <span class="px-2 py-0.5 rounded-full ${product.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}">${product.status}</span>
+          <span class="px-2 py-0.5 rounded-full ${isSoldOut ? 'bg-red-100 text-red-700' : product.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}">
+            ${isSoldOut ? 'SOLD OUT' : product.status}
+          </span>
           <span>${product.location || 'Nigeria'}</span>
         </div>
       </div>
       <div class="flex flex-col gap-2">
+        <button onclick="toggleProductStatus('${product.id}', '${product.status}')" class="text-blue-600 hover:text-blue-800 text-sm">
+          <i class="fa-solid fa-${isSoldOut ? 'check' : 'ban'}"></i> ${isSoldOut ? 'Activate' : 'Mark Sold'}
+        </button>
         <button onclick="deleteProduct('${product.id}')" class="text-red-600 hover:text-red-800 text-sm"><i class="fa-solid fa-trash"></i> Delete</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+
+async function toggleProductStatus(productId, currentStatus) {
+  const newStatus = currentStatus === 'sold-out' ? 'active' : 'sold-out';
+  try {
+    await supabaseClient.from('products').update({ status: newStatus }).eq('id', productId);
+    showToast(`Product marked as ${newStatus}`, 'success');
+    loadSellerProducts();
+  } catch(e) {
+    showToast('Failed to update product', 'error');
+  }
 }
 
 async function deleteProduct(productId) {
@@ -2242,20 +2768,34 @@ async function loadSellerOrders() {
   list.classList.add('hidden');
   empty.classList.add('hidden');
   try {
-    const response = await supabaseClient.from('orders').select('*, buyer:users(first_name, last_name, phone, whatsapp_number)').eq('seller_id', currentUser.id).order('created_at', { ascending: false });
-    if (response.error) throw response.error;
-    const data = response.data;
+    // Load from localStorage first (persistence)
+    const localOrders = orders.filter(o => o.seller_id === currentUser.id);
+    
+    // Also try to load from Supabase
+    try {
+      const response = await supabaseClient.from('orders').select('*, buyer:users(first_name, last_name, phone, whatsapp_number)').eq('seller_id', currentUser.id).order('created_at', { ascending: false });
+      if (!response.error && response.data) {
+        // Merge with local orders
+        const supabaseOrders = response.data;
+        const allOrders = [...localOrders, ...supabaseOrders.filter(o => !localOrders.find(lo => lo.order_number === o.order_number))];
+        renderOrders(allOrders);
+        const pendingCount = allOrders.filter(o => o.status === 'pending').length;
+        if (pendingCount > 0) {
+          document.getElementById('pending-orders-badge').textContent = pendingCount;
+          document.getElementById('pending-orders-badge').classList.remove('hidden');
+        }
+      } else {
+        renderOrders(localOrders);
+      }
+    } catch (e) {
+      renderOrders(localOrders);
+    }
+    
     loading.classList.add('hidden');
-    if (!data || data.length === 0) {
+    if (localOrders.length === 0) {
       empty.classList.remove('hidden');
     } else {
       list.classList.remove('hidden');
-      renderOrders(data);
-      const pendingCount = data.filter(o => o.status === 'pending').length;
-      if (pendingCount > 0) {
-        document.getElementById('pending-orders-badge').textContent = pendingCount;
-        document.getElementById('pending-orders-badge').classList.remove('hidden');
-      }
     }
   } catch(e) {
     console.log("Could not load seller orders");
@@ -2278,74 +2818,157 @@ function renderOrders(orders) {
           <span class="px-3 py-1 rounded-full text-xs font-medium ${statusClass}">${order.status}</span>
         </div>
         <div class="flex gap-2 flex-wrap">
-          <a href="https://wa.me/${order.buyer?.whatsapp_number || order.buyer?.phone}" target="_blank" class="px-3 py-1.5 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 flex items-center gap-1"><i class="fa-brands fa-whatsapp"></i> Contact Buyer</a>
+          <a href="https://wa.me/${order.delivery?.whatsapp || order.delivery?.phone}" target="_blank" class="px-3 py-1.5 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 flex items-center gap-1"><i class="fa-brands fa-whatsapp"></i> Contact Buyer</a>
         </div>
       </div>`;
   }).join('');
 }
 
-async function loadCommissionStatus() {
-  if (!currentUser) return;
-  try {
-    const response = await supabaseClient.from('seller_commissions').select('*').eq('seller_id', currentUser.id).single();
-    const commission = response.data;
-    if (commission) {
-      document.getElementById('commission-status-badge').textContent = commission.commission_paid ? 'Paid' : 'Active';
-    }
-  } catch(e) {
-    console.log("Could not load commission status");
-  }
+function loadOrders() {
+  // Load orders from localStorage
+  orders = JSON.parse(localStorage.getItem('buysell_orders')) || [];
 }
 
-function showCommissionModal() {
-  document.getElementById('commission-modal').classList.add('active');
+// ==========================================
+// DROPSHIPPING
+// ==========================================
+function selectSupplier(supplier) {
+  showToast(`Connecting to ${supplier === 'aliexpress' ? 'AliExpress' : 'CJ Dropshipping'}...`, 'info');
+  setTimeout(() => {
+    showToast('Supplier connected! You can now import products.', 'success');
+  }, 2000);
 }
 
-async function submitCommissionPayment(event) {
-  event.preventDefault();
-  const receiptInput = document.getElementById('commission-receipt');
-  if (!receiptInput.files[0]) {
-    showToast('Please upload receipt', 'error');
+function importDropshipItem(name, costPrice, sellPrice) {
+  if (!currentUser) {
+    showToast('Please sign in to import products', 'error');
+    showLoginModal();
     return;
   }
+  
+  showToast(`Importing "${name}" to your store...`, 'info');
+  
+  // Update dropship stats
+  dropshipStats.imported++;
+  document.getElementById('dropship-imported').textContent = dropshipStats.imported;
+  
+  setTimeout(() => {
+    showToast(`"${name}" added to your products! Set your margin and publish.`, 'success');
+    showSellerSection('add-product');
+  }, 1500);
+}
 
+// ==========================================
+// AFFILIATE & REFERRAL
+// ==========================================
+function copyReferralLink() {
+  const link = document.getElementById('referral-link').value;
+  navigator.clipboard.writeText(link);
+  showToast('Referral link copied! Share to earn ₦500 per referral 🎁', 'success');
+}
+
+async function loadAffiliateEarnings() {
+  if (!currentUser) return;
+  document.getElementById('total-earnings').textContent = `₦${affiliateEarnings.total.toLocaleString()}`;
+  document.getElementById('pending-payouts').textContent = `₦${affiliateEarnings.pending.toLocaleString()}`;
+  document.getElementById('total-clicks').textContent = affiliateEarnings.clicks;
+  document.getElementById('total-conversions').textContent = affiliateEarnings.conversions;
+  document.getElementById('affiliate-earnings-badge').textContent = `₦${affiliateEarnings.total.toLocaleString()}`;
+  document.getElementById('affiliate-earnings-badge').classList.remove('hidden');
+}
+
+function requestWithdrawal() {
+  const message = `💰 *WITHDRAWAL REQUEST*\n👤 Seller: ${currentUser.email}\n💵 Amount: ₦${affiliateEarnings.total}\n📅 Date: ${new Date().toLocaleString()}\nPlease process withdrawal to my account.`;
+  const whatsappURL = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent(message)}`;
+  window.open(whatsappURL, '_blank');
+  showToast('Withdrawal request sent via WhatsApp!', 'success');
+}
+
+// ==========================================
+// SUPER ADMIN
+// ==========================================
+async function loadAllSellers() {
+  if (currentUser?.email !== ADMIN_EMAIL) {
+    showToast('Admin access required', 'error');
+    return;
+  }
+  
+  const loading = document.getElementById('admin-loading');
+  const list = document.getElementById('admin-sellers-list');
+  const empty = document.getElementById('admin-empty');
+  
+  loading.classList.remove('hidden');
+  list.classList.add('hidden');
+  empty.classList.add('hidden');
+  
   try {
-    const receiptFile = receiptInput.files[0];
-    const receiptFileName = `commissions/${currentUser.id}-${Date.now()}.${receiptFile.name.split('.').pop()}`;
-    const uploadResponse = await supabaseClient.storage.from('receipts').upload(receiptFileName, receiptFile);
-    if (uploadResponse.error) throw uploadResponse.error;
-
-    const urlResponse = supabaseClient.storage.from('receipts').getPublicUrl(receiptFileName);
-    const publicUrl = urlResponse.data.publicUrl;
-    const reference = document.getElementById('commission-reference').value;
-
-    const dbResponse = await supabaseClient.from('seller_commissions').upsert([{
-      seller_id: currentUser.id,
-      commission_amount: COMMISSION_AMOUNT,
-      commission_paid: false,
-      payment_receipt_url: publicUrl,
-      transaction_reference: reference,
-      paid_at: new Date().toISOString(),
-      status: 'pending_verification'
-    }]);
-
-    if (dbResponse.error) throw dbResponse.error;
-
-    showToast('Payment receipt submitted! Admin will verify within 24 hours ✅', 'success');
-    closeModal('commission-modal');
+    const response = await supabaseClient.from('sellers').select('*, users(email, first_name, last_name)');
+    if (response.error) throw response.error;
     
-    // Notify admin via WhatsApp
-    const message = `🔔 *NEW COMMISSION PAYMENT*\n👤 Seller: ${currentUser.email}\n💵 Amount: ₦${COMMISSION_AMOUNT}\n📅 Date: ${new Date().toLocaleString()}\nPlease verify and restore seller access.`;
-    const whatsappURL = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent(message)}`;
-    window.open(whatsappURL, '_blank');
+    const sellers = response.data || [];
+    loading.classList.add('hidden');
     
-    loadCommissionStatus();
-  } catch (error) {
-    console.error('Commission Error:', error);
-    showToast('Failed to submit payment: ' + error.message, 'error');
+    if (sellers.length === 0) {
+      empty.classList.remove('hidden');
+      return;
+    }
+    
+    list.classList.remove('hidden');
+    list.innerHTML = sellers.map(seller => {
+      const trialEndDate = new Date(seller.trial_end_date);
+      const today = new Date();
+      const isExpired = !seller.commission_paid && today > trialEndDate;
+      const statusBadge = seller.commission_paid 
+        ? '<span class="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">Paid</span>'
+        : isExpired 
+          ? '<span class="px-2 py-1 bg-red-100 text-red-700 text-xs rounded-full">Expired</span>'
+          : '<span class="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded-full">Active Trial</span>';
+      
+      return `
+        <div class="border border-neutral-200 rounded-xl p-4 flex items-center justify-between">
+          <div>
+            <div class="font-semibold">${seller.users?.first_name || 'Unknown'} ${seller.users?.last_name || ''}</div>
+            <div class="text-sm text-neutral-500">${seller.users?.email || 'N/A'}</div>
+            <div class="text-xs text-neutral-400 mt-1">Trial ends: ${trialEndDate.toLocaleDateString()}</div>
+            <div class="mt-2">${statusBadge}</div>
+          </div>
+          <button onclick="approveSellerSubscription('${seller.user_id}')" 
+            class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg disabled:opacity-50"
+            ${seller.commission_paid ? 'disabled' : ''}>
+            ${seller.commission_paid ? '✓ Approved' : 'Approve Sub'}
+          </button>
+        </div>
+      `;
+    }).join('');
+  } catch(e) {
+    console.log("Could not load sellers:", e);
+    loading.classList.add('hidden');
+    empty.classList.remove('hidden');
   }
 }
 
+async function approveSellerSubscription(sellerId) {
+  if (currentUser?.email !== ADMIN_EMAIL) {
+    showToast('Admin access required', 'error');
+    return;
+  }
+  
+  try {
+    await supabaseClient.from('sellers').update({
+      commission_paid: true,
+      paid_at: new Date().toISOString()
+    }).eq('user_id', sellerId);
+    
+    showToast('Seller subscription approved! ✅', 'success');
+    loadAllSellers();
+  } catch(e) {
+    showToast('Failed to approve subscription', 'error');
+  }
+}
+
+// ==========================================
+// SETTINGS & UTILS
+// ==========================================
 async function updateSellerSettings(event) {
   event.preventDefault();
   if (!currentUser) return;
@@ -2362,21 +2985,6 @@ async function updateSellerSettings(event) {
   } catch (error) {
     showToast('Failed to update settings: ' + error.message, 'error');
   }
-}
-
-async function loadAffiliateEarnings() {
-  if (!currentUser) return;
-  const totalEarnings = 0;
-  const totalConversions = 0;
-  document.getElementById('total-earnings').textContent = `₦${totalEarnings.toLocaleString()}`;
-  document.getElementById('total-conversions').textContent = totalConversions;
-}
-
-function requestWithdrawal() {
-  const message = `💰 *WITHDRAWAL REQUEST*\n👤 Seller: ${currentUser.email}\n💵 Amount: ₦0\n📅 Date: ${new Date().toLocaleString()}\nPlease process withdrawal to my account.`;
-  const whatsappURL = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent(message)}`;
-  window.open(whatsappURL, '_blank');
-  showToast('Withdrawal request sent via WhatsApp!', 'success');
 }
 
 async function handleProductUpload(event) {
@@ -2402,17 +3010,6 @@ async function handleProductUpload(event) {
     const urlResponse = supabaseClient.storage.from('products').getPublicUrl(fileName);
     const publicUrl = urlResponse.data.publicUrl;
 
-    let videoUrl = null;
-    const videoFile = document.getElementById('prod-video').files[0];
-    if (videoFile) {
-      const videoFileName = `${currentUser.id}-video-${Date.now()}.${videoFile.name.split('.').pop()}`;
-      const videoUploadResponse = await supabaseClient.storage.from('products').upload(videoFileName, videoFile);
-      if (!videoUploadResponse.error) {
-        const videoUrlResponse = supabaseClient.storage.from('products').getPublicUrl(videoFileName);
-        videoUrl = videoUrlResponse.data.publicUrl;
-      }
-    }
-
     const newProduct = {
       name: document.getElementById('prod-name').value,
       price: parseFloat(document.getElementById('prod-price').value),
@@ -2423,8 +3020,6 @@ async function handleProductUpload(event) {
       location: document.getElementById('prod-location').value,
       is_negotiable: document.getElementById('prod-negotiable').checked,
       image_url: publicUrl,
-      video_url: videoUrl,
-      has_video: !!videoUrl,
       seller_id: currentUser.id,
       status: 'active'
     };
@@ -2444,14 +3039,6 @@ async function handleProductUpload(event) {
     btnText.textContent = 'Publish Product';
     spinner.classList.add('hidden');
   }
-}
-
-function selectSupplier(supplier) {
-  showToast(`Connecting to ${supplier === 'aliexpress' ? 'AliExpress' : 'CJ Dropshipping'}...`, 'info');
-  setTimeout(() => {
-    showToast('Supplier connected! You can now import products.', 'success');
-    showSellerSection('add-product');
-  }, 2000);
 }
 
 // ==========================================
