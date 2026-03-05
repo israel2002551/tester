@@ -296,10 +296,6 @@ justify-content: center;
 .account-suspended.active {
 display: flex;
 }
-.tab-active {
-background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-color: white;
-}
 </style>
 </head>
 <body class="bg-neutral-50 text-neutral-900">
@@ -661,11 +657,6 @@ onkeyup="handleSearch(event)">
 <p class="text-neutral-500">List an item for sale. Include videos for better conversion!</p>
 </div>
 <div class="bg-white rounded-xl border border-neutral-200 p-6 max-w-3xl">
-<div class="flex gap-4 mb-6">
-<button id="manual-tab" class="px-4 py-2 rounded-lg font-medium tab-active">Manual Add</button>
-<button id="import-tab" class="px-4 py-2 rounded-lg font-medium bg-neutral-100 text-neutral-600">Import from Dropship</button>
-</div>
-<div id="manual-form">
 <form id="add-product-form" onsubmit="handleProductUpload(event)" class="space-y-6">
 <div>
 <label class="block text-sm font-medium mb-1">Product Name <span class="text-red-500">*</span></label>
@@ -729,25 +720,6 @@ onkeyup="handleSearch(event)">
 <div id="upload-spinner" class="loading-spinner hidden border-white border-t-transparent"></div>
 </button>
 </form>
-</div>
-<div id="import-form" class="hidden space-y-6">
-<div>
-<label class="block text-sm font-medium mb-1">Supplier</label>
-<select id="supplier" class="w-full px-4 py-2 border border-neutral-300 rounded-lg">
-<option value="aliexpress">AliExpress</option>
-<option value="cj">CJ Dropshipping</option>
-</select>
-</div>
-<div>
-<label class="block text-sm font-medium mb-1">Product URL</label>
-<input type="text" id="product-url" placeholder="Paste product URL from supplier" class="w-full px-4 py-2 border border-neutral-300 rounded-lg">
-</div>
-<button onclick="importDropshipProduct()" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg w-full flex justify-center items-center gap-2">
-<span id="import-btn-text">Import Product</span>
-<div id="import-spinner" class="loading-spinner hidden border-white border-t-transparent"></div>
-</button>
-<p class="text-sm text-neutral-500">After importing, review and edit the details in the Manual Add tab before publishing.</p>
-</div>
 </div>
 </div>
 <!-- Orders Section -->
@@ -1203,39 +1175,6 @@ Proceed to Checkout
 </div>
 </div>
 </div>
-<!-- Product Detail Modal -->
-<div id="product-detail-modal" class="modal">
-<div class="modal-content p-6 relative max-w-4xl">
-<button onclick="closeModal('product-detail-modal')" class="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600">
-<i class="fa-solid fa-xmark text-xl"></i>
-</button>
-<div class="grid md:grid-cols-2 gap-6">
-<div class="relative">
-<img id="detail-image" src="" class="w-full h-96 object-cover rounded-xl">
-<div id="detail-video" class="hidden video-preview mt-4"></div>
-</div>
-<div>
-<h1 id="detail-name" class="text-3xl font-heading font-bold mb-2"></h1>
-<div class="flex items-baseline gap-3 mb-4">
-<span id="detail-price" class="text-2xl font-bold text-brand-600"></span>
-<span id="detail-original-price" class="text-lg text-neutral-400 line-through"></span>
-<span id="detail-discount" class="text-lg text-red-600 font-bold"></span>
-</div>
-<div class="flex items-center gap-4 mb-4">
-<span class="text-sm text-neutral-500"><i class="fa-solid fa-location-dot mr-1"></i><span id="detail-location"></span></span>
-<span class="text-sm text-neutral-500"><i class="fa-solid fa-box mr-1"></i><span id="detail-condition"></span></span>
-</div>
-<p id="detail-description" class="text-neutral-600 mb-6"></p>
-<button onclick="addToCart(currentProduct.id)" class="btn-primary text-white px-6 py-3 rounded-lg w-full mb-3">
-<i class="fa-solid fa-cart-plus mr-2"></i> Add to Cart
-</button>
-<button onclick="addToCart(currentProduct.id); showCheckout()" class="bg-accent-500 text-white px-6 py-3 rounded-lg w-full">
-<i class="fa-solid fa-bag-shopping mr-2"></i> Buy Now
-</button>
-</div>
-</div>
-</div>
-</div>
 <!-- Toast Notification -->
 <div id="toast" class="toast">
 <div class="flex items-start gap-3">
@@ -1285,39 +1224,13 @@ let currentProduct = null;
 let receiptFile = null;
 let currentSlide = 0;
 let chatbotOpen = false;
-let currentEditProduct = null;
 // ==========================================
 // INITIALIZATION
 // ==========================================
 document.addEventListener('DOMContentLoaded', async () => {
 await checkAuth();
 updateCartCount();
-initAddProductTabs();
 });
-function initAddProductTabs() {
-const manualTab = document.getElementById('manual-tab');
-const importTab = document.getElementById('import-tab');
-const manualForm = document.getElementById('manual-form');
-const importForm = document.getElementById('import-form');
-if (manualTab && importTab && manualForm && importForm) {
-manualTab.onclick = () => {
-manualForm.classList.remove('hidden');
-importForm.classList.add('hidden');
-manualTab.classList.add('tab-active');
-manualTab.classList.remove('bg-neutral-100', 'text-neutral-600');
-importTab.classList.remove('tab-active');
-importTab.classList.add('bg-neutral-100', 'text-neutral-600');
-};
-importTab.onclick = () => {
-manualForm.classList.add('hidden');
-importForm.classList.remove('hidden');
-importTab.classList.add('tab-active');
-importTab.classList.remove('bg-neutral-100', 'text-neutral-600');
-manualTab.classList.remove('tab-active');
-manualTab.classList.add('bg-neutral-100', 'text-neutral-600');
-};
-}
-}
 async function checkAuth() {
 try {
 const { data: { session } } = await supabaseClient.auth.getSession();
@@ -1455,13 +1368,6 @@ if (sectionId === 'orders') loadSellerOrders();
 if (sectionId === 'overview') loadSellerStats();
 if (sectionId === 'affiliate') loadAffiliateEarnings();
 if (sectionId === 'commission') loadCommissionStatus();
-if (sectionId === 'add-product') {
-currentEditProduct = null;
-document.getElementById('seller-add-product').querySelector('h1').textContent = 'Add New Product';
-document.getElementById('add-product-form').reset();
-document.getElementById('upload-btn-text').textContent = 'Publish Product';
-document.getElementById('manual-tab').click();
-}
 }
 // ==========================================
 // AUTHENTICATION
@@ -1637,7 +1543,6 @@ const productHTML = `
 <img src="${product.image_url || 'https://via.placeholder.com/300'}" class="w-full h-40 object-cover" onerror="this.src='https://via.placeholder.com/300?text=No+Image'">
 ${product.has_video ? `<span class="absolute top-2 right-2 video-badge text-xs px-2 py-1 rounded text-white"><i class="fa-solid fa-video"></i></span>` : ''}
 ${discount > 0 ? `<span class="absolute top-2 left-2 price-badge text-white text-xs font-bold px-2 py-1 rounded">-${discount}%</span>` : ''}
-${product.category === 'dropship' ? `<span class="absolute bottom-2 left-2 dropship-badge text-white text-xs font-bold px-2 py-1 rounded">Dropship</span>` : ''}
 <button onclick="event.stopPropagation(); addToCart('${product.id}')" class="absolute bottom-2 right-2 bg-brand-600 hover:bg-brand-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition opacity-0 group-hover:opacity-100">
 <i class="fa-solid fa-cart-plus mr-1"></i> Add
 </button>
@@ -1664,23 +1569,7 @@ function showProductDetail(productId) {
 const product = products.find(p => p.id === productId);
 if (!product) return;
 currentProduct = product;
-const modal = document.getElementById('product-detail-modal');
-document.getElementById('detail-name').textContent = product.name;
-document.getElementById('detail-price').textContent = `₦${product.price.toLocaleString()}`;
-document.getElementById('detail-original-price').textContent = product.original_price ? `₦${product.original_price.toLocaleString()}` : '';
-document.getElementById('detail-discount').textContent = product.original_price ? `-${Math.round((1 - product.price / product.original_price) * 100)}%` : '';
-document.getElementById('detail-location').textContent = product.location || 'Nigeria';
-document.getElementById('detail-condition').textContent = product.condition;
-document.getElementById('detail-description').textContent = product.description;
-document.getElementById('detail-image').src = product.image_url || 'https://via.placeholder.com/600';
-const videoContainer = document.getElementById('detail-video');
-if (product.video_url) {
-videoContainer.innerHTML = `<video controls><source src="${product.video_url}" type="video/mp4"></video>`;
-videoContainer.classList.remove('hidden');
-} else {
-videoContainer.classList.add('hidden');
-}
-modal.classList.add('active');
+showToast('Product detail view coming soon!', 'info');
 }
 // ==========================================
 // CART & CHECKOUT
@@ -1902,20 +1791,7 @@ async function loadSellerStats() {
 if (!currentUser) return;
 try {
 const { count: productsCount } = await supabaseClient.from('products').select('*', { count: 'exact', head: true }).eq('seller_id', currentUser.id).eq('status', 'active');
-document.getElementById('stat-products').textContent = productsCount || 0;
-const { data: orders } = await supabaseClient.from('orders').select('total_amount').eq('seller_id', currentUser.id).eq('status', 'delivered');
-const revenue = orders.reduce((sum, o) => sum + o.total_amount, 0);
-document.getElementById('stat-revenue').textContent = `₦${revenue.toLocaleString()}`;
-const { count: ordersCount } = await supabaseClient.from('orders').select('*', { count: 'exact', head: true }).eq('seller_id', currentUser.id);
-document.getElementById('stat-orders').textContent = ordersCount || 0;
-const { data: seller } = await supabaseClient.from('sellers').select('trial_end_date, commission_paid').eq('user_id', currentUser.id).single();
-if (seller) {
-const trialEndDate = new Date(seller.trial_end_date);
-const today = new Date();
-const daysLeft = Math.ceil((trialEndDate - today) / (1000 * 60 * 60 * 24));
-document.getElementById('stat-subscription').textContent = seller.commission_paid ? 'Paid' : 'Free Trial';
-document.getElementById('stat-days-left').textContent = seller.commission_paid ? 'Active' : (daysLeft > 0 ? `${daysLeft} days left` : 'Expired');
-}
+if(document.getElementById('stat-products')) document.getElementById('stat-products').textContent = productsCount || 0;
 } catch(e) {
 console.log("Could not load seller stats");
 }
@@ -1970,22 +1846,7 @@ grid.innerHTML = products.map(product => `
 </div>`).join('');
 }
 async function editProduct(productId) {
-const product = sellerProducts.find(p => p.id === productId);
-if (!product) return;
-currentEditProduct = product;
-showSellerSection('add-product');
-document.getElementById('seller-add-product').querySelector('h1').textContent = 'Edit Product';
-const form = document.getElementById('add-product-form');
-form.elements['prod-name'].value = product.name;
-form.elements['prod-price'].value = product.price;
-form.elements['prod-original-price'].value = product.original_price || '';
-form.elements['prod-category'].value = product.category;
-form.elements['prod-condition'].value = product.condition;
-form.elements['prod-desc'].value = product.description;
-form.elements['prod-location'].value = product.location;
-form.elements['prod-negotiable'].checked = product.is_negotiable;
-document.getElementById('upload-btn-text').textContent = 'Update Product';
-document.getElementById('manual-tab').click();
+showToast('Edit product feature coming soon!', 'info');
 }
 async function deleteProduct(productId) {
 if (!confirm('Are you sure you want to delete this product?')) return;
@@ -1997,52 +1858,171 @@ loadSellerProducts();
 showToast('Failed to delete product', 'error');
 }
 }
-async function importDropshipProduct() {
-const url = document.getElementById('product-url').value;
-const supplier = document.getElementById('supplier').value;
-if (!url) {
-showToast('Please enter a product URL', 'error');
+async function loadSellerOrders() {
+if (!currentUser) return;
+const loading = document.getElementById('orders-loading');
+const list = document.getElementById('orders-list');
+const empty = document.getElementById('orders-empty');
+loading.classList.remove('hidden');
+list.classList.add('hidden');
+empty.classList.add('hidden');
+try {
+const { data, error } = await supabaseClient.from('orders').select('*, buyer:users(first_name, last_name, phone, whatsapp_number)').eq('seller_id', currentUser.id).order('created_at', { ascending: false });
+if (error) throw error;
+loading.classList.add('hidden');
+if (!data || data.length === 0) {
+empty.classList.remove('hidden');
+} else {
+list.classList.remove('hidden');
+renderOrders(data);
+const pendingCount = data.filter(o => o.status === 'pending').length;
+if (pendingCount > 0) {
+document.getElementById('pending-orders-badge').textContent = pendingCount;
+document.getElementById('pending-orders-badge').classList.remove('hidden');
+}
+}
+} catch(e) {
+console.log("Could not load seller orders");
+loading.classList.add('hidden');
+empty.classList.remove('hidden');
+}
+}
+function renderOrders(orders) {
+const list = document.getElementById('orders-list');
+list.innerHTML = orders.map(order => {
+const statusClass = `status-${order.status}`;
+return `
+<div class="border border-neutral-200 rounded-xl p-4">
+<div class="flex items-center justify-between mb-3">
+<div>
+<div class="font-bold">Order #${order.order_number}</div>
+<div class="text-xs text-neutral-500">${new Date(order.created_at).toLocaleString()}</div>
+</div>
+<span class="px-3 py-1 rounded-full text-xs font-medium ${statusClass}">${order.status}</span>
+</div>
+<div class="grid md:grid-cols-2 gap-4 mb-3">
+<div>
+<div class="text-sm font-medium mb-1">Buyer</div>
+<div class="text-sm">${order.buyer?.first_name || 'N/A'} ${order.buyer?.last_name || ''}</div>
+<div class="text-sm text-neutral-500">${order.buyer?.phone || order.buyer?.whatsapp_number || 'N/A'}</div>
+</div>
+<div class="text-right">
+<div class="text-sm font-medium mb-1">Total</div>
+<div class="text-lg font-bold text-brand-600">₦${order.total_amount?.toLocaleString()}</div>
+</div>
+</div>
+<div class="flex gap-2 flex-wrap">
+${order.status === 'pending' ? `<button onclick="updateOrderStatus('${order.id}', 'paid')" class="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">Confirm Payment</button>` : ''}
+${order.status === 'paid' ? `<button onclick="updateOrderStatus('${order.id}', 'processing')" class="px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700">Start Processing</button>` : ''}
+${order.status === 'processing' ? `<button onclick="updateOrderStatus('${order.id}', 'shipped')" class="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700">Mark as Shipped</button>` : ''}
+${order.status === 'shipped' ? `<button onclick="updateOrderStatus('${order.id}', 'delivered')" class="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">Mark as Delivered</button>` : ''}
+<a href="https://wa.me/${order.buyer?.whatsapp_number || order.buyer?.phone}" target="_blank" class="px-3 py-1.5 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 flex items-center gap-1"><i class="fa-brands fa-whatsapp"></i> Contact Buyer</a>
+</div>
+</div>`;
+}).join('');
+}
+async function updateOrderStatus(orderId, newStatus) {
+try {
+await supabaseClient.from('orders').update({ status: newStatus }).eq('id', orderId);
+showToast(`Order marked as ${newStatus}`, 'success');
+loadSellerOrders();
+} catch(e) {
+showToast('Failed to update order', 'error');
+}
+}
+async function loadCommissionStatus() {
+if (!currentUser) return;
+try {
+const { data: commission } = await supabaseClient.from('seller_commissions').select('*').eq('seller_id', currentUser.id).single();
+if (commission) {
+document.getElementById('commission-due-date').textContent = new Date(commission.commission_due_date).toLocaleDateString();
+document.getElementById('commission-status-badge').textContent = commission.commission_paid ? 'Paid' : 'Active';
+}
+} catch(e) {
+console.log("Could not load commission status");
+}
+}
+function showCommissionModal() {
+document.getElementById('commission-modal').classList.add('active');
+}
+async function submitCommissionPayment(event) {
+event.preventDefault();
+const receiptFile = document.getElementById('commission-receipt').files[0];
+if (!receiptFile) {
+showToast('Please upload receipt', 'error');
 return;
 }
-const btnText = document.getElementById('import-btn-text');
-const spinner = document.getElementById('import-spinner');
-btnText.textContent = 'Importing...';
-spinner.classList.remove('hidden');
 try {
-const proxy = 'https://cors-anywhere.herokuapp.com/';
-const response = await fetch(proxy + url);
-if (!response.ok) throw new Error('Failed to fetch page');
-const html = await response.text();
-const parser = new DOMParser();
-const doc = parser.parseFromString(html, 'text/html');
-let title, price, image, desc;
-if (supplier === 'aliexpress') {
-title = doc.querySelector('h1[data-pl="product-title"]')?.textContent.trim() || doc.querySelector('h1.product-title-text')?.textContent.trim() || '';
-price = doc.querySelector('.product-price-current')?.textContent.trim() || doc.querySelector('span.uniform-banner-box-price')?.textContent.trim() || '';
-image = doc.querySelector('.magnifier-image')?.src || '';
-desc = doc.querySelector('#product-description')?.innerText.trim() || doc.querySelector('div.detail-desc-decorate-content')?.innerText.trim() || '';
-} else if (supplier === 'cj') {
-title = doc.querySelector('.product-name')?.textContent.trim() || '';
-price = doc.querySelector('.price')?.textContent.trim() || '';
-image = doc.querySelector('.product-main-img img')?.src || '';
-desc = doc.querySelector('.product-detail-desc')?.innerText.trim() || '';
-}
-if (!title) throw new Error('Could not extract product details. Please try manual add.');
-document.getElementById('prod-name').value = title;
-document.getElementById('prod-price').value = parseFloat(price.replace(/[^0-9.]/g, '')) || 0;
-document.getElementById('prod-desc').value = desc;
-document.getElementById('prod-category').value = 'dropship';
-// For image, since file input, user needs to download and upload, or set a note
-showToast(`Product imported from ${supplier}! Please review details, upload image manually from ${image}, and publish.`, 'success');
-// Switch to manual tab
-document.getElementById('manual-tab').click();
+const receiptFileName = `commissions/${currentUser.id}-${Date.now()}.${receiptFile.name.split('.').pop()}`;
+const { error: uploadError } = await supabaseClient.storage.from('receipts').upload(receiptFileName, receiptFile);
+if (uploadError) throw uploadError;
+const { data: { publicUrl } } = supabaseClient.storage.from('receipts').getPublicUrl(receiptFileName);
+const reference = document.getElementById('commission-reference').value;
+// Save commission record for admin verification
+const { error: dbError } = await supabaseClient.from('seller_commissions').upsert([{
+seller_id: currentUser.id,
+commission_amount: COMMISSION_AMOUNT,
+commission_paid: false,
+payment_receipt_url: publicUrl,
+transaction_reference: reference,
+paid_at: new Date().toISOString(),
+status: 'pending_verification'
+}]);
+if (dbError) throw dbError;
+showToast('Payment receipt submitted! Admin will verify and restore access within 24 hours ✅', 'success');
+closeModal('commission-modal');
+// Notify admin via WhatsApp
+const message = `🔔 *NEW COMMISSION PAYMENT*
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+👤 Seller: ${currentUser.email}
+💵 Amount: ₦${COMMISSION_AMOUNT}
+📅 Date: ${new Date().toLocaleString()}
+📝 Reference: ${reference || 'N/A'}
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+Please verify and restore seller access.`;
+const whatsappURL = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent(message)}`;
+window.open(whatsappURL, '_blank');
+loadCommissionStatus();
 } catch (error) {
-console.error('Import error:', error);
-showToast('Failed to import product: ' + error.message + '. Note: You may need to enable CORS proxy at https://cors-anywhere.herokuapp.com/corsdemo', 'error');
-} finally {
-btnText.textContent = 'Import Product';
-spinner.classList.add('hidden');
+console.error('Commission Error:', error);
+showToast('Failed to submit payment: ' + error.message, 'error');
 }
+}
+async function updateSellerSettings(event) {
+event.preventDefault();
+if (!currentUser) return;
+const accountNumber = document.getElementById('seller-account-number').value;
+const bankName = document.getElementById('seller-bank-name').value;
+const accountName = document.getElementById('seller-account-name').value;
+try {
+await supabaseClient.from('sellers').update({
+account_number: accountNumber,
+bank_name: bankName,
+account_name: accountName
+}).eq('user_id', currentUser.id);
+showToast('Settings updated successfully! ✅', 'success');
+} catch (error) {
+showToast('Failed to update settings: ' + error.message, 'error');
+}
+}
+async function loadAffiliateEarnings() {
+if (!currentUser) return;
+const totalEarnings = 0;
+const totalConversions = 0;
+document.getElementById('total-earnings').textContent = `₦${totalEarnings.toLocaleString()}`;
+document.getElementById('total-conversions').textContent = totalConversions;
+}
+function requestWithdrawal() {
+const message = `💰 *WITHDRAWAL REQUEST*
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+👤 Seller: ${currentUser.email}
+💵 Amount: ₦0
+📅 Date: ${new Date().toLocaleString()}
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+Please process withdrawal to my account.`;
+const whatsappURL = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent(message)}`;
+window.open(whatsappURL, '_blank');
+showToast('Withdrawal request sent via WhatsApp!', 'success');
 }
 async function handleProductUpload(event) {
 event.preventDefault();
@@ -2057,25 +2037,22 @@ submitBtn.disabled = true;
 btnText.textContent = 'Uploading...';
 spinner.classList.remove('hidden');
 try {
-let imageUrl = '';
 const imageFile = document.getElementById('prod-image').files[0];
-if (imageFile) {
 const fileName = `${currentUser.id}-${Date.now()}.${imageFile.name.split('.').pop()}`;
 const { error: uploadError } = await supabaseClient.storage.from('products').upload(fileName, imageFile);
 if (uploadError) throw uploadError;
-const { data: { publicUrl: pubUrl } } = supabaseClient.storage.from('products').getPublicUrl(fileName);
-imageUrl = pubUrl;
-}
+const { data: { publicUrl } } = supabaseClient.storage.from('products').getPublicUrl(fileName);
 let videoUrl = null;
 const videoFile = document.getElementById('prod-video').files[0];
 if (videoFile) {
 const videoFileName = `${currentUser.id}-video-${Date.now()}.${videoFile.name.split('.').pop()}`;
 const { error: videoError } = await supabaseClient.storage.from('products').upload(videoFileName, videoFile);
-if (videoError) throw videoError;
+if (!videoError) {
 const { data: { publicUrl: videoPublicUrl } } = supabaseClient.storage.from('products').getPublicUrl(videoFileName);
 videoUrl = videoPublicUrl;
 }
-const productData = {
+}
+const newProduct = {
 name: document.getElementById('prod-name').value,
 price: parseFloat(document.getElementById('prod-price').value),
 original_price: document.getElementById('prod-original-price').value ? parseFloat(document.getElementById('prod-original-price').value) : null,
@@ -2084,30 +2061,24 @@ condition: document.getElementById('prod-condition').value,
 description: document.getElementById('prod-desc').value,
 location: document.getElementById('prod-location').value,
 is_negotiable: document.getElementById('prod-negotiable').checked,
-image_url: imageUrl,
+image_url: publicUrl,
 video_url: videoUrl,
 has_video: !!videoUrl,
 seller_id: currentUser.id,
 status: 'active'
 };
-let error;
-if (currentEditProduct) {
-({ error } = await supabaseClient.from('products').update(productData).eq('id', currentEditProduct.id));
-} else {
-({ error } = await supabaseClient.from('products').insert([productData]));
-}
-if (error) throw error;
-showToast(currentEditProduct ? 'Product updated successfully! 🎉' : 'Product published successfully! 🎉', 'success');
+const { error: dbError } = await supabaseClient.from('products').insert([newProduct]);
+if (dbError) throw dbError;
+showToast('Product published successfully! 🎉', 'success');
 document.getElementById('add-product-form').reset();
 loadProducts();
 showSellerSection('products');
-currentEditProduct = null;
 } catch (error) {
 console.error('Upload Error:', error);
 showToast(error.message, 'error');
 } finally {
 submitBtn.disabled = false;
-btnText.textContent = currentEditProduct ? 'Update Product' : 'Publish Product';
+btnText.textContent = 'Publish Product';
 spinner.classList.add('hidden');
 }
 }
