@@ -43,7 +43,7 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Plus Jakarta Sans', sans-serif; font-weig
 html { scroll-behavior: smooth; }
 .product-card { transition: all 0.2s ease; border: 1px solid transparent; position: relative; }
 .product-card:hover { border-color: #e5e7eb; box-shadow: 0 10px 40px -10px rgba(0,0,0,0.1); transform: translateY(-2px); }
-.product-card.sold-out { opacity: 0.7; }
+.product-card.sold-out { opacity: 0.7; pointer-events: none; }
 .product-card.sold-out::after {
   content: 'SOLD OUT';
   position: absolute;
@@ -56,6 +56,7 @@ html { scroll-behavior: smooth; }
   font-weight: 700;
   font-size: 0.875rem;
   z-index: 10;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 .product-card.sold-out::before {
   content: '';
@@ -1924,7 +1925,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ==========================================
 async function checkAuth() {
   try {
-    const { data: { session } } = await supabaseClient.auth.getSession();
+    const {  { session } } = await supabaseClient.auth.getSession();
     currentUser = session?.user || null;
     updateAuthUI();
     if (currentUser) {
@@ -2028,12 +2029,12 @@ async function handleRegister(e) {
   const userType = document.getElementById('reg-usertype').value;
   const whatsapp = document.getElementById('reg-whatsapp').value;
   
-  // ✅ FIXED: Added 'data:' key in options
+  // ✅ FIXED: Added '' key in options
   const { data, error } = await supabaseClient.auth.signUp({
     email,
     password,
     options: {
-      data: {
+       {
         first_name: firstName,
         last_name: lastName,
         user_type: userType,
