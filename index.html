@@ -18,9 +18,18 @@ tailwind.config = {
         heading: ['Plus Jakarta Sans', 'sans-serif']
       },
       colors: {
-        brand: { 50: '#f0f9ff', 100: '#e0f2fe', 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1', 900: '#0c4a6e' },
-        accent: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' },
-        neutral: { 50: '#fafafa', 100: '#f5f5f5', 200: '#e5e5e5', 300: '#d4d4d4', 500: '#737373', 700: '#404040', 800: '#262626', 900: '#171717' },
+        brand: {
+          50: '#f0f9ff', 100: '#e0f2fe', 500: '#0ea5e9',
+          600: '#0284c7', 700: '#0369a1', 900: '#0c4a6e'
+        },
+        accent: {
+          400: '#fbbf24', 500: '#f59e0b', 600: '#d97706'
+        },
+        neutral: {
+          50: '#fafafa', 100: '#f5f5f5', 200: '#e5e5e5',
+          300: '#d4d4d4', 500: '#737373', 700: '#404040',
+          800: '#262626', 900: '#171717'
+        },
         aliexpress: '#ff4747',
         cj: '#ff6b00'
       }
@@ -35,75 +44,312 @@ html { scroll-behavior: smooth; }
 .product-card { transition: all 0.2s ease; border: 1px solid transparent; position: relative; }
 .product-card:hover { border-color: #e5e7eb; box-shadow: 0 10px 40px -10px rgba(0,0,0,0.1); transform: translateY(-2px); }
 .product-card.sold-out { opacity: 0.7; pointer-events: none; }
-.product-card.sold-out::after { content: 'SOLD OUT'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #dc2626; color: white; padding: 0.5rem 1.5rem; border-radius: 9999px; font-weight: 700; z-index: 10; }
-.product-card.sold-out::before { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,0.4); z-index: 5; }
+.product-card.sold-out::after {
+  content: 'SOLD OUT';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: #dc2626;
+  color: white;
+  padding: 0.5rem 1.5rem;
+  border-radius: 9999px;
+  font-weight: 700;
+  font-size: 0.875rem;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.product-card.sold-out::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 5;
+  border-radius: inherit;
+}
 .video-badge { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-.verified-badge { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
 .price-badge { background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); }
 .dropship-badge { background: linear-gradient(135deg, #ff4747 0%, #ff6b00 100%); }
-.btn-primary { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); transition: all 0.2s ease; }
+.btn-primary {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  transition: all 0.2s ease;
+}
 .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4); }
-.btn-secondary { background: white; border: 1px solid #d4d4d4; transition: all 0.2s ease; }
+.btn-secondary {
+  background: white; border: 1px solid #d4d4d4;
+  transition: all 0.2s ease;
+}
 .btn-secondary:hover { border-color: #0284c7; color: #0284c7; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 .header-shadow { box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06); }
 .hidden-section { display: none !important; }
-.skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 0.5rem; }
-@keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-.modal { display: none; position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); align-items: center; justify-content: center; padding: 1rem; }
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+  border-radius: 0.5rem;
+}
+@keyframes loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
 .modal.active { display: flex; }
-.modal-content { background: white; border-radius: 1rem; max-width: 900px; width: 100%; max-height: 90vh; overflow-y: auto; animation: slideUp 0.3s ease-out; }
-@keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-.toast { position: fixed; bottom: 2rem; right: 2rem; background: white; border-left: 4px solid #10b981; padding: 1rem 1.5rem; border-radius: 0.5rem; box-shadow: 0 10px 40px -10px rgba(0,0,0,0.2); z-index: 1000; animation: slideUp 0.3s ease-out; display: none; }
+.modal-content {
+  background: white;
+  border-radius: 1rem;
+  max-width: 900px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slideUp 0.3s ease-out;
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.toast {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  background: white;
+  border-left: 4px solid #10b981;
+  padding: 1rem 1.5rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 40px -10px rgba(0,0,0,0.2);
+  z-index: 1000;
+  animation: slideUp 0.3s ease-out;
+  display: none;
+}
 .toast.error { border-left-color: #dc2626; }
 .toast.show { display: block; }
-.upload-zone { border: 2px dashed #d4d4d4; transition: all 0.3s ease; }
-.upload-zone:hover, .upload-zone.dragover { border-color: #0284c7; background: #f0f9ff; }
-.upload-zone.has-files { border-color: #10b981; background: #f0fdf4; }
+.upload-zone {
+  border: 2px dashed #d4d4d4;
+  transition: all 0.3s ease;
+}
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: #0284c7;
+  background: #f0f9ff;
+}
+.upload-zone.has-files {
+  border-color: #10b981;
+  background: #f0fdf4;
+}
 .sidebar-link { transition: all 0.2s ease; }
-.sidebar-link:hover, .sidebar-link.active { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: white; }
-.loading-spinner { border: 3px solid #f3f3f3; border-top: 3px solid #0284c7; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-.supplier-card { border: 2px solid transparent; transition: all 0.2s ease; }
-.supplier-card:hover, .supplier-card.selected { border-color: #10b981; background: #f0fdf4; }
-.trending-filter-btn.active { background: #0284c7 !important; color: white !important; }
+.sidebar-link:hover, .sidebar-link.active {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: white;
+}
+.loading-spinner {
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #0284c7;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 .status-pending { background: #fef3c7; color: #92400e; }
 .status-paid { background: #dbeafe; color: #1e40af; }
 .status-processing { background: #e9d5ff; color: #6b21a8; }
 .status-shipped { background: #c7d2fe; color: #3730a3; }
 .status-delivered { background: #d1fae5; color: #065f46; }
 .status-cancelled { background: #fee2e2; color: #991b1b; }
-.chatbot-button { position: fixed; bottom: 6rem; right: 1.5rem; z-index: 999; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: white; width: 3.5rem; height: 3.5rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(2, 132, 199, 0.4); transition: all 0.3s ease; }
-.chatbot-button:hover { transform: scale(1.1); box-shadow: 0 6px 25px rgba(2, 132, 199, 0.5); }
-.chatbot-window { position: fixed; bottom: 7rem; right: 1.5rem; z-index: 999; width: 22rem; max-width: calc(100vw - 2rem); background: white; border-radius: 1rem; box-shadow: 0 10px 40px rgba(0,0,0,0.2); display: none; flex-direction: column; overflow: hidden; animation: slideUp 0.3s ease-out; }
+.status-active { background: #d1fae5; color: #065f46; }
+.status-sold-out { background: #fee2e2; color: #991b1b; }
+.chatbot-button {
+  position: fixed;
+  bottom: 6rem;
+  right: 1.5rem;
+  z-index: 999;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: white;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(2, 132, 199, 0.4);
+  transition: all 0.3s ease;
+}
+.chatbot-button:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 25px rgba(2, 132, 199, 0.5);
+}
+.chatbot-window {
+  position: fixed;
+  bottom: 7rem;
+  right: 1.5rem;
+  z-index: 999;
+  width: 22rem;
+  max-width: calc(100vw - 2rem);
+  background: white;
+  border-radius: 1rem;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideUp 0.3s ease-out;
+}
 .chatbot-window.active { display: flex; }
-.chatbot-header { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: white; padding: 1rem; display: flex; align-items: center; justify-content: space-between; }
-.chatbot-messages { height: 20rem; overflow-y: auto; padding: 1rem; background: #f9fafb; }
-.chatbot-input { padding: 1rem; border-top: 1px solid #e5e7eb; display: flex; gap: 0.5rem; }
-.chatbot-input input { flex: 1; padding: 0.5rem 1rem; border: 1px solid #d4d4d4; border-radius: 0.5rem; outline: none; }
-.chatbot-input input:focus { border-color: #0284c7; box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.1); }
-.chatbot-input button { background: #0284c7; color: white; padding: 0.5rem 1rem; border-radius: 0.5rem; border: none; cursor: pointer; }
-.chat-message { margin-bottom: 1rem; display: flex; gap: 0.5rem; }
+.chatbot-header {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: white;
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.chatbot-messages {
+  height: 20rem;
+  overflow-y: auto;
+  padding: 1rem;
+  background: #f9fafb;
+}
+.chatbot-input {
+  padding: 1rem;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  gap: 0.5rem;
+}
+.chatbot-input input {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  border: 1px solid #d4d4d4;
+  border-radius: 0.5rem;
+  outline: none;
+}
+.chatbot-input input:focus {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.1);
+}
+.chatbot-input button {
+  background: #0284c7;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  border: none;
+  cursor: pointer;
+}
+.chat-message {
+  margin-bottom: 1rem;
+  display: flex;
+  gap: 0.5rem;
+}
 .chat-message.bot { flex-direction: row; }
 .chat-message.user { flex-direction: row-reverse; }
-.chat-message-content { max-width: 80%; padding: 0.75rem 1rem; border-radius: 1rem; font-size: 0.875rem; }
-.chat-message.bot .chat-message-content { background: white; border: 1px solid #e5e7eb; }
-.chat-message.user .chat-message-content { background: #0284c7; color: white; }
-.quick-questions { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 1rem; border-top: 1px solid #e5e7eb; }
-.quick-question-btn { background: #f0f9ff; color: #0284c7; border: 1px solid #bae6fd; padding: 0.5rem 0.75rem; border-radius: 1rem; font-size: 0.75rem; cursor: pointer; transition: all 0.2s ease; }
-.quick-question-btn:hover { background: #0284c7; color: white; }
+.chat-message-content {
+  max-width: 80%;
+  padding: 0.75rem 1rem;
+  border-radius: 1rem;
+  font-size: 0.875rem;
+}
+.chat-message.bot .chat-message-content {
+  background: white;
+  border: 1px solid #e5e7eb;
+}
+.chat-message.user .chat-message-content {
+  background: #0284c7;
+  color: white;
+}
+.quick-questions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+.quick-question-btn {
+  background: #f0f9ff;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+  padding: 0.5rem 0.75rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.quick-question-btn:hover {
+  background: #0284c7;
+  color: white;
+}
+.supplier-card {
+  border: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+.supplier-card:hover, .supplier-card.selected {
+  border-color: #10b981;
+  background: #f0fdf4;
+}
+.admin-badge {
+  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+}
 .checkout-step { display: none; }
-.checkout-step.active { display: block; animation: fadeIn 0.3s; }
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-.progress-bar { height: 4px; background: #e5e7eb; border-radius: 9999px; overflow: hidden; }
-.progress-fill { height: 100%; background: linear-gradient(135deg, #0284c7, #0369a1); transition: width 0.3s; }
-.admin-badge { background: linear-gradient(135deg, #7c3aed, #a855f7); }
+.checkout-step.active { display: block; animation: fadeIn 0.3s ease-out; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.progress-bar {
+  height: 4px;
+  background: #e5e7eb;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  transition: width 0.3s ease;
+}
+.product-detail-modal .modal-content {
+  max-width: 1000px;
+  max-height: 95vh;
+}
+.product-gallery {
+  aspect-ratio: 1;
+  background: #f9fafb;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.product-gallery img, .product-gallery video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.verified-badge {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
 </style>
 </head>
 <body class="bg-neutral-50 text-neutral-900">
 
-<!-- LANDING PAGE -->
+<!-- ================= LANDING PAGE ================= -->
 <div id="landing-page" class="fixed inset-0 z-50 bg-gradient-to-br from-neutral-900 via-neutral-800 to-brand-900">
   <div class="min-h-screen flex flex-col">
     <header class="p-6 flex justify-between items-center">
@@ -126,7 +372,7 @@ html { scroll-behavior: smooth; }
             <span class="text-xs font-medium bg-white/20 px-3 py-1 rounded-full text-white">Most Popular</span>
           </div>
           <h2 class="text-3xl font-heading font-bold text-white mb-3">I'm a Buyer</h2>
-          <p class="text-neutral-300 mb-6 leading-relaxed">Discover authentic products from verified Nigerian sellers and global dropshipping suppliers. Enjoy secure payments, buyer protection, and fast delivery nationwide.</p>
+          <p class="text-neutral-300 mb-6 leading-relaxed">Discover authentic products from verified Nigerian sellers. Pay directly to seller's account with buyer protection.</p>
           <div class="flex items-center gap-4 mb-6">
             <div class="flex items-center gap-2 text-sm text-neutral-300">
               <i class="fa-solid fa-shield-check text-accent-400"></i>
@@ -137,7 +383,7 @@ html { scroll-behavior: smooth; }
               <span>Fast Delivery</span>
             </div>
           </div>
-          <button class="btn-primary text-white font-semibold px-8 py-4 rounded-xl w-full flex items-center justify-center gap-2 group-hover:gap-3 transition-all">
+          <button class="btn-primary text-white font-semibold px-8 py-4 rounded-xl w-full flex items-center justify-center gap-2">
             Start Shopping <i class="fa-solid fa-arrow-right"></i>
           </button>
         </div>
@@ -149,18 +395,18 @@ html { scroll-behavior: smooth; }
             <span class="text-xs font-medium bg-brand-500/30 px-3 py-1 rounded-full text-white">1 Month Free</span>
           </div>
           <h2 class="text-3xl font-heading font-bold text-white mb-3">I'm a Seller</h2>
-          <p class="text-neutral-300 mb-6 leading-relaxed">Sell your own products OR import from AliExpress & CJ Dropshipping. No inventory needed! List products with video demos, manage orders, and get paid securely.</p>
+          <p class="text-neutral-300 mb-6 leading-relaxed">Open your store FREE for 1 month! Upload products with videos, sell anything, or start dropshipping with affiliate earnings.</p>
           <div class="flex items-center gap-4 mb-6">
             <div class="flex items-center gap-2 text-sm text-neutral-300">
-              <i class="fa-solid fa-globe text-brand-400"></i>
-              <span>Global Suppliers</span>
+              <i class="fa-solid fa-calendar-check text-brand-400"></i>
+              <span>1 Month Free Trial</span>
             </div>
             <div class="flex items-center gap-2 text-sm text-neutral-300">
-              <i class="fa-solid fa-chart-line text-brand-400"></i>
-              <span>Auto-Fulfillment</span>
+              <i class="fa-solid fa-video text-brand-400"></i>
+              <span>Video Listings</span>
             </div>
           </div>
-          <button class="bg-white text-neutral-900 font-semibold px-8 py-4 rounded-xl w-full flex items-center justify-center gap-2 group-hover:gap-3 transition-all hover:bg-neutral-100">
+          <button class="bg-white text-neutral-900 font-semibold px-8 py-4 rounded-xl w-full flex items-center justify-center gap-2 hover:bg-neutral-100">
             Open Your Store <i class="fa-solid fa-arrow-right"></i>
           </button>
         </div>
@@ -169,24 +415,53 @@ html { scroll-behavior: smooth; }
     <footer class="p-6 border-t border-white/10">
       <div class="max-w-6xl mx-auto flex flex-wrap justify-center gap-6 text-sm text-neutral-400">
         <div class="flex items-center gap-2"><i class="fa-solid fa-lock text-accent-400"></i><span>SSL Secured</span></div>
-        <div class="flex items-center gap-2"><i class="fa-solid fa-credit-card text-accent-400"></i><span>Paystack & OPay</span></div>
+        <div class="flex items-center gap-2"><i class="fa-solid fa-credit-card text-accent-400"></i><span>Direct Bank Transfer</span></div>
         <div class="flex items-center gap-2"><i class="fa-brands fa-whatsapp text-accent-400"></i><span>WhatsApp Support</span></div>
       </div>
     </footer>
   </div>
 </div>
 
-<!-- MAIN NAVIGATION -->
+<!-- ================= ACCOUNT SUSPENDED MODAL ================= -->
+<div id="account-suspended" class="fixed inset-0 z-[1000] bg-black/80 hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl p-8 max-w-md w-full text-center">
+    <div class="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+      <i class="fa-solid fa-triangle-exclamation text-4xl text-red-600"></i>
+    </div>
+    <h2 class="text-2xl font-heading font-bold mb-2">Account Suspended</h2>
+    <p class="text-neutral-600 mb-6">Your free trial has expired. Please pay the ₦5,000 commission to continue using your seller account.</p>
+    <div class="bg-neutral-50 rounded-xl p-4 mb-6 text-left">
+      <div class="flex justify-between mb-2">
+        <span class="text-sm text-neutral-500">Bank</span>
+        <span class="font-bold">OPay</span>
+      </div>
+      <div class="flex justify-between mb-2">
+        <span class="text-sm text-neutral-500">Account Number</span>
+        <span class="font-bold text-brand-600">9061484256</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-sm text-neutral-500">Account Name</span>
+        <span class="font-semibold">Efe Israel</span>
+      </div>
+    </div>
+    <button onclick="showCommissionModal()" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg w-full mb-3">
+      <i class="fa-solid fa-upload mr-2"></i> Upload Payment Receipt
+    </button>
+    <button onclick="logoutUser()" class="text-neutral-500 hover:text-neutral-700 text-sm">
+      Sign Out
+    </button>
+  </div>
+</div>
+
+<!-- ================= MAIN NAVIGATION ================= -->
 <nav id="main-nav" class="hidden-section sticky top-0 z-40 bg-white header-shadow">
   <div class="bg-neutral-900 text-white text-xs py-2">
     <div class="container mx-auto px-4 flex justify-between items-center">
       <div class="flex items-center gap-4">
         <span><i class="fa-solid fa-truck mr-1"></i> Free delivery on orders over ₦15,000</span>
-        <span class="hidden md:inline"><i class="fa-solid fa-percent mr-1"></i> Black Friday: Up to 70% off</span>
       </div>
       <div class="flex items-center gap-4">
-        <a href="#" class="hover:text-accent-400 transition">Track Order</a>
-        <a href="#" class="hover:text-accent-400 transition" onclick="showHelpModal()">Help Center</a>
+        <a href="#" onclick="showHelpModal()" class="hover:text-accent-400 transition">Help Center</a>
         <a href="https://wa.me/2349061484256" target="_blank" class="hover:text-green-400 transition flex items-center gap-1">
           <i class="fa-brands fa-whatsapp"></i> Support
         </a>
@@ -203,10 +478,10 @@ html { scroll-behavior: smooth; }
       </div>
       <div class="flex-1 max-w-3xl">
         <div class="relative">
-          <input type="text" id="search-input" placeholder="Search for products, brands and categories..."
-            class="w-full pl-4 pr-12 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
+          <input type="text" id="search-input" placeholder="Search for products..."
+            class="w-full pl-4 pr-12 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
             onkeyup="handleSearch(event)">
-          <button class="absolute right-2 top-1/2 -translate-y-1/2 bg-brand-600 hover:bg-brand-700 text-white px-5 py-2 rounded-md font-medium transition" onclick="performSearch()">
+          <button class="absolute right-2 top-1/2 -translate-y-1/2 bg-brand-600 hover:bg-brand-700 text-white px-5 py-2 rounded-md" onclick="performSearch()">
             <i class="fa-solid fa-magnifying-glass"></i>
           </button>
         </div>
@@ -230,33 +505,9 @@ html { scroll-behavior: smooth; }
       </div>
     </div>
   </div>
-  <div class="border-t border-neutral-200">
-    <div class="container mx-auto px-4">
-      <div class="flex items-center gap-1 overflow-x-auto no-scrollbar py-2" id="category-filters">
-        <button class="flex items-center gap-2 px-4 py-2 bg-neutral-100 rounded-lg transition whitespace-nowrap font-medium" onclick="filterByCategory('all')">
-          <i class="fa-solid fa-bars"></i><span>All</span>
-        </button>
-        <button class="px-4 py-2 hover:bg-neutral-100 rounded-lg transition whitespace-nowrap" onclick="filterByCategory('electronics')">Electronics</button>
-        <button class="px-4 py-2 hover:bg-neutral-100 rounded-lg transition whitespace-nowrap" onclick="filterByCategory('fashion')">Fashion</button>
-        <button class="px-4 py-2 hover:bg-neutral-100 rounded-lg transition whitespace-nowrap" onclick="filterByCategory('home')">Home & Kitchen</button>
-        <button class="px-4 py-2 hover:bg-neutral-100 rounded-lg transition whitespace-nowrap" onclick="filterByCategory('phones')">Phones</button>
-        <button class="px-4 py-2 hover:bg-neutral-100 rounded-lg transition whitespace-nowrap" onclick="filterByCategory('beauty')">Beauty</button>
-        <button class="px-4 py-2 hover:bg-neutral-100 rounded-lg transition whitespace-nowrap" onclick="filterByCategory('dropshipping')">
-          <i class="fa-solid fa-globe mr-1"></i> Dropshipping
-        </button>
-        <button class="px-4 py-2 hover:bg-neutral-100 rounded-lg transition whitespace-nowrap" onclick="filterByCategory('trending')">
-          <i class="fa-solid fa-fire mr-1"></i> Trending
-        </button>
-        <div class="flex-1"></div>
-        <button class="flex items-center gap-2 px-4 py-2 bg-accent-500 hover:bg-accent-600 text-white rounded-lg transition whitespace-nowrap font-medium" onclick="filterByVideo()">
-          <i class="fa-solid fa-video"></i> Video Listings
-        </button>
-      </div>
-    </div>
-  </div>
 </nav>
 
-<!-- BUYER VIEW -->
+<!-- ================= BUYER VIEW ================= -->
 <div id="buyer-view" class="hidden-section">
   <!-- Hero Carousel -->
   <div class="relative bg-neutral-100">
@@ -365,44 +616,6 @@ html { scroll-behavior: smooth; }
     </div>
   </div>
 
-  <!-- Trending Deals Section -->
-  <div class="container mx-auto px-4 py-8" id="trending-section">
-    <div class="flex items-center justify-between mb-6">
-      <div>
-        <h2 class="text-3xl font-heading font-bold mb-2">
-          <i class="fa-solid fa-fire text-orange-500 mr-2"></i>
-          Trending Deals
-        </h2>
-        <p class="text-neutral-500">Hot deals from Amazon, eBay & local sellers</p>
-      </div>
-      <div class="flex gap-2">
-        <button onclick="filterTrending('all')" class="trending-filter-btn active px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-medium">All</button>
-        <button onclick="filterTrending('amazon')" class="trending-filter-btn px-4 py-2 rounded-lg bg-neutral-100 text-neutral-700 text-sm font-medium hover:bg-neutral-200">
-          <i class="fa-brands fa-amazon mr-1"></i> Amazon
-        </button>
-        <button onclick="filterTrending('ebay')" class="trending-filter-btn px-4 py-2 rounded-lg bg-neutral-100 text-neutral-700 text-sm font-medium hover:bg-neutral-200">
-          <i class="fa-brands fa-ebay mr-1"></i> eBay
-        </button>
-        <button onclick="filterTrending('local')" class="trending-filter-btn px-4 py-2 rounded-lg bg-neutral-100 text-neutral-700 text-sm font-medium hover:bg-neutral-200">
-          <i class="fa-solid fa-store mr-1"></i> Local
-        </button>
-      </div>
-    </div>
-    <div id="trending-loading" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-      <div class="skeleton h-64 rounded-xl"></div>
-      <div class="skeleton h-64 rounded-xl"></div>
-      <div class="skeleton h-64 rounded-xl"></div>
-      <div class="skeleton h-64 rounded-xl"></div>
-      <div class="skeleton h-64 rounded-xl"></div>
-      <div class="skeleton h-64 rounded-xl"></div>
-    </div>
-    <div id="trending-grid" class="hidden grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
-    <div id="trending-empty" class="hidden text-center py-12">
-      <i class="fa-solid fa-fire text-4xl text-neutral-300 mb-4"></i>
-      <p class="text-neutral-500">No trending deals available</p>
-    </div>
-  </div>
-
   <!-- Products Section -->
   <div class="container mx-auto px-4 py-6">
     <div class="bg-white rounded-2xl shadow-sm border border-neutral-200 overflow-hidden">
@@ -425,9 +638,6 @@ html { scroll-behavior: smooth; }
       </div>
       <div class="p-6">
         <div id="loading-products" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <div class="skeleton h-48 rounded-xl"></div>
-          <div class="skeleton h-48 rounded-xl"></div>
-          <div class="skeleton h-48 rounded-xl"></div>
           <div class="skeleton h-48 rounded-xl"></div>
           <div class="skeleton h-48 rounded-xl"></div>
           <div class="skeleton h-48 rounded-xl"></div>
@@ -464,7 +674,7 @@ html { scroll-behavior: smooth; }
             <i class="fa-solid fa-lock text-2xl text-accent-600"></i>
           </div>
           <h3 class="font-semibold mb-1">Secure Payments</h3>
-          <p class="text-sm text-neutral-500">Paystack & OPay integration</p>
+          <p class="text-sm text-neutral-500">Direct bank transfer to seller</p>
         </div>
         <div class="trust-item">
           <div class="w-14 h-14 mx-auto mb-3 bg-green-100 rounded-2xl flex items-center justify-center">
@@ -485,7 +695,7 @@ html { scroll-behavior: smooth; }
   </div>
 </div>
 
-<!-- CHATBOT -->
+<!-- ================= CHATBOT ================= -->
 <div class="chatbot-button" onclick="toggleChatbot()">
   <i class="fa-solid fa-comments text-xl"></i>
 </div>
@@ -509,7 +719,9 @@ html { scroll-behavior: smooth; }
       <div class="w-8 h-8 bg-brand-100 rounded-full flex items-center justify-center flex-shrink-0">
         <i class="fa-solid fa-robot text-brand-600 text-sm"></i>
       </div>
-      <div class="chat-message-content">Hello! 👋 I'm your BUYSELL assistant. How can I help you today?</div>
+      <div class="chat-message-content">
+        Hello! 👋 I'm your BUYSELL assistant. How can I help you today?
+      </div>
     </div>
   </div>
   <div class="quick-questions">
@@ -521,12 +733,15 @@ html { scroll-behavior: smooth; }
   </div>
   <div class="chatbot-input">
     <input type="text" id="chatbot-input" placeholder="Type your question..." onkeypress="handleChatInput(event)">
-    <button onclick="sendChatMessage()"><i class="fa-solid fa-paper-plane"></i></button>
+    <button onclick="sendChatMessage()">
+      <i class="fa-solid fa-paper-plane"></i>
+    </button>
   </div>
 </div>
 
-<!-- SELLER DASHBOARD -->
+<!-- ================= SELLER DASHBOARD ================= -->
 <div id="seller-dashboard" class="hidden-section min-h-screen flex bg-neutral-50">
+  <!-- Sidebar -->
   <aside class="w-64 bg-white border-r border-neutral-200 fixed h-full overflow-y-auto">
     <div class="p-6 border-b border-neutral-200">
       <div class="flex items-center gap-3">
@@ -541,34 +756,44 @@ html { scroll-behavior: smooth; }
     </div>
     <nav class="p-4 space-y-2">
       <a href="#" class="sidebar-link active flex items-center gap-3 px-4 py-3 rounded-lg text-neutral-700" onclick="showSellerSection('overview')">
-        <i class="fa-solid fa-chart-line w-5"></i><span>Overview</span>
+        <i class="fa-solid fa-chart-line w-5"></i>
+        <span>Overview</span>
       </a>
       <a href="#" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg text-neutral-700" onclick="showSellerSection('products')">
-        <i class="fa-solid fa-box w-5"></i><span>My Products</span>
+        <i class="fa-solid fa-box w-5"></i>
+        <span>My Products</span>
       </a>
       <a href="#" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg text-neutral-700" onclick="showSellerSection('add-product')">
-        <i class="fa-solid fa-plus w-5"></i><span>Add Product</span>
+        <i class="fa-solid fa-plus w-5"></i>
+        <span>Add Product</span>
       </a>
       <a href="#" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg text-neutral-700" onclick="showSellerSection('dropshipping')">
-        <i class="fa-solid fa-globe w-5"></i><span>Dropshipping</span>
+        <i class="fa-solid fa-globe w-5"></i>
+        <span>Dropshipping</span>
         <span class="ml-auto bg-dropship-badge text-white text-xs font-bold px-2 py-0.5 rounded-full">NEW</span>
       </a>
       <a href="#" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg text-neutral-700" onclick="showSellerSection('affiliate')">
-        <i class="fa-solid fa-chart-line w-5"></i><span>Affiliate Earnings</span>
+        <i class="fa-solid fa-chart-line w-5"></i>
+        <span>Affiliate Earnings</span>
         <span id="affiliate-earnings-badge" class="ml-auto bg-green-500 text-white text-xs font-bold px-2 py-0.5 rounded-full hidden">₦0</span>
       </a>
       <a href="#" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg text-neutral-700" onclick="showSellerSection('orders')">
-        <i class="fa-solid fa-cart-shopping w-5"></i><span>Orders</span>
+        <i class="fa-solid fa-cart-shopping w-5"></i>
+        <span>Orders</span>
         <span id="pending-orders-badge" class="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full hidden">0</span>
       </a>
       <a href="#" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg text-neutral-700" onclick="showSellerSection('commission')">
-        <i class="fa-solid fa-naira-sign w-5"></i><span>Commission</span>
+        <i class="fa-solid fa-naira-sign w-5"></i>
+        <span>Commission</span>
       </a>
       <a href="#" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg text-neutral-700" onclick="showSellerSection('settings')">
-        <i class="fa-solid fa-gear w-5"></i><span>Store Settings</span>
+        <i class="fa-solid fa-gear w-5"></i>
+        <span>Store Settings</span>
       </a>
-      <a href="#" id="admin-link" class="sidebar-link hidden admin-badge text-white flex items-center gap-3 px-4 py-3 rounded-lg" onclick="showSellerSection('admin')">
-        <i class="fa-solid fa-shield-halved w-5"></i><span>Super Admin</span>
+      <!-- SUPER ADMIN LINK - Only visible to admin -->
+      <a href="#" id="admin-link" class="sidebar-link hidden flex items-center gap-3 px-4 py-3 rounded-lg text-neutral-700 admin-badge text-white" onclick="showSellerSection('admin')">
+        <i class="fa-solid fa-shield-halved w-5"></i>
+        <span>Super Admin</span>
       </a>
     </nav>
     <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-neutral-200">
@@ -586,8 +811,10 @@ html { scroll-behavior: smooth; }
       </button>
     </div>
   </aside>
+
+  <!-- Main Content -->
   <main class="ml-64 flex-1 p-8">
-    <!-- Overview -->
+    <!-- Overview Section -->
     <div id="seller-overview" class="seller-section">
       <div class="mb-8">
         <h1 class="text-3xl font-heading font-bold mb-2">Dashboard Overview</h1>
@@ -627,12 +854,11 @@ html { scroll-behavior: smooth; }
         <div class="stat-card rounded-xl p-6 bg-white border border-neutral-200">
           <div class="flex items-center justify-between mb-4">
             <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-              <i class="fa-solid fa-eye text-orange-600 text-xl"></i>
+              <i class="fa-solid fa-calendar text-orange-600 text-xl"></i>
             </div>
-            <span class="text-neutral-400 text-sm font-medium">This month</span>
           </div>
-          <div class="text-3xl font-bold mb-1" id="stat-views">0</div>
-          <div class="text-neutral-500 text-sm">Product Views</div>
+          <div class="text-lg font-bold mb-1" id="stat-subscription">Free Trial</div>
+          <div class="text-neutral-500 text-sm" id="stat-days-left">Days Left</div>
         </div>
       </div>
       <div class="bg-white rounded-xl border border-neutral-200 p-6">
@@ -669,7 +895,7 @@ html { scroll-behavior: smooth; }
       </div>
     </div>
 
-    <!-- Products -->
+    <!-- My Products Section -->
     <div id="seller-products" class="seller-section hidden-section">
       <div class="mb-8">
         <h1 class="text-3xl font-heading font-bold mb-2">My Products</h1>
@@ -680,8 +906,8 @@ html { scroll-behavior: smooth; }
           <select id="seller-product-filter" class="border border-neutral-300 rounded-lg px-3 py-2 text-sm" onchange="loadSellerProducts()">
             <option value="all">All Status</option>
             <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
             <option value="sold-out">Sold Out</option>
+            <option value="inactive">Inactive</option>
           </select>
           <button onclick="showSellerSection('add-product')" class="btn-primary text-white px-4 py-2 rounded-lg text-sm">
             <i class="fa-solid fa-plus mr-1"></i> Add Product
@@ -700,7 +926,7 @@ html { scroll-behavior: smooth; }
       </div>
     </div>
 
-    <!-- Orders -->
+    <!-- Orders Section -->
     <div id="seller-orders" class="seller-section hidden-section">
       <div class="mb-8">
         <h1 class="text-3xl font-heading font-bold mb-2">Orders</h1>
@@ -717,16 +943,19 @@ html { scroll-behavior: smooth; }
       </div>
     </div>
 
-    <!-- Dropshipping -->
+    <!-- Dropshipping Section -->
     <div id="seller-dropshipping" class="seller-section hidden-section">
       <div class="mb-8">
         <h1 class="text-3xl font-heading font-bold mb-2">
           <i class="fa-solid fa-globe text-brand-600 mr-2"></i>
-          Dropshipping
+          Global Dropshipping
         </h1>
-        <p class="text-neutral-500">Import products from global suppliers</p>
+        <p class="text-neutral-500">Import products from AliExpress & CJ Dropshipping</p>
       </div>
-      <div class="bg-white rounded-xl border border-neutral-200 p-6">
+      
+      <!-- Supplier Connection -->
+      <div class="bg-white rounded-xl border border-neutral-200 p-6 mb-6">
+        <h3 class="text-lg font-bold mb-4">Connect Suppliers</h3>
         <div class="grid md:grid-cols-2 gap-6">
           <div class="supplier-card p-6 rounded-xl border cursor-pointer" onclick="selectSupplier('aliexpress')">
             <div class="flex items-center gap-4 mb-4">
@@ -738,7 +967,9 @@ html { scroll-behavior: smooth; }
                 <p class="text-xs text-neutral-500">Millions of products</p>
               </div>
             </div>
-            <button class="btn-primary text-white px-4 py-2 rounded-lg text-sm w-full">Connect Supplier</button>
+            <button class="btn-primary text-white px-4 py-2 rounded-lg text-sm w-full">
+              Connect Supplier
+            </button>
           </div>
           <div class="supplier-card p-6 rounded-xl border cursor-pointer" onclick="selectSupplier('cj')">
             <div class="flex items-center gap-4 mb-4">
@@ -750,116 +981,150 @@ html { scroll-behavior: smooth; }
                 <p class="text-xs text-neutral-500">Fast shipping</p>
               </div>
             </div>
-            <button class="btn-primary text-white px-4 py-2 rounded-lg text-sm w-full">Connect Supplier</button>
+            <button class="btn-primary text-white px-4 py-2 rounded-lg text-sm w-full">
+              Connect Supplier
+            </button>
           </div>
         </div>
-        <div class="mt-8 p-6 bg-neutral-50 rounded-xl">
-          <h3 class="font-bold mb-4">🔥 Hot Items for Nigeria</h3>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div class="border rounded-lg p-4 hover:border-brand-500 transition cursor-pointer" onclick="importDropshipItem('Mini Projector', 45000, 120000)">
-              <div class="w-full h-32 bg-neutral-100 rounded-lg mb-3 flex items-center justify-center">
-                <i class="fa-solid fa-video text-3xl text-neutral-400"></i>
-              </div>
-              <h4 class="font-medium text-sm mb-1">Mini Projector</h4>
-              <div class="flex items-baseline gap-2">
-                <span class="text-xs text-neutral-500">Cost: ₦45,000</span>
-                <span class="text-xs font-bold text-green-600">Sell: ₦120,000</span>
-              </div>
-              <div class="mt-2 text-xs text-brand-600 font-medium">Profit: ₦75,000 (167%)</div>
+      </div>
+
+      <!-- Hot Items Catalog -->
+      <div class="bg-white rounded-xl border border-neutral-200 p-6 mb-6">
+        <h3 class="text-lg font-bold mb-4">🔥 Hot Items for Nigeria</h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="border rounded-lg p-4 hover:border-brand-500 transition cursor-pointer" onclick="importDropshipItem('Mini Projector', 45000, 120000)">
+            <div class="w-full h-32 bg-neutral-100 rounded-lg mb-3 flex items-center justify-center">
+              <i class="fa-solid fa-video text-3xl text-neutral-400"></i>
             </div>
-            <div class="border rounded-lg p-4 hover:border-brand-500 transition cursor-pointer" onclick="importDropshipItem('Kitchen Gadget', 8500, 25000)">
-              <div class="w-full h-32 bg-neutral-100 rounded-lg mb-3 flex items-center justify-center">
-                <i class="fa-solid fa-utensils text-3xl text-neutral-400"></i>
-              </div>
-              <h4 class="font-medium text-sm mb-1">Kitchen Gadget</h4>
-              <div class="flex items-baseline gap-2">
-                <span class="text-xs text-neutral-500">Cost: ₦8,500</span>
-                <span class="text-xs font-bold text-green-600">Sell: ₦25,000</span>
-              </div>
-              <div class="mt-2 text-xs text-brand-600 font-medium">Profit: ₦16,500 (194%)</div>
+            <h4 class="font-medium text-sm mb-1">Mini Projector</h4>
+            <div class="flex items-baseline gap-2">
+              <span class="text-xs text-neutral-500">Cost: ₦45,000</span>
+              <span class="text-xs font-bold text-green-600">Sell: ₦120,000</span>
             </div>
-            <div class="border rounded-lg p-4 hover:border-brand-500 transition cursor-pointer" onclick="importDropshipItem('Wireless Earbuds', 12000, 35000)">
-              <div class="w-full h-32 bg-neutral-100 rounded-lg mb-3 flex items-center justify-center">
-                <i class="fa-solid fa-headphones text-3xl text-neutral-400"></i>
-              </div>
-              <h4 class="font-medium text-sm mb-1">Wireless Earbuds</h4>
-              <div class="flex items-baseline gap-2">
-                <span class="text-xs text-neutral-500">Cost: ₦12,000</span>
-                <span class="text-xs font-bold text-green-600">Sell: ₦35,000</span>
-              </div>
-              <div class="mt-2 text-xs text-brand-600 font-medium">Profit: ₦23,000 (192%)</div>
+            <div class="mt-2 text-xs text-brand-600 font-medium">Profit: ₦75,000 (167%)</div>
+          </div>
+          <div class="border rounded-lg p-4 hover:border-brand-500 transition cursor-pointer" onclick="importDropshipItem('Kitchen Gadget Set', 8500, 25000)">
+            <div class="w-full h-32 bg-neutral-100 rounded-lg mb-3 flex items-center justify-center">
+              <i class="fa-solid fa-utensils text-3xl text-neutral-400"></i>
             </div>
-            <div class="border rounded-lg p-4 hover:border-brand-500 transition cursor-pointer" onclick="importDropshipItem('Smart Watch', 18000, 55000)">
-              <div class="w-full h-32 bg-neutral-100 rounded-lg mb-3 flex items-center justify-center">
-                <i class="fa-solid fa-watch text-3xl text-neutral-400"></i>
-              </div>
-              <h4 class="font-medium text-sm mb-1">Smart Watch</h4>
-              <div class="flex items-baseline gap-2">
-                <span class="text-xs text-neutral-500">Cost: ₦18,000</span>
-                <span class="text-xs font-bold text-green-600">Sell: ₦55,000</span>
-              </div>
-              <div class="mt-2 text-xs text-brand-600 font-medium">Profit: ₦37,000 (206%)</div>
+            <h4 class="font-medium text-sm mb-1">Kitchen Gadget Set</h4>
+            <div class="flex items-baseline gap-2">
+              <span class="text-xs text-neutral-500">Cost: ₦8,500</span>
+              <span class="text-xs font-bold text-green-600">Sell: ₦25,000</span>
             </div>
+            <div class="mt-2 text-xs text-brand-600 font-medium">Profit: ₦16,500 (194%)</div>
+          </div>
+          <div class="border rounded-lg p-4 hover:border-brand-500 transition cursor-pointer" onclick="importDropshipItem('Wireless Earbuds', 12000, 35000)">
+            <div class="w-full h-32 bg-neutral-100 rounded-lg mb-3 flex items-center justify-center">
+              <i class="fa-solid fa-headphones text-3xl text-neutral-400"></i>
+            </div>
+            <h4 class="font-medium text-sm mb-1">Wireless Earbuds</h4>
+            <div class="flex items-baseline gap-2">
+              <span class="text-xs text-neutral-500">Cost: ₦12,000</span>
+              <span class="text-xs font-bold text-green-600">Sell: ₦35,000</span>
+            </div>
+            <div class="mt-2 text-xs text-brand-600 font-medium">Profit: ₦23,000 (192%)</div>
+          </div>
+          <div class="border rounded-lg p-4 hover:border-brand-500 transition cursor-pointer" onclick="importDropshipItem('Smart Watch', 18000, 55000)">
+            <div class="w-full h-32 bg-neutral-100 rounded-lg mb-3 flex items-center justify-center">
+              <i class="fa-solid fa-watch text-3xl text-neutral-400"></i>
+            </div>
+            <h4 class="font-medium text-sm mb-1">Smart Watch</h4>
+            <div class="flex items-baseline gap-2">
+              <span class="text-xs text-neutral-500">Cost: ₦18,000</span>
+              <span class="text-xs font-bold text-green-600">Sell: ₦55,000</span>
+            </div>
+            <div class="mt-2 text-xs text-brand-600 font-medium">Profit: ₦37,000 (206%)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dropship Analytics -->
+      <div class="bg-white rounded-xl border border-neutral-200 p-6">
+        <h3 class="text-lg font-bold mb-4">📊 Dropship Analytics</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="bg-neutral-50 rounded-lg p-4">
+            <div class="text-2xl font-bold text-brand-600" id="dropship-imported">0</div>
+            <div class="text-sm text-neutral-500">Items Imported</div>
+          </div>
+          <div class="bg-neutral-50 rounded-lg p-4">
+            <div class="text-2xl font-bold text-green-600" id="dropship-sales">₦0</div>
+            <div class="text-sm text-neutral-500">Total Sales</div>
+          </div>
+          <div class="bg-neutral-50 rounded-lg p-4">
+            <div class="text-2xl font-bold text-purple-600" id="dropship-pending">0</div>
+            <div class="text-sm text-neutral-500">Pending Orders</div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Affiliate -->
+    <!-- Affiliate Earnings Section -->
     <div id="seller-affiliate" class="seller-section hidden-section">
       <div class="mb-8">
         <h1 class="text-3xl font-heading font-bold mb-2">
           <i class="fa-solid fa-chart-line text-green-600 mr-2"></i>
-          Affiliate Earnings
+          Affiliate & Referral Earnings
         </h1>
-        <p class="text-neutral-500">Track your earnings from affiliate products and sales</p>
+        <p class="text-neutral-500">Track commissions from local & external programs</p>
       </div>
+
+      <!-- Referral Section -->
+      <div class="bg-white rounded-xl border border-neutral-200 p-6 mb-6">
+        <h3 class="text-lg font-bold mb-4">🎁 Refer & Earn</h3>
+        <p class="text-sm text-neutral-600 mb-4">Invite new sellers and earn ₦500 for each referral!</p>
+        <div class="flex items-center gap-3 p-4 bg-neutral-50 rounded-lg">
+          <input type="text" id="referral-link" readonly class="flex-1 px-4 py-2 border border-neutral-300 rounded-lg text-sm" value="https://buysell.ng/ref/USER123">
+          <button onclick="copyReferralLink()" class="btn-secondary px-4 py-2 rounded-lg text-sm">
+            <i class="fa-regular fa-copy mr-1"></i> Copy
+          </button>
+        </div>
+        <div class="mt-4 flex items-center gap-2 text-sm text-neutral-600">
+          <span class="font-bold text-green-600">₦500</span>
+          <span>bonus per new seller referral</span>
+        </div>
+      </div>
+
+      <!-- Earnings Stats -->
       <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div class="bg-white rounded-xl border border-neutral-200 p-6">
-          <div class="flex items-center justify-between mb-4">
-            <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-              <i class="fa-solid fa-naira-sign text-green-600 text-xl"></i>
-            </div>
-          </div>
           <div class="text-3xl font-bold mb-1" id="total-earnings">₦0</div>
           <div class="text-neutral-500 text-sm">Total Earnings</div>
         </div>
         <div class="bg-white rounded-xl border border-neutral-200 p-6">
-          <div class="flex items-center justify-between mb-4">
-            <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-              <i class="fa-solid fa-click text-blue-600 text-xl"></i>
-            </div>
-          </div>
-          <div class="text-3xl font-bold mb-1" id="total-clicks">0</div>
-          <div class="text-neutral-500 text-sm">Affiliate Clicks</div>
+          <div class="text-3xl font-bold mb-1" id="pending-payouts">₦0</div>
+          <div class="text-neutral-500 text-sm">Pending Payouts</div>
         </div>
         <div class="bg-white rounded-xl border border-neutral-200 p-6">
-          <div class="flex items-center justify-between mb-4">
-            <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-              <i class="fa-solid fa-cart-shopping text-purple-600 text-xl"></i>
-            </div>
-          </div>
+          <div class="text-3xl font-bold mb-1" id="total-clicks">0</div>
+          <div class="text-neutral-500 text-sm">Referral Clicks</div>
+        </div>
+        <div class="bg-white rounded-xl border border-neutral-200 p-6">
           <div class="text-3xl font-bold mb-1" id="total-conversions">0</div>
           <div class="text-neutral-500 text-sm">Conversions</div>
         </div>
-        <div class="bg-white rounded-xl border border-neutral-200 p-6">
-          <div class="flex items-center justify-between mb-4">
-            <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-              <i class="fa-solid fa-percent text-orange-600 text-xl"></i>
-            </div>
-          </div>
-          <div class="text-3xl font-bold mb-1" id="conversion-rate">0%</div>
-          <div class="text-neutral-500 text-sm">Conversion Rate</div>
-        </div>
       </div>
+
+      <!-- External Account Sync -->
       <div class="bg-white rounded-xl border border-neutral-200 p-6 mb-6">
-        <h3 class="font-bold mb-4">🎁 Referral Link</h3>
-        <div class="flex gap-2">
-          <input type="text" id="referral-link" readonly value="https://buysell.ng/ref/USER123" class="flex-1 border rounded px-4 py-2">
-          <button onclick="copyReferralLink()" class="btn-secondary px-4 py-2 rounded">Copy</button>
+        <h3 class="text-lg font-bold mb-4">🔗 Connect External Programs</h3>
+        <div class="flex flex-wrap gap-3">
+          <button class="flex items-center gap-2 px-4 py-2 border border-neutral-300 rounded-lg hover:border-brand-500 transition">
+            <i class="fa-brands fa-amazon text-orange-500"></i>
+            <span class="text-sm">Amazon Associates</span>
+          </button>
+          <button class="flex items-center gap-2 px-4 py-2 border border-neutral-300 rounded-lg hover:border-brand-500 transition">
+            <i class="fa-brands fa-ebay text-blue-500"></i>
+            <span class="text-sm">eBay Partner</span>
+          </button>
+          <button class="flex items-center gap-2 px-4 py-2 border border-neutral-300 rounded-lg hover:border-brand-500 transition">
+            <i class="fa-solid fa-link text-green-500"></i>
+            <span class="text-sm">Custom Link</span>
+          </button>
         </div>
-        <p class="text-sm text-neutral-500 mt-2">Earn ₦500 per referral!</p>
       </div>
+
+      <!-- Earnings Log Table -->
       <div class="bg-white rounded-xl border border-neutral-200 overflow-hidden">
         <div class="p-6 border-b border-neutral-200">
           <h2 class="text-xl font-heading font-bold">Recent Earnings</h2>
@@ -870,14 +1135,15 @@ html { scroll-behavior: smooth; }
               <tr>
                 <th class="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Date</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Product</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Type</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Source</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Amount</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Commission</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Status</th>
               </tr>
             </thead>
             <tbody id="earnings-table-body" class="divide-y divide-neutral-200">
-              <tr><td colspan="6" class="px-6 py-8 text-center text-neutral-500">No earnings yet</td></tr>
+              <tr>
+                <td colspan="5" class="px-6 py-8 text-center text-neutral-500">No earnings yet</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -889,14 +1155,14 @@ html { scroll-behavior: smooth; }
       </div>
     </div>
 
-    <!-- Commission -->
+    <!-- Commission Section -->
     <div id="seller-commission" class="seller-section hidden-section">
       <div class="mb-8">
         <h1 class="text-3xl font-heading font-bold mb-2">
           <i class="fa-solid fa-naira-sign text-accent-500 mr-2"></i>
           Platform Commission
         </h1>
-        <p class="text-neutral-500">Manage your ₦5,000 commission payment</p>
+        <p class="text-neutral-500">₦5,000 after 1 month free trial</p>
       </div>
       <div class="bg-white rounded-xl border border-neutral-200 p-8 max-w-2xl">
         <div class="text-center mb-6">
@@ -904,7 +1170,7 @@ html { scroll-behavior: smooth; }
             <i class="fa-solid fa-naira-sign text-4xl text-accent-600"></i>
           </div>
           <h2 class="text-2xl font-heading font-bold mb-2">Commission Payment</h2>
-          <p class="text-neutral-500">₦5,000 after 3 months of selling</p>
+          <p class="text-neutral-500">Pay ₦5,000 to continue using your seller account</p>
         </div>
         <div class="bg-neutral-50 rounded-xl p-6 mb-6">
           <div class="flex items-center justify-between mb-4">
@@ -912,11 +1178,11 @@ html { scroll-behavior: smooth; }
             <span id="commission-status-badge" class="px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700">Active</span>
           </div>
           <div class="flex items-center justify-between mb-4">
-            <span class="font-medium">Due Date:</span>
-            <span id="commission-due-date" class="font-bold">-</span>
+            <span class="font-medium">Trial Ends:</span>
+            <span id="trial-end-date" class="font-bold">-</span>
           </div>
           <div class="flex items-center justify-between mb-4">
-            <span class="font-medium">Amount:</span>
+            <span class="font-medium">Amount Due:</span>
             <span class="font-bold text-2xl text-accent-600">₦5,000</span>
           </div>
           <div class="border-t border-neutral-200 pt-4 mt-4">
@@ -940,51 +1206,105 @@ html { scroll-behavior: smooth; }
       </div>
     </div>
 
-    <!-- Settings -->
+    <!-- Settings Section (COMPREHENSIVE) -->
     <div id="seller-settings" class="seller-section hidden-section">
       <div class="mb-8">
         <h1 class="text-3xl font-heading font-bold mb-2">Store Settings</h1>
-        <p class="text-neutral-500">Manage your store preferences</p>
+        <p class="text-neutral-500">Manage your store, payments, and preferences</p>
       </div>
-      <div class="bg-white rounded-xl border border-neutral-200 p-6 max-w-2xl">
-        <form onsubmit="updateSellerSettings(event)" class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium mb-1">Store Name</label>
-            <input type="text" id="store-name" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="Your store name">
+      <div class="bg-white rounded-xl border border-neutral-200 p-6 max-w-3xl">
+        <form onsubmit="updateSellerSettings(event)" class="space-y-6">
+          <!-- Store Info -->
+          <div class="border-b border-neutral-200 pb-6">
+            <h3 class="font-bold mb-4">Store Information</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium mb-1">Store Name</label>
+                <input type="text" id="store-name" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="Your store name">
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Store Category</label>
+                <select class="w-full px-4 py-2 border border-neutral-300 rounded-lg">
+                  <option>Electronics</option>
+                  <option>Fashion</option>
+                  <option>Home & Kitchen</option>
+                  <option>Beauty</option>
+                  <option>General</option>
+                </select>
+              </div>
+            </div>
+            <div class="mt-4">
+              <label class="block text-sm font-medium mb-1">Store Description</label>
+              <textarea id="store-description" rows="3" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="Describe your store..."></textarea>
+            </div>
           </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Store Description</label>
-            <textarea id="store-description" rows="3" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="Describe your store"></textarea>
+
+          <!-- Contact Info -->
+          <div class="border-b border-neutral-200 pb-6">
+            <h3 class="font-bold mb-4">Contact Information</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium mb-1">WhatsApp Number <span class="text-red-500">*</span></label>
+                <input type="tel" id="store-whatsapp" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="0801 234 5678">
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Email for Notifications</label>
+                <input type="email" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="notifications@example.com">
+              </div>
+            </div>
           </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">WhatsApp Number</label>
-            <input type="tel" id="store-whatsapp" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="0801 234 5678">
-          </div>
-          <div class="border-t border-neutral-200 pt-4 mt-4">
+
+          <!-- Payment Details -->
+          <div class="border-b border-neutral-200 pb-6">
             <h3 class="font-bold mb-4 text-brand-600">Payment Details (For Receiving Customer Payments)</h3>
+            <p class="text-sm text-neutral-500 mb-4">Customers will pay directly to this account. Ensure details are accurate.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-sm font-medium mb-1">Bank Name <span class="text-red-500">*</span></label>
+                <input type="text" id="seller-bank-name" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="e.g., OPay, GTBank">
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Account Number <span class="text-red-500">*</span></label>
+                <input type="text" id="seller-account-number" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="10-digit account number">
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Account Name <span class="text-red-500">*</span></label>
+                <input type="text" id="seller-account-name" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="Account holder name">
+              </div>
+            </div>
           </div>
+
+          <!-- Preferences -->
           <div>
-            <label class="block text-sm font-medium mb-1">Bank Name <span class="text-red-500">*</span></label>
-            <input type="text" id="seller-bank-name" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="e.g., OPay, GTBank">
+            <h3 class="font-bold mb-4">Preferences</h3>
+            <div class="space-y-3">
+              <label class="flex items-center gap-3">
+                <input type="checkbox" class="w-5 h-5 text-brand-600 rounded">
+                <span class="text-sm">Enable price negotiation (allow haggling)</span>
+              </label>
+              <label class="flex items-center gap-3">
+                <input type="checkbox" class="w-5 h-5 text-brand-600 rounded">
+                <span class="text-sm">Show phone number to buyers</span>
+              </label>
+              <label class="flex items-center gap-3">
+                <input type="checkbox" class="w-5 h-5 text-brand-600 rounded">
+                <span class="text-sm">Receive order notifications via WhatsApp</span>
+              </label>
+            </div>
           </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Account Number <span class="text-red-500">*</span></label>
-            <input type="text" id="seller-account-number" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="10-digit account number">
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Account Name <span class="text-red-500">*</span></label>
-            <input type="text" id="seller-account-name" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="Account holder name">
-          </div>
-          <button type="submit" class="btn-primary text-white px-6 py-3 rounded-lg w-full">Save Settings</button>
+
+          <button type="submit" class="btn-primary text-white px-6 py-3 rounded-lg w-full">
+            Save All Settings
+          </button>
         </form>
       </div>
     </div>
 
-    <!-- Add Product -->
+    <!-- Add Product Section -->
     <div id="seller-add-product" class="seller-section hidden-section">
       <div class="mb-8">
         <h1 class="text-3xl font-heading font-bold mb-2">Add New Product</h1>
-        <p class="text-neutral-500">List an item for sale in your store.</p>
+        <p class="text-neutral-500">List an item for sale. Include videos for better conversion!</p>
       </div>
       <div class="bg-white rounded-xl border border-neutral-200 p-6 max-w-3xl">
         <form id="add-product-form" onsubmit="handleProductUpload(event)" class="space-y-6">
@@ -995,11 +1315,11 @@ html { scroll-behavior: smooth; }
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium mb-1">Price (₦) <span class="text-red-500">*</span></label>
-              <input type="number" id="prod-price" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="e.g., 500000">
+              <input type="number" id="prod-price" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="500000">
             </div>
             <div>
               <label class="block text-sm font-medium mb-1">Original Price (Optional)</label>
-              <input type="number" id="prod-original-price" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="Used for discount strike-through">
+              <input type="number" id="prod-original-price" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="For discount">
             </div>
           </div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1021,38 +1341,39 @@ html { scroll-behavior: smooth; }
                 <option value="new">Brand New</option>
                 <option value="used-like-new">Used - Like New</option>
                 <option value="used-good">Used - Good</option>
-                <option value="used-fair">Used - Fair</option>
-                <option value="sold-out">Sold Out</option>
               </select>
             </div>
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">Description <span class="text-red-500">*</span></label>
-            <textarea id="prod-desc" required rows="4" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="Describe the item, its features, and any flaws..."></textarea>
+            <textarea id="prod-desc" required rows="4" class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="Describe the item..."></textarea>
           </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium mb-1">Item Location <span class="text-red-500">*</span></label>
-              <input type="text" id="prod-location" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="e.g., Ikeja, Lagos">
-            </div>
-            <div class="flex items-center gap-2 mt-8">
-              <input type="checkbox" id="prod-negotiable" class="w-5 h-5 text-brand-600 rounded">
-              <label class="text-sm font-medium">Price is Negotiable (Allow Haggling)</label>
-            </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Item Location <span class="text-red-500">*</span></label>
+            <input type="text" id="prod-location" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg" placeholder="e.g., Ikeja, Lagos">
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">Product Image <span class="text-red-500">*</span></label>
             <input type="file" id="prod-image" accept="image/*" required class="w-full px-4 py-2 border border-neutral-300 rounded-lg bg-neutral-50">
           </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Product Video (Optional)</label>
+            <input type="file" id="prod-video" accept="video/*" class="w-full px-4 py-2 border border-neutral-300 rounded-lg bg-neutral-50">
+            <p class="text-xs text-neutral-500 mt-1">Upload video demo (max 50MB). Products with videos get 3x more sales!</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="checkbox" id="prod-negotiable" class="w-5 h-5 text-brand-600 rounded">
+            <label class="text-sm font-medium">Price is Negotiable (Allow Haggling)</label>
+          </div>
           <button type="submit" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg w-full flex justify-center items-center gap-2">
             <span id="upload-btn-text">Publish Product</span>
-            <div id="upload-spinner" class="loading-spinner hidden border-white border-t-transparent"></div>
+            <div id="upload-spinner" class="loading-spinner hidden border-white border-t-transparent inline-block ml-2"></div>
           </button>
         </form>
       </div>
     </div>
 
-    <!-- Admin Panel -->
+    <!-- SUPER ADMIN PANEL -->
     <div id="seller-admin" class="seller-section hidden-section">
       <div class="mb-8">
         <h1 class="text-3xl font-heading font-bold mb-2">
@@ -1083,8 +1404,8 @@ html { scroll-behavior: smooth; }
   </main>
 </div>
 
-<!-- MODALS -->
-<!-- Auth Modal -->
+<!-- ================= MODALS ================= -->
+<!-- Login/Register Modal -->
 <div id="auth-modal" class="modal">
   <div class="modal-content p-6 relative max-w-md">
     <button onclick="closeModal('auth-modal')" class="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600">
@@ -1101,11 +1422,11 @@ html { scroll-behavior: smooth; }
       <div class="space-y-4">
         <div>
           <label class="block text-sm font-medium mb-1">Email</label>
-          <input type="email" id="login-email" required class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="you@example.com">
+          <input type="email" id="login-email" required class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg" placeholder="you@example.com">
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">Password</label>
-          <input type="password" id="login-password" required class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="••••••••">
+          <input type="password" id="login-password" required class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg" placeholder="••••••••">
         </div>
         <button type="submit" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg w-full">Sign In</button>
       </div>
@@ -1118,28 +1439,28 @@ html { scroll-behavior: smooth; }
         <div class="grid grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium mb-1">First Name</label>
-            <input type="text" id="reg-firstname" required class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <input type="text" id="reg-firstname" required class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg">
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">Last Name</label>
-            <input type="text" id="reg-lastname" required class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <input type="text" id="reg-lastname" required class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg">
           </div>
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">Email</label>
-          <input type="email" id="reg-email" required class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="you@example.com">
+          <input type="email" id="reg-email" required class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg" placeholder="you@example.com">
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">Password</label>
-          <input type="password" id="reg-password" required class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="•••••••• (min 8 chars)">
+          <input type="password" id="reg-password" required class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg" placeholder="•••••••• (min 8 chars)">
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">WhatsApp Number</label>
-          <input type="tel" id="reg-whatsapp" required class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="0801 234 5678">
+          <input type="tel" id="reg-whatsapp" required class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg" placeholder="0801 234 5678">
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">I am a:</label>
-          <select id="reg-usertype" class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <select id="reg-usertype" class="w-full px-4 py-2.5 border border-neutral-300 rounded-lg" onchange="toggleSellerField()">
             <option value="buyer">Buyer</option>
             <option value="seller">Seller</option>
             <option value="both">Both</option>
@@ -1154,67 +1475,159 @@ html { scroll-behavior: smooth; }
   </div>
 </div>
 
-<!-- Checkout Modal -->
+<!-- Product Detail Modal (IMMERSIVE) -->
+<div id="product-detail-modal" class="modal product-detail-modal">
+  <div class="modal-content p-0 relative max-w-5xl">
+    <button onclick="closeModal('product-detail-modal')" class="absolute top-4 right-4 z-10 bg-white/90 hover:bg-white p-2 rounded-full shadow-lg">
+      <i class="fa-solid fa-xmark text-xl"></i>
+    </button>
+    <div class="grid md:grid-cols-2 gap-0">
+      <!-- Gallery -->
+      <div class="p-6 bg-neutral-50">
+        <div class="product-gallery mb-4">
+          <img id="detail-image" src="" alt="Product" class="w-full h-full object-contain">
+          <video id="detail-video" controls class="hidden w-full h-full"></video>
+        </div>
+        <div id="detail-has-video" class="hidden text-center text-sm text-neutral-500">
+          <i class="fa-solid fa-video mr-1"></i> Video demo available
+        </div>
+      </div>
+      <!-- Details -->
+      <div class="p-6">
+        <div class="flex items-start justify-between mb-4">
+          <div>
+            <span id="detail-category" class="text-xs font-medium text-brand-600 bg-brand-50 px-2 py-1 rounded">Category</span>
+            <h2 id="detail-title" class="text-2xl font-heading font-bold mt-2">Product Title</h2>
+          </div>
+          <span id="detail-condition" class="px-3 py-1 rounded-full text-xs font-medium bg-neutral-100 text-neutral-700">Condition</span>
+        </div>
+        
+        <div class="flex items-baseline gap-3 mb-6">
+          <span id="detail-price" class="text-3xl font-bold text-brand-600">₦0</span>
+          <span id="detail-original-price" class="text-lg text-neutral-400 line-through hidden">₦0</span>
+          <span id="detail-discount" class="text-sm font-bold text-red-600 hidden">-0%</span>
+        </div>
+        
+        <p id="detail-description" class="text-neutral-600 mb-6 leading-relaxed"></p>
+        
+        <div class="flex items-center gap-2 mb-6">
+          <i class="fa-solid fa-location-dot text-brand-600"></i>
+          <span id="detail-location" class="text-sm text-neutral-600">Location</span>
+        </div>
+        
+        <!-- Seller Trust Profile -->
+        <div class="bg-neutral-50 rounded-lg p-4 mb-6">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 bg-neutral-200 rounded-full flex items-center justify-center">
+                <i class="fa-solid fa-user text-neutral-600"></i>
+              </div>
+              <div>
+                <div id="detail-seller" class="font-medium text-sm">Seller Name</div>
+                <div class="flex items-center gap-1">
+                  <span class="verified-badge"><i class="fa-solid fa-check"></i> Verified</span>
+                  <span class="text-xs text-neutral-500">4.8 ★ (124 sales)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Actions -->
+        <div class="flex gap-3 mb-4">
+          <button onclick="addToCartFromDetail()" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg flex-1">
+            <i class="fa-solid fa-cart-plus mr-2"></i> Add to Cart
+          </button>
+          <button onclick="haggleViaWhatsApp()" class="btn-secondary px-4 py-3 rounded-lg">
+            <i class="fa-brands fa-whatsapp text-green-500"></i>
+          </button>
+          <button class="btn-secondary px-4 py-3 rounded-lg">
+            <i class="fa-regular fa-heart"></i>
+          </button>
+        </div>
+        
+        <p class="text-xs text-neutral-500 text-center">
+          <i class="fa-solid fa-shield-check mr-1"></i> Buyer Protection • Pay directly to seller • WhatsApp support
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Multi-Step Checkout Modal -->
 <div id="checkout-modal" class="modal">
   <div class="modal-content p-6 relative max-w-3xl max-h-[90vh] overflow-y-auto">
     <button onclick="closeModal('checkout-modal')" class="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600">
       <i class="fa-solid fa-xmark text-xl"></i>
     </button>
-    <h3 class="text-xl font-heading font-bold mb-6">Complete Your Order</h3>
     
     <!-- Progress Bar -->
     <div class="mb-6">
-      <div class="flex justify-between mb-2 text-sm">
-        <span>Step <span id="checkout-step-number">1</span> of 3</span>
-        <span id="checkout-step-label">Delivery</span>
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-sm font-medium text-brand-600">Step <span id="checkout-step-number">1</span> of 3</span>
+        <span class="text-sm text-neutral-500" id="checkout-step-label">Delivery Details</span>
       </div>
-      <div class="progress-bar"><div id="checkout-progress" class="progress-fill" style="width: 33%"></div></div>
+      <div class="progress-bar">
+        <div id="checkout-progress" class="progress-fill" style="width: 33%"></div>
+      </div>
+      <div class="flex justify-between mt-2 text-xs text-neutral-500">
+        <span>Delivery</span>
+        <span>Payment</span>
+        <span>Confirm</span>
+      </div>
     </div>
     
-    <!-- Step 1: Delivery -->
+    <!-- Step 1: Delivery Details -->
     <div id="checkout-step-1" class="checkout-step active">
-      <h4 class="font-semibold mb-3">📍 Delivery Information</h4>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label class="block text-sm font-medium mb-1">Full Name <span class="text-red-500">*</span></label>
-          <input type="text" id="buyer-name" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="Your full name">
+      <h3 class="text-xl font-heading font-bold mb-6">📍 Delivery Information</h3>
+      <div class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Full Name <span class="text-red-500">*</span></label>
+            <input type="text" id="buyer-name" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg" placeholder="Your full name">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Phone Number <span class="text-red-500">*</span></label>
+            <input type="tel" id="buyer-phone" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg" placeholder="0801 234 5678">
+          </div>
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Phone Number <span class="text-red-500">*</span></label>
-          <input type="tel" id="buyer-phone" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="0801 234 5678">
+          <label class="block text-sm font-medium mb-1">WhatsApp Number <span class="text-red-500">*</span></label>
+          <input type="tel" id="buyer-whatsapp" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg" placeholder="0801 234 5678">
+          <p class="text-xs text-neutral-500 mt-1">Seller will contact you on WhatsApp for delivery</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">State <span class="text-red-500">*</span></label>
+          <select id="buyer-state" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg">
+            <option value="">Select state</option>
+            <option value="Lagos">Lagos</option>
+            <option value="Abuja">Abuja (FCT)</option>
+            <option value="Port Harcourt">Port Harcourt</option>
+            <option value="Kano">Kano</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">City/Area <span class="text-red-500">*</span></label>
+          <input type="text" id="buyer-city" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg" placeholder="e.g., Ikeja, Lekki">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Full Delivery Address <span class="text-red-500">*</span></label>
+          <textarea id="buyer-address" required rows="3" class="w-full px-4 py-3 border border-neutral-300 rounded-lg" placeholder="Street address, landmark, etc."></textarea>
         </div>
       </div>
-      <div class="mt-4">
-        <label class="block text-sm font-medium mb-1">WhatsApp Number <span class="text-red-500">*</span></label>
-        <input type="tel" id="buyer-whatsapp" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="0801 234 5678">
-        <p class="text-xs text-neutral-500 mt-1">Seller will contact you on WhatsApp for delivery</p>
+      <div class="flex justify-end mt-6">
+        <button type="button" onclick="goToCheckoutStep(2)" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg">
+          Continue to Payment <i class="fa-solid fa-arrow-right ml-2"></i>
+        </button>
       </div>
-      <div class="mt-4">
-        <label class="block text-sm font-medium mb-1">State <span class="text-red-500">*</span></label>
-        <select id="buyer-state" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500">
-          <option value="">Select state</option>
-          <option value="Lagos">Lagos</option>
-          <option value="Abuja">Abuja (FCT)</option>
-          <option value="Port Harcourt">Port Harcourt</option>
-          <option value="Kano">Kano</option>
-          <option value="Other">Other</option>
-        </select>
-      </div>
-      <div class="mt-4">
-        <label class="block text-sm font-medium mb-1">City/Area <span class="text-red-500">*</span></label>
-        <input type="text" id="buyer-city" required class="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="e.g., Ikeja, Lekki, Garki">
-      </div>
-      <div class="mt-4">
-        <label class="block text-sm font-medium mb-1">Full Delivery Address <span class="text-red-500">*</span></label>
-        <textarea id="buyer-address" required rows="3" class="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="Street address, landmark, etc."></textarea>
-      </div>
-      <button type="button" onclick="goToCheckoutStep(2)" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg w-full mt-6">
-        Continue to Payment <i class="fa-solid fa-arrow-right ml-2"></i>
-      </button>
     </div>
     
-    <!-- Step 2: Payment -->
+    <!-- Step 2: Payment & Receipt -->
     <div id="checkout-step-2" class="checkout-step">
+      <h3 class="text-xl font-heading font-bold mb-6">💳 Payment Details</h3>
+      
+      <!-- Order Summary -->
       <div class="bg-neutral-50 rounded-xl p-4 mb-6">
         <h4 class="font-semibold mb-3">Order Summary</h4>
         <div id="checkout-items" class="space-y-3"></div>
@@ -1223,26 +1636,28 @@ html { scroll-behavior: smooth; }
           <span id="checkout-total" class="font-bold text-lg">₦0</span>
         </div>
       </div>
+      
+      <!-- Bank Transfer Instructions -->
       <div class="bg-brand-50 border border-brand-200 rounded-xl p-4 mb-6">
         <div class="flex items-start gap-3">
           <div class="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center flex-shrink-0">
             <i class="fa-solid fa-building-columns text-brand-600"></i>
           </div>
           <div class="flex-1">
-            <h4 class="font-semibold text-brand-900 mb-2">💳 Bank Transfer Payment</h4>
-            <p class="text-sm text-brand-700 mb-3">Transfer the total amount to the account below, then upload your payment receipt.</p>
+            <h4 class="font-semibold text-brand-900 mb-2">Pay Directly to Seller</h4>
+            <p class="text-sm text-brand-700 mb-3">Transfer the exact amount to the seller's account below. Your order will be processed after payment verification.</p>
             <div class="bg-white rounded-lg p-4 space-y-3">
               <div class="flex justify-between items-center">
                 <span class="text-sm text-neutral-500">Bank Name</span>
-                <span class="font-bold text-lg">OPay</span>
+                <span id="seller-bank" class="font-bold text-lg">-</span>
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-sm text-neutral-500">Account Number</span>
-                <span id="seller-account-display" class="font-bold text-2xl text-brand-600">9061484256</span>
+                <span id="seller-account" class="font-bold text-2xl text-brand-600">-</span>
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-sm text-neutral-500">Account Name</span>
-                <span class="font-semibold">Efe Israel</span>
+                <span id="seller-account-name" class="font-semibold">-</span>
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-sm text-neutral-500">Amount to Pay</span>
@@ -1255,9 +1670,11 @@ html { scroll-behavior: smooth; }
           </div>
         </div>
       </div>
+      
+      <!-- Receipt Upload -->
       <div class="bg-neutral-50 rounded-xl p-4 mb-6">
         <label class="block text-sm font-medium mb-2">📸 Upload Payment Receipt <span class="text-red-500">*</span></label>
-        <p class="text-xs text-neutral-500 mb-3">After transferring, take a screenshot and upload it here.</p>
+        <p class="text-xs text-neutral-500 mb-3">After transferring, take a screenshot and upload it here for verification.</p>
         <div id="receipt-upload-zone" class="upload-zone rounded-lg p-6 text-center cursor-pointer" onclick="document.getElementById('receipt-file').click()">
           <i class="fa-solid fa-cloud-arrow-up text-3xl text-neutral-400 mb-2"></i>
           <p class="font-medium text-sm">Click to upload receipt</p>
@@ -1269,12 +1686,14 @@ html { scroll-behavior: smooth; }
           <button type="button" onclick="removeReceipt()" class="text-red-600 text-sm mt-2 hover:underline">Remove</button>
         </div>
       </div>
+      
       <div class="flex items-start gap-2 mb-6">
         <input type="checkbox" id="checkout-terms" required class="w-5 h-5 text-brand-600 rounded mt-0.5">
         <label class="text-sm text-neutral-600">
-          I confirm that I have made the payment and uploaded the correct receipt. I understand that my order will be processed after payment verification.
+          I confirm that I have made the payment to the seller's account and uploaded the correct receipt.
         </label>
       </div>
+      
       <div class="flex gap-3">
         <button type="button" onclick="goToCheckoutStep(1)" class="btn-secondary px-6 py-3 rounded-lg font-medium">
           <i class="fa-solid fa-arrow-left mr-2"></i> Back
@@ -1285,7 +1704,7 @@ html { scroll-behavior: smooth; }
       </div>
     </div>
     
-    <!-- Step 3: Success -->
+    <!-- Step 3: Success Confirmation -->
     <div id="checkout-step-3" class="checkout-step">
       <div class="text-center py-8">
         <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -1293,6 +1712,7 @@ html { scroll-behavior: smooth; }
         </div>
         <h3 class="text-2xl font-heading font-bold mb-2">Order Confirmed! 🎉</h3>
         <p class="text-neutral-600 mb-6">Your order has been placed successfully. The seller will contact you on WhatsApp shortly.</p>
+        
         <div class="bg-neutral-50 rounded-xl p-6 mb-6 text-left">
           <div class="grid grid-cols-2 gap-4 text-sm">
             <div>
@@ -1309,8 +1729,9 @@ html { scroll-behavior: smooth; }
             </div>
           </div>
         </div>
+        
         <div class="flex gap-3 justify-center">
-          <button onclick="closeModal('checkout-modal');clearCartAfterSuccess()" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg">
+          <button onclick="closeModal('checkout-modal'); clearCartAfterSuccess()" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg">
             Continue Shopping
           </button>
           <a href="https://wa.me/2349061484256" target="_blank" class="btn-secondary px-6 py-3 rounded-lg font-medium flex items-center gap-2">
@@ -1322,7 +1743,7 @@ html { scroll-behavior: smooth; }
   </div>
 </div>
 
-<!-- Commission Modal -->
+<!-- Commission Payment Modal -->
 <div id="commission-modal" class="modal">
   <div class="modal-content p-6 relative max-w-lg">
     <button onclick="closeModal('commission-modal')" class="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600">
@@ -1330,7 +1751,7 @@ html { scroll-behavior: smooth; }
     </button>
     <h3 class="text-xl font-heading font-bold mb-4">Pay Platform Commission</h3>
     <div class="bg-neutral-50 rounded-xl p-4 mb-4">
-      <p class="text-sm text-neutral-600 mb-3">As per our agreement, sellers pay ₦5,000 commission after 3 months of using the platform.</p>
+      <p class="text-sm text-neutral-600 mb-3">After your 1-month free trial, pay ₦5,000 to continue using your seller account.</p>
       <div class="bg-white rounded-lg p-4 space-y-2">
         <div class="flex justify-between">
           <span class="text-sm text-neutral-500">Bank</span>
@@ -1357,9 +1778,11 @@ html { scroll-behavior: smooth; }
       </div>
       <div>
         <label class="block text-sm font-medium mb-1">Transaction Reference (Optional)</label>
-        <input type="text" id="commission-reference" class="w-full px-4 py-3 border border-neutral-300 rounded-lg" placeholder="Transaction ID from your bank app">
+        <input type="text" id="commission-reference" class="w-full px-4 py-3 border border-neutral-300 rounded-lg" placeholder="Transaction ID">
       </div>
-      <button type="submit" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg w-full">Submit Payment Proof</button>
+      <button type="submit" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg w-full">
+        Submit Payment Proof
+      </button>
     </form>
   </div>
 </div>
@@ -1379,11 +1802,9 @@ html { scroll-behavior: smooth; }
         <span class="text-neutral-600">Subtotal</span>
         <span id="cart-subtotal" class="font-bold">₦0</span>
       </div>
-      <div class="flex justify-between mb-4">
-        <span class="text-neutral-600">Delivery</span>
-        <span class="text-green-600 font-medium">Calculated at checkout</span>
-      </div>
-      <button onclick="showCheckout()" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg w-full">Proceed to Checkout</button>
+      <button onclick="showCheckout()" class="btn-primary text-white font-semibold px-6 py-3 rounded-lg w-full">
+        Proceed to Checkout
+      </button>
     </div>
   </div>
 </div>
@@ -1400,9 +1821,8 @@ html { scroll-behavior: smooth; }
         <h4 class="font-medium mb-2"><i class="fa-solid fa-circle-question text-brand-600 mr-2"></i>How to Buy</h4>
         <ol class="text-sm text-neutral-600 list-decimal list-inside space-y-1">
           <li>Search or browse products</li>
-          <li>Click on a product to view details</li>
-          <li>Add to cart or haggle on price</li>
-          <li>Checkout with bank transfer</li>
+          <li>Add to cart</li>
+          <li>Checkout - pay directly to seller's account</li>
           <li>Upload payment receipt</li>
           <li>Seller contacts you on WhatsApp</li>
         </ol>
@@ -1410,17 +1830,15 @@ html { scroll-behavior: smooth; }
       <div class="border border-neutral-200 rounded-lg p-4">
         <h4 class="font-medium mb-2"><i class="fa-solid fa-store text-brand-600 mr-2"></i>How to Sell</h4>
         <ol class="text-sm text-neutral-600 list-decimal list-inside space-y-1">
-          <li>Sign up as a seller</li>
-          <li>List your own products OR import from AliExpress/CJ</li>
-          <li>Set your prices and margins</li>
-          <li>Receive orders on WhatsApp</li>
-          <li>For dropshipping: forward order to supplier</li>
-          <li>Track commission payments</li>
+          <li>Sign up as seller (1 month FREE)</li>
+          <li>Add your bank account details</li>
+          <li>List products with photos/videos</li>
+          <li>Receive payments directly</li>
+          <li>After 1 month, pay ₦5,000 commission</li>
         </ol>
       </div>
       <div class="border border-neutral-200 rounded-lg p-4">
         <h4 class="font-medium mb-2"><i class="fa-brands fa-whatsapp text-brand-600 mr-2"></i>WhatsApp Support</h4>
-        <p class="text-sm text-neutral-600 mb-2">Get instant help on WhatsApp:</p>
         <a href="https://wa.me/2349061484256" target="_blank" class="btn-primary text-white px-4 py-2 rounded-lg inline-flex items-center gap-2 text-sm">
           <i class="fa-brands fa-whatsapp"></i> Chat with Support
         </a>
@@ -1429,7 +1847,7 @@ html { scroll-behavior: smooth; }
   </div>
 </div>
 
-<!-- Toast -->
+<!-- Toast Notification -->
 <div id="toast" class="toast">
   <div class="flex items-start gap-3">
     <i id="toast-icon" class="fa-solid fa-circle-check text-green-500 text-lg mt-0.5"></i>
@@ -1440,78 +1858,125 @@ html { scroll-behavior: smooth; }
   </div>
 </div>
 
-<!-- Floating WhatsApp -->
-<a href="https://wa.me/2349061484256?text=Hello%20BUYSELL%20Nigeria,%20I%20need%20help" target="_blank" class="fixed bottom-6 right-6 z-50 bg-green-500 hover:bg-green-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition transform hover:scale-110">
+<!-- Floating WhatsApp Button -->
+<a href="https://wa.me/2349061484256?text=Hello%20BUYSELL%20Nigeria"
+  target="_blank"
+  class="fixed bottom-6 right-6 z-50 bg-green-500 hover:bg-green-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition transform hover:scale-110">
   <i class="fa-brands fa-whatsapp text-3xl"></i>
 </a>
 
-<!-- JAVASCRIPT -->
+<!-- ================= JAVASCRIPT ================= -->
 <script>
-// CONFIG
+// ==========================================
+// CONFIGURATION
+// ==========================================
 const SUPABASE_URL = 'https://hasairlvjazwhtvylrjl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Z179YOa4aZcA2SR2mqWlfw_sM7Xa9y8';
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const ADMIN_WHATSAPP = '2349061484256';
 const ADMIN_EMAIL = 'israelefe093@gmail.com';
+const PLATFORM_ACCOUNT = '9061484256';
+const PLATFORM_ACCOUNT_NAME = 'Efe Israel';
+const PLATFORM_BANK = 'OPay';
 const COMMISSION_AMOUNT = 5000;
-const COMMISSION_PERIOD_MONTHS = 3;
+const FREE_TRIAL_DAYS = 30;
 
-// CHATBOT QA
 const chatbotQA = {
-  'how do i buy': 'To buy on BUYSELL Nigeria: 1️⃣ Browse or search for products 2️⃣ Click "Add to Cart" 3️⃣ Go to checkout 4️⃣ Make bank transfer to OPay: 9061484256 (Efe Israel) 5️⃣ Upload payment receipt 6️⃣ Seller contacts you on WhatsApp for delivery! 🛒',
-  'how do i sell': 'To sell on BUYSELL Nigeria: 1️⃣ Sign up as a seller 2️⃣ Complete your profile 3️⃣ List your products with photos/videos 4️⃣ Set your prices 5️⃣ Receive orders on WhatsApp 6️⃣ Fulfill orders & get paid! You can also import from AliExpress/CJ for dropshipping. 💰',
-  'payment methods': 'We currently accept bank transfer to: 🏦 OPay | 📱 Account: 9061484256 | 👤 Name: Efe Israel. After transfer, upload your payment receipt during checkout. Paystack integration coming soon! 💳',
-  'delivery time': 'Delivery time depends on your location: 📍 Lagos: 1-2 days | 📍 Abuja/PH: 2-3 days | 📍 Other states: 3-5 days. Sellers contact you on WhatsApp to arrange delivery after payment confirmation. 🚚',
-  'return policy': 'Our Buyer Protection Policy: ✅ 7-day return window | ✅ Full refund if item not as described | ✅ Seller must respond within 24hrs | ✅ Disputes resolved via WhatsApp support. Keep your receipt safe! 🛡️',
-  'commission': 'Sellers pay ₦5,000 platform commission after 3 months of active selling. This covers maintenance, support, and marketing. Pay to OPay: 9061484256 (Efe Israel) and upload receipt in your dashboard. 💵',
-  'dropshipping': 'Yes! You can import products from AliExpress, CJ Dropshipping, or any supplier. Set your margin (we recommend 30-50%), list on BUYSELL, and when you get an order, forward it to your supplier. They ship directly to your customer! 🌍',
-  'affiliate': 'Earn commission by sharing trending products! Click on Amazon/eBay affiliate links in the Trending section. You earn 4-10% on every purchase made through your link. Track earnings in your Affiliate Dashboard. 💸',
-  'contact': 'Contact us via: 📱 WhatsApp: +234 906 148 4256 | 📧 Email: support@buysell.ng | 💬 Use this chatbot for instant answers! We respond within 24 hours. 🤝',
-  'default': 'I\'m not sure about that. Try asking about: buying, selling, payment, delivery, returns, commission, dropshipping, or affiliate program. Or contact WhatsApp support: +234 906 148 4256 📱'
+  'how do i buy': 'To buy: 1️⃣ Browse products 2️⃣ Add to cart 3️⃣ Checkout 4️⃣ Pay to seller 5️⃣ Upload receipt 6️⃣ Seller contacts you! 🛒',
+  'how do i sell': 'To sell: 1️⃣ Sign up 2️⃣ Add bank account 3️⃣ List products (FREE 1 month) 4️⃣ Receive payments 5️⃣ Pay ₦5,000 after trial! 💰',
+  'payment': 'Buyers pay sellers DIRECTLY via bank transfer. Upload receipt as proof! 💳',
+  'commission': 'Sellers get 1 month FREE. After that, pay ₦5,000 to OPay: 9061484256 (Efe Israel). Upload receipt to continue! 💵',
+  'dropshipping': 'Yes! Import from AliExpress, CJ Dropshipping. Set margin (30-50%), list on BUYSELL, forward orders to supplier. They ship to customer! 🌍',
+  'default': 'Contact WhatsApp support: +234 906 148 4256 📱'
 };
 
-// STATE
+// ==========================================
+// GLOBAL STATE
+// ==========================================
 let currentUser = null;
 let currentView = 'buyer';
 let products = [];
-let trendingProducts = [];
 let sellerProducts = [];
 let cart = JSON.parse(localStorage.getItem('buysell_cart')) || [];
 let currentProduct = null;
+let receiptFile = null;
 let currentSlide = 0;
 const slides = 3;
-let receiptFile = null;
-let currentTrendingFilter = 'all';
-let selectedSupplier = null;
 let chatbotOpen = false;
 let carouselInterval;
+let selectedSupplier = null;
 let currentCheckoutStep = 1;
+let orders = JSON.parse(localStorage.getItem('buysell_orders')) || [];
+let dropshipStats = { imported: 0, sales: 0, pending: 0 };
+let affiliateEarnings = { total: 0, pending: 0, clicks: 0, conversions: 0 };
 
-// INIT
+// ==========================================
+// INITIALIZATION
+// ==========================================
 document.addEventListener('DOMContentLoaded', async () => {
   await checkAuth();
   updateCartCount();
-  loadTrendingDeals();
   startCarousel();
+  loadOrders();
 });
 
-// AUTH
+// ==========================================
+// AUTHENTICATION
+// ==========================================
 async function checkAuth() {
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  currentUser = session?.user || null;
-  updateAuthUI();
-  checkAdminAccess();
+  try {
+    const {  { session } } = await supabaseClient.auth.getSession();
+    currentUser = session?.user || null;
+    updateAuthUI();
+    if (currentUser) {
+      await checkSellerSubscription();
+      await loadUserProfile();
+      checkAdminAccess();
+    }
+  } catch (e) {
+    console.log('Auth check error:', e);
+  }
 }
 
 function checkAdminAccess() {
   const adminLink = document.getElementById('admin-link');
   if (currentUser?.email === ADMIN_EMAIL) {
     adminLink.classList.remove('hidden');
+  } else {
+    adminLink.classList.add('hidden');
   }
 }
 
-function showLoginModal() { document.getElementById('auth-modal').classList.add('active'); }
-function closeModal(modalId) { document.getElementById(modalId).classList.remove('active'); }
+async function checkSellerSubscription() {
+  if (!currentUser) return;
+  try {
+    const response = await supabaseClient.from('sellers').select('*').eq('user_id', currentUser.id).single();
+    const sellerData = response.data;
+    
+    if (sellerData) {
+      const trialEndDate = new Date(sellerData.trial_end_date);
+      const today = new Date();
+      
+      if (!sellerData.commission_paid && today > trialEndDate) {
+        document.getElementById('account-suspended').classList.remove('hidden');
+        document.getElementById('account-suspended').style.display = 'flex';
+        if (currentView === 'seller') {
+          document.getElementById('seller-dashboard').classList.add('hidden-section');
+        }
+      }
+    }
+  } catch (e) {
+    console.log('Subscription check error:', e);
+  }
+}
+
+function showLoginModal() {
+  document.getElementById('auth-modal').classList.add('active');
+}
+
+function closeModal(modalId) {
+  document.getElementById(modalId).classList.remove('active');
+}
 
 function toggleAuthMode(mode) {
   const loginForm = document.getElementById('login-form');
@@ -1525,12 +1990,28 @@ function toggleAuthMode(mode) {
   }
 }
 
+function toggleSellerField() {
+  const userType = document.getElementById('reg-usertype').value;
+  const sellerField = document.getElementById('seller-account-field');
+  if (userType === 'seller' || userType === 'both') {
+    sellerField.classList.remove('hidden');
+  } else {
+    sellerField.classList.add('hidden');
+  }
+}
+
 async function handleLogin(e) {
   e.preventDefault();
   const email = document.getElementById('login-email').value;
   const password = document.getElementById('login-password').value;
+  
   const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-  if (error) { showToast(error.message, 'error'); return; }
+  
+  if (error) {
+    showToast(error.message, 'error');
+    return;
+  }
+  
   currentUser = data.user;
   closeModal('auth-modal');
   updateAuthUI();
@@ -1547,11 +2028,13 @@ async function handleRegister(e) {
   const password = document.getElementById('reg-password').value;
   const userType = document.getElementById('reg-usertype').value;
   const whatsapp = document.getElementById('reg-whatsapp').value;
+  
+  // ✅ FIXED: Added '' key in options
   const { data, error } = await supabaseClient.auth.signUp({
     email,
     password,
     options: {
-      data: {
+       {
         first_name: firstName,
         last_name: lastName,
         user_type: userType,
@@ -1559,7 +2042,12 @@ async function handleRegister(e) {
       }
     }
   });
-  if (error) { showToast(error.message, 'error'); return; }
+
+  if (error) {
+    showToast(error.message, 'error');
+    return;
+  }
+
   if (data.user) {
     await supabaseClient.from('users').insert({
       id: data.user.id,
@@ -1571,6 +2059,7 @@ async function handleRegister(e) {
       created_at: new Date().toISOString()
     });
   }
+
   currentUser = data.user;
   closeModal('auth-modal');
   updateAuthUI();
@@ -1599,21 +2088,108 @@ function updateAuthUI() {
 
 async function loadUserProfile() {
   if (!currentUser) return;
-  const { data: userData } = await supabaseClient.from('users').select('*').eq('id', currentUser.id).single();
-  if (userData) {
-    document.getElementById('seller-name').textContent = userData.store_name || userData.first_name || currentUser.email?.split('@')[0] || 'User';
-    document.getElementById('seller-email').textContent = currentUser.email;
+  try {
+    const response = await supabaseClient.from('users').select('*').eq('id', currentUser.id).single();
+    const userData = response.data;
+    if (userData) {
+      document.getElementById('seller-name').textContent = userData.first_name || currentUser.email?.split('@')[0] || 'User';
+      document.getElementById('seller-email').textContent = currentUser.email;
+    }
+
+    const sellerResponse = await supabaseClient.from('sellers').select('*').eq('user_id', currentUser.id).single();
+    const sellerData = sellerResponse.data;
+    if (sellerData) {
+      document.getElementById('seller-account-number').value = sellerData.account_number || '';
+      document.getElementById('seller-bank-name').value = sellerData.bank_name || '';
+      document.getElementById('seller-account-name').value = sellerData.account_name || '';
+      
+      const trialEndDate = new Date(sellerData.trial_end_date);
+      const today = new Date();
+      const daysLeft = Math.ceil((trialEndDate - today) / (1000 * 60 * 60 * 24));
+      
+      document.getElementById('trial-end-date').textContent = trialEndDate.toLocaleDateString();
+      document.getElementById('stat-days-left').textContent = daysLeft > 0 ? `${daysLeft} days left` : 'Expired';
+      document.getElementById('commission-status-badge').textContent = sellerData.commission_paid ? 'Paid' : 'Active';
+      document.getElementById('commission-status-badge').className = `px-3 py-1 rounded-full text-sm font-medium ${sellerData.commission_paid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`;
+    }
+  } catch (e) {
+    console.log('Profile load error:', e);
   }
 }
 
+// ==========================================
+// NAVIGATION
+// ==========================================
+function enterSite(view) {
+  currentView = view;
+  document.getElementById('landing-page').style.opacity = '0';
+  document.getElementById('landing-page').style.transition = 'opacity 0.3s ease';
+  setTimeout(() => {
+    document.getElementById('landing-page').style.display = 'none';
+    document.getElementById('main-nav').classList.remove('hidden-section');
+    if (view === 'seller') {
+      document.getElementById('buyer-view').classList.add('hidden-section');
+      document.getElementById('seller-dashboard').classList.remove('hidden-section');
+      loadSellerDashboard();
+    } else {
+      document.getElementById('buyer-view').classList.remove('hidden-section');
+      document.getElementById('seller-dashboard').classList.add('hidden-section');
+      loadProducts();
+    }
+  }, 300);
+}
+
+function toggleDashboard() {
+  if (currentView === 'buyer') {
+    currentView = 'seller';
+    document.getElementById('buyer-view').classList.add('hidden-section');
+    document.getElementById('seller-dashboard').classList.remove('hidden-section');
+    document.getElementById('dashboard-btn-text').textContent = 'Buyer View';
+    loadSellerDashboard();
+  } else {
+    currentView = 'buyer';
+    document.getElementById('buyer-view').classList.remove('hidden-section');
+    document.getElementById('seller-dashboard').classList.add('hidden-section');
+    document.getElementById('dashboard-btn-text').textContent = 'Seller Dashboard';
+    loadProducts();
+  }
+}
+
+function showSellerSection(sectionId) {
+  document.querySelectorAll('.seller-section').forEach(section => {
+    section.classList.add('hidden-section');
+  });
+  document.getElementById(`seller-${sectionId}`).classList.remove('hidden-section');
+  document.querySelectorAll('.sidebar-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  if (event && event.currentTarget) {
+    event.currentTarget.classList.add('active');
+  }
+  if (sectionId === 'products') loadSellerProducts();
+  if (sectionId === 'orders') loadSellerOrders();
+  if (sectionId === 'overview') loadSellerStats();
+  if (sectionId === 'affiliate') loadAffiliateEarnings();
+  if (sectionId === 'commission') loadCommissionStatus();
+  if (sectionId === 'admin') loadAllSellers();
+}
+
+// ==========================================
 // CHATBOT
+// ==========================================
 function toggleChatbot() {
   chatbotOpen = !chatbotOpen;
   const chatWindow = document.getElementById('chatbot-window');
-  if (chatbotOpen) { chatWindow.classList.add('active'); } else { chatWindow.classList.remove('active'); }
+  if (chatbotOpen) {
+    chatWindow.classList.add('active');
+  } else {
+    chatWindow.classList.remove('active');
+  }
 }
 
-function handleChatInput(e) { if (e.key === 'Enter') { sendChatMessage(); } }
+function handleChatInput(e) {
+  if (e.key === 'Enter') sendChatMessage();
+}
 
 function sendChatMessage() {
   const input = document.getElementById('chatbot-input');
@@ -1649,163 +2225,33 @@ function addChatMessage(message, sender) {
 function getChatbotResponse(question) {
   const lowerQuestion = question.toLowerCase();
   for (const [key, answer] of Object.entries(chatbotQA)) {
-    if (lowerQuestion.includes(key)) { return answer; }
+    if (lowerQuestion.includes(key)) return answer;
   }
   return chatbotQA['default'];
 }
 
-// NAVIGATION
-function enterSite(view) {
-  currentView = view;
-  document.getElementById('landing-page').style.opacity = '0';
-  document.getElementById('landing-page').style.transition = 'opacity 0.3s ease';
-  setTimeout(() => {
-    document.getElementById('landing-page').style.display = 'none';
-    document.getElementById('main-nav').classList.remove('hidden-section');
-    if (view === 'seller') {
-      document.getElementById('buyer-view').classList.add('hidden-section');
-      document.getElementById('seller-dashboard').classList.remove('hidden-section');
-      loadSellerDashboard();
-    } else {
-      document.getElementById('buyer-view').classList.remove('hidden-section');
-      document.getElementById('seller-dashboard').classList.add('hidden-section');
-      loadProducts();
-    }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, 300);
-}
-
-function toggleDashboard() {
-  if (currentView === 'buyer') {
-    currentView = 'seller';
-    document.getElementById('buyer-view').classList.add('hidden-section');
-    document.getElementById('seller-dashboard').classList.remove('hidden-section');
-    document.getElementById('dashboard-btn-text').textContent = 'Buyer View';
-    loadSellerDashboard();
-  } else {
-    currentView = 'buyer';
-    document.getElementById('buyer-view').classList.remove('hidden-section');
-    document.getElementById('seller-dashboard').classList.add('hidden-section');
-    document.getElementById('dashboard-btn-text').textContent = 'Seller Dashboard';
-    loadProducts();
-  }
-}
-
-function showSellerSection(sectionId) {
-  document.querySelectorAll('.seller-section').forEach(section => { section.classList.add('hidden-section'); });
-  document.getElementById(`seller-${sectionId}`).classList.remove('hidden-section');
-  document.querySelectorAll('.sidebar-link').forEach(link => { link.classList.remove('active'); });
-  if (event && event.currentTarget) { event.currentTarget.classList.add('active'); }
-  if (sectionId === 'products') loadSellerProducts();
-  if (sectionId === 'orders') loadSellerOrders();
-  if (sectionId === 'overview') loadSellerStats();
-  if (sectionId === 'affiliate') loadAffiliateEarnings();
-  if (sectionId === 'commission') loadCommissionStatus();
-  if (sectionId === 'admin') loadAllSellers();
-}
-
-// TRENDING DEALS
-function loadTrendingDeals() {
-  trendingProducts = [
-    { id: 'aff-1', title: 'Apple iPhone 15 Pro Max', price: 1299, original_price: 1499, image_url: 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=400', affiliate_link: 'https://amazon.com/dp/B0CHX1W1XY?tag=yourtag-20', source_platform: 'amazon', isAffiliate: true },
-    { id: 'aff-2', title: 'Sony WH-1000XM5 Headphones', price: 348, original_price: 399, image_url: 'https://images.unsplash.com/photo-1618366712010-f4ae9c647dcb?w=400', affiliate_link: 'https://ebay.com/itm/123456', source_platform: 'ebay', isAffiliate: true },
-    { id: 'aff-3', title: 'Samsung Galaxy S24 Ultra', price: 1199, image_url: 'https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?w=400', affiliate_link: 'https://amazon.com/dp/B0CMDRCZBJ?tag=yourtag-20', source_platform: 'amazon', isAffiliate: true }
-  ];
-  renderTrendingDeals();
-}
-
-function renderTrendingDeals() {
-  const grid = document.getElementById('trending-grid');
-  const loading = document.getElementById('trending-loading');
-  const empty = document.getElementById('trending-empty');
-  loading.classList.add('hidden');
-  let filtered = trendingProducts;
-  if (currentTrendingFilter === 'amazon') { filtered = trendingProducts.filter(p => p.source_platform === 'amazon'); }
-  else if (currentTrendingFilter === 'ebay') { filtered = trendingProducts.filter(p => p.source_platform === 'ebay'); }
-  else if (currentTrendingFilter === 'local') { filtered = trendingProducts.filter(p => !p.isAffiliate); }
-  if (filtered.length === 0) { grid.classList.add('hidden'); empty.classList.remove('hidden'); return; }
-  grid.classList.remove('hidden');
-  empty.classList.add('hidden');
-  grid.innerHTML = filtered.map(product => {
-    const discount = product.original_price ? Math.round((1 - product.price / product.original_price) * 100) : 0;
-    return `
-      <div class="product-card bg-white rounded-xl border border-neutral-200 overflow-hidden cursor-pointer" onclick="trackAffiliateClick('${product.id}', '${product.affiliate_link}')">
-        <div class="relative">
-          <img src="${product.image_url}" class="w-full h-40 object-cover">
-          ${discount > 0 ? `<span class="absolute top-2 left-2 price-badge text-white text-xs font-bold px-2 py-1 rounded">-${discount}%</span>` : ''}
-          <span class="absolute top-2 right-2 bg-gradient-to-r from-orange-500 to-red-500 text-white text-xs font-bold px-2 py-1 rounded">
-            <i class="fa-brands fa-amazon mr-1"></i> Trending
-          </span>
-        </div>
-        <div class="p-3">
-          <h3 class="font-medium text-sm truncate mb-1">${product.title}</h3>
-          <div class="flex items-baseline gap-2">
-            <span class="text-lg font-bold">₦${product.price?.toLocaleString()}</span>
-          </div>
-        </div>
-      </div>`;
-  }).join('');
-}
-
-function filterTrending(filter) {
-  currentTrendingFilter = filter;
-  document.querySelectorAll('.trending-filter-btn').forEach(btn => {
-    btn.classList.remove('active', 'bg-brand-600', 'text-white');
-    btn.classList.add('bg-neutral-100', 'text-neutral-700');
-  });
-  event.target.classList.remove('bg-neutral-100', 'text-neutral-700');
-  event.target.classList.add('active', 'bg-brand-600', 'text-white');
-  renderTrendingDeals();
-}
-
-function trackAffiliateClick(productId, affiliateLink) {
-  window.open(affiliateLink, '_blank', 'noopener,noreferrer');
-  showToast('Redirecting to partner site... 🔗', 'info');
-}
-
-async function loadAffiliateEarnings() {
-  if (!currentUser) return;
-  const totalEarnings = 0;
-  const totalConversions = 0;
-  document.getElementById('total-earnings').textContent = `₦${totalEarnings.toLocaleString()}`;
-  document.getElementById('total-conversions').textContent = totalConversions;
-  document.getElementById('affiliate-earnings-badge').textContent = `₦${totalEarnings.toLocaleString()}`;
-  document.getElementById('affiliate-earnings-badge').classList.remove('hidden');
-}
-
-function requestWithdrawal() {
-  const message = `💰 *WITHDRAWAL REQUEST*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n👤 Seller: ${currentUser.email}\n💵 Amount: ₦0\n📅 Date: ${new Date().toLocaleString()}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nPlease process withdrawal to my account.`;
-  const whatsappURL = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent(message)}`;
-  window.open(whatsappURL, '_blank');
-  showToast('Withdrawal request sent via WhatsApp!', 'success');
-}
-
-function copyReferralLink() {
-  navigator.clipboard.writeText(document.getElementById('referral-link').value);
-  showToast('Link copied! Share to earn ₦500 per referral 🎁', 'success');
-}
-
+// ==========================================
 // PRODUCTS
+// ==========================================
 async function loadProducts(filters = {}) {
   document.getElementById('loading-products').classList.remove('hidden');
   document.getElementById('products-grid').classList.add('hidden');
-  document.getElementById('empty-state').classList.add('hidden');
-  document.getElementById('error-state').classList.add('hidden');
   try {
     let query = supabaseClient.from('products').select('*').eq('status', 'active');
-    if (filters.category && filters.category !== 'all') { query = query.eq('category', filters.category); }
-    if (filters.hasVideo) { query = query.eq('has_video', true); }
-    const { data, error } = await query;
-    if (error) throw error;
-    products = data || [];
-    if (filters.search) {
-      const searchTerm = filters.search.toLowerCase();
-      products = products.filter(p => p.name.toLowerCase().includes(searchTerm) || p.description.toLowerCase().includes(searchTerm));
+    if (filters.category && filters.category !== 'all') {
+      query = query.eq('category', filters.category);
     }
+    const response = await query;
+    if (response.error) throw response.error;
+    products = response.data || [];
     document.getElementById('product-count').textContent = products.length;
     document.getElementById('loading-products').classList.add('hidden');
-    if (products.length === 0) { document.getElementById('empty-state').classList.remove('hidden'); }
-    else { document.getElementById('products-grid').classList.remove('hidden'); renderProducts(products); }
+    if (products.length === 0) {
+      document.getElementById('empty-state').classList.remove('hidden');
+    } else {
+      document.getElementById('products-grid').classList.remove('hidden');
+      renderProducts(products);
+    }
   } catch (error) {
     console.error('Error loading products:', error);
     document.getElementById('loading-products').classList.add('hidden');
@@ -1818,16 +2264,18 @@ function renderProducts(productsToRender) {
   grid.innerHTML = '';
   productsToRender.forEach(product => {
     const discount = product.original_price ? Math.round((1 - product.price / product.original_price) * 100) : 0;
+    const isSoldOut = product.status === 'sold-out';
     const productHTML = `
-      <div class="product-card bg-white rounded-xl border border-neutral-200 overflow-hidden group">
-        <div class="relative" onclick="showProductDetail('${product.id}')">
-          <img src="${product.image_url || 'https://via.placeholder.com/300'}" class="w-full h-40 object-cover" alt="${product.name}" onerror="this.src='https://via.placeholder.com/300?text=No+Image'">
-          ${product.has_video ? `<span class="absolute top-2 right-2 video-badge text-xs px-2 py-1 rounded text-white flex items-center gap-1"><i class="fa-solid fa-video"></i> Video</span>` : ''}
+      <div class="product-card bg-white rounded-xl border border-neutral-200 overflow-hidden group ${isSoldOut ? 'sold-out' : ''}" onclick="${isSoldOut ? '' : `showProductDetail('${product.id}')`}">
+        <div class="relative">
+          <img src="${product.image_url || 'https://via.placeholder.com/300'}" class="w-full h-40 object-cover" onerror="this.src='https://via.placeholder.com/300?text=No+Image'">
+          ${product.has_video ? `<span class="absolute top-2 right-2 video-badge text-xs px-2 py-1 rounded text-white"><i class="fa-solid fa-video"></i></span>` : ''}
           ${discount > 0 ? `<span class="absolute top-2 left-2 price-badge text-white text-xs font-bold px-2 py-1 rounded">-${discount}%</span>` : ''}
-          ${product.product_type === 'dropship' ? `<span class="absolute bottom-2 left-2 dropship-badge text-white text-xs px-2 py-1 rounded flex items-center gap-1"><i class="fa-solid fa-globe"></i> Dropship</span>` : ''}
-          <button onclick="event.stopPropagation(); addToCart('${product.id}')" class="absolute bottom-2 right-2 bg-brand-600 hover:bg-brand-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition opacity-0 group-hover:opacity-100">
+          ${product.category === 'dropship' ? `<span class="absolute bottom-2 left-2 dropship-badge text-white text-xs px-2 py-1 rounded"><i class="fa-solid fa-globe"></i> Dropship</span>` : ''}
+          ${isSoldOut ? `<span class="absolute top-2 left-2 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded">SOLD OUT</span>` : ''}
+          ${!isSoldOut ? `<button onclick="event.stopPropagation(); addToCart('${product.id}')" class="absolute bottom-2 right-2 bg-brand-600 hover:bg-brand-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition opacity-0 group-hover:opacity-100">
             <i class="fa-solid fa-cart-plus mr-1"></i> Add
-          </button>
+          </button>` : ''}
         </div>
         <div class="p-3">
           <h3 class="font-medium text-sm truncate mb-1">${product.name}</h3>
@@ -1835,34 +2283,103 @@ function renderProducts(productsToRender) {
             <span class="text-lg font-bold text-neutral-900">₦${product.price?.toLocaleString() || '0'}</span>
             ${product.original_price ? `<span class="text-sm text-neutral-400 line-through">₦${product.original_price.toLocaleString()}</span>` : ''}
           </div>
-          <div class="flex items-center gap-1 mt-2 text-xs text-neutral-500">
-            <i class="fa-solid fa-location-dot text-brand-600"></i>
-            <span class="truncate">${product.location || 'Nigeria'}</span>
-          </div>
-          <button onclick="event.stopPropagation(); addToCart('${product.id}')" class="w-full mt-3 bg-brand-600 hover:bg-brand-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition md:hidden">
+          ${!isSoldOut ? `<button onclick="event.stopPropagation(); addToCart('${product.id}')" class="w-full mt-3 bg-brand-600 hover:bg-brand-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition md:hidden">
             <i class="fa-solid fa-cart-plus mr-1"></i> Add to Cart
-          </button>
+          </button>` : ''}
         </div>
       </div>`;
     grid.innerHTML += productHTML;
   });
 }
 
-function showProductDetail(productId) {
+async function showProductDetail(productId) {
   const product = products.find(p => p.id === productId);
   if (!product) return;
+  
+  // Populate modal
+  document.getElementById('detail-title').textContent = product.name;
+  document.getElementById('detail-price').textContent = `₦${product.price?.toLocaleString()}`;
+  document.getElementById('detail-description').textContent = product.description;
+  document.getElementById('detail-location').textContent = product.location || 'Nigeria';
+  document.getElementById('detail-category').textContent = product.category?.toUpperCase() || 'GENERAL';
+  document.getElementById('detail-condition').textContent = product.condition?.replace('-', ' ') || 'New';
+  document.getElementById('detail-seller').textContent = 'Verified Seller';
+  
+  // Handle image/video
+  const imageEl = document.getElementById('detail-image');
+  const videoEl = document.getElementById('detail-video');
+  const hasVideo = document.getElementById('detail-has-video');
+  
+  if (product.video_url) {
+    imageEl.classList.add('hidden');
+    videoEl.classList.remove('hidden');
+    videoEl.src = product.video_url;
+    hasVideo.classList.remove('hidden');
+  } else {
+    imageEl.classList.remove('hidden');
+    videoEl.classList.add('hidden');
+    videoEl.src = '';
+    imageEl.src = product.image_url || 'https://via.placeholder.com/400';
+    hasVideo.classList.add('hidden');
+  }
+  
+  // Handle original price & discount
+  if (product.original_price) {
+    document.getElementById('detail-original-price').textContent = `₦${product.original_price.toLocaleString()}`;
+    document.getElementById('detail-original-price').classList.remove('hidden');
+    const discount = Math.round((1 - product.price / product.original_price) * 100);
+    document.getElementById('detail-discount').textContent = `-${discount}%`;
+    document.getElementById('detail-discount').classList.remove('hidden');
+  } else {
+    document.getElementById('detail-original-price').classList.add('hidden');
+    document.getElementById('detail-discount').classList.add('hidden');
+  }
+  
+  // Store current product for cart/whatsapp
   currentProduct = product;
-  showToast('Product detail view coming soon!', 'info');
+  
+  document.getElementById('product-detail-modal').classList.add('active');
 }
 
-// CART & CHECKOUT
+function addToCartFromDetail() {
+  if (!currentProduct) return;
+  addToCart(currentProduct.id);
+  closeModal('product-detail-modal');
+}
+
+function haggleViaWhatsApp() {
+  if (!currentProduct) return;
+  const message = `Hello! I'm interested in "${currentProduct.name}" listed at ₦${currentProduct.price?.toLocaleString()}. Is the price negotiable?`;
+  const whatsappURL = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent(message)}`;
+  window.open(whatsappURL, '_blank');
+}
+
+// ==========================================
+// CART & MULTI-STEP CHECKOUT
+// ==========================================
 function addToCart(productId) {
   const product = products.find(p => p.id === productId) || currentProduct;
-  if (!product) { showToast('Product not found', 'error'); return; }
+  if (!product) {
+    showToast('Product not found', 'error');
+    return;
+  }
+  if (product.status === 'sold-out') {
+    showToast('This item is sold out', 'error');
+    return;
+  }
   const existingItem = cart.find(item => item.id === product.id);
-  if (existingItem) { existingItem.quantity += 1; showToast(`${product.name} quantity updated! 🛒`, 'success'); }
-  else {
-    cart.push({ id: product.id, name: product.name, price: product.price, image: product.image_url, quantity: 1, seller_id: product.seller_id });
+  if (existingItem) {
+    existingItem.quantity += 1;
+    showToast(`${product.name} quantity updated! 🛒`, 'success');
+  } else {
+    cart.push({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      image: product.image_url,
+      quantity: 1,
+      seller_id: product.seller_id
+    });
     showToast(`${product.name} added to cart! 🛒`, 'success');
   }
   localStorage.setItem('buysell_cart', JSON.stringify(cart));
@@ -1909,9 +2426,50 @@ function removeFromCart(productId) {
   showToast('Item removed from cart', 'success');
 }
 
-function showCheckout() {
-  if (!currentUser) { showToast('Please sign in to checkout', 'error'); closeModal('cart-modal'); showLoginModal(); return; }
-  if (cart.length === 0) { showToast('Your cart is empty', 'error'); return; }
+function goToCheckoutStep(step) {
+  // Validation
+  if (step === 2) {
+    const name = document.getElementById('buyer-name').value;
+    const phone = document.getElementById('buyer-phone').value;
+    const address = document.getElementById('buyer-address').value;
+    if (!name || !phone || !address) {
+      showToast('Please fill in all delivery details', 'error');
+      return;
+    }
+  }
+  if (step === 3) {
+    if (!receiptFile) {
+      showToast('Please upload payment receipt', 'error');
+      return;
+    }
+    if (!document.getElementById('checkout-terms').checked) {
+      showToast('Please confirm payment', 'error');
+      return;
+    }
+  }
+  
+  // Update UI
+  currentCheckoutStep = step;
+  document.querySelectorAll('.checkout-step').forEach(el => el.classList.remove('active'));
+  document.getElementById(`checkout-step-${step}`).classList.add('active');
+  
+  // Update progress
+  document.getElementById('checkout-step-number').textContent = step;
+  const labels = ['Delivery Details', 'Payment & Receipt', 'Confirmation'];
+  document.getElementById('checkout-step-label').textContent = labels[step - 1];
+  document.getElementById('checkout-progress').style.width = `${step * 33.33}%`;
+  
+  // Populate step 2 if navigating to it
+  if (step === 2) {
+    populatePaymentStep();
+  }
+  // Populate step 3 if navigating to it
+  if (step === 3) {
+    populateConfirmationStep();
+  }
+}
+
+async function populatePaymentStep() {
   const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   document.getElementById('checkout-items').innerHTML = cart.map(item => `
     <div class="flex items-center gap-3">
@@ -1924,19 +2482,42 @@ function showCheckout() {
     </div>`).join('');
   document.getElementById('checkout-total').textContent = `₦${total.toLocaleString()}`;
   document.getElementById('checkout-amount').textContent = `₦${total.toLocaleString()}`;
-  closeModal('cart-modal');
-  document.getElementById('checkout-modal').classList.add('active');
+  
+  // Get seller account info
+  if (cart[0]?.seller_id) {
+    const response = await supabaseClient.from('sellers').select('*').eq('user_id', cart[0].seller_id).single();
+    const sellerData = response.data;
+    if (sellerData) {
+      document.getElementById('seller-account').textContent = sellerData.account_number || 'Not provided';
+      document.getElementById('seller-bank').textContent = sellerData.bank_name || 'Not provided';
+      document.getElementById('seller-account-name').textContent = sellerData.account_name || 'Not provided';
+    }
+  }
+}
+
+function populateConfirmationStep() {
+  const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const orderNumber = 'ORD-' + Date.now().toString().slice(-6);
+  const delivery = `${document.getElementById('buyer-city').value}, ${document.getElementById('buyer-state').value}`;
+  
+  document.getElementById('success-order-number').textContent = orderNumber;
+  document.getElementById('success-total').textContent = `₦${total.toLocaleString()}`;
+  document.getElementById('success-delivery').textContent = delivery;
 }
 
 function copyAccountNumber() {
-  navigator.clipboard.writeText('9061484256');
+  const accountNumber = document.getElementById('seller-account').textContent;
+  navigator.clipboard.writeText(accountNumber);
   showToast('Account number copied! ✅', 'success');
 }
 
 function handleReceiptUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
-  if (file.size > 5 * 1024 * 1024) { showToast('Receipt image is too large (max 5MB)', 'error'); return; }
+  if (file.size > 5 * 1024 * 1024) {
+    showToast('Receipt image is too large (max 5MB)', 'error');
+    return;
+  }
   receiptFile = file;
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -1954,82 +2535,80 @@ function removeReceipt() {
   document.getElementById('receipt-upload-zone').classList.remove('has-files');
 }
 
-function goToCheckoutStep(step) {
-  if (step === 2) {
-    const name = document.getElementById('buyer-name').value;
-    const phone = document.getElementById('buyer-phone').value;
-    const address = document.getElementById('buyer-address').value;
-    if (!name || !phone || !address) { showToast('Please fill in all delivery details', 'error'); return; }
-  }
-  if (step === 3) {
-    if (!receiptFile) { showToast('Please upload payment receipt', 'error'); return; }
-    if (!document.getElementById('checkout-terms').checked) { showToast('Please confirm payment', 'error'); return; }
-  }
-  currentCheckoutStep = step;
-  document.querySelectorAll('.checkout-step').forEach(el => el.classList.remove('active'));
-  document.getElementById(`checkout-step-${step}`).classList.add('active');
-  document.getElementById('checkout-step-number').textContent = step;
-  const labels = ['Delivery Details', 'Payment & Receipt', 'Confirmation'];
-  document.getElementById('checkout-step-label').textContent = labels[step - 1];
-  document.getElementById('checkout-progress').style.width = `${step * 33.33}%`;
-  if (step === 2) {
-    const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    document.getElementById('checkout-items').innerHTML = cart.map(item => `
-      <div class="flex justify-between py-2"><span>${item.name}</span><span>₦${item.price}</span></div>
-    `).join('');
-    document.getElementById('checkout-amount').textContent = '₦' + total;
-  }
-  if (step === 3) {
-    const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const orderNumber = 'ORD-' + Date.now().toString().slice(-6);
-    const delivery = `${document.getElementById('buyer-city').value}, ${document.getElementById('buyer-state').value}`;
-    document.getElementById('success-order-number').textContent = orderNumber;
-    document.getElementById('success-total').textContent = '₦' + total;
-    document.getElementById('success-delivery').textContent = delivery;
-  }
-}
-
 async function submitOrder(event) {
   event.preventDefault();
-  if (!receiptFile) { showToast('Please upload payment receipt', 'error'); return; }
-  if (!currentUser) { showToast('Please sign in to checkout', 'error'); return; }
+  
+  if (!currentUser) {
+    showToast('Please sign in to checkout', 'error');
+    closeModal('checkout-modal');
+    showLoginModal();
+    return;
+  }
+  
   const checkoutBtn = document.getElementById('checkout-btn-text');
   const checkoutSpinner = document.getElementById('checkout-spinner');
   checkoutBtn.textContent = 'Processing...';
   checkoutSpinner.classList.remove('hidden');
+
   try {
-    const receiptFileName = `receipts/${currentUser.id}-${Date.now()}.${receiptFile.name.split('.').pop()}`;
-    const { error: uploadError } = await supabaseClient.storage.from('receipts').upload(receiptFileName, receiptFile);
-    if (uploadError) throw uploadError;
-    const { data: urlData } = supabaseClient.storage.from('receipts').getPublicUrl(receiptFileName);
+    // Generate order number
+    const orderNumber = 'ORD-' + Date.now().toString().slice(-6);
     const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const buyerName = document.getElementById('buyer-name').value;
-    const buyerPhone = document.getElementById('buyer-phone').value;
-    const buyerWhatsapp = document.getElementById('buyer-whatsapp').value;
-    const buyerState = document.getElementById('buyer-state').value;
-    const buyerCity = document.getElementById('buyer-city').value;
-    const buyerAddress = document.getElementById('buyer-address').value;
-    const { error: orderError } = await supabaseClient.from('orders').insert([{
+    
+    // Save order to localStorage (persistence)
+    const newOrder = {
+      id: Date.now().toString(),
+      order_number: orderNumber,
       buyer_id: currentUser.id,
-      seller_id: cart[0].seller_id,
+      seller_id: cart[0]?.seller_id,
+      items: [...cart],
       total_amount: total,
       status: 'pending',
-      order_number: 'ORD-' + Date.now(),
-      delivery_name: buyerName,
-      delivery_phone: buyerPhone,
-      delivery_whatsapp: buyerWhatsapp,
-      delivery_state: buyerState,
-      delivery_city: buyerCity,
-      delivery_address: buyerAddress,
-      payment_receipt_url: urlData.publicUrl,
+      delivery: {
+        name: document.getElementById('buyer-name').value,
+        phone: document.getElementById('buyer-phone').value,
+        whatsapp: document.getElementById('buyer-whatsapp').value,
+        state: document.getElementById('buyer-state').value,
+        city: document.getElementById('buyer-city').value,
+        address: document.getElementById('buyer-address').value
+      },
+      payment_receipt: receiptFile?.name || 'receipt.jpg',
       created_at: new Date().toISOString()
-    }]);
-    if (orderError) throw orderError;
+    };
+    
+    orders.push(newOrder);
+    localStorage.setItem('buysell_orders', JSON.stringify(orders));
+    
+    // Also save to Supabase if connected
+    try {
+      const receiptFileName = `receipts/${currentUser.id}-${Date.now()}.${receiptFile.name.split('.').pop()}`;
+      const uploadResponse = await supabaseClient.storage.from('receipts').upload(receiptFileName, receiptFile);
+      if (!uploadResponse.error) {
+        const urlResponse = supabaseClient.storage.from('receipts').getPublicUrl(receiptFileName);
+        await supabaseClient.from('orders').insert([{
+          buyer_id: currentUser.id,
+          seller_id: cart[0].seller_id,
+          total_amount: total,
+          status: 'pending',
+          order_number: orderNumber,
+          delivery_name: newOrder.delivery.name,
+          delivery_phone: newOrder.delivery.phone,
+          delivery_whatsapp: newOrder.delivery.whatsapp,
+          delivery_state: newOrder.delivery.state,
+          delivery_city: newOrder.delivery.city,
+          delivery_address: newOrder.delivery.address,
+          payment_receipt_url: urlResponse.data.publicUrl,
+          created_at: new Date().toISOString()
+        }]);
+      }
+    } catch (e) {
+      console.log('Supabase order save error:', e);
+    }
+    
+    // Go to success step
+    goToCheckoutStep(3);
     showToast('Order placed! Seller will contact you on WhatsApp 🎉', 'success');
-    closeModal('checkout-modal');
-    cart = [];
-    localStorage.setItem('buysell_cart', JSON.stringify(cart));
-    updateCartCount();
+    
   } catch (error) {
     console.error('Order Error:', error);
     showToast('Failed to place order: ' + error.message, 'error');
@@ -2043,60 +2622,113 @@ function clearCartAfterSuccess() {
   cart = [];
   localStorage.setItem('buysell_cart', JSON.stringify(cart));
   updateCartCount();
+  closeModal('checkout-modal');
 }
 
+function showCheckout() {
+  if (!currentUser) {
+    showToast('Please sign in to checkout', 'error');
+    closeModal('cart-modal');
+    showLoginModal();
+    return;
+  }
+  if (cart.length === 0) {
+    showToast('Your cart is empty', 'error');
+    return;
+  }
+  closeModal('cart-modal');
+  goToCheckoutStep(1);
+  document.getElementById('checkout-modal').classList.add('active');
+}
+
+// ==========================================
 // SEARCH & FILTER
-function handleSearch(e) { if (e.key === 'Enter') performSearch(); }
+// ==========================================
+function handleSearch(e) {
+  if (e.key === 'Enter') performSearch();
+}
+
 function performSearch() {
   const query = document.getElementById('search-input').value.trim();
-  if (query.length < 2) { showToast('Enter at least 2 characters', 'error'); return; }
-  loadProducts({ search: query });
+  if (query.length < 2) {
+    showToast('Enter at least 2 characters', 'error');
+    return;
+  }
+  loadProducts();
 }
+
 function filterByCategory(category) {
-  if (category === 'trending') { document.getElementById('trending-section').scrollIntoView({ behavior: 'smooth' }); }
-  else { loadProducts({ category }); }
+  if (category === 'trending') {
+    document.getElementById('trending-section')?.scrollIntoView({ behavior: 'smooth' });
+  } else {
+    loadProducts({ category });
+  }
 }
-function filterByVideo() { loadProducts({ hasVideo: true }); }
+
 function sortProducts() {
   const sortBy = document.getElementById('sort-select').value;
   let sorted = [...products];
   switch(sortBy) {
-    case 'price-low': sorted.sort((a, b) => (a.price || 0) - (b.price || 0)); break;
-    case 'price-high': sorted.sort((a, b) => (b.price || 0) - (a.price || 0)); break;
-    case 'rating': sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0)); break;
-    default: sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    case 'price-low':
+      sorted.sort((a, b) => (a.price || 0) - (b.price || 0));
+      break;
+    case 'price-high':
+      sorted.sort((a, b) => (b.price || 0) - (a.price || 0));
+      break;
+    default:
+      sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }
   renderProducts(sorted);
 }
-function resetFilters() { document.getElementById('search-input').value = ''; loadProducts({}); }
 
+function resetFilters() {
+  document.getElementById('search-input').value = '';
+  loadProducts({});
+}
+
+// ==========================================
 // CAROUSEL
+// ==========================================
 function updateCarousel() {
   const track = document.getElementById('carousel-track');
   if (track) track.style.transform = `translateX(-${currentSlide * 100}%)`;
 }
+
 function moveCarousel(direction) {
   currentSlide = (currentSlide + direction + slides) % slides;
   updateCarousel();
 }
-function goToSlide(index) { currentSlide = index; updateCarousel(); }
+
+function goToSlide(index) {
+  currentSlide = index;
+  updateCarousel();
+}
+
 function startCarousel() {
   carouselInterval = setInterval(() => {
     const buyerView = document.getElementById('buyer-view');
-    if (buyerView && !buyerView.classList.contains('hidden-section')) { moveCarousel(1); }
+    if (buyerView && !buyerView.classList.contains('hidden-section')) {
+      moveCarousel(1);
+    }
   }, 6000);
 }
-function stopCarousel() { if (carouselInterval) { clearInterval(carouselInterval); } }
 
+// ==========================================
 // SELLER DASHBOARD
-async function loadSellerDashboard() { loadSellerStats(); }
+// ==========================================
+async function loadSellerDashboard() {
+  loadSellerStats();
+}
 
 async function loadSellerStats() {
   if (!currentUser) return;
   try {
-    const { count: productsCount } = await supabaseClient.from('products').select('*', { count: 'exact', head: true }).eq('seller_id', currentUser.id).eq('status', 'active');
-    if(document.getElementById('stat-products')) document.getElementById('stat-products').textContent = productsCount || 0;
-  } catch(e) { console.log("Could not load seller stats"); }
+    const response = await supabaseClient.from('products').select('*', { count: 'exact', head: true }).eq('seller_id', currentUser.id).eq('status', 'active');
+    const productsCount = response.count || 0;
+    if(document.getElementById('stat-products')) document.getElementById('stat-products').textContent = productsCount;
+  } catch(e) {
+    console.log("Could not load seller stats");
+  }
 }
 
 async function loadSellerProducts() {
@@ -2110,13 +2742,19 @@ async function loadSellerProducts() {
   try {
     const filter = document.getElementById('seller-product-filter')?.value || 'all';
     let query = supabaseClient.from('products').select('*').eq('seller_id', currentUser.id);
-    if (filter !== 'all') { query = query.eq('status', filter); }
-    const { data, error } = await query.order('created_at', { ascending: false });
-    if (error) throw error;
-    sellerProducts = data || [];
+    if (filter !== 'all' && filter !== 'sold-out') {
+      query = query.eq('status', filter);
+    }
+    const response = await query.order('created_at', { ascending: false });
+    if (response.error) throw response.error;
+    sellerProducts = response.data || [];
     loading.classList.add('hidden');
-    if (sellerProducts.length === 0) { empty.classList.remove('hidden'); }
-    else { grid.classList.remove('hidden'); renderSellerProducts(sellerProducts); }
+    if (sellerProducts.length === 0) {
+      empty.classList.remove('hidden');
+    } else {
+      grid.classList.remove('hidden');
+      renderSellerProducts(sellerProducts);
+    }
   } catch(e) {
     console.log("Could not load seller products");
     loading.classList.add('hidden');
@@ -2126,25 +2764,41 @@ async function loadSellerProducts() {
 
 function renderSellerProducts(products) {
   const grid = document.getElementById('seller-products-grid');
-  grid.innerHTML = products.map(product => `
+  grid.innerHTML = products.map(product => {
+    const isSoldOut = product.status === 'sold-out';
+    return `
     <div class="bg-white rounded-xl border border-neutral-200 p-4 flex gap-4">
       <img src="${product.image_url || 'https://via.placeholder.com/100'}" class="w-24 h-24 object-cover rounded-lg">
       <div class="flex-1">
         <h3 class="font-semibold mb-1">${product.name}</h3>
         <div class="text-brand-600 font-bold mb-1">₦${product.price?.toLocaleString()}</div>
         <div class="flex items-center gap-2 text-xs text-neutral-500">
-          <span class="px-2 py-0.5 rounded-full ${product.status === 'active' ? 'bg-green-100 text-green-700' : product.status === 'sold-out' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}">${product.status}</span>
+          <span class="px-2 py-0.5 rounded-full ${isSoldOut ? 'bg-red-100 text-red-700' : product.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}">
+            ${isSoldOut ? 'SOLD OUT' : product.status}
+          </span>
           <span>${product.location || 'Nigeria'}</span>
         </div>
       </div>
       <div class="flex flex-col gap-2">
-        <button onclick="editProduct('${product.id}')" class="text-blue-600 hover:text-blue-800 text-sm"><i class="fa-solid fa-pen"></i> Edit</button>
+        <button onclick="toggleProductStatus('${product.id}', '${product.status}')" class="text-blue-600 hover:text-blue-800 text-sm">
+          <i class="fa-solid fa-${isSoldOut ? 'check' : 'ban'}"></i> ${isSoldOut ? 'Activate' : 'Mark Sold'}
+        </button>
         <button onclick="deleteProduct('${product.id}')" class="text-red-600 hover:text-red-800 text-sm"><i class="fa-solid fa-trash"></i> Delete</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
-async function editProduct(productId) { showToast('Edit product feature coming soon!', 'info'); }
+async function toggleProductStatus(productId, currentStatus) {
+  const newStatus = currentStatus === 'sold-out' ? 'active' : 'sold-out';
+  try {
+    await supabaseClient.from('products').update({ status: newStatus }).eq('id', productId);
+    showToast(`Product marked as ${newStatus}`, 'success');
+    loadSellerProducts();
+  } catch(e) {
+    showToast('Failed to update product', 'error');
+  }
+}
 
 async function deleteProduct(productId) {
   if (!confirm('Are you sure you want to delete this product?')) return;
@@ -2152,7 +2806,9 @@ async function deleteProduct(productId) {
     await supabaseClient.from('products').update({ status: 'deleted' }).eq('id', productId);
     showToast('Product deleted', 'success');
     loadSellerProducts();
-  } catch(e) { showToast('Failed to delete product', 'error'); }
+  } catch(e) {
+    showToast('Failed to delete product', 'error');
+  }
 }
 
 async function loadSellerOrders() {
@@ -2164,18 +2820,33 @@ async function loadSellerOrders() {
   list.classList.add('hidden');
   empty.classList.add('hidden');
   try {
-    const { data, error } = await supabaseClient.from('orders').select('*, buyer:users(first_name, last_name, phone, whatsapp_number)').eq('seller_id', currentUser.id).order('created_at', { ascending: false });
-    if (error) throw error;
-    loading.classList.add('hidden');
-    if (!data || data.length === 0) { empty.classList.remove('hidden'); }
-    else {
-      list.classList.remove('hidden');
-      renderOrders(data);
-      const pendingCount = data.filter(o => o.status === 'pending').length;
-      if (pendingCount > 0) {
-        document.getElementById('pending-orders-badge').textContent = pendingCount;
-        document.getElementById('pending-orders-badge').classList.remove('hidden');
+    // Load from localStorage first (persistence)
+    const localOrders = orders.filter(o => o.seller_id === currentUser.id);
+    
+    // Also try to load from Supabase
+    try {
+      const response = await supabaseClient.from('orders').select('*, buyer:users(first_name, last_name, phone, whatsapp_number)').eq('seller_id', currentUser.id).order('created_at', { ascending: false });
+      if (!response.error && response.data) {
+        const supabaseOrders = response.data;
+        const allOrders = [...localOrders, ...supabaseOrders.filter(o => !localOrders.find(lo => lo.order_number === o.order_number))];
+        renderOrders(allOrders);
+        const pendingCount = allOrders.filter(o => o.status === 'pending').length;
+        if (pendingCount > 0) {
+          document.getElementById('pending-orders-badge').textContent = pendingCount;
+          document.getElementById('pending-orders-badge').classList.remove('hidden');
+        }
+      } else {
+        renderOrders(localOrders);
       }
+    } catch (e) {
+      renderOrders(localOrders);
+    }
+    
+    loading.classList.add('hidden');
+    if (localOrders.length === 0) {
+      empty.classList.remove('hidden');
+    } else {
+      list.classList.remove('hidden');
     }
   } catch(e) {
     console.log("Could not load seller orders");
@@ -2197,97 +2868,199 @@ function renderOrders(orders) {
           </div>
           <span class="px-3 py-1 rounded-full text-xs font-medium ${statusClass}">${order.status}</span>
         </div>
-        <div class="grid md:grid-cols-2 gap-4 mb-3">
-          <div>
-            <div class="text-sm font-medium mb-1">Buyer</div>
-            <div class="text-sm">${order.buyer?.first_name || 'N/A'} ${order.buyer?.last_name || ''}</div>
-            <div class="text-sm text-neutral-500">${order.buyer?.phone || order.buyer?.whatsapp_number || 'N/A'}</div>
-          </div>
-          <div class="text-right">
-            <div class="text-sm font-medium mb-1">Total</div>
-            <div class="text-lg font-bold text-brand-600">₦${order.total_amount?.toLocaleString()}</div>
-          </div>
-        </div>
         <div class="flex gap-2 flex-wrap">
-          ${order.status === 'pending' ? `<button onclick="updateOrderStatus('${order.id}', 'paid')" class="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">Confirm Payment</button>` : ''}
-          ${order.status === 'paid' ? `<button onclick="updateOrderStatus('${order.id}', 'processing')" class="px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700">Start Processing</button>` : ''}
-          ${order.status === 'processing' ? `<button onclick="updateOrderStatus('${order.id}', 'shipped')" class="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700">Mark as Shipped</button>` : ''}
-          ${order.status === 'shipped' ? `<button onclick="updateOrderStatus('${order.id}', 'delivered')" class="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">Mark as Delivered</button>` : ''}
-          <a href="https://wa.me/${formatWhatsAppNumber(order.buyer?.whatsapp_number || order.buyer?.phone)}" target="_blank" class="px-3 py-1.5 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 flex items-center gap-1">
-            <i class="fa-brands fa-whatsapp"></i> Contact Buyer
-          </a>
+          <a href="https://wa.me/${order.delivery?.whatsapp || order.delivery?.phone}" target="_blank" class="px-3 py-1.5 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 flex items-center gap-1"><i class="fa-brands fa-whatsapp"></i> Contact Buyer</a>
         </div>
       </div>`;
   }).join('');
 }
 
-async function updateOrderStatus(orderId, newStatus) {
-  try {
-    await supabaseClient.from('orders').update({ status: newStatus }).eq('id', orderId);
-    showToast(`Order marked as ${newStatus}`, 'success');
-    loadSellerOrders();
-  } catch(e) { showToast('Failed to update order', 'error'); }
+function loadOrders() {
+  // Load orders from localStorage
+  orders = JSON.parse(localStorage.getItem('buysell_orders')) || [];
 }
 
-async function loadCommissionStatus() {
+// ==========================================
+// DROPSHIPPING
+// ==========================================
+function selectSupplier(supplier) {
+  showToast(`Connecting to ${supplier === 'aliexpress' ? 'AliExpress' : 'CJ Dropshipping'}...`, 'info');
+  setTimeout(() => {
+    showToast('Supplier connected! You can now import products.', 'success');
+  }, 2000);
+}
+
+function importDropshipItem(name, costPrice, sellPrice) {
+  if (!currentUser) {
+    showToast('Please sign in to import products', 'error');
+    showLoginModal();
+    return;
+  }
+  
+  showToast(`Importing "${name}" to your store...`, 'info');
+  
+  // Update dropship stats
+  dropshipStats.imported++;
+  document.getElementById('dropship-imported').textContent = dropshipStats.imported;
+  
+  setTimeout(() => {
+    showToast(`"${name}" added to your products! Set your margin and publish.`, 'success');
+    showSellerSection('add-product');
+  }, 1500);
+}
+
+// ==========================================
+// AFFILIATE & REFERRAL
+// ==========================================
+function copyReferralLink() {
+  const link = document.getElementById('referral-link').value;
+  navigator.clipboard.writeText(link);
+  showToast('Referral link copied! Share to earn ₦500 per referral 🎁', 'success');
+}
+
+async function loadAffiliateEarnings() {
   if (!currentUser) return;
-  try {
-    const { data: commission } = await supabaseClient.from('seller_commissions').select('*').eq('seller_id', currentUser.id).single();
-    if (commission) {
-      document.getElementById('commission-due-date').textContent = new Date(commission.commission_due_date).toLocaleDateString();
-      document.getElementById('commission-status-badge').textContent = commission.commission_paid ? 'Paid' : 'Active';
-    }
-  } catch(e) { console.log("Could not load commission status"); }
+  document.getElementById('total-earnings').textContent = `₦${affiliateEarnings.total.toLocaleString()}`;
+  document.getElementById('pending-payouts').textContent = `₦${affiliateEarnings.pending.toLocaleString()}`;
+  document.getElementById('total-clicks').textContent = affiliateEarnings.clicks;
+  document.getElementById('total-conversions').textContent = affiliateEarnings.conversions;
+  document.getElementById('affiliate-earnings-badge').textContent = `₦${affiliateEarnings.total.toLocaleString()}`;
+  document.getElementById('affiliate-earnings-badge').classList.remove('hidden');
 }
 
-function showCommissionModal() { document.getElementById('commission-modal').classList.add('active'); }
+function requestWithdrawal() {
+  const message = `💰 *WITHDRAWAL REQUEST*\n👤 Seller: ${currentUser.email}\n💵 Amount: ₦${affiliateEarnings.total}\n📅 Date: ${new Date().toLocaleString()}\nPlease process withdrawal to my account.`;
+  const whatsappURL = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent(message)}`;
+  window.open(whatsappURL, '_blank');
+  showToast('Withdrawal request sent via WhatsApp!', 'success');
+}
 
-async function submitCommissionPayment(event) {
-  event.preventDefault();
-  if (!currentUser) { showToast('Please sign in', 'error'); return; }
-  const receiptFile = document.getElementById('commission-receipt').files[0];
-  const reference = document.getElementById('commission-reference').value;
-  if (!receiptFile) { showToast('Please upload receipt', 'error'); return; }
+// ==========================================
+// SUPER ADMIN
+// ==========================================
+async function loadAllSellers() {
+  if (currentUser?.email !== ADMIN_EMAIL) {
+    showToast('Admin access required', 'error');
+    return;
+  }
+  
+  const loading = document.getElementById('admin-loading');
+  const list = document.getElementById('admin-sellers-list');
+  const empty = document.getElementById('admin-empty');
+  
+  loading.classList.remove('hidden');
+  list.classList.add('hidden');
+  empty.classList.add('hidden');
+  
   try {
-    const receiptFileName = `commissions/${currentUser.id}-${Date.now()}.${receiptFile.name.split('.').pop()}`;
-    const { error: uploadError } = await supabaseClient.storage.from('receipts').upload(receiptFileName, receiptFile);
-    if (uploadError) throw uploadError;
-    const { data: urlData } = supabaseClient.storage.from('receipts').getPublicUrl(receiptFileName);
-    const { error: dbError } = await supabaseClient.from('seller_commissions').upsert([{
-      seller_id: currentUser.id,
-      commission_amount: COMMISSION_AMOUNT,
-      commission_paid: true,
-      payment_receipt_url: urlData.publicUrl,
-      transaction_reference: reference,
-      paid_at: new Date().toISOString(),
-      commission_due_date: new Date(Date.now() + COMMISSION_PERIOD_MONTHS * 30 * 24 * 60 * 60 * 1000).toISOString()
-    }]);
-    if (dbError) throw dbError;
-    showToast('Commission payment submitted! ✅', 'success');
-    closeModal('commission-modal');
-    loadCommissionStatus();
-  } catch (error) {
-    console.error('Commission Error:', error);
-    showToast('Failed to submit payment: ' + error.message, 'error');
+    const response = await supabaseClient.from('sellers').select('*, users(email, first_name, last_name)');
+    if (response.error) throw response.error;
+    
+    const sellers = response.data || [];
+    loading.classList.add('hidden');
+    
+    if (sellers.length === 0) {
+      empty.classList.remove('hidden');
+      return;
+    }
+    
+    list.classList.remove('hidden');
+    list.innerHTML = sellers.map(seller => {
+      const trialEndDate = new Date(seller.trial_end_date);
+      const today = new Date();
+      const isExpired = !seller.commission_paid && today > trialEndDate;
+      const statusBadge = seller.commission_paid 
+        ? '<span class="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">Paid</span>'
+        : isExpired 
+          ? '<span class="px-2 py-1 bg-red-100 text-red-700 text-xs rounded-full">Expired</span>'
+          : '<span class="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded-full">Active Trial</span>';
+      
+      return `
+        <div class="border border-neutral-200 rounded-xl p-4 flex items-center justify-between">
+          <div>
+            <div class="font-semibold">${seller.users?.first_name || 'Unknown'} ${seller.users?.last_name || ''}</div>
+            <div class="text-sm text-neutral-500">${seller.users?.email || 'N/A'}</div>
+            <div class="text-xs text-neutral-400 mt-1">Trial ends: ${trialEndDate.toLocaleDateString()}</div>
+            <div class="mt-2">${statusBadge}</div>
+          </div>
+          <button onclick="approveSellerSubscription('${seller.user_id}')" 
+            class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg disabled:opacity-50"
+            ${seller.commission_paid ? 'disabled' : ''}>
+            ${seller.commission_paid ? '✓ Approved' : 'Approve Sub'}
+          </button>
+        </div>
+      `;
+    }).join('');
+  } catch(e) {
+    console.log("Could not load sellers:", e);
+    loading.classList.add('hidden');
+    empty.classList.remove('hidden');
   }
 }
 
-// PRODUCT UPLOAD
+async function approveSellerSubscription(sellerId) {
+  if (currentUser?.email !== ADMIN_EMAIL) {
+    showToast('Admin access required', 'error');
+    return;
+  }
+  
+  try {
+    await supabaseClient.from('sellers').update({
+      commission_paid: true,
+      paid_at: new Date().toISOString()
+    }).eq('user_id', sellerId);
+    
+    showToast('Seller subscription approved! ✅', 'success');
+    loadAllSellers();
+  } catch(e) {
+    showToast('Failed to approve subscription', 'error');
+  }
+}
+
+// ==========================================
+// SETTINGS & UTILS
+// ==========================================
+async function updateSellerSettings(event) {
+  event.preventDefault();
+  if (!currentUser) return;
+  const accountNumber = document.getElementById('seller-account-number').value;
+  const bankName = document.getElementById('seller-bank-name').value;
+  const accountName = document.getElementById('seller-account-name').value;
+  try {
+    await supabaseClient.from('sellers').update({
+      account_number: accountNumber,
+      bank_name: bankName,
+      account_name: accountName
+    }).eq('user_id', currentUser.id);
+    showToast('Settings updated successfully! ✅', 'success');
+  } catch (error) {
+    showToast('Failed to update settings: ' + error.message, 'error');
+  }
+}
+
 async function handleProductUpload(event) {
   event.preventDefault();
-  if (!currentUser) { showToast('Please sign in to add products', 'error'); return; }
+  if (!currentUser) {
+    showToast('Please sign in to add products', 'error');
+    return;
+  }
+
   const submitBtn = event.target.querySelector('button[type="submit"]');
   const btnText = document.getElementById('upload-btn-text');
   const spinner = document.getElementById('upload-spinner');
   submitBtn.disabled = true;
   btnText.textContent = 'Uploading...';
   spinner.classList.remove('hidden');
+
   try {
     const imageFile = document.getElementById('prod-image').files[0];
     const fileName = `${currentUser.id}-${Date.now()}.${imageFile.name.split('.').pop()}`;
-    const { error: uploadError } = await supabaseClient.storage.from('products').upload(fileName, imageFile);
-    if (uploadError) throw uploadError;
-    const { data: { publicUrl } } = supabaseClient.storage.from('products').getPublicUrl(fileName);
+    const uploadResponse = await supabaseClient.storage.from('products').upload(fileName, imageFile);
+    if (uploadResponse.error) throw uploadResponse.error;
+
+    const urlResponse = supabaseClient.storage.from('products').getPublicUrl(fileName);
+    const publicUrl = urlResponse.data.publicUrl;
+
     const newProduct = {
       name: document.getElementById('prod-name').value,
       price: parseFloat(document.getElementById('prod-price').value),
@@ -2301,12 +3074,14 @@ async function handleProductUpload(event) {
       seller_id: currentUser.id,
       status: 'active'
     };
-    const { error: dbError } = await supabaseClient.from('products').insert([newProduct]);
-    if (dbError) throw dbError;
+
+    const dbResponse = await supabaseClient.from('products').insert([newProduct]);
+    if (dbResponse.error) throw dbResponse.error;
+
     showToast('Product published successfully! 🎉', 'success');
     document.getElementById('add-product-form').reset();
     loadProducts();
-    toggleDashboard();
+    showSellerSection('products');
   } catch (error) {
     console.error('Upload Error:', error);
     showToast(error.message, 'error');
@@ -2317,83 +3092,9 @@ async function handleProductUpload(event) {
   }
 }
 
-// DROPSHIPPING
-function selectSupplier(supplier) {
-  selectedSupplier = supplier;
-  showToast(`Connecting to ${supplier === 'aliexpress' ? 'AliExpress' : 'CJ Dropshipping'}...`, 'info');
-  setTimeout(() => { showToast('Supplier connected! You can now import products.', 'success'); }, 2000);
-}
-
-function importDropshipItem(name, costPrice, sellPrice) {
-  if (!currentUser) { showToast('Please sign in to import products', 'error'); showLoginModal(); return; }
-  showToast(`Importing "${name}" to your store...`, 'info');
-  setTimeout(() => { showToast(`"${name}" added to your products! Set your margin and publish.`, 'success'); showSellerSection('add-product'); }, 1500);
-}
-
-// SUPER ADMIN
-async function loadAllSellers() {
-  if (currentUser?.email !== ADMIN_EMAIL) { showToast('Admin access required', 'error'); return; }
-  const loading = document.getElementById('admin-loading');
-  const list = document.getElementById('admin-sellers-list');
-  const empty = document.getElementById('admin-empty');
-  loading.classList.remove('hidden');
-  list.classList.add('hidden');
-  empty.classList.add('hidden');
-  try {
-    const response = await supabaseClient.from('sellers').select('*, users(email, first_name, last_name)');
-    if (response.error) throw response.error;
-    const sellers = response.data || [];
-    loading.classList.add('hidden');
-    if (sellers.length === 0) { empty.classList.remove('hidden'); return; }
-    list.classList.remove('hidden');
-    list.innerHTML = sellers.map(seller => {
-      const trialEndDate = new Date(seller.trial_end_date);
-      const today = new Date();
-      const isExpired = !seller.commission_paid && today > trialEndDate;
-      const statusBadge = seller.commission_paid ? '<span class="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">Paid</span>' : isExpired ? '<span class="px-2 py-1 bg-red-100 text-red-700 text-xs rounded-full">Expired</span>' : '<span class="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded-full">Active Trial</span>';
-      return `
-        <div class="border border-neutral-200 rounded-xl p-4 flex items-center justify-between">
-          <div>
-            <div class="font-semibold">${seller.users?.first_name || 'Unknown'} ${seller.users?.last_name || ''}</div>
-            <div class="text-sm text-neutral-500">${seller.users?.email || 'N/A'}</div>
-            <div class="text-xs text-neutral-400 mt-1">Trial ends: ${trialEndDate.toLocaleDateString()}</div>
-            <div class="mt-2">${statusBadge}</div>
-          </div>
-          <button onclick="approveSellerSubscription('${seller.user_id}')" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg disabled:opacity-50" ${seller.commission_paid ? 'disabled' : ''}>
-            ${seller.commission_paid ? '✓ Approved' : 'Approve Sub'}
-          </button>
-        </div>`;
-    }).join('');
-  } catch(e) {
-    console.log("Could not load sellers:", e);
-    loading.classList.add('hidden');
-    empty.classList.remove('hidden');
-  }
-}
-
-async function approveSellerSubscription(sellerId) {
-  if (currentUser?.email !== ADMIN_EMAIL) { showToast('Admin access required', 'error'); return; }
-  try {
-    await supabaseClient.from('sellers').update({ commission_paid: true, paid_at: new Date().toISOString() }).eq('user_id', sellerId);
-    showToast('Seller subscription approved! ✅', 'success');
-    loadAllSellers();
-  } catch(e) { showToast('Failed to approve subscription', 'error'); }
-}
-
-// SETTINGS
-async function updateSellerSettings(event) {
-  event.preventDefault();
-  if (!currentUser) return;
-  const accountNumber = document.getElementById('seller-account-number').value;
-  const bankName = document.getElementById('seller-bank-name').value;
-  const accountName = document.getElementById('seller-account-name').value;
-  try {
-    await supabaseClient.from('sellers').update({ account_number: accountNumber, bank_name: bankName, account_name: accountName }).eq('user_id', currentUser.id);
-    showToast('Settings updated successfully! ✅', 'success');
-  } catch (error) { showToast('Failed to update settings: ' + error.message, 'error'); }
-}
-
-// TOAST
+// ==========================================
+// TOAST NOTIFICATIONS
+// ==========================================
 function showToast(message, type = 'success') {
   const toast = document.getElementById('toast');
   const toastMessage = document.getElementById('toast-message');
@@ -2401,41 +3102,46 @@ function showToast(message, type = 'success') {
   const toastIcon = document.getElementById('toast-icon');
   toastMessage.textContent = type === 'success' ? 'Success!' : type === 'error' ? 'Error' : 'Info';
   toastDetails.textContent = message;
-  if (type === 'success') { toastIcon.className = 'fa-solid fa-circle-check text-green-500 text-lg mt-0.5'; toast.style.borderLeftColor = '#10b981'; }
-  else if (type === 'error') { toastIcon.className = 'fa-solid fa-circle-xmark text-red-500 text-lg mt-0.5'; toast.style.borderLeftColor = '#dc2626'; }
-  else { toastIcon.className = 'fa-solid fa-circle-info text-blue-500 text-lg mt-0.5'; toast.style.borderLeftColor = '#3b82f6'; }
+  if (type === 'success') {
+    toastIcon.className = 'fa-solid fa-circle-check text-green-500 text-lg';
+    toast.style.borderLeftColor = '#10b981';
+  } else if (type === 'error') {
+    toastIcon.className = 'fa-solid fa-circle-xmark text-red-500 text-lg';
+    toast.style.borderLeftColor = '#dc2626';
+  } else {
+    toastIcon.className = 'fa-solid fa-circle-info text-blue-500 text-lg';
+    toast.style.borderLeftColor = '#3b82f6';
+  }
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 4000);
 }
 
-function showHelpModal() { document.getElementById('help-modal').classList.add('active'); }
+function showHelpModal() {
+  document.getElementById('help-modal').classList.add('active');
+}
 
 function showProfile() {
-  if (!currentUser) { showLoginModal(); return; }
+  if (!currentUser) {
+    showLoginModal();
+    return;
+  }
   showToast('Profile feature coming soon! 👤', 'info');
 }
 
-// MODAL CLOSE
 document.querySelectorAll('.modal').forEach(modal => {
-  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('active'); });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.classList.remove('active');
+  });
 });
 
-// KEYBOARD
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    document.querySelectorAll('.modal.active').forEach(modal => { modal.classList.remove('active'); });
+    document.querySelectorAll('.modal.active').forEach(modal => {
+      modal.classList.remove('active');
+    });
     if (chatbotOpen) toggleChatbot();
   }
 });
-
-// UTILS
-function formatWhatsAppNumber(number) {
-  if (!number) return ADMIN_WHATSAPP;
-  let cleaned = number.replace(/[\s\-]/g, '');
-  if (cleaned.startsWith('0')) { cleaned = '234' + cleaned.substring(1); }
-  else if (!cleaned.startsWith('234')) { cleaned = '234' + cleaned; }
-  return cleaned;
-}
 </script>
 </body>
 </html>
