@@ -9,6 +9,8 @@
 <!-- PWA Manifest injected by JS below -->
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script data-cfasync="false" src="https://js.paystack.co/v1/inline.js"></script>
 <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -434,6 +436,24 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 #filters-modal .modal-box{max-width:420px;padding:1.65rem}
 .filter-section-title{font-weight:700;font-size:.84rem;color:var(--text2);margin-bottom:.65rem;display:flex;align-items:center;gap:.4rem}
 
+   #map { 
+  height: 250px; 
+  width: 100%; 
+  border-radius: var(--radius); 
+  border: 2px solid var(--border);
+  z-index: 1; /* Keep below modal close button */
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: var(--radius-sm);
+  font-family: 'DM Sans', sans-serif;
+}
+
+.hub-label {
+  font-weight: 700;
+  color: var(--forest);
+}
+   
 /* Dispute modal */
 #dispute-modal .modal-box{max-width:500px;padding:1.65rem}
 
@@ -1587,7 +1607,35 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
       <h3 class="mb-3">Delivery Information</h3>
       <div class="form-group"><label class="form-label">Full Name <span class="req">*</span></label><input type="text" id="co-name" class="form-input" required placeholder="Recipient name" autocomplete="name"></div>
       <div class="form-group"><label class="form-label">Phone Number <span class="req">*</span></label><input type="tel" id="co-phone" class="form-input" required placeholder="0801 234 5678" inputmode="tel" autocomplete="tel"></div>
-      <div class="form-group"><label class="form-label">Delivery Address <span class="req">*</span></label><textarea id="co-address" class="form-textarea" required placeholder="Street, area, city, state" rows="3" autocomplete="street-address"></textarea></div>
+<div class="form-group">
+  <label class="form-label">How should we get this to you?</label>
+  <div class="flex gap-2 mb-3">
+    <button type="button" id="btn-home" class="btn btn-primary btn-sm flex-1" onclick="setDeliveryMode('home')">
+      <i class="fa-solid fa-house"></i> Doorstep
+    </button>
+    <button type="button" id="btn-pickup" class="btn btn-outline btn-sm flex-1" onclick="setDeliveryMode('pickup')">
+      <i class="fa-solid fa-location-dot"></i> Safe Pickup
+    </button>
+  </div>
+</div>
+
+<div id="pickup-container" class="hidden fade-up">
+  <div id="map-frame" style="position:relative; margin-bottom:1rem;">
+    <div id="map"></div>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Selected Verified Hub</label>
+    <div class="input-group">
+      <i class="fa-solid fa-shield-check input-prefix" style="color:var(--green)"></i>
+      <input type="text" id="selected-hub-input" class="form-input" readonly placeholder="Select a pin on the map">
+    </div>
+  </div>
+</div>
+
+<div class="form-group">
+  <label class="form-label" id="addr-label">Delivery Address</label>
+  <textarea id="co-address" class="form-textarea" required placeholder="Street, area, city, state" rows="3"></textarea>
+</div>
       <div class="order-items-list" id="co-items"></div>
       <div class="flex justify-between items-center" style="margin-bottom:1rem"><span class="font-600">Total</span><span class="font-bold" style="font-size:1.1rem;color:var(--green)" id="co-total"></span></div>
       <button class="btn btn-primary btn-full" onclick="goCheckoutStep(2)">Continue to Payment <i class="fa-solid fa-arrow-right"></i></button>
@@ -4020,6 +4068,56 @@ function sanitizeUrl(url) {
   return String(url).trim();
 }
 
+   let pickupMap = null;
+let currentMode = 'home';
+
+// Predefined Verified Hubs
+const verifiedHubs = [
+  { name: "Ikeja City Mall (ICM)", coords: [6.6194, 3.3581], info: "Main Entrance, Alausa" },
+  { name: "The Palms Lekki", coords: [6.4358, 3.4474], info: "Pickup Gate 2" },
+  { name: "Yaba Left Hub", coords: [6.5095, 3.3711], info: "Near Yaba Tech Gate" },
+  { name: "Silverbird Abuja", coords: [9.0805, 7.4855], info: "Central Area" }
+];
+
+function setDeliveryMode(mode) {
+  currentMode = mode;
+  const isPickup = mode === 'pickup';
+  
+  // Toggle UI
+  document.getElementById('pickup-container').classList.toggle('hidden', !isPickup);
+  document.getElementById('btn-pickup').className = isPickup ? 'btn btn-primary btn-sm flex-1' : 'btn btn-outline btn-sm flex-1';
+  document.getElementById('btn-home').className = !isPickup ? 'btn btn-primary btn-sm flex-1' : 'btn btn-outline btn-sm flex-1';
+  
+  document.getElementById('addr-label').textContent = isPickup ? "Pickup Instructions" : "Delivery Address";
+  document.getElementById('co-address').placeholder = isPickup ? "e.g. I will be there by 4pm" : "Street, area, city, state";
+
+  if (isPickup) {
+    initLeaflet();
+  }
+}
+
+function initLeaflet() {
+  // Always give the browser a moment to render the modal container
+  setTimeout(() => {
+    if (!pickupMap) {
+      pickupMap = L.map('map').setView([6.5244, 3.3792], 12); // Closer zoom (12) is better for city hubs
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+      }).addTo(pickupMap);
+
+      verifiedHubs.forEach(hub => {
+        const marker = L.marker(hub.coords).addTo(pickupMap);
+        marker.bindPopup(`<b class="hub-label">${hub.name}</b><br>${hub.info}`);
+        marker.on('click', () => {
+          document.getElementById('selected-hub-input').value = hub.name;
+          document.getElementById('co-address').value = `VERIFIED HUB: ${hub.name} (${hub.info})`;
+          toast('Hub Selected', hub.name, 'success');
+        });
+      });
+    }
+    pickupMap.invalidateSize(); // Forces the map to fill the container correctly
+  }, 300);
+}
 // Share product from detail modal
 function shareCurrentProduct() {
   if (currentProd) shareProduct(currentProd);
