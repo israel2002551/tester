@@ -1063,7 +1063,13 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
                 <select id="p-condition" class="form-select" required><option value="new">Brand New</option><option value="used-like-new">Used – Like New</option><option value="used-good">Used – Good</option></select>
               </div>
             </div>
-            <div class="form-group"><label class="form-label">Description <span class="req">*</span></label><textarea id="p-desc" class="form-textarea" required placeholder="Describe your product in detail…"></textarea></div>
+            <div class="form-group">
+  <label class="form-label">Description <span class="req">*</span></label>
+  <textarea id="p-desc" class="form-textarea" required placeholder="Describe your product in detail…"></textarea>
+  <button type="button" class="btn btn-outline btn-sm mt-1" onclick="generateDescription()">
+    <i class="fa-solid fa-magic"></i> Generate with AI
+  </button>
+</div>
             <div class="form-group"><label class="form-label">Location <span class="req">*</span></label><input type="text" id="p-location" class="form-input" required placeholder="e.g., Ikeja, Lagos"></div>
             <div class="form-group"><label class="form-label">Product Image <span class="req">*</span></label><input type="file" id="p-image" class="form-input" accept="image/*" style="background:var(--cream)"></div>
             <div class="form-group"><label class="form-label">Product Video <span style="color:var(--text3);font-weight:400">(Recommended — 3× more sales)</span></label><input type="file" id="p-video" class="form-input" accept="video/*" style="background:var(--cream)"><div style="font-size:.74rem;color:var(--text3);margin-top:.28rem"><i class="fa-solid fa-info-circle"></i> Max 50MB.</div></div>
@@ -1278,14 +1284,65 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 
           <!-- Admin Tab Bar -->
           <div class="buyer-tabs-wrap" style="margin-bottom:1.5rem;overflow-x:auto;-webkit-overflow-scrolling:touch">
-            <button class="buyer-tab active" id="atab-overview"     onclick="switchAdminTab('overview')">📊 Overview</button>
-            <button class="buyer-tab"         id="atab-sellers"     onclick="switchAdminTab('sellers')">🏪 Sellers</button>
-            <button class="buyer-tab"         id="atab-orders"      onclick="switchAdminTab('orders')">📦 Orders</button>
-            <button class="buyer-tab"         id="atab-disputes"    onclick="switchAdminTab('disputes')">⚖️ Disputes</button>
-            <button class="buyer-tab"         id="atab-withdrawals" onclick="switchAdminTab('withdrawals')">💸 Payouts</button>
-            <button class="buyer-tab"         id="atab-broadcast"   onclick="switchAdminTab('broadcast')">📣 Broadcast</button>
-          </div>
+    <button class="buyer-tab active" id="atab-overview"     onclick="switchAdminTab('overview')">📊 Overview</button>
+    <button class="buyer-tab"         id="atab-sellers"     onclick="switchAdminTab('sellers')">🏪 Sellers</button>
+    <button class="buyer-tab"         id="atab-orders"      onclick="switchAdminTab('orders')">📦 Orders</button>
+    <button class="buyer-tab"         id="atab-disputes"    onclick="switchAdminTab('disputes')">⚖️ Disputes</button>
+    <button class="buyer-tab"         id="atab-withdrawals" onclick="switchAdminTab('withdrawals')">💸 Payouts</button>
+    <button class="buyer-tab"         id="atab-broadcast"   onclick="switchAdminTab('broadcast')">📣 Broadcast</button>
+    <button class="buyer-tab"         id="atab-ai"          onclick="switchAdminTab('ai')">🤖 AI Assistant</button>
+    <button class="buyer-tab"         id="atab-branding" onclick="switchAdminTab('branding')">🎨 Branding</button>
+</div>
 
+<div id="adm-tab-branding" class="adm-tab hidden">
+  <div class="card card-pad-lg" style="max-width:500px">
+    <h3 class="mb-1"><i class="fa-solid fa-paint-brush color-green"></i> Platform Branding</h3>
+    <p class="text-xs color-text3 mb-3">Update the main logo across the entire marketplace.</p>
+    
+    <div class="form-group">
+      <label class="form-label">Upload New Logo</label>
+      <div class="upload-zone" id="logo-zone" onclick="document.getElementById('logo-upload').click()">
+        <i class="fa-solid fa-cloud-upload-alt"></i>
+        <div class="upload-label">Click to select logo</div>
+        <div class="upload-sub">PNG, JPG, or SVG (Transparent background recommended)</div>
+      </div>
+      <input type="file" id="logo-upload" accept="image/*" class="hidden" onchange="previewAdminLogo(this)">
+    </div>
+    
+    <div id="logo-preview-container" class="hidden mb-3 text-center">
+      <p class="form-label">Preview:</p>
+      <img id="logo-preview-img" src="" style="width:64px;height:64px;border-radius:12px;object-fit:contain;border:1px solid var(--border);padding:4px;background:var(--cream);">
+    </div>
+    
+    <button class="btn btn-primary btn-full" id="save-logo-btn" onclick="saveAdminLogo()">
+      <i class="fa-solid fa-save"></i> Save & Apply Logo
+    </button>
+  </div>
+</div>             
+             
+             <!-- ═══ AI ASSISTANT TAB ═══ -->
+<div id="adm-tab-ai" class="adm-tab hidden">
+  <div class="card card-pad-lg" style="max-width:600px">
+    <h3 class="mb-1"><i class="fa-solid fa-robot color-green"></i> Admin AI Assistant</h3>
+    <p class="text-xs color-text3 mb-3">Ask Claude anything about your platform — sales trends, seller issues, dispute advice, growth strategies.</p>
+    <div id="admin-ai-messages" style="height:280px;overflow-y:auto;background:var(--cream);border-radius:var(--radius-sm);border:1px solid var(--border);padding:.88rem;display:flex;flex-direction:column;gap:.58rem;margin-bottom:.75rem">
+      <div class="cb-msg bot" style="display:flex;gap:.42rem">
+        <div class="cb-avatar" style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-robot"></i></div>
+        <div class="cb-bubble" style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;line-height:1.5">Hello Admin! 👋 I have full context of your BUYSELL platform. Ask me about sales, disputes, seller performance, or growth strategies.</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.65rem">
+      <button class="cb-quick-btn" onclick="askAdminBot('Summarise platform performance this month')">📊 Performance</button>
+      <button class="cb-quick-btn" onclick="askAdminBot('How should I handle a seller dispute?')">⚖️ Disputes</button>
+      <button class="cb-quick-btn" onclick="askAdminBot('Give me 5 growth strategies for BUYSELL Nigeria')">🚀 Growth</button>
+      <button class="cb-quick-btn" onclick="askAdminBot('What commission pricing is best for Nigerian marketplaces?')">💰 Pricing</button>
+    </div>
+    <div style="display:flex;gap:.5rem">
+      <input type="text" id="admin-ai-input" class="form-input" placeholder="Ask anything about your platform…" onkeypress="if(event.key==='Enter')askAdminBot()">
+      <button class="btn btn-primary" onclick="askAdminBot()" style="flex-shrink:0"><i class="fa-solid fa-paper-plane"></i></button>
+    </div>
+  </div>
+</div>
           <!-- ═══ OVERVIEW TAB ═══ -->
           <div id="adm-tab-overview" class="adm-tab">
             <div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(148px,1fr));margin-bottom:1.25rem">
@@ -1431,12 +1488,12 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
     <div class="cb-msg bot"><div class="cb-avatar" style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0"><i class="fa-solid fa-robot"></i></div><div class="cb-bubble">Hello! 👋 I'm your BUYSELL assistant. How can I help?</div></div>
   </div>
   <div class="cb-quick-wrap">
-    <button class="cb-quick-btn" onclick="askBot('How do I buy?')">Buy?</button>
-    <button class="cb-quick-btn" onclick="askBot('How do I sell?')">Sell?</button>
-    <button class="cb-quick-btn" onclick="askBot('Payment methods?')">Payments?</button>
-    <button class="cb-quick-btn" onclick="askBot('Delivery time?')">Delivery?</button>
-    <button class="cb-quick-btn" onclick="askBot('Return policy?')">Returns?</button>
-  </div>
+  <button class="cb-quick-btn" onclick="askBot('How do I buy safely on BUYSELL?')">🛒 Buy</button>
+  <button class="cb-quick-btn" onclick="askBot('How do I open a seller store?')">🏪 Sell</button>
+  <button class="cb-quick-btn" onclick="askBot('What payment methods are available?')">💳 Pay</button>
+  <button class="cb-quick-btn" onclick="askBot('How long does delivery take in Nigeria?')">🚚 Deliver</button>
+  <button class="cb-quick-btn" onclick="askBot('How does the affiliate program work?')">💸 Earn</button>
+</div>
   <div class="chatbot-input-row">
     <input type="text" id="chat-input" placeholder="Type a message…" onkeypress="if(event.key==='Enter')sendChat()">
     <button onclick="sendChat()" aria-label="Send"><i class="fa-solid fa-paper-plane"></i></button>
@@ -1621,9 +1678,27 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 </div>
 
 <div id="pickup-container" class="hidden fade-up">
+  
+  <div class="form-group">
+    <label class="form-label">Select Your State <span class="req">*</span></label>
+    <select id="state-selector" class="form-select" onchange="loadHubsForState(this.value)">
+      <option value="Abuja" selected>Federal Capital Territory (Abuja)</option>
+      <option value="Lagos">Lagos</option>
+      <option value="Rivers">Rivers</option>
+      <option value="Oyo">Oyo</option>
+      <option value="Kano">Kano</option>
+      <option value="Enugu">Enugu</option>
+      <option value="Ogun">Ogun</option>
+      <option value="Delta">Delta</option>
+      <option value="Edo">Edo</option>
+      <option value="Kaduna">Kaduna</option>
+      </select>
+  </div>
+
   <div id="map-frame" style="position:relative; margin-bottom:1rem;">
     <div id="map"></div>
   </div>
+  
   <div class="form-group">
     <label class="form-label">Selected Verified Hub</label>
     <div class="input-group">
@@ -1798,6 +1873,10 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 const SB_URL  = 'https://obzhlmzswthnorkiqemh.supabase.co';
 const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9iemhsbXpzd3Robm9ya2lxZW1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxMDE2NjgsImV4cCI6MjA4ODY3NzY2OH0.5I4Ln0913h0AH5z4e64QBVx88igcIwEaM0Lz11FqDvU';
 const EDGE_URL = SB_URL + '/functions/v1';
+
+const CLAUDE_EDGE_URL = `${EDGE_URL}/claude-agent`;
+let chatHistory = []; 
+let adminAiHistory = [];
 
 /** Call a deployed Edge Function securely with the user's JWT */
 async function callEdge(fnName, body) {
@@ -2186,7 +2265,54 @@ async function logoutUser() {
 }
 
 
+async function generateDescription() {
+  const name      = document.getElementById('p-name').value.trim();
+  const price     = document.getElementById('p-price').value;
+  const category  = document.getElementById('p-category').value;
+  const condition = document.getElementById('p-condition').value;
 
+  if (!name) { toast('Enter product name first', '', 'warn'); return; }
+
+  const btn = event.target.closest('button');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-dark"></span> Writing...';
+
+  try {
+    const res  = await fetch(CLAUDE_EDGE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{
+          role: 'user',
+          content: `Write a compelling product description for a Nigerian marketplace listing.
+                    Product: ${name}
+                    Category: ${category}
+                    Condition: ${condition}
+                    Price: ₦${price}
+                    
+                    Requirements:
+                    - 2–3 sentences max
+                    - Highlight key benefits
+                    - Mention it's available in Nigeria
+                    - No bullet points, plain text only
+                    - Sound authentic and trustworthy`
+        }],
+        context: { task: 'product_description' }
+      }),
+    });
+
+    const data = await res.json();
+    if (data.reply) {
+      document.getElementById('p-desc').value = data.reply;
+      toast('Description Generated! ✨', 'Edit it to your liking', 'success');
+    }
+  } catch(e) {
+    toast('AI unavailable', 'Write description manually', 'warn');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-magic"></i> Generate with AI';
+  }
+}
 
 
 
@@ -2392,19 +2518,46 @@ function filterCat(cat) {
 }
 
 let searchTimeout;
-function doSearch() {
-  clearTimeout(searchTimeout);
-  const q = document.getElementById('search-input').value.trim().toLowerCase();
-  
-  // Wait 300ms after user stops typing to filter (saves battery/performance)
-  searchTimeout = setTimeout(() => {
-    if (q) { 
-      activeFilters.search = q; 
-    } else { 
-      delete activeFilters.search; 
-    }
-    applyCurrentFilters();
-  }, 300);
+// Replace doSearch() with this Claude-enhanced version
+async function doSearch() {
+  const q = document.getElementById('search-input').value.trim();
+  if (!q) return;
+
+  // First do the normal fuzzy search (fast, free)
+  activeFilters.search = q.toLowerCase();
+  applyCurrentFilters();
+
+  // If < 3 results, ask Claude for query suggestions
+  if (filteredProducts.length < 3 && q.length > 4) {
+    try {
+      const res  = await fetch(CLAUDE_EDGE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{
+            role: 'user',
+            content: `A user searched "${q}" on a Nigerian marketplace. 
+                      Suggest 2-3 alternative single-word search terms 
+                      they might mean. Reply ONLY with the terms 
+                      comma-separated, nothing else.`
+          }],
+          context: { task: 'search_suggestion' }
+        }),
+      });
+      const data = await res.json();
+      if (data.reply) {
+        const suggestions = data.reply.split(',').map(s => s.trim()).filter(Boolean);
+        if (suggestions.length) {
+          toast(
+            `💡 Try searching: ${suggestions.slice(0,2).join(', ')}`,
+            'Showing closest matches',
+            'info',
+            4000
+          );
+        }
+      }
+    } catch(e) { /* silent fail */ }
+  }
 }
 
 function applyFilters() {
@@ -3451,6 +3604,74 @@ function guardAdminPanel() {
   return true;
 }
 
+// ====================================================
+//  ADMIN BRANDING
+// ====================================================
+let tempLogoFile = null;
+
+function previewAdminLogo(input) {
+  if (input.files && input.files[0]) {
+    tempLogoFile = input.files[0];
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      document.getElementById('logo-preview-container').classList.remove('hidden');
+      document.getElementById('logo-preview-img').src = e.target.result;
+      document.getElementById('logo-zone').classList.add('has-file');
+      document.querySelector('#logo-zone .upload-label').textContent = tempLogoFile.name;
+    }
+    reader.readAsDataURL(tempLogoFile);
+  }
+}
+
+async function saveAdminLogo() {
+  if (!tempLogoFile) return toast('No file selected', 'Please choose an image first', 'warn');
+  if (!isAdmin()) return toast('Access Denied', '', 'error');
+
+  const btn = document.getElementById('save-logo-btn');
+  btn.disabled = true; 
+  btn.innerHTML = '<span class="spinner"></span> Saving...';
+
+  try {
+    // 1. Upload to Supabase (using your existing 'uploads' bucket)
+    const ext = tempLogoFile.name.split('.').pop();
+    const path = `branding/logo_${Date.now()}.${ext}`;
+    
+    const { error: upErr, data } = await db.storage.from('uploads').upload(path, tempLogoFile, { upsert: true });
+    if (upErr) throw upErr;
+    
+    // 2. Get Public URL
+    const { data: pubData } = db.storage.from('uploads').getPublicUrl(path);
+    const logoUrl = pubData.publicUrl;
+
+    // 3. Save to localStorage so it persists instantly for all page reloads
+    // (In a full scale app, you'd also save this to a 'site_settings' table in Supabase)
+    localStorage.setItem('buysell_custom_logo', logoUrl);
+    
+    // 4. Apply globally to the DOM right now
+    applySiteLogo(logoUrl);
+    
+    toast('Logo Updated! 🎨', 'Your new branding is live', 'success');
+  } catch(e) {
+    console.error("Logo upload error:", e);
+    toast('Upload Failed', 'Check your Supabase storage permissions', 'error');
+  } finally {
+    btn.disabled = false; 
+    btn.innerHTML = '<i class="fa-solid fa-save"></i> Save & Apply Logo';
+  }
+}
+
+// Function to hunt down every logo element and replace it with the image
+function applySiteLogo(url) {
+  if (!url) return;
+  document.querySelectorAll('.brand-icon').forEach(icon => {
+    // Replace the text "B" with the uploaded image
+    icon.innerHTML = `<img src="${sanitizeUrl(url)}" alt="Logo" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;">`;
+    // Remove the green background gradient so the image looks clean
+    icon.style.background = 'transparent';
+    icon.style.boxShadow = 'none';
+  });
+}
+   
 function switchAdminTab(tab) {
   document.querySelectorAll('.adm-tab').forEach(p => p.classList.add('hidden'));
   document.querySelectorAll('[id^="atab-"]').forEach(b => b.classList.remove('active'));
@@ -3461,7 +3682,7 @@ function switchAdminTab(tab) {
   if (tab === 'orders')       loadAdminOrders();
   if (tab === 'disputes')     loadAdminDisputes();
   if (tab === 'withdrawals')  loadAdminWithdrawals();
-  if (tab === 'broadcast')    loadBroadcastHistory();
+  if (tab === 'ai') adminAiHistory = []; // fresh context each time
 }
 
 /* ── OVERVIEW ── */
@@ -3494,6 +3715,69 @@ async function loadAdminOverview() {
   _renderAdminRevenueChart(orders || []);
 }
 
+   // ====================================================
+//  ADMIN AI ASSISTANT
+// ====================================================
+let adminAiHistory = [];
+
+async function askAdminBot(preset) {
+  const input = document.getElementById('admin-ai-input');
+  const msg   = preset || input.value.trim();
+  if (!msg) return;
+  if (!preset) input.value = '';
+
+  // Add user message
+  const container = document.getElementById('admin-ai-messages');
+  const userDiv = document.createElement('div');
+  userDiv.style.cssText = 'display:flex;flex-direction:row-reverse;gap:.42rem';
+  userDiv.innerHTML = `<div style="background:var(--forest);color:#fff;padding:.52rem .82rem;border-radius:14px;font-size:.79rem;max-width:82%;line-height:1.5">${escHtml(msg)}</div>`;
+  container.appendChild(userDiv);
+
+  adminAiHistory.push({ role: 'user', content: msg });
+
+  // Typing indicator
+  const typingDiv = document.createElement('div');
+  typingDiv.id = 'admin-typing';
+  typingDiv.style.cssText = 'display:flex;gap:.42rem;align-items:center';
+  typingDiv.innerHTML = `<div style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-robot"></i></div><div style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;color:var(--text3)">Thinking…</div>`;
+  container.appendChild(typingDiv);
+  container.scrollTop = container.scrollHeight;
+
+  try {
+    const res  = await fetch(CLAUDE_EDGE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: adminAiHistory,
+        context: {
+          task:             'admin_assistant',
+          platform:         'BUYSELL Nigeria',
+          admin_email:      ADMIN_EMAIL,
+          total_sellers:    document.getElementById('adm-total-sellers')?.textContent || '?',
+          total_buyers:     document.getElementById('adm-total-buyers')?.textContent  || '?',
+          total_revenue:    document.getElementById('adm-revenue')?.textContent       || '?',
+          open_disputes:    document.getElementById('adm-disputes')?.textContent      || '?',
+        }
+      }),
+    });
+
+    const data  = await res.json();
+    const reply = data.reply || 'Sorry, I could not process that.';
+    adminAiHistory.push({ role: 'assistant', content: reply });
+
+    document.getElementById('admin-typing')?.remove();
+    const replyDiv = document.createElement('div');
+    replyDiv.style.cssText = 'display:flex;gap:.42rem';
+    replyDiv.innerHTML = `<div style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-robot"></i></div><div style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;max-width:82%;line-height:1.5">${reply}</div>`;
+    container.appendChild(replyDiv);
+
+  } catch(e) {
+    document.getElementById('admin-typing')?.remove();
+    toast('AI unavailable', 'Try again shortly', 'warn');
+  }
+  container.scrollTop = container.scrollHeight;
+}
+   
 async function loadAdminSellers() {
   if (!guardAdminPanel()) return;
   document.getElementById('admin-skeleton').classList.remove('hidden');
@@ -3804,46 +4088,98 @@ function _renderAdminRevenueChart(orders) {
 // ====================================================
 //  CHATBOT
 // ====================================================
-const botAnswers = {
-  'how do i buy':  'Browse products, click any item to view details, add to cart, then click Checkout. You can pay via Paystack (card/USSD) or direct bank transfer. 🛒',
-  'how do i sell': 'Create a seller account, go to your dashboard, and click "Add Product". Your first month is FREE! After that, it\'s just ₦5,000/month. 🏪',
-  'payment methods': 'We support: ✅ Paystack (card, USSD, bank transfer) and 🏦 Direct bank transfer. All payments are secured.',
-  'delivery time': 'Most sellers deliver within 2–5 business days. You can also WhatsApp the seller directly for faster coordination. 🚚',
-  'return policy': 'File a dispute within 7 days of delivery if you have an issue. Admin reviews all disputes and helps mediate refunds. 🛡️',
-  'commission': 'Sellers get 1 free month, then ₦5,000/month. Buyers pay zero fees! Platform takes 3% on Paystack orders.',
-  'hello': 'Hello! 👋 How can I help you today? Ask me about buying, selling, payments, or delivery!',
-  'hi': 'Hi there! 😊 What can I help you with?',
-};
+// ====================================================
+//  CLAUDE-POWERED CHATBOT  (replaces old rule-based bot)
+// ====================================================
 
-function toggleChat() {
-  const win = document.getElementById('chatbot-window');
-  win.classList.toggle('open');
-}
-
-function sendChat() {
-  const input = document.getElementById('chat-input');
-  const msg = input.value.trim();
+async function sendChat() {
+  const input  = document.getElementById('chat-input');
+  const msg    = input.value.trim();
   if (!msg) return;
+
   addChatMsg(msg, 'user');
   input.value = '';
-  setTimeout(() => {
-    const key = Object.keys(botAnswers).find(k => msg.toLowerCase().includes(k));
-    const reply = key ? botAnswers[key] : "I'm not sure about that. For more help, WhatsApp us at 09061484256 or email support@buysell.ng 🙋";
-    addChatMsg(reply, 'bot');
-  }, 600);
+  chatHistory.push({ role: 'user', content: msg });
+
+  // Show typing indicator
+  const typingId = 'typing-' + Date.now();
+  addChatMsg('...', 'bot', typingId);
+
+  // Build context from current app state
+  const context = {
+    current_page:      getCurrentPage(),
+    user_role:         currentRole || 'visitor',
+    cart_item_count:   cart.length,
+    cart_total:        cart.reduce((s, c) => s + c.price * (c.qty || 1), 0),
+    current_product:   currentProd
+      ? { name: currentProd.name, price: currentProd.price, category: currentProd.category }
+      : null,
+  };
+
+  try {
+    const res = await fetch(CLAUDE_EDGE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: chatHistory, context }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Agent error');
+
+    const reply = data.reply;
+    chatHistory.push({ role: 'assistant', content: reply });
+
+    // Replace typing indicator with real reply
+    const typingEl = document.getElementById(typingId);
+    if (typingEl) typingEl.querySelector('.cb-bubble').textContent = reply;
+
+  } catch (err) {
+    const typingEl = document.getElementById(typingId);
+    const fallback = "Sorry, I'm having trouble right now. WhatsApp us at 09061484256 for instant help!";
+    if (typingEl) typingEl.querySelector('.cb-bubble').textContent = fallback;
+    chatHistory.push({ role: 'assistant', content: fallback });
+  }
 }
 
-function askBot(q) { document.getElementById('chat-input').value = q; sendChat(); }
+// Helper — detect which "page" user is on
+function getCurrentPage() {
+  if (document.getElementById('seller-dashboard')?.style.display !== 'none') return 'seller-dashboard';
+  if (document.getElementById('storefront-view')?.style.display !== 'none')  return 'storefront';
+  if (document.getElementById('product-modal')?.classList.contains('open'))  return 'product-detail';
+  return 'buyer-marketplace';
+}
 
-function addChatMsg(text, sender) {
+// Updated addChatMsg — accepts optional id for typing indicator replacement
+function addChatMsg(text, sender, id = null) {
   const container = document.getElementById('chat-messages');
-  const div = document.createElement('div');
-  div.className = `cb-msg ${sender}`;
-  div.innerHTML = sender === 'bot' ? `<div class="cb-avatar" style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0"><i class="fa-solid fa-robot"></i></div><div class="cb-bubble">${text}</div>` : `<div class="cb-bubble">${escHtml(text)}</div>`;
+  const div       = document.createElement('div');
+  div.className   = `cb-msg ${sender}`;
+  if (id) div.id  = id;
+
+  div.innerHTML = sender === 'bot'
+    ? `<div class="cb-avatar" style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0">
+         <i class="fa-solid fa-robot"></i>
+       </div>
+       <div class="cb-bubble">${sender === 'bot' ? text : escHtml(text)}</div>`
+    : `<div class="cb-bubble">${escHtml(text)}</div>`;
+
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
 }
 
+// Clear history when chat is closed (optional — remove to keep memory)
+function toggleChat() {
+  const win = document.getElementById('chatbot-window');
+  const wasOpen = win.classList.contains('open');
+  win.classList.toggle('open');
+  // Optionally reset history on open for a fresh session:
+  // if (!wasOpen) chatHistory = [];
+}
+
+function askBot(q) {
+  document.getElementById('chat-input').value = q;
+  sendChat();
+}
 // ====================================================
 //  CSV BULK UPLOAD
 // ====================================================
@@ -4098,16 +4434,9 @@ function sanitizeUrl(url) {
   return String(url).trim();
 }
 
-   let pickupMap = null;
+let pickupMap = null;
 let currentMode = 'home';
-
-// Predefined Verified Hubs
-const verifiedHubs = [
-  { name: "Ikeja City Mall (ICM)", coords: [6.6194, 3.3581], info: "Main Entrance, Alausa" },
-  { name: "The Palms Lekki", coords: [6.4358, 3.4474], info: "Pickup Gate 2" },
-  { name: "Yaba Left Hub", coords: [6.5095, 3.3711], info: "Near Yaba Tech Gate" },
-  { name: "Silverbird Abuja", coords: [9.0805, 7.4855], info: "Central Area" }
-];
+let currentMarkers = []; // Keeps track of active pins so we can delete them when the state changes
 
 function setDeliveryMode(mode) {
   currentMode = mode;
@@ -4117,6 +4446,12 @@ function setDeliveryMode(mode) {
   document.getElementById('pickup-container').classList.toggle('hidden', !isPickup);
   document.getElementById('btn-pickup').className = isPickup ? 'btn btn-primary btn-sm flex-1' : 'btn btn-outline btn-sm flex-1';
   document.getElementById('btn-home').className = !isPickup ? 'btn btn-primary btn-sm flex-1' : 'btn btn-outline btn-sm flex-1';
+  
+  // Clear inputs if switching back to home delivery
+  if (!isPickup) {
+    document.getElementById('selected-hub-input').value = '';
+    document.getElementById('co-address').value = '';
+  }
   
   document.getElementById('addr-label').textContent = isPickup ? "Pickup Instructions" : "Delivery Address";
   document.getElementById('co-address').placeholder = isPickup ? "e.g. I will be there by 4pm" : "Street, area, city, state";
@@ -4130,23 +4465,69 @@ function initLeaflet() {
   // Always give the browser a moment to render the modal container
   setTimeout(() => {
     if (!pickupMap) {
-      pickupMap = L.map('map').setView([6.5244, 3.3792], 12); // Closer zoom (12) is better for city hubs
+      // Initialize map centered on Nigeria
+      pickupMap = L.map('map').setView([9.0820, 8.6753], 6); 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap'
       }).addTo(pickupMap);
+    }
+    
+    pickupMap.invalidateSize(); // Fixes the gray-box modal rendering bug
+    
+    // Load the hubs for whichever state is currently selected in the dropdown
+    const initialState = document.getElementById('state-selector').value;
+    loadHubsForState(initialState);
+    
+  }, 300);
+}
 
-      verifiedHubs.forEach(hub => {
-        const marker = L.marker(hub.coords).addTo(pickupMap);
+// NEW: Dynamic Supabase Fetcher
+async function loadHubsForState(stateName) {
+  // 1. Clear old pins from the map
+  currentMarkers.forEach(marker => pickupMap.removeLayer(marker));
+  currentMarkers = [];
+  
+  document.getElementById('selected-hub-input').placeholder = "Fetching secure hubs...";
+  document.getElementById('selected-hub-input').value = ""; // Reset selection
+
+  try {
+    // 2. Fetch live data from Supabase
+    const { data, error } = await db
+      .from('safe_hubs')
+      .select('*')
+      .eq('state', stateName)
+      .eq('is_active', true);
+
+    if (error) throw error;
+
+    if (data && data.length > 0) {
+      const bounds = []; // Used to auto-zoom the map perfectly
+
+      data.forEach(hub => {
+        const marker = L.marker([hub.latitude, hub.longitude]).addTo(pickupMap);
         marker.bindPopup(`<b class="hub-label">${hub.name}</b><br>${hub.info}`);
+        
         marker.on('click', () => {
           document.getElementById('selected-hub-input').value = hub.name;
           document.getElementById('co-address').value = `VERIFIED HUB: ${hub.name} (${hub.info})`;
           toast('Hub Selected', hub.name, 'success');
         });
+
+        currentMarkers.push(marker);
+        bounds.push([hub.latitude, hub.longitude]);
       });
+
+      // 3. Auto-zoom map to fit all the new pins perfectly
+      pickupMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+      document.getElementById('selected-hub-input').placeholder = "Click a pin on the map";
+      
+    } else {
+      document.getElementById('selected-hub-input').placeholder = "No verified hubs in this state yet.";
     }
-    pickupMap.invalidateSize(); // Forces the map to fill the container correctly
-  }, 300);
+  } catch (err) {
+    console.error("Error fetching hubs:", err);
+    toast('Map Error', 'Could not load safe hubs. Check your connection.', 'error');
+  }
 }
 // Share product from detail modal
 function shareCurrentProduct() {
@@ -4157,6 +4538,8 @@ function shareCurrentProduct() {
 //  INIT
 // ====================================================
 (async function init() {
+  const savedLogo = localStorage.getItem('buysell_custom_logo');
+  if (savedLogo) applySiteLogo(savedLogo);
   await checkSession();
   updateCartCount();
   handleDeepLink();
