@@ -1077,10 +1077,24 @@ async function submitTransferOrder() {
     let proofUrl = '';
     const file = fileInput.files[0];
     const ext = file.name.split('.').pop();
-    const path = `proofs/${Date.now()}.${ext}`;
+    const path = `proofs/${currentUser.id}/${Date.now()}.${ext}`;
     const { error: upErr } = await db.storage.from('uploads').upload(path, file);
     if (!upErr) { const { data } = db.storage.from('uploads').getPublicUrl(path); proofUrl = data.publicUrl; }
     await saveOrderToDb(null, 'transfer', null, proofUrl);
+
+    // Also save to payment_receipts for seller auditing
+    if (proofUrl && cart.length > 0) {
+      const sellerId = cart[0]?.seller_id || cart[0]?.profiles?.id;
+      const total = cart.reduce((sum, c) => sum + (c.price * (c.qty || 1)), 0);
+      await db.from('payment_receipts').insert({
+        buyer_id:     currentUser.id,
+        seller_id:    sellerId || null,
+        receipt_url:  proofUrl,
+        amount:       total,
+        payment_type: 'product',
+        status:       'pending'
+      }).then(() => {}).catch(() => {}); // non-blocking
+    }
   } catch(e) { toast('Error','Could not submit order','error'); }
   btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Submit Order';
 }
@@ -1558,12 +1572,47 @@ function payCommissionPaystack() {
 
 async function submitCommissionReceipt() {
   const file = document.getElementById('commission-file').files[0];
-  const ref = document.getElementById('commission-ref').value.trim();
-  if (!file || !ref) { toast('Please upload receipt and enter reference','','warn'); return; }
-  toast('Receipt Submitted!', 'Admin will verify within 24hrs', 'success');
-  closeModal('commission-modal');
-  document.getElementById('suspended-modal').classList.remove('open');
-  document.body.classList.remove('modal-open');
+  const ref  = document.getElementById('commission-ref').value.trim();
+  if (!file || !ref) { toast('Please upload receipt and enter reference', '', 'warn'); return; }
+  if (!currentUser) { toast('Not logged in', '', 'error'); return; }
+
+  try {
+    toast('Uploading receipt...', '', 'info', 3000);
+
+    // 1. Upload receipt image to Supabase Storage
+    const ext  = file.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const path = `receipts/${currentUser.id}/${Date.now()}.${ext}`;
+    const { data: uploadData, error: uploadErr } = await db.storage
+      .from('uploads')
+      .upload(path, file, { upsert: false });
+
+    if (uploadErr) throw uploadErr;
+
+    const { data: urlData } = db.storage.from('uploads').getPublicUrl(uploadData.path);
+    const receiptUrl = urlData?.publicUrl || '';
+
+    // 2. Insert record into commission_receipts table
+    const { error: insertErr } = await db.from('commission_receipts').insert({
+      seller_id:       currentUser.id,
+      receipt_url:     receiptUrl,
+      transaction_ref: validateInput(ref),
+      amount:          5000,
+      status:          'pending'
+    });
+
+    if (insertErr) throw insertErr;
+
+    toast('Receipt Submitted! ✅', 'Admin will verify within 24hrs.', 'success', 6000);
+    closeModal('commission-modal');
+    document.getElementById('suspended-modal').classList.remove('open');
+    document.body.classList.remove('modal-open');
+    
+    // Clear form
+    document.getElementById('commission-file').value = '';
+    document.getElementById('commission-ref').value = '';
+  } catch(e) {
+    toast('Upload Failed', e.message || 'Please try again', 'error');
+  }
 }
 
 // ====================================================
@@ -1838,6 +1887,7 @@ function switchAdminTab(tab) {
   if (tab === 'orders')       loadAdminOrders();
   if (tab === 'disputes')     loadAdminDisputes();
   if (tab === 'withdrawals')  loadAdminWithdrawals();
+  if (tab === 'receipts')     loadAdminReceipts();
   if (tab === 'broadcast')    loadBroadcastHistory();
   if (tab === 'ai')           adminAiHistory = [];
 }
@@ -2253,6 +2303,90 @@ async function loadBroadcastHistory() {
         <div class="text-sm">${escHtml(b.body)}</div>
       </div>`).join('')
     : '<p class="color-text3 text-sm">None sent yet.</p>';
+}
+
+// ====================================================
+//  ADMIN — RECEIPTS MANAGEMENT
+// ====================================================
+async function loadAdminReceipts() {
+  if (!guardAdminPanel()) return;
+  try {
+    const { data: receipts } = await db.from('commission_receipts')
+      .select('*, profiles(name, email)')
+      .order('created_at', { ascending: false });
+
+    const all = receipts || [];
+    const pending  = all.filter(r => r.status === 'pending').length;
+    const approved = all.filter(r => r.status === 'approved').length;
+    const rejected = all.filter(r => r.status === 'rejected').length;
+
+    document.getElementById('rcpt-pending').textContent  = pending;
+    document.getElementById('rcpt-approved').textContent = approved;
+    document.getElementById('rcpt-rejected').textContent = rejected;
+
+    const tbody = document.getElementById('rcpt-table-body');
+    if (!all.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3)">No receipts submitted yet</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = all.map(r => {
+      const sellerName = r.profiles?.name || r.profiles?.email || 'Unknown';
+      const statusBadge = r.status === 'approved' ? 'badge-green'
+        : r.status === 'rejected' ? 'badge-red' : 'badge-gold';
+      const actions = r.status === 'pending'
+        ? `<button class="btn btn-primary btn-sm" onclick="approveReceipt('${r.id}','${r.seller_id}')" style="margin-right:.3rem"><i class="fa-solid fa-check"></i></button><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="rejectReceipt('${r.id}')"><i class="fa-solid fa-times"></i></button>`
+        : `<span class="text-xs color-text3">${r.status}</span>`;
+      return `<tr>
+        <td style="font-weight:600;font-size:.82rem">${escHtml(sellerName)}</td>
+        <td class="text-xs">${fmtDate(r.created_at)}</td>
+        <td class="text-xs" style="font-family:monospace">${escHtml(r.transaction_ref)}</td>
+        <td><a href="${r.receipt_url}" target="_blank" class="btn btn-ghost btn-sm" style="color:var(--blue)"><i class="fa-solid fa-image"></i> View</a></td>
+        <td><span class="badge ${statusBadge}">${r.status}</span></td>
+        <td>${actions}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    console.error('loadAdminReceipts error:', e);
+  }
+}
+
+async function approveReceipt(receiptId, sellerId) {
+  if (!confirm('Approve this receipt and activate the seller?')) return;
+  try {
+    // 1. Update receipt status
+    await db.from('commission_receipts').update({
+      status: 'approved',
+      reviewed_at: new Date().toISOString()
+    }).eq('id', receiptId);
+
+    // 2. Activate the seller's commission_paid flag
+    await db.from('profiles').update({
+      commission_paid: true,
+      updated_at: new Date().toISOString()
+    }).eq('id', sellerId);
+
+    toast('Receipt Approved ✅', 'Seller store is now active.', 'success');
+    loadAdminReceipts();
+  } catch(e) {
+    toast('Error', e.message, 'error');
+  }
+}
+
+async function rejectReceipt(receiptId) {
+  const note = prompt('Reason for rejection (optional):') || '';
+  try {
+    await db.from('commission_receipts').update({
+      status: 'rejected',
+      admin_note: note,
+      reviewed_at: new Date().toISOString()
+    }).eq('id', receiptId);
+
+    toast('Receipt Rejected', 'Seller has been notified.', 'warn');
+    loadAdminReceipts();
+  } catch(e) {
+    toast('Error', e.message, 'error');
+  }
 }
 
 async function checkBroadcastForUser() {
