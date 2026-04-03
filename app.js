@@ -1918,13 +1918,22 @@ async function askAdminBot(preset) {
     });
 
     const data  = await res.json();
-    const reply = data.reply || 'Sorry, I could not process that.';
+    let reply = data.reply || 'Sorry, I could not process that.';
+    
+    // Check for mass suspension trigger
+    if (reply.includes('[ACTION: SUSPEND_UNPAID_SELLERS]')) {
+      reply = reply.replace('[ACTION: SUSPEND_UNPAID_SELLERS]', '').trim();
+      executeMassSuspension();
+    }
+
     adminAiHistory.push({ role: 'assistant', content: reply });
 
     document.getElementById('admin-typing')?.remove();
     const replyDiv = document.createElement('div');
     replyDiv.style.cssText = 'display:flex;gap:.42rem';
-    replyDiv.innerHTML = `<div style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-robot"></i></div><div style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;max-width:82%;line-height:1.5">${reply}</div>`;
+    // Format bold text as simple bold html
+    const formattedReply = escHtml(reply).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    replyDiv.innerHTML = `<div style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-robot"></i></div><div style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;max-width:82%;line-height:1.5">${formattedReply}</div>`;
     container.appendChild(replyDiv);
 
   } catch(e) {
@@ -1932,6 +1941,40 @@ async function askAdminBot(preset) {
     toast('AI unavailable', 'Try again shortly', 'warn');
   }
   container.scrollTop = container.scrollHeight;
+}
+
+async function executeMassSuspension() {
+  toast('Executing Enforcement', 'AI is scanning and suspending unpaid stores...', 'info', 3000);
+  
+  // 1. Fetch all sellers
+  const { data: sellers } = await db.from('profiles').select('id, commission_paid, trial_end').eq('role', 'seller');
+  if (!sellers) {
+    toast('Suspension Failed', 'Could not retrieve sellers list', 'error');
+    return;
+  }
+  
+  const now = new Date();
+  
+  // 2. Identify unpaid + expired sellers
+  const targetIds = sellers
+    .filter(s => !s.commission_paid && (!s.trial_end || new Date(s.trial_end) <= now))
+    .map(s => s.id);
+    
+  if (targetIds.length === 0) {
+    toast('No Actions Needed', 'All sellers are paid or still within trial', 'success', 5000);
+    return;
+  }
+  
+  // 3. Mass update
+  const { error } = await db.from('profiles').update({ updated_at: new Date().toISOString() }).in('id', targetIds);
+  
+  if (error) {
+    toast('Execution Error', error.message, 'error');
+    return;
+  }
+  
+  toast('Enforcement Complete', `Successfully locked out ${targetIds.length} expired accounts.`, 'success', 6000);
+  loadAdminOverview(); 
 }
    
 async function loadAdminSellers() {
