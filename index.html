@@ -1154,6 +1154,70 @@
   </div>
 </div>
 
+<!-- KYC VERIFICATION MODAL -->
+<div id="kyc-modal" class="modal-overlay">
+  <div class="modal-box" style="max-width:560px;padding:2rem">
+    <button class="modal-close" onclick="closeModal('kyc-modal')"><i class="fa-solid fa-times"></i></button>
+    <div style="text-align:center;margin-bottom:1.25rem">
+      <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#dcfce7,#f0fdf4);display:inline-flex;align-items:center;justify-content:center;margin-bottom:.5rem"><i class="fa-solid fa-shield-check" style="font-size:1.5rem;color:var(--green)"></i></div>
+      <h2 style="font-size:1.1rem;margin-bottom:.2rem">Identity Verification (KYC)</h2>
+      <p class="text-xs color-text3">For your security, sellers and service providers must verify their identity</p>
+    </div>
+
+    <!-- KYC Status Banner -->
+    <div id="kyc-status-banner" class="hidden" style="border-radius:10px;padding:.75rem 1rem;margin-bottom:1rem;font-size:.82rem;display:flex;align-items:center;gap:.5rem"></div>
+
+    <form id="kyc-form" onsubmit="submitKyc(event)">
+      <div class="form-group">
+        <label class="form-label">Document Type <span class="req">*</span></label>
+        <select id="kyc-doc-type" class="form-input" required>
+          <option value="">Select document type</option>
+          <option value="nin">National Identification Number (NIN)</option>
+          <option value="passport">International Passport</option>
+          <option value="drivers_license">Driver's License</option>
+          <option value="voters_card">Voter's Card</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Document Number <span class="req">*</span></label>
+        <input type="text" id="kyc-doc-number" class="form-input" placeholder="Enter your ID number" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Full Legal Name (as shown on document) <span class="req">*</span></label>
+        <input type="text" id="kyc-full-name" class="form-input" placeholder="Full name on your ID" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Front of Document <span class="req">*</span></label>
+        <div class="upload-zone" style="border:2px dashed var(--border);border-radius:10px;padding:1rem;text-align:center;cursor:pointer" onclick="document.getElementById('kyc-front').click()">
+          <i class="fa-solid fa-camera" style="font-size:1.3rem;color:var(--text3);display:block;margin-bottom:.3rem"></i>
+          <span class="text-xs color-text3" id="kyc-front-label">Tap to upload front of ID</span>
+          <input type="file" id="kyc-front" accept="image/*" style="display:none" onchange="this.parentElement.querySelector('span').textContent=this.files[0]?.name||'Tap to upload'" required>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Back of Document <span class="text-xs color-text3">(optional)</span></label>
+        <div class="upload-zone" style="border:2px dashed var(--border);border-radius:10px;padding:1rem;text-align:center;cursor:pointer" onclick="document.getElementById('kyc-back').click()">
+          <i class="fa-solid fa-camera" style="font-size:1.3rem;color:var(--text3);display:block;margin-bottom:.3rem"></i>
+          <span class="text-xs color-text3" id="kyc-back-label">Tap to upload back of ID</span>
+          <input type="file" id="kyc-back" accept="image/*" style="display:none" onchange="this.parentElement.querySelector('span').textContent=this.files[0]?.name||'Tap to upload'">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Selfie with ID <span class="req">*</span></label>
+        <div class="upload-zone" style="border:2px dashed var(--border);border-radius:10px;padding:1rem;text-align:center;cursor:pointer" onclick="document.getElementById('kyc-selfie').click()">
+          <i class="fa-solid fa-user-shield" style="font-size:1.3rem;color:var(--text3);display:block;margin-bottom:.3rem"></i>
+          <span class="text-xs color-text3">Take a selfie holding your ID next to your face</span>
+          <input type="file" id="kyc-selfie" accept="image/*" capture="user" style="display:none" onchange="this.parentElement.querySelector('span').textContent=this.files[0]?.name||'Take selfie'" required>
+        </div>
+      </div>
+      <div style="background:#fffbeb;border:1px solid #f59e0b33;border-radius:8px;padding:.65rem .85rem;margin-bottom:1rem;font-size:.75rem;color:#92400e">
+        <i class="fa-solid fa-info-circle"></i> Your documents are securely stored and only reviewed by admin. This process helps protect buyers and build trust on the platform.
+      </div>
+      <button type="submit" class="btn btn-primary btn-full btn-lg" id="kyc-submit-btn"><i class="fa-solid fa-shield-check"></i> Submit Verification</button>
+    </form>
+  </div>
+</div>
+
 <!-- CART -->
 <div id="cart-modal" class="modal-overlay">
   <div class="modal-box"><button class="modal-close" onclick="closeModal('cart-modal')"><i class="fa-solid fa-times"></i></button>
@@ -1505,6 +1569,7 @@
         <a href="#" class="dash-nav-item" id="ap-nav-disputes" onclick="switchAdminTab('disputes');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-gavel"></i> Disputes</a>
         <a href="#" class="dash-nav-item" id="ap-nav-withdrawals" onclick="switchAdminTab('withdrawals');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-coins"></i> Payouts</a>
         <a href="#" class="dash-nav-item" id="ap-nav-receipts" onclick="switchAdminTab('receipts');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-file-invoice"></i> Receipts</a>
+        <a href="#" class="dash-nav-item" id="ap-nav-kyc" onclick="switchAdminTab('kyc');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-id-card"></i> KYC Verify</a>
         <a href="#" class="dash-nav-item" id="ap-nav-broadcast" onclick="switchAdminTab('broadcast');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-bullhorn"></i> Broadcast</a>
         <a href="#" class="dash-nav-item" id="ap-nav-ai" onclick="switchAdminTab('ai');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-robot"></i> AI Assistant</a>
         <a href="#" class="dash-nav-item" id="ap-nav-branding" onclick="switchAdminTab('branding');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-paint-brush"></i> Branding</a>
