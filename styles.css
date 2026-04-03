@@ -132,7 +132,8 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .landing-tagline h1{font-size:clamp(1.75rem,5vw,3.4rem);color:#fff;line-height:1.1;margin-bottom:.7rem}
 .landing-tagline h1 em{font-style:normal;background:linear-gradient(90deg,var(--gold),var(--green-lt));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .landing-tagline p{color:rgba(255,255,255,.55);font-size:.98rem;max-width:500px;margin:0 auto}
-.portal-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.1rem}
+.portal-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.1rem}
+@media(max-width:860px){.portal-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:560px){.portal-grid{grid-template-columns:1fr;gap:.9rem}}
 .portal-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:1.6rem;cursor:pointer;transition:all .3s ease;position:relative;overflow:hidden;animation:fadeUp .5s ease both}
 .portal-card:hover{border-color:rgba(255,255,255,.25);transform:translateY(-4px);box-shadow:0 24px 60px rgba(0,0,0,.3)}
@@ -660,3 +661,150 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
   font-family: 'Syne', sans-serif;
 }
 #hire-pro-section .prod-card:hover { border-color: var(--purple); }
+
+/* ====================================================
+   SPD SECTIONS (Service Provider dashboard sub-pages)
+   ==================================================== */
+.spd-section { display: block; animation: fadeIn .22s ease; }
+.spd-section.hidden { display: none !important; }
+
+/* ====================================================
+   EMPTY STATE
+   ==================================================== */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--text3);
+  gap: .5rem;
+}
+
+/* ====================================================
+   CARD VARIANTS
+   ==================================================== */
+.card-pad-lg { padding: 1.65rem 1.75rem; }
+@media (max-width: 600px) { .card-pad-lg { padding: 1.1rem; } }
+
+/* ====================================================
+   STAT CARD — top section (icon row)
+   ==================================================== */
+.stat-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: .5rem; }
+.stat-card .stat-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .95rem; flex-shrink: 0;
+}
+
+/* ====================================================
+   ADM-TAB — admin portal content panels
+   ==================================================== */
+.adm-tab { display: block; animation: fadeIn .22s ease; }
+.adm-tab.hidden { display: none !important; }
+
+/* ====================================================
+   FAQ ITEMS (help modal)
+   ==================================================== */
+.faq-item {
+  padding: .55rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.faq-item:last-child { border-bottom: none; padding-bottom: 0; }
+
+/* ====================================================
+   DISPUTE CARDS
+   ==================================================== */
+.dispute-card {
+  padding: 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: #fff;
+}
+.dispute-card.open-dispute { border-left: 3px solid var(--danger); }
+.dispute-card.resolved { border-left: 3px solid var(--green); opacity: .85; }
+
+/* ====================================================
+   BADGE EXTRAS (referenced in JS render functions)
+   ==================================================== */
+.badge-blue   { background: #dbeafe; color: #1d4ed8; }
+.badge-purple { background: #ede9fe; color: #7c3aed; }
+.badge-gray   { background: var(--border2); color: var(--text3); }
+.badge-orange { background: #ffedd5; color: #c2410c; }
+
+/* ====================================================
+   ADMIN PORTAL — sidebar nav item active in dark bg
+   ==================================================== */
+#admin-portal-view .dash-nav-item {
+  color: rgba(255,255,255,.65);
+  background: transparent;
+  padding: .5rem .7rem;
+  border-radius: var(--radius-sm);
+  gap: .6rem;
+  font-size: .85rem;
+  transition: background .15s, color .15s;
+  text-decoration: none;
+  cursor: pointer;
+  border: none;
+  width: 100%;
+  text-align: left;
+}
+#admin-portal-view .dash-nav-item i { width: 16px; text-align: center; }
+#admin-portal-view .dash-nav-item:hover { background: rgba(255,255,255,.07); color: #fff; }
+#admin-portal-view .dash-nav-item.active { background: var(--forest); color: var(--green); font-weight: 600; }
+
+/* ====================================================
+   ADMIN PORTAL — responsive (collapse sidebar on mobile)
+   ==================================================== */
+@media (max-width: 768px) {
+  #admin-portal-view > div { flex-direction: column; height: auto; }
+  #admin-portal-view > div > div:first-child {
+    width: 100% !important;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: .4rem;
+    padding: .75rem 1rem;
+    height: auto;
+  }
+  #admin-portal-view > div > div:first-child nav { display: none; }
+  #admin-portal-view > div > div:first-child h2 { margin-bottom: 0; }
+  #ap-mobile-tabs { display: flex !important; }
+}
+
+/* ====================================================
+   COLOR UTILITIES (additional)
+   ==================================================== */
+.color-green { color: var(--green); }
+.color-gold  { color: var(--gold); }
+.color-blue  { color: var(--blue); }
+
+/* ====================================================
+   CHART CARD
+   ==================================================== */
+.chart-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.35rem;
+  margin-top: .25rem;
+}
+
+/* ====================================================
+   SELLER AVATAR (admin list)
+   ==================================================== */
+.seller-avatar {
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  background: var(--forest);
+  color: var(--green);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 1rem;
+}
+
+/* ====================================================
+   BORDER BOTTOM UTILITY
+   ==================================================== */
+.border-b { border-bottom: 1px solid var(--border); }
+.border-border { border-color: var(--border); }
+
