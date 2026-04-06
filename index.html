@@ -374,6 +374,7 @@
           <div class="dash-nav-label">Grow</div>
           <a class="dash-nav-item" onclick="showDash('dropshipping');closeMobSidebar()"><i class="fa-solid fa-globe"></i> Dropshipping <span class="nav-new">HOT</span></a>
           <a class="dash-nav-item" onclick="showDash('affiliate');closeMobSidebar()"><i class="fa-solid fa-link"></i> Affiliate</a>
+          <a class="dash-nav-item" onclick="showDash('advertise');closeMobSidebar()"><i class="fa-solid fa-bullhorn"></i> Advertise <span class="nav-new" style="background:#ea580c">AD</span></a>
           <a class="dash-nav-item" onclick="showDash('reviews');closeMobSidebar()"><i class="fa-solid fa-star"></i> Reviews</a>
         </div>
         <div class="dash-nav-section">
@@ -566,6 +567,76 @@
         </div>
         <div class="card overflow-hidden"><div class="card-pad" style="border-bottom:1px solid var(--border)"><h3>Recent Earnings</h3></div>
           <div class="overflow-x"><table class="data-table"><thead><tr><th>Date</th><th>Product</th><th>Source</th><th>Amount</th><th>Status</th></tr></thead><tbody id="aff-table-body"><tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">No earnings yet</td></tr></tbody></table></div>
+        </div>
+      </div>
+
+      <!-- ADVERTISE -->
+      <div id="ds-advertise" class="dash-section">
+        <h1 class="dash-page-title">Marketplace Advertising</h1>
+        <p class="dash-page-sub">Reach thousands of buyers by featuring your business on the dashboard</p>
+        <div class="stats-grid mb-4">
+          <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-bullseye" style="color:var(--green)"></i></div></div><div class="stat-value" id="ad-active-count">0</div><div class="stat-label">Active Ads</div></div>
+          <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dbeafe"><i class="fa-solid fa-eye" style="color:var(--blue)"></i></div></div><div class="stat-value" id="ad-total-views">0</div><div class="stat-label">Total Views</div></div>
+          <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-hand-pointer" style="color:var(--gold)"></i></div></div><div class="stat-value" id="ad-total-clicks">0</div><div class="stat-label">Total Clicks</div></div>
+        </div>
+        
+        <div class="card card-pad-lg mb-4" style="max-width:700px">
+          <h3 class="mb-1"><i class="fa-solid fa-bullhorn color-green"></i> Create New Advertisement</h3>
+          <p class="text-xs color-text3 mb-3">Upload a 30-second video or an image. ₦10,000 for 30 days of premium visibility.</p>
+          <div class="form-group">
+            <label class="form-label">Ad Title <span class="req">*</span></label>
+            <input type="text" id="ad-title" class="form-input" placeholder="Catchy title for your ad">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Ad Description <span class="req">*</span></label>
+            <textarea id="ad-desc" class="form-textarea" rows="2" placeholder="Brief description of your offer..."></textarea>
+          </div>
+          <div class="form-grid form-grid-2">
+            <div class="form-group">
+              <label class="form-label">Call to Action <span class="req">*</span></label>
+              <select id="ad-cta-select" class="form-select">
+                <option value="Learn More">Learn More</option>
+                <option value="Shop Now">Shop Now</option>
+                <option value="Contact Us">Contact Us</option>
+                <option value="Book Service">Book Service</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Destination Link <span class="req">*</span></label>
+              <input type="url" id="ad-link" class="form-input" placeholder="https://buysell.ng/your-store" value="https://buysell.ng/">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Media Upload <span class="req">*</span> <span class="text-xs color-text3">(Video max 30s)</span></label>
+            <div class="upload-zone" id="ad-media-zone" onclick="document.getElementById('ad-media-file').click()">
+              <i class="fa-solid fa-cloud-upload-alt"></i>
+              <div class="upload-label">Click to upload Media (Image or Video)</div>
+              <div class="upload-sub">MP4, JPG, PNG (Max 50MB)</div>
+            </div>
+            <input type="file" id="ad-media-file" accept="image/*,video/mp4" class="hidden" onchange="previewAdMedia(this)">
+            <div id="ad-media-preview-container" class="hidden mt-2 text-center" style="position:relative">
+               <!-- Preview element dynamically populated -->
+               <div id="ad-preview-el"></div>
+               <button class="btn btn-sm btn-ghost text-red" style="position:absolute;top:5px;right:5px;color:red;background:white" onclick="document.getElementById('ad-media-file').value='';document.getElementById('ad-media-preview-container').classList.add('hidden')"><i class="fa-solid fa-times"></i></button>
+            </div>
+          </div>
+          <div class="flex items-center gap-3 mt-4 pt-3" style="border-top:1px solid var(--border)">
+            <div style="flex:1">
+              <div class="font-600">Total Price: <span class="color-green font-bold text-lg">₦10,000</span></div>
+              <div class="text-xs color-text3">For 30 Days Dashboard Placement</div>
+            </div>
+            <button class="btn btn-primary" onclick="initiateAdPayment()" id="ad-pay-btn"><i class="fa-solid fa-credit-card"></i> Pay & Publish Ad</button>
+          </div>
+        </div>
+
+        <div class="card overflow-hidden">
+          <div class="card-pad" style="border-bottom:1px solid var(--border)"><h3>Your Active Advertisements</h3></div>
+          <div class="overflow-x">
+            <table class="data-table">
+              <thead><tr><th>Media</th><th>Title</th><th>Views</th><th>Clicks</th><th>Status</th><th>Expires</th></tr></thead>
+              <tbody id="ad-table-body"><tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3)">No active ads yet</td></tr></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -884,6 +955,30 @@
     <button class="mob-bot-item" onclick="showDash('orders');setMobActive(this)" data-section="orders"><i class="fa-solid fa-receipt"></i>Orders</button>
     <button class="mob-bot-item" onclick="openMobSidebar()"><i class="fa-solid fa-bars"></i>More</button>
   </nav>
+</div>
+
+<!-- ==================== AD POPUP ==================== -->
+<div id="ad-popup-overlay" class="ad-popup-overlay hidden">
+  <div class="ad-popup-container">
+    <div class="ad-popup-header">
+      <span class="ad-popup-badge"><i class="fa-solid fa-bullhorn"></i> Sponsored</span>
+      <div class="ad-popup-controls">
+        <span class="ad-popup-counter" id="ad-counter">1/3</span>
+        <button class="ad-popup-close" onclick="closeAdPopup()" title="Close"><i class="fa-solid fa-times"></i></button>
+      </div>
+    </div>
+    <div class="ad-popup-content" id="ad-popup-content">
+      <!-- Dynamic ad content injected by JS -->
+    </div>
+    <div class="ad-popup-footer">
+      <div class="ad-popup-dots" id="ad-popup-dots"></div>
+      <div class="ad-popup-actions">
+        <button class="btn btn-ghost btn-sm" onclick="skipAd()" id="ad-skip-btn">Skip <span id="ad-skip-timer">5</span>s</button>
+        <a href="#" class="btn btn-primary btn-sm" id="ad-cta-btn" target="_blank"><i class="fa-solid fa-external-link-alt"></i> <span id="ad-cta-text">Learn More</span></a>
+      </div>
+    </div>
+    <div class="ad-progress-bar"><div class="ad-progress" id="ad-progress"></div></div>
+  </div>
 </div>
 
 <!-- ==================== CHATBOT ==================== -->
