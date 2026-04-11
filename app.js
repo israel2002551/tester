@@ -404,6 +404,12 @@ function updateNavForUser() {
   // Referral link
   const rc = currentUser.profile?.referral_code || 'ref_' + currentUser.id?.substr(0,8);
   document.getElementById('referral-link').value = `https://buysell.ng/ref/${rc}`;
+
+  // Update Toggle View text for Service Providers
+  if (currentRole === 'service_provider') {
+    document.getElementById('toggle-view-text').textContent = 'Service Dashboard';
+    document.getElementById('toggle-view-icon').className = 'fa-solid fa-wrench';
+  }
 }
 
 async function sendPasswordReset() {
@@ -542,8 +548,8 @@ function showBuyerView() {
   if(document.getElementById('admin-portal-view')) document.getElementById('admin-portal-view').style.display = 'none';
   if(document.getElementById('service-provider-view')) document.getElementById('service-provider-view').style.display = 'none';
 
-  document.getElementById('toggle-view-icon').className = 'fa-solid fa-store';
-  document.getElementById('toggle-view-text').textContent = 'Seller Dashboard';
+  document.getElementById('toggle-view-icon').className = currentUser?.profile?.role === 'service_provider' ? 'fa-solid fa-wrench' : 'fa-solid fa-store';
+  document.getElementById('toggle-view-text').textContent = currentUser?.profile?.role === 'service_provider' ? 'Service Dashboard' : 'Seller Dashboard';
   document.getElementById('mob-ham-btn').style.display = 'none';
   document.body.classList.remove('in-seller');
   currentRole = 'buyer';
@@ -580,11 +586,16 @@ function showSellerDashboard() {
 }
 
 function toggleView() {
-  if (currentRole === 'seller') showBuyerView();
-  else { 
+  if (currentRole === 'seller' || currentRole === 'service_provider') {
+    showBuyerView();
+  } else { 
     if (!currentUser) { showModal('auth-modal'); return; }
     if (!checkAndPromptKyc()) return; // Block unverified access
-    showSellerDashboard(); 
+    if (currentUser.profile?.role === 'service_provider') {
+      showServiceDashboard();
+    } else {
+      showSellerDashboard(); 
+    }
   }
 }
 
