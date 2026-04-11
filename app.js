@@ -1264,7 +1264,8 @@ async function loadBuyerOrders() {
       <div class="flex gap-1 flex-wrap mb-2">${(o.items||[]).map(i=>`<span class="text-xs badge badge-gray">${escHtml(i.name)} ×${i.qty}</span>`).join('')}</div>
       <div class="flex gap-2 flex-wrap">
         ${o.status==='delivered'?`<button class="btn btn-outline btn-sm" onclick="openDisputeModal('${o.id}')"><i class="fa-solid fa-exclamation-triangle"></i> Dispute</button>`:''}
-        <a href="https://wa.me/2349061484256?text=Order ${o.id}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Track</a>
+        <button class="btn btn-outline btn-sm" onclick="showOrderTracking('${o.id}')"><i class="fa-solid fa-truck"></i> Track</button>
+        <button class="btn btn-outline btn-sm" onclick="openMessageModal('${o.seller_id}', 'Seller')" style="color:var(--green);border-color:var(--green)"><i class="fa-solid fa-comment-dots"></i> Message Seller</button>
       </div>
     </div>`).join('');
 }
@@ -1573,7 +1574,8 @@ async function loadSellerOrders() {
         ${o.status==='pending'?`<button onclick="updateOrderStatus('${o.id}','confirmed')" class="btn btn-primary btn-sm">Confirm Order</button>`:''}
         ${o.status==='confirmed'?`<button onclick="updateOrderStatus('${o.id}','shipped')" class="btn btn-sm" style="background:#ede9fe;color:#6d28d9">Mark Shipped</button>`:''}
         ${o.status==='shipped'?`<button onclick="updateOrderStatus('${o.id}','delivered')" class="btn btn-sm" style="background:#dcfce7;color:#15803d">Mark Delivered</button>`:''}
-        <a href="https://wa.me/${(o.delivery_phone||'').replace(/\D/g,'')}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Contact</a>
+        <button class="btn btn-outline btn-sm" onclick="showOrderTracking('${o.id}')"><i class="fa-solid fa-truck"></i> Track</button>
+        ${o.buyer_id ? `<button class="btn btn-outline btn-sm" onclick="openMessageModal('${o.buyer_id}', '${escAttr(o.delivery_name||'Buyer')}')" style="color:var(--green);border-color:var(--green)"><i class="fa-solid fa-comment-dots"></i> Message Buyer</button>` : `<a href="https://wa.me/${(o.delivery_phone||'').replace(/\D/g,'')}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Contact</a>`}
       </div>
     </div>`).join('');
 }
@@ -3456,9 +3458,14 @@ function renderServiceCards(gigs) {
           <button class="btn btn-outline btn-sm" style="flex:1" onclick="viewProviderProfile('${g.provider_id}')">
             <i class="fa-solid fa-user"></i> View Profile
           </button>
-          <a href="${waLink}" target="_blank" class="btn btn-primary btn-sm" style="flex:1;text-decoration:none">
-            <i class="fa-brands fa-whatsapp"></i> Contact
-          </a>
+          <div style="display:flex;gap:.5rem;flex:1">
+            <button onclick="openMessageModal('${g.provider_id}', '${escAttr(provName)}')" class="btn btn-primary btn-sm flex-1">
+              <i class="fa-solid fa-comment-dots"></i> Message
+            </button>
+            <a href="${waLink}" target="_blank" class="btn btn-outline btn-sm flex-1" style="text-decoration:none;border-color:var(--green);color:var(--green)">
+              <i class="fa-brands fa-whatsapp"></i>
+            </a>
+          </div>
         </div>
       </div>
     </div>`;
