@@ -7,7 +7,7 @@ const EDGE_URL = SB_URL + '/functions/v1';
 // ── GROQ DIRECT CALL (replaces CLAUDE_EDGE_URL / edge function) ──────────────
 const GROQ_API_KEY = "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";
 const GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL   = "llama-3.3-70b-versatile";
+const GROQ_MODEL   = "llama-3.1-8b-instant";
 
 async function callGroq(messages, systemPrompt = null) {
   const groqMessages = [];
