@@ -1155,7 +1155,7 @@
         <div id="role-sp-note" class="hidden" style="margin-top:.5rem;font-size:.76rem;color:var(--text3);background:#f3e8ff;border-radius:6px;padding:.5rem .75rem"><i class="fa-solid fa-tools" style="color:var(--purple)"></i> You'll get a dedicated Service Dashboard to post gigs, set pricing, and connect with local clients via WhatsApp.</div>
       </div>
       <div class="form-group"><label class="form-label">Email <span class="req">*</span></label><input type="email" id="auth-email" class="form-input" required placeholder="you@email.com" autocomplete="email"></div>
-      <div class="form-group"><label class="form-label">Password <span class="req">*</span></label><input type="password" id="auth-password" class="form-input" required placeholder="Min 6 characters" autocomplete="current-password"></div>
+      <div class="form-group" style="position:relative"><label class="form-label">Password <span class="req">*</span></label><div style="position:relative"><input type="password" id="auth-password" class="form-input" required placeholder="Min 6 characters autocomplete="current-password" style="padding-right:2.5rem"><button type="button" onclick="togglePasswordVisibility('auth-password',this)" id="auth-pw-toggle" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text3);cursor:pointer;font-size:.85rem"><i class="fa-solid fa-eye"></i></button></div></div>
       <div id="auth-wa-group" class="form-group hidden"><label class="form-label">WhatsApp Number <span class="req">*</span></label><input type="tel" id="auth-wa" class="form-input" placeholder="0801 234 5678" inputmode="tel"></div>
       <div id="auth-terms-group" class="form-group hidden" style="margin-bottom:.75rem">
         <label style="display:flex;align-items:flex-start;gap:.5rem;cursor:pointer;font-size:.78rem;color:var(--text2);line-height:1.5">
@@ -1203,7 +1203,10 @@
             <div class="font-600 text-sm" id="modal-seller-name"></div>
             <div class="text-xs color-text3" id="modal-seller-email"></div>
           </div>
-          <button class="btn btn-outline btn-sm" onclick="viewStorefront(currentProd?.seller_id)"><i class="fa-solid fa-store"></i> View Store</button>
+          <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" onclick="viewStorefront(currentProd?.seller_id)"><i class="fa-solid fa-store"></i> View Store</button>
+            <button class="btn btn-outline btn-sm" onclick="closeModal('product-modal');openMessageModal(currentProd?.seller_id, currentProd?.profiles?.name, currentProd?.id)" style="color:var(--green);border-color:var(--green)"><i class="fa-solid fa-comment-dots"></i> Message Seller</button>
+          </div>
         </div>
         <div style="display:flex;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap">
           <div class="product-actions" style="flex:1">
@@ -1751,6 +1754,9 @@
         <a href="#" class="dash-nav-item" id="ap-nav-receipts" onclick="switchAdminTab('receipts');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-file-invoice"></i> Receipts</a>
         <a href="#" class="dash-nav-item" id="ap-nav-kyc" onclick="switchAdminTab('kyc');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-id-card"></i> KYC Verify</a>
         <a href="#" class="dash-nav-item" id="ap-nav-broadcast" onclick="switchAdminTab('broadcast');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-bullhorn"></i> Broadcast</a>
+        <a href="#" class="dash-nav-item" id="ap-nav-predictive" onclick="switchAdminTab('predictive');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-crystal-ball"></i> Predictive</a>
+        <a href="#" class="dash-nav-item" id="ap-nav-competitors" onclick="switchAdminTab('competitors');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-users"></i> Competitors</a>
+        <a href="#" class="dash-nav-item" id="ap-nav-notifications" onclick="switchAdminTab('notifications');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-bell"></i> Alerts</a>
         <a href="#" class="dash-nav-item" id="ap-nav-ai" onclick="switchAdminTab('ai');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-robot"></i> AI Assistant</a>
         <a href="#" class="dash-nav-item" id="ap-nav-branding" onclick="switchAdminTab('branding');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-paint-brush"></i> Branding</a>
       </nav>
@@ -1972,6 +1978,62 @@
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+
+        <!-- ═══ PREDICTIVE TAB ═══ -->
+        <div id="adm-tab-predictive" class="adm-tab hidden">
+          <div class="card card-pad mb-3">
+            <h3 class="mb-1"><i class="fa-solid fa-crystal-ball color-purple"></i> Predictive Analytics</h3>
+            <p class="text-xs color-text3 mb-3">AI-powered insights and forecasts for your business.</p>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem">
+              <div class="card card-pad" style="text-align:center">
+                <div class="text-xs color-text3 mb-1">Revenue Forecast</div>
+                <div style="font-size:1.3rem;font-weight:800;color:var(--purple)">Next 30 Days</div>
+              </div>
+              <div class="card card-pad" style="text-align:center">
+                <div class="text-xs color-text3 mb-1">Orders Forecast</div>
+                <div style="font-size:1.3rem;font-weight:800;color:var(--blue)">Projected</div>
+              </div>
+              <div class="card card-pad" style="text-align:center">
+                <div class="text-xs color-text3 mb-1">Risk Level</div>
+                <div style="font-size:1.3rem;font-weight:800" id="p-risk-level">Low</div>
+              </div>
+            </div>
+            <div id="predictive-analytics"></div>
+            <div class="mt-3">
+              <h4 class="mb-2">📊 Trend Analysis</h4>
+              <div id="trend-analysis"></div>
+            </div>
+            <div class="mt-3">
+              <h4 class="mb-2">👥 Customer Segments</h4>
+              <div id="customer-segments"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ COMPETITORS TAB ═══ -->
+        <div id="adm-tab-competitors" class="adm-tab hidden">
+          <div class="card card-pad mb-3">
+            <h3 class="mb-1"><i class="fa-solid fa-users color-purple"></i> Competitor Analysis</h3>
+            <p class="text-xs color-text3 mb-3">See how you rank against other sellers.</p>
+            <div id="competitor-analysis"></div>
+          </div>
+          <div class="card card-pad">
+            <h3 class="mb-1"><i class="fa-solid fa-tag color-green"></i> Price Intelligence</h3>
+            <p class="text-xs color-text3 mb-3">Compare your prices with competitors.</p>
+            <div id="price-intelligence"></div>
+          </div>
+        </div>
+
+        <!-- ═══ NOTIFICATIONS TAB ═══ -->
+        <div id="adm-tab-notifications" class="adm-tab hidden">
+          <div id="notification-settings"></div>
+          <div class="card card-pad mt-3">
+            <h3 class="mb-2"><i class="fa-solid fa-bell color-gold"></i> Browser Notifications</h3>
+            <p class="text-xs color-text3 mb-3">Enable push notifications in your browser.</p>
+            <button class="btn btn-primary" onclick="requestNotificationPermission()"><i class="fa-solid fa-bell"></i> Enable Notifications</button>
+            <button class="btn btn-outline ml-2" onclick="testNotification()">Test</button>
           </div>
         </div>
 
@@ -2291,5 +2353,12 @@
 
 <script data-cfasync="false" src="https://js.paystack.co/v1/inline.js"></script>
 <script src="app.js"></script>
+
+<!-- VOICE INPUT BUTTON -->
+<div style="position:fixed;bottom:80px;right:12px;z-index:997">
+  <button onclick="toggleVoiceInput()" id="voice-btn" style="width:44px;height:44px;border-radius:50%;background:var(--forest);color:#fff;border:none;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;font-size:1rem">
+    <i class="fa-solid fa-microphone"></i>
+  </button>
+</div>
 </body>
 </html>
