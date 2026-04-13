@@ -121,8 +121,8 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .landing-bg::after{content:'';position:absolute;width:400px;height:400px;background:radial-gradient(circle,rgba(244,180,0,.12) 0%,transparent 70%);bottom:-50px;left:-50px;border-radius:50%}
 .landing-header{position:relative;z-index:2;padding:1.25rem 1.5rem;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.06)}
 .brand-logo{display:flex;align-items:center;gap:.75rem;text-decoration:none}
-.brand-icon{width:42px;height:42px;background:linear-gradient(135deg,var(--green),var(--green-lt));border-radius:12px;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:1.2rem;color:#fff;box-shadow:0 4px 16px rgba(25,168,71,.4);flex-shrink:0}
-.brand-text{font-family:'Syne',sans-serif;font-weight:800;font-size:1.45rem;color:#fff;letter-spacing:-.02em}
+.brand-icon{width:56px;height:56px;background:linear-gradient(135deg,var(--green),var(--green-lt));border-radius:14px;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:1.6rem;color:#fff;box-shadow:0 4px 16px rgba(25,168,71,.4);flex-shrink:0}
+.brand-text{font-family:'Syne',sans-serif;font-weight:800;font-size:1.7rem;color:#fff;letter-spacing:-.02em}
 .brand-text span{color:var(--gold)}
 .brand-tld{font-size:.67rem;color:rgba(255,255,255,.35);margin-top:.2rem}
 .landing-main{flex:1;display:flex;align-items:center;justify-content:center;position:relative;z-index:2;padding:1.5rem;overflow-y:auto}
