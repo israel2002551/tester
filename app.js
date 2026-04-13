@@ -1113,6 +1113,10 @@ function selectPM(method) {
 }
 
 function payWithPaystack() {
+  if (typeof PaystackPop === 'undefined') {
+    toast('Payment Error', 'Paystack not loaded. Please refresh and try again.', 'error');
+    return;
+  }
   const handler = PaystackPop.setup({
     key: PAYSTACK_PUBLIC_KEY,
     email: currentUser.email,
@@ -6389,7 +6393,7 @@ function loadAllAnalytics() {
   loadCustomerSegmentation();
 }
 
-function exportAdminReport(type) {
+async function exportAdminReport(type) {
   toast('Generating Report...', '', 'info', 2000);
   let rows = [];
   let filename = '';
