@@ -5,7 +5,7 @@ const SB_URL  = 'https://obzhlmzswthnorkiqemh.supabase.co';
 const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9iemhsbXpzd3Robm9ya2lxZW1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxMDE2NjgsImV4cCI6MjA4ODY3NzY2OH0.5I4Ln0913h0AH5z4e64QBVx88igcIwEaM0Lz11FqDvU';
 const EDGE_URL = SB_URL + '/functions/v1';
 // ── GROQ DIRECT CALL (replaces CLAUDE_EDGE_URL / edge function) ──────────────
-const GROQ_API_KEY = "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";
+const GROQ_API_KEY = "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";
 const GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL   = "llama-3.3-70b-versatile";
 
