@@ -132,8 +132,7 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .landing-tagline h1{font-size:clamp(1.75rem,5vw,3.4rem);color:#fff;line-height:1.1;margin-bottom:.7rem}
 .landing-tagline h1 em{font-style:normal;background:linear-gradient(90deg,var(--gold),var(--green-lt));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .landing-tagline p{color:rgba(255,255,255,.55);font-size:.98rem;max-width:500px;margin:0 auto}
-.portal-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.1rem}
-@media(max-width:860px){.portal-grid{grid-template-columns:1fr 1fr}}
+.portal-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.1rem;max-width:720px;margin:0 auto}
 @media(max-width:560px){.portal-grid{grid-template-columns:1fr;gap:.9rem}}
 .portal-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:1.6rem;cursor:pointer;transition:all .3s ease;position:relative;overflow:hidden;animation:fadeUp .5s ease both}
 .portal-card:hover{border-color:rgba(255,255,255,.25);transform:translateY(-4px);box-shadow:0 24px 60px rgba(0,0,0,.3)}
@@ -269,6 +268,8 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .prod-quick-add{position:absolute;bottom:.45rem;right:.45rem;background:var(--green);color:#fff;border:none;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.78rem;opacity:0;transform:scale(.8);transition:all .2s ease;box-shadow:0 4px 12px rgba(25,168,71,.4)}
 .prod-card:hover .prod-quick-add{opacity:1;transform:scale(1)}
 @media(hover:none){.prod-quick-add{opacity:1;transform:scale(1)}}
+.prod-wish-btn{position:absolute;top:.45rem;right:.45rem;background:rgba(255,255,255,.85);backdrop-filter:blur(6px);color:var(--text3);border:none;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.8rem;transition:all .2s ease;z-index:2;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.prod-wish-btn:hover{background:#fff;transform:scale(1.1);box-shadow:0 4px 16px rgba(0,0,0,.15)}
 .prod-sold-overlay{position:absolute;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
 .prod-sold-label{background:var(--danger);color:#fff;padding:.38rem 1.05rem;border-radius:99px;font-weight:700;font-size:.75rem;letter-spacing:.06em}
 .prod-body{padding:.65rem}
@@ -665,8 +666,8 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 /* ====================================================
    SPD SECTIONS (Service Provider dashboard sub-pages)
    ==================================================== */
-.spd-section { display: block; animation: fadeIn .22s ease; }
-.spd-section.hidden { display: none !important; }
+/* .spd-section { display: block; animation: fadeIn .22s ease; }
+.spd-section.hidden { display: none !important; } */
 
 /* ====================================================
    EMPTY STATE
@@ -882,3 +883,103 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .ad-progress-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: rgba(0,0,0,0.1); z-index: 10; }
 .ad-progress { height: 100%; background: var(--green); width: 0%; transition: width 0.1s linear; }
 
+/* ====================================================
+   REVIEW IMAGE UPLOAD & GALLERY
+   ==================================================== */
+.review-upload-zone {
+  border: 2px dashed var(--border2);
+  border-radius: 12px;
+  padding: 1.2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all .2s ease;
+  background: var(--cream);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .15rem;
+}
+.review-upload-zone:hover {
+  border-color: var(--green-lt);
+  background: rgba(25,168,71,.04);
+}
+.review-img-previews {
+  display: flex;
+  gap: .5rem;
+  margin-top: .6rem;
+  flex-wrap: wrap;
+}
+.review-img-preview {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid var(--border);
+  animation: fadeUp .3s ease both;
+}
+.review-img-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.review-img-preview .remove-preview {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0,0,0,.65);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .55rem;
+  transition: background .2s;
+}
+.review-img-preview .remove-preview:hover {
+  background: var(--red);
+}
+
+/* Review images shown in review cards */
+.review-images-gallery {
+  display: flex;
+  gap: .4rem;
+  margin-top: .5rem;
+  flex-wrap: wrap;
+}
+.review-images-gallery img {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.review-images-gallery img:hover {
+  transform: scale(1.08);
+  box-shadow: 0 4px 16px rgba(0,0,0,.15);
+}
+
+/* Lightbox for review images */
+.review-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0,0,0,.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn .2s ease;
+  cursor: zoom-out;
+}
+.review-lightbox img {
+  max-width: 92vw;
+  max-height: 88vh;
+  border-radius: 12px;
+  box-shadow: 0 12px 60px rgba(0,0,0,.5);
+}
