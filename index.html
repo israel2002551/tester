@@ -46,7 +46,7 @@
       <div class="brand-icon">B</div>
       <div><div class="brand-text">BUY<span>SELL</span></div><div class="brand-tld">.nigeria</div></div>
     </a>
-    <button class="btn btn-ghost btn-sm" onclick="showModal('auth-modal');toggleAuth('login')"><i class="fa-solid fa-sign-in-alt"></i> Sign In</button>
+    <button class="btn btn-ghost btn-sm" id="landing-auth-btn" onclick="handleLandingAuthClick()"><i class="fa-solid fa-sign-in-alt" id="landing-auth-icon"></i> <span id="landing-auth-text">Sign In</span></button>
   </header>
   <main class="landing-main">
     <div class="landing-inner">
@@ -55,7 +55,7 @@
         <h1>Buy, Sell & Earn —<br><em>The Nigerian Way</em></h1>
         <p>Authentic products, secure Paystack payments, dropshipping & affiliate income. All in one platform.</p>
       </div>
-      <div class="portal-grid">
+      <div class="portal-grid" id="portal-grid">
         <div class="portal-card buyer-card delay-1" onclick="enterSite('buyer')">
           <span class="portal-badge">Most Popular</span>
           <div class="portal-icon buyer-icon"><i class="fa-solid fa-shopping-bag" style="color:#fff"></i></div>
@@ -80,6 +80,7 @@
           </div>
           <button class="btn btn-primary btn-full">Open Your Store <i class="fa-solid fa-arrow-right"></i></button>
         </div>
+        <!-- 
         <div class="portal-card seller-card delay-3" onclick="enterSite('service_provider')" style="border-color:var(--purple)">
           <span class="portal-badge" style="background:var(--purple)">NEW</span>
           <div class="portal-icon" style="background:linear-gradient(135deg,var(--purple),#7c3aed)"><i class="fa-solid fa-tools" style="color:#fff"></i></div>
@@ -92,6 +93,7 @@
           </div>
           <button class="btn btn-full" style="background:var(--purple);color:#fff">Start Earning <i class="fa-solid fa-arrow-right"></i></button>
         </div>
+        -->
       </div>
     </div>
   </main>
@@ -230,7 +232,7 @@
     <div class="buyer-tabs">
       <button class="buyer-tab active" id="tab-shop" onclick="switchBuyerTab('shop')">🛍️ Shop</button>
       <button class="buyer-tab" id="tab-orders" onclick="switchBuyerTab('orders')">📦 My Orders</button>
-      <button class="buyer-tab" id="tab-services" onclick="switchBuyerTab('services')">🔧 Hire Services</button>
+      <!-- <button class="buyer-tab" id="tab-services" onclick="switchBuyerTab('services')">🔧 Hire Services</button> -->
     </div>
 
     <!-- Shop tab -->
@@ -282,7 +284,7 @@
       </div>
     </div>
 
-    <!-- Services tab -->
+    <!-- Services tab
     <div id="buyer-services-tab" class="hidden">
       <div class="section-header mb-3">
         <div>
@@ -315,6 +317,7 @@
         <button class="btn btn-primary btn-sm" onclick="filterServices('all')">Show All Services</button>
       </div>
     </div>
+    -->
   </div>
 
   <!-- Trust -->
@@ -1138,12 +1141,14 @@
             <div class="role-card-label">Seller</div>
             <div class="role-card-sub">List & sell</div>
           </label>
+          <!--
           <label id="role-card-service_provider" class="role-card" onclick="selectRole('service_provider')">
             <input type="radio" name="auth-role-radio" value="service_provider" style="display:none">
             <div class="role-card-icon">🔧</div>
             <div class="role-card-label">Service Pro</div>
             <div class="role-card-sub">Offer skills</div>
           </label>
+          -->
           <label id="role-card-both" class="role-card" onclick="selectRole('both')">
             <input type="radio" name="auth-role-radio" value="both" style="display:none">
             <div class="role-card-icon">🔄</div>
@@ -1152,7 +1157,7 @@
           </label>
         </div>
         <div id="role-both-note" class="hidden" style="margin-top:.5rem;font-size:.76rem;color:var(--text3);background:var(--cream);border-radius:6px;padding:.5rem .75rem"><i class="fa-solid fa-info-circle color-green"></i> You'll have access to both Buyer and Seller dashboards. Seller features activate after free trial.</div>
-        <div id="role-sp-note" class="hidden" style="margin-top:.5rem;font-size:.76rem;color:var(--text3);background:#f3e8ff;border-radius:6px;padding:.5rem .75rem"><i class="fa-solid fa-tools" style="color:var(--purple)"></i> You'll get a dedicated Service Dashboard to post gigs, set pricing, and connect with local clients via WhatsApp.</div>
+        <!-- <div id="role-sp-note" class="hidden" style="margin-top:.5rem;font-size:.76rem;color:var(--text3);background:#f3e8ff;border-radius:6px;padding:.5rem .75rem"><i class="fa-solid fa-tools" style="color:var(--purple)"></i> You'll get a dedicated Service Dashboard to post gigs, set pricing, and connect with local clients via WhatsApp.</div> -->
       </div>
       <div class="form-group"><label class="form-label">Email <span class="req">*</span></label><input type="email" id="auth-email" class="form-input" required placeholder="you@email.com" autocomplete="email"></div>
       <div class="form-group" style="position:relative"><label class="form-label">Password <span class="req">*</span></label><div style="position:relative"><input type="password" id="auth-password" class="form-input" required placeholder="Min 6 characters autocomplete="current-password" style="padding-right:2.5rem"><button type="button" onclick="togglePasswordVisibility('auth-password',this)" id="auth-pw-toggle" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text3);cursor:pointer;font-size:.85rem"><i class="fa-solid fa-eye"></i></button></div></div>
@@ -1212,6 +1217,7 @@
           <div class="product-actions" style="flex:1">
             <button class="btn btn-primary flex-1" onclick="addToCart(currentProd)" id="modal-cart-btn"><i class="fa-solid fa-cart-plus"></i> Add to Cart</button>
             <button class="btn btn-gold" onclick="buyNow(currentProd)"><i class="fa-solid fa-bolt"></i> Buy Now</button>
+            <button class="btn btn-outline btn-sm" id="modal-wishlist-btn" onclick="toggleWishlist(currentProd?.id);updateModalWishBtn()" title="Save to Wishlist"><i class="fa-regular fa-heart"></i></button>
             <button class="btn btn-outline btn-sm" onclick="shareCurrentProduct()" title="Share"><i class="fa-solid fa-share-alt"></i></button>
           </div>
         </div>
@@ -1562,9 +1568,21 @@
       <button class="star-btn" data-val="5" onclick="setRating(5)">★</button>
     </div>
     <div class="form-group"><label class="form-label">Your Review</label><textarea id="review-text" class="form-textarea" rows="4" placeholder="What did you think about this product?"></textarea></div>
-    <button class="btn btn-primary btn-full" onclick="submitReview()"><i class="fa-solid fa-star"></i> Submit Review</button>
+    <!-- Review Photo Upload -->
+    <div class="form-group">
+      <label class="form-label"><i class="fa-solid fa-camera" style="color:var(--green)"></i> Add Photos <span class="color-text3" style="font-weight:400">(optional, up to 3)</span></label>
+      <div class="review-upload-zone" id="review-upload-zone" onclick="document.getElementById('review-images-input').click()">
+        <i class="fa-solid fa-cloud-arrow-up" style="font-size:1.5rem;color:var(--green-lt);margin-bottom:.35rem"></i>
+        <div style="font-size:.78rem;color:var(--text2)">Tap to add photos of your purchase</div>
+        <div style="font-size:.65rem;color:var(--text3)">JPG, PNG • Max 5MB each</div>
+      </div>
+      <input type="file" id="review-images-input" accept="image/jpeg,image/png,image/webp" multiple style="display:none" onchange="previewReviewImages(this)">
+      <div class="review-img-previews" id="review-img-previews"></div>
+    </div>
+    <button class="btn btn-primary btn-full" id="review-submit-btn" onclick="submitReview()"><i class="fa-solid fa-star"></i> Submit Review</button>
   </div>
 </div>
+
 
 <!-- FILTERS MODAL -->
 <div id="filters-modal" class="modal-overlay">
@@ -1604,11 +1622,10 @@
   </div>
 </div>
 
-<!-- SERVICE PROVIDER PROFILE MODAL -->
+<!-- SERVICE PROVIDER PROFILE MODAL 
 <div id="sp-profile-modal" class="modal-overlay">
   <div class="modal-box" style="max-width:600px;padding:0;overflow:hidden">
     <button class="modal-close" onclick="closeModal('sp-profile-modal')" style="z-index:2"><i class="fa-solid fa-times"></i></button>
-    <!-- Header Banner -->
     <div id="sp-profile-banner" style="background:linear-gradient(135deg,var(--purple),#7c3aed);padding:1.75rem 1.25rem 1rem;color:#fff;position:relative">
       <div style="display:flex;align-items:center;gap:.85rem">
         <div style="width:64px;height:64px;border-radius:16px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:1.6rem;flex-shrink:0"><i class="fa-solid fa-tools"></i></div>
@@ -1635,35 +1652,29 @@
         </div>
       </div>
     </div>
-    <!-- Body -->
     <div style="padding:1.25rem">
-      <!-- About -->
       <div class="mb-3">
         <h3 style="font-size:.88rem;font-weight:700;margin-bottom:.4rem"><i class="fa-solid fa-user color-green"></i> About</h3>
         <p id="sp-p-bio" style="font-size:.82rem;color:var(--text2);line-height:1.6">No bio available.</p>
       </div>
-      <!-- Services & Pricing -->
       <div class="mb-3">
         <h3 style="font-size:.88rem;font-weight:700;margin-bottom:.6rem"><i class="fa-solid fa-naira-sign color-gold"></i> Services & Pricing</h3>
         <div id="sp-p-services-list" style="display:flex;flex-direction:column;gap:.5rem">
           <p class="color-text3 text-sm">No services listed.</p>
         </div>
       </div>
-      <!-- Portfolio Gallery -->
       <div class="mb-3">
         <h3 style="font-size:.88rem;font-weight:700;margin-bottom:.6rem"><i class="fa-solid fa-images" style="color:var(--purple)"></i> Portfolio</h3>
         <div id="sp-p-gallery" style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;border-radius:8px;overflow:hidden">
           <p class="color-text3 text-sm" style="grid-column:1/-1;text-align:center;padding:1rem">No portfolio images yet.</p>
         </div>
       </div>
-      <!-- Reviews -->
       <div class="mb-3">
         <h3 style="font-size:.88rem;font-weight:700;margin-bottom:.6rem"><i class="fa-solid fa-star color-gold"></i> Client Reviews</h3>
         <div id="sp-p-reviews">
           <p class="color-text3 text-sm">No reviews yet.</p>
         </div>
       </div>
-      <!-- CTA -->
       <a id="sp-p-wa-btn" href="#" target="_blank" class="btn btn-primary btn-full" style="text-decoration:none;font-size:.95rem">
         <i class="fa-brands fa-whatsapp"></i> Contact on WhatsApp
       </a>
@@ -1671,6 +1682,7 @@
     </div>
   </div>
 </div>
+-->
 
 <!-- SUSPENDED -->
 <div id="suspended-modal">
@@ -2066,10 +2078,9 @@
   </div>
 </div>
 
-<!-- ==================== SERVICE PROVIDER DASH ==================== -->
+<!-- ==================== SERVICE PROVIDER DASH ====================
 <div id="service-provider-view" style="display:none;min-height:100vh;background:var(--cream);">
   <div class="dash-layout">
-    <!-- Sidebar -->
     <aside class="dash-sidebar" id="spd-sidebar">
       <div class="dash-sidebar-head">
         <div style="display:flex;justify-content:space-between;align-items:center">
@@ -2104,8 +2115,6 @@
         </div>
       </nav>
     </aside>
-
-    <!-- Main Content Area -->
     <main class="dash-main">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
@@ -2114,8 +2123,6 @@
         </div>
         <button class="btn btn-primary" onclick="showSpdDash('portfolio')"><i class="fa-solid fa-plus"></i> Add Service</button>
       </div>
-
-      <!-- Overview Section -->
       <div id="spd-sec-overview" class="spd-section">
         <div class="stats-grid mb-4">
           <div class="stat-card">
@@ -2148,8 +2155,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Portfolio Section -->
       <div id="spd-sec-portfolio" class="spd-section hidden">
         <div class="card card-pad-lg" style="max-width:600px;margin-bottom:1.25rem">
           <h3 class="mb-1"><i class="fa-solid fa-plus-circle color-green"></i> Post a Service Gig</h3>
@@ -2185,8 +2190,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Bookings Section -->
       <div id="spd-sec-bookings" class="spd-section hidden">
         <div class="card card-pad">
           <div class="flex justify-between items-center mb-3">
@@ -2201,8 +2204,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Earnings Section -->
       <div id="spd-sec-earnings" class="spd-section hidden">
         <div id="spd-earnings-content">
           <div class="empty-state">
@@ -2211,8 +2212,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Leads Section -->
       <div id="spd-sec-leads" class="spd-section hidden">
         <div class="card card-pad">
           <h3 class="mb-3"><i class="fa-solid fa-envelope"></i> Leads & Messages</h3>
@@ -2222,8 +2221,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Reviews Section -->
       <div id="spd-sec-reviews" class="spd-section hidden">
         <div class="card card-pad">
           <h3 class="mb-3"><i class="fa-solid fa-star color-gold"></i> Client Reviews</h3>
@@ -2233,8 +2230,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Settings Section -->
       <div id="spd-sec-settings" class="spd-section hidden">
         <div class="card card-pad-lg" style="max-width:600px">
           <h3 class="mb-3"><i class="fa-solid fa-cog"></i> Profile Settings</h3>
@@ -2244,10 +2239,10 @@
           <button class="btn btn-primary btn-full" onclick="saveServiceProfile()"><i class="fa-solid fa-save"></i> Save Profile</button>
         </div>
       </div>
-
     </main>
   </div>
 </div>
+-->
 
 <!-- PWA Install Bar -->
 <div id="pwa-install-bar" class="hidden" style="position:fixed;bottom:60px;left:50%;transform:translateX(-50%);z-index:999;background:linear-gradient(135deg,var(--forest),#1a3a26);color:#fff;padding:.65rem 1.2rem;border-radius:14px;display:flex;align-items:center;gap:.75rem;box-shadow:0 4px 20px rgba(0,0,0,.3);max-width:380px;width:90%">
@@ -2333,7 +2328,7 @@
   </div>
 </div>
 
-<!-- SERVICE REVIEW MODAL -->
+<!-- SERVICE REVIEW MODAL 
 <div id="service-review-modal" class="modal-overlay">
   <div class="modal-box"><button class="modal-close" onclick="closeModal('service-review-modal')"><i class="fa-solid fa-times"></i></button>
     <h2 class="mb-1">Rate Service Provider</h2>
@@ -2350,6 +2345,7 @@
     <button class="btn btn-primary btn-full" onclick="submitServiceReview()"><i class="fa-solid fa-star"></i> Submit Review</button>
   </div>
 </div>
+-->
 
 <script src="app.js"></script>
 <script data-cfasync="false" src="https://js.paystack.co/v1/inline.js"></script>
