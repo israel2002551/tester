@@ -10,14 +10,20 @@ const GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL   = "llama-3.3-70b-versatile";
 
 async function callGroq(messages, systemPrompt = null) {
-  const groqMessages = [];
-  if (systemPrompt) groqMessages.push({ role: 'system', content: systemPrompt });
-
-  // Sanitize: only user/assistant, no consecutive same-role, must start with user
-  const valid = messages.filter(m =>
-    m && typeof m.role === 'string' && typeof m.content === 'string' &&
-    (m.role === 'user' || m.role === 'assistant')
-  );
+  // Send the request to your secure backend instead of exposing the API key
+  try {
+    const data = await callEdge('chat-bot-handler', {
+      messages: messages,
+      systemPrompt: systemPrompt
+    });
+    
+    if (!data || !data.reply) throw new Error('Invalid AI response');
+    return data.reply;
+  } catch (error) {
+    console.error("AI Error:", error);
+    throw new Error('AI processing failed. Please try again.');
+  }
+}
 
   // Deduplicate consecutive same-role
   const deduped = [];
@@ -783,7 +789,9 @@ async function loadProducts() {
   document.getElementById('prods-empty').classList.add('hidden');
   document.getElementById('prods-error').classList.add('hidden');
   try {
-    let q = db.from('products').select(`*, profiles(name, whatsapp, bank_name, account_number, account_name, paystack_key)`).eq('status', 'active').order('created_at', { ascending: false });
+    // Change this line:
+let q = db.from('products').select(`*, profiles(name, whatsapp, bank_name, account_number, account_name, paystack_key)`).eq('status', 'active').order('created_at', { ascending: false }).limit(100); 
+// Added .limit(100) to cap the initial marketplace load
     const { data, error } = await q;
     if (error) throw error;
     products = data || [];
@@ -1860,7 +1868,9 @@ async function loadSellerProds() {
   const filter = document.getElementById('prod-filter')?.value || 'all';
   document.getElementById('sp-skeleton').classList.remove('hidden');
   document.getElementById('sp-list').classList.add('hidden');
-  let q = db.from('products').select('*').eq('seller_id', currentUser.id).order('created_at', {ascending: false});
+  // Change this line:
+     let q = db.from('products').select('*').eq('seller_id', currentUser.id).order('created_at', {ascending: false}).limit(300);
+// Added .limit(300) so a seller with massive inventory doesn't crash their own dashboard
   const { data, error } = await q;
   document.getElementById('sp-skeleton').classList.add('hidden');
   const prods = (data||[]).filter(p => filter==='all'||filter===p.stock_status||(filter==='sold-out'&&p.stock_quantity===0)|| (filter==='active'&&p.status==='active'));
@@ -2904,137 +2914,126 @@ REMEMBER: You're the expert. Proactively identify issues, suggest fixes, and act
     let finalReply = reply;
 
     // ── ADVANCED ACTION PARSER ──
+// ── ADVANCED ACTION PARSER (Batch Processing) ──
     let actionLog = [];
     
     // 1. Suspend unpaid sellers
     if (finalReply.includes('[ACTION: SUSPEND_UNPAID_SELLERS]')) {
-      finalReply = finalReply.replace('[ACTION: SUSPEND_UNPAID_SELLERS]', '⚡ Executing seller suspension...').trim();
+      finalReply = finalReply.replace(/\[ACTION: SUSPEND_UNPAID_SELLERS\]/g, '⚡ Executing seller suspension...');
       executeMassSuspension();
       actionLog.push('Suspended unpaid sellers');
     }
+    
     // 2. Suspend unpaid service providers
     if (finalReply.includes('[ACTION: SUSPEND_UNPAID_PROVIDERS]')) {
-      finalReply = finalReply.replace('[ACTION: SUSPEND_UNPAID_PROVIDERS]', '⚡ Executing provider suspension...').trim();
+      finalReply = finalReply.replace(/\[ACTION: SUSPEND_UNPAID_PROVIDERS\]/g, '⚡ Executing provider suspension...');
       executeMassProviderSuspension();
       actionLog.push('Suspended unpaid providers');
     }
+
     // 3. Deactivate specific user
-    const deactivateMatch = finalReply.match(/\[ACTION: DEACTIVATE_USER:([a-f0-9-]+)\]/i);
-    if (deactivateMatch) {
-      const targetId = deactivateMatch[1];
-      finalReply = finalReply.replace(deactivateMatch[0], `⚡ Deactivating user ${targetId.substring(0,8)}...`);
-      await adminAiDeactivateUser(targetId);
-      actionLog.push(`Deactivated user ${targetId.substring(0,8)}`);
+    for (const match of finalReply.matchAll(/\[ACTION: DEACTIVATE_USER:([a-f0-9-]+)\]/gi)) {
+      finalReply = finalReply.replace(match[0], `⚡ Deactivating user ${match[1].substring(0,8)}...`);
+      await adminAiDeactivateUser(match[1]);
+      actionLog.push(`Deactivated user ${match[1].substring(0,8)}`);
     }
+
     // 4. Resolve dispute
-    const resolveMatch = finalReply.match(/\[ACTION: RESOLVE_DISPUTE:([a-f0-9-]+)\]/i);
-    if (resolveMatch) {
-      const disputeId = resolveMatch[1];
-      finalReply = finalReply.replace(resolveMatch[0], `✅ Resolving dispute ${disputeId.substring(0,8)}...`);
-      await adminAiResolveDispute(disputeId);
-      actionLog.push(`Resolved dispute ${disputeId.substring(0,8)}`);
+    for (const match of finalReply.matchAll(/\[ACTION: RESOLVE_DISPUTE:([a-f0-9-]+)\]/gi)) {
+      finalReply = finalReply.replace(match[0], `✅ Resolving dispute ${match[1].substring(0,8)}...`);
+      await adminAiResolveDispute(match[1]);
+      actionLog.push(`Resolved dispute ${match[1].substring(0,8)}`);
     }
+
     // 5. Approve receipt
-    const approveMatch = finalReply.match(/\[ACTION: APPROVE_RECEIPT:([a-f0-9-]+)\]/i);
-    if (approveMatch) {
-      const receiptId = approveMatch[1];
-      finalReply = finalReply.replace(approveMatch[0], `✅ Approving receipt ${receiptId.substring(0,8)}...`);
-      await adminAiApproveReceipt(receiptId);
-      actionLog.push(`Approved receipt ${receiptId.substring(0,8)}`);
+    for (const match of finalReply.matchAll(/\[ACTION: APPROVE_RECEIPT:([a-f0-9-]+)\]/gi)) {
+      finalReply = finalReply.replace(match[0], `✅ Approving receipt ${match[1].substring(0,8)}...`);
+      await adminAiApproveReceipt(match[1]);
+      actionLog.push(`Approved receipt ${match[1].substring(0,8)}`);
     }
-    // 6. Reject receipt
-    const rejectMatch = finalReply.match(/\[ACTION: REJECT_RECEIPT:([a-f0-9-]+):(.+)\]/i);
-    if (rejectMatch) {
-      const [_, receiptId, reason] = rejectMatch;
-      finalReply = finalReply.replace(rejectMatch[0], `❌ Rejecting receipt ${receiptId.substring(0,8)}...`);
-      await adminAiRejectReceipt(receiptId, reason);
-      actionLog.push(`Rejected receipt ${receiptId.substring(0,8)}`);
+
+    // 6. Reject receipt (Using .*? to prevent greedy matching)
+    for (const match of finalReply.matchAll(/\[ACTION: REJECT_RECEIPT:([a-f0-9-]+):(.*?)\]/gi)) {
+      finalReply = finalReply.replace(match[0], `❌ Rejecting receipt ${match[1].substring(0,8)}...`);
+      await adminAiRejectReceipt(match[1], match[2]);
+      actionLog.push(`Rejected receipt ${match[1].substring(0,8)}`);
     }
+
     // 7. Approve withdrawal
-    const wdMatch = finalReply.match(/\[ACTION: APPROVE_WITHDRAWAL:([a-f0-9-]+)\]/i);
-    if (wdMatch) {
-      const wdId = wdMatch[1];
-      finalReply = finalReply.replace(wdMatch[0], `✅ Approving withdrawal ${wdId.substring(0,8)}...`);
-      await adminAiApproveWithdrawal(wdId);
-      actionLog.push(`Approved withdrawal ${wdId.substring(0,8)}`);
+    for (const match of finalReply.matchAll(/\[ACTION: APPROVE_WITHDRAWAL:([a-f0-9-]+)\]/gi)) {
+      finalReply = finalReply.replace(match[0], `✅ Approving withdrawal ${match[1].substring(0,8)}...`);
+      await adminAiApproveWithdrawal(match[1]);
+      actionLog.push(`Approved withdrawal ${match[1].substring(0,8)}`);
     }
+
     // 8. Approve KYC
-    const kycMatch = finalReply.match(/\[ACTION: APPROVE_KYC:([a-f0-9-]+)\]/i);
-    if (kycMatch) {
-      const kycId = kycMatch[1];
-      finalReply = finalReply.replace(kycMatch[0], `✅ Approving KYC ${kycId.substring(0,8)}...`);
-      await adminAiApproveKyc(kycId);
-      actionLog.push(`Approved KYC ${kycId.substring(0,8)}`);
+    for (const match of finalReply.matchAll(/\[ACTION: APPROVE_KYC:([a-f0-9-]+)\]/gi)) {
+      finalReply = finalReply.replace(match[0], `✅ Approving KYC ${match[1].substring(0,8)}...`);
+      await adminAiApproveKyc(match[1]);
+      actionLog.push(`Approved KYC ${match[1].substring(0,8)}`);
     }
+
     // 9. Reject KYC
-    const kycRejectMatch = finalReply.match(/\[ACTION: REJECT_KYC:([a-f0-9-]+):(.+)\]/i);
-    if (kycRejectMatch) {
-      const [_, kycId, reason] = kycRejectMatch;
-      finalReply = finalReply.replace(kycRejectMatch[0], `❌ Rejecting KYC ${kycId.substring(0,8)}...`);
-      await adminAiRejectKyc(kycId, reason);
-      actionLog.push(`Rejected KYC ${kycId.substring(0,8)}`);
+    for (const match of finalReply.matchAll(/\[ACTION: REJECT_KYC:([a-f0-9-]+):(.*?)\]/gi)) {
+      finalReply = finalReply.replace(match[0], `❌ Rejecting KYC ${match[1].substring(0,8)}...`);
+      await adminAiRejectKyc(match[1], match[2]);
+      actionLog.push(`Rejected KYC ${match[1].substring(0,8)}`);
     }
+
     // 10. Broadcast
-    const bcMatch = finalReply.match(/\[ACTION: BROADCAST:(.+):(.+)\]/i);
-    if (bcMatch) {
-      const [_, title, message] = bcMatch;
-      finalReply = finalReply.replace(bcMatch[0], `📣 Sending broadcast: ${title}...`);
-      await sendBroadcastMessage(title, message);
-      actionLog.push(`Broadcast: ${title}`);
+    for (const match of finalReply.matchAll(/\[ACTION: BROADCAST:(.*?):(.*?)\]/gi)) {
+      finalReply = finalReply.replace(match[0], `📣 Sending broadcast: ${match[1]}...`);
+      await sendBroadcastMessage(match[1], match[2]);
+      actionLog.push(`Broadcast: ${match[1]}`);
     }
+
     // 11. Create coupon
-    const couponMatch = finalReply.match(/\[ACTION: CREATE_COUPON:([A-Z0-9]+):(\d+):(\d+)\]/i);
-    if (couponMatch) {
-      const [_, code, percent, days] = couponMatch;
-      finalReply = finalReply.replace(couponMatch[0], `🎟️ Creating coupon ${code}...`);
-      await adminAiCreateCoupon(code, parseInt(percent), parseInt(days));
-      actionLog.push(`Created coupon ${code}`);
+    for (const match of finalReply.matchAll(/\[ACTION: CREATE_COUPON:([A-Z0-9]+):(\d+):(\d+)\]/gi)) {
+      finalReply = finalReply.replace(match[0], `🎟️ Creating coupon ${match[1]}...`);
+      await adminAiCreateCoupon(match[1], parseInt(match[2]), parseInt(match[3]));
+      actionLog.push(`Created coupon ${match[1]}`);
     }
+
     // 12. Export report
-    const exportMatch = finalReply.match(/\[ACTION: EXPORT_REPORT:(sellers|orders|revenue|disputes)\]/i);
-    if (exportMatch) {
-      const reportType = exportMatch[1];
-      finalReply = finalReply.replace(exportMatch[0], `📊 Generating ${reportType} report...`);
-      exportAdminReport(reportType);
-      actionLog.push(`Generated ${reportType} report`);
+    for (const match of finalReply.matchAll(/\[ACTION: EXPORT_REPORT:(sellers|orders|revenue|disputes)\]/gi)) {
+      finalReply = finalReply.replace(match[0], `📊 Generating ${match[1]} report...`);
+      exportAdminReport(match[1]);
+      actionLog.push(`Generated ${match[1]} report`);
     }
+
     // 13. Refresh data
     if (finalReply.includes('[ACTION: REFRESH_DATA]')) {
-      finalReply = finalReply.replace('[ACTION: REFRESH_DATA]', '🔄 Refreshing dashboard...');
+      finalReply = finalReply.replace(/\[ACTION: REFRESH_DATA\]/g, '🔄 Refreshing dashboard...');
       loadAdminOverview();
       actionLog.push('Refreshed dashboard');
     }
+
     // 14. Reactivate user
-    const reactivateMatch = finalReply.match(/\[ACTION: REACTIVATE_USER:([a-f0-9-]+)\]/i);
-    if (reactivateMatch) {
-      const targetId = reactivateMatch[1];
-      finalReply = finalReply.replace(reactivateMatch[0], `✅ Reactivating user ${targetId.substring(0,8)}...`);
-      await adminAiReactivateUser(targetId);
-      actionLog.push(`Reactivated user ${targetId.substring(0,8)}`);
+    for (const match of finalReply.matchAll(/\[ACTION: REACTIVATE_USER:([a-f0-9-]+)\]/gi)) {
+      finalReply = finalReply.replace(match[0], `✅ Reactivating user ${match[1].substring(0,8)}...`);
+      await adminAiReactivateUser(match[1]);
+      actionLog.push(`Reactivated user ${match[1].substring(0,8)}`);
     }
+
     // 15. Change role
-    const roleMatch = finalReply.match(/\[ACTION: CHANGE_ROLE:([a-f0-9-]+):(buyer|seller|admin|both)\]/i);
-    if (roleMatch) {
-      const [_, targetId, newRole] = roleMatch;
-      finalReply = finalReply.replace(roleMatch[0], `✅ Changing user ${targetId.substring(0,8)} role to ${newRole}...`);
-      await adminAiChangeRole(targetId, newRole);
-      actionLog.push(`Changed user ${targetId.substring(0,8)} to ${newRole}`);
+    for (const match of finalReply.matchAll(/\[ACTION: CHANGE_ROLE:([a-f0-9-]+):(buyer|seller|admin|both)\]/gi)) {
+      finalReply = finalReply.replace(match[0], `✅ Changing user ${match[1].substring(0,8)} role to ${match[2]}...`);
+      await adminAiChangeRole(match[1], match[2]);
+      actionLog.push(`Changed user ${match[1].substring(0,8)} to ${match[2]}`);
     }
+
     // 16. Extend trial
-    const trialMatch = finalReply.match(/\[ACTION: EXTEND_TRIAL:([a-f0-9-]+):(\d+)\]/i);
-    if (trialMatch) {
-      const [_, targetId, days] = trialMatch;
-      finalReply = finalReply.replace(trialMatch[0], `✅ Extending trial for ${targetId.substring(0,8)} by ${days} days...`);
-      await adminAiExtendTrial(targetId, parseInt(days));
-      actionLog.push(`Extended trial for ${targetId.substring(0,8)} by ${days} days`);
+    for (const match of finalReply.matchAll(/\[ACTION: EXTEND_TRIAL:([a-f0-9-]+):(\d+)\]/gi)) {
+      finalReply = finalReply.replace(match[0], `✅ Extending trial for ${match[1].substring(0,8)} by ${match[2]} days...`);
+      await adminAiExtendTrial(match[1], parseInt(match[2]));
+      actionLog.push(`Extended trial for ${match[1].substring(0,8)} by ${match[2]} days`);
     }
+
     // 17. Grant commission (activate seller)
-    const grantMatch = finalReply.match(/\[ACTION: GRANT_COMMISSION:([a-f0-9-]+)\]/i);
-    if (grantMatch) {
-      const targetId = grantMatch[1];
-      finalReply = finalReply.replace(grantMatch[0], `✅ Activating seller ${targetId.substring(0,8)}...`);
-      await adminAiGrantCommission(targetId);
-      actionLog.push(`Granted commission to ${targetId.substring(0,8)}`);
+    for (const match of finalReply.matchAll(/\[ACTION: GRANT_COMMISSION:([a-f0-9-]+)\]/gi)) {
+      finalReply = finalReply.replace(match[0], `✅ Activating seller ${match[1].substring(0,8)}...`);
+      await adminAiGrantCommission(match[1]);
+      actionLog.push(`Granted commission to ${match[1].substring(0,8)}`);
     }
     
     // Add action summary if any actions taken
@@ -4026,35 +4025,106 @@ async function importCsvProducts() {
   if (!csvRows.length || !currentUser) return;
   const btn = document.getElementById('csv-import-btn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Importing…';
+  
+  // Format the raw data
   const toInsert = csvRows.map(r => ({
-    seller_id: currentUser.id,
-    name: r.name, description: r.description||r.name,
-    price: parseFloat(r.price)||0,
-    original_price: parseFloat(r.original_price)||parseFloat(r.price)||0,
-    category: r.category||'electronics',
-    condition: r.condition||'new',
-    location: r.location||'Nigeria',
-    stock_quantity: parseInt(r.stock_quantity)||10,
-    negotiable: r.negotiable==='true'||r.negotiable==='1',
-    image_url: '', video_url: '', has_video: false,
-    status: 'active', avg_rating: 5, review_count: 0,
-    created_at: new Date().toISOString()
+    name: r.name, 
+    description: r.description || r.name,
+    price: parseFloat(r.price) || 0,
+    original_price: parseFloat(r.original_price) || parseFloat(r.price) || 0,
+    category: r.category || 'electronics',
+    condition: r.condition || 'new',
+    location: r.location || 'Nigeria',
+    stock_quantity: parseInt(r.stock_quantity) || 10,
+    negotiable: r.negotiable === 'true' || r.negotiable === '1',
+    has_video: false
   }));
-  const BATCH = 50;
-  let imported = 0;
-  for (let i = 0; i < toInsert.length; i += BATCH) {
-    const { error } = await db.from('products').insert(toInsert.slice(i, i+BATCH));
-    if (!error) imported += Math.min(BATCH, toInsert.length - i);
+
+  try {
+    // Pass the payload to your Edge Function for secure processing
+    await callEdge('manage-product', { 
+      action: 'bulk_create', 
+      products: toInsert 
+    });
+
+    toast(`${toInsert.length} Products Imported! 🎉`, 'All products are now live', 'success');
+    
+    // Reset UI
+    csvRows = [];
+    document.getElementById('csv-file').value = '';
+    document.getElementById('csv-preview').classList.add('hidden');
+    btn.classList.add('hidden');
+    document.getElementById('csv-zone').classList.remove('has-file');
+    document.getElementById('csv-zone').querySelector('.upload-label').textContent = 'Click to upload CSV file';
+    loadSellerProds();
+  } catch(e) {
+    toast('Import Failed', e.message, 'error');
+  } finally {
+    btn.disabled = false; 
+    btn.innerHTML = '<i class="fa-solid fa-upload"></i> Import Products';
   }
-  toast(`${imported} Products Imported! 🎉`, 'All products are now live', 'success');
-  csvRows = [];
-  document.getElementById('csv-file').value = '';
-  document.getElementById('csv-preview').classList.add('hidden');
-  btn.classList.add('hidden');
-  document.getElementById('csv-zone').classList.remove('has-file');
-  document.getElementById('csv-zone').querySelector('.upload-label').textContent = 'Click to upload CSV file';
-  btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-upload"></i> Import Products';
-  loadSellerProds();
+}
+
+async function payWithPaystack() {
+  if (typeof PaystackPop === 'undefined') {
+    toast('Payment Error', 'Paystack not loaded. Please refresh and try again.', 'error');
+    return;
+  }
+
+  // 1. Ask the backend to calculate the true total and generate a Paystack Access Code
+  toast('Initializing secure payment...', '', 'info');
+  let secureAmount = 0;
+  let accessCode = '';
+
+  try {
+    const initData = await callEdge('init-checkout', {
+      cart: cart.map(c => ({ id: c.id, qty: c.qty || 1 })),
+      coupon_code: appliedCoupon ? appliedCoupon.code : null
+    });
+    
+    secureAmount = initData.amount_kobo; // Backend returns true amount in kobo
+    accessCode = initData.access_code;   // Paystack secure session code
+  } catch (error) {
+    toast('Checkout Error', error.message || 'Could not verify cart total', 'error');
+    return;
+  }
+
+  // 2. Open Paystack using the secure Access Code
+  const handler = PaystackPop.setup({
+    key: PAYSTACK_PUBLIC_KEY,
+    email: currentUser.email,
+    amount: secureAmount, 
+    access_code: accessCode, // Enforces the backend's price
+    callback: async function(response) {
+      toast('Verifying Payment...', 'Please do not close the window', 'info');
+
+      try {
+        const verification = await callEdge('verify-payment', {
+          reference: response.reference,
+          delivery_address: document.getElementById('co-address').value,
+          delivery_name: document.getElementById('co-name').value,
+          delivery_phone: document.getElementById('co-phone').value,
+          payment_method: 'paystack'
+        });
+
+        if (verification.success) {
+          cart = []; 
+          saveCart();
+          document.getElementById('co-order-id').textContent = verification.order_id;
+          document.getElementById('co-order-total').textContent = fmtN(verification.total_paid);
+          goCheckoutStep(3);
+          toast('Payment Verified!', 'Your order is confirmed', 'success');
+        }
+      } catch (err) {
+        toast('Verification Error', err.message || 'Contact support with ref: ' + response.reference, 'error');
+      }
+    },
+    onClose: function() {
+      toast('Payment Cancelled', '', 'warn');
+    }
+  });
+  
+  handler.openIframe();
 }
 
 // ====================================================
@@ -5216,6 +5286,80 @@ async function initiateAdPayment() {
   if (!currentUser || (currentUser.profile?.role !== 'seller' && currentUser.profile?.role !== 'both')) {
     return toast('Access Denied', 'Only sellers can advertise', 'error');
   }
+
+  const title = document.getElementById('ad-title').value.trim();
+  const desc = document.getElementById('ad-desc').value.trim();
+  const cta = document.getElementById('ad-cta-select').value;
+  const link = document.getElementById('ad-link').value.trim();
+  const fileInput = document.getElementById('ad-media-file');
+  const file = fileInput.files[0];
+
+  if (!title || !desc || !link || !file) {
+    return toast('Incomplete Form', 'Please fill all required fields and upload media', 'error');
+  }
+
+  const btn = document.getElementById('ad-pay-btn');
+  btn.innerHTML = '<span class="spinner"></span> Processing...';
+  btn.disabled = true;
+
+  try {
+    // 1. Upload Media First
+    const ext = file.name.split('.').pop();
+    const path = `ads/${currentUser.id}/${Date.now()}.${ext}`;
+    const { data: uploadData, error: uploadErr } = await db.storage.from('uploads').upload(path, file);
+    if (uploadErr) throw uploadErr;
+    
+    const { data: pubData } = db.storage.from('uploads').getPublicUrl(path);
+    const publicUrl = pubData.publicUrl;
+
+    // 2. Initialize Payment Securely via Edge Function
+    const initData = await callEdge('init-ad-payment', { amount: 10000 });
+
+    // 3. Open Paystack
+    let handler = PaystackPop.setup({
+      key: PAYSTACK_PUBLIC_KEY,
+      email: currentUser.email,
+      amount: 10000 * 100, 
+      access_code: initData.access_code, // Secure session code
+      callback: async function(response) {
+        toast('Verifying Payment...', 'Publishing advertisement...', 'info');
+        
+        try {
+          // 4. Verify Payment and Insert Ad via Edge Function (Bypasses Client-Side Spoofing)
+          await callEdge('verify-ad-payment', {
+            reference: response.reference,
+            adData: {
+              title: title,
+              description: desc,
+              media_url: publicUrl,
+              media_type: file.type.startsWith('video/') ? 'video' : 'image',
+              cta_text: cta,
+              cta_link: link
+            }
+          });
+
+          toast('Success', 'Your advertisement is now live!', 'success');
+          document.getElementById('ad-title').value = '';
+          document.getElementById('ad-desc').value = '';
+          document.getElementById('ad-media-file').value = '';
+          document.getElementById('ad-media-preview-container').classList.add('hidden');
+          loadActiveAds();
+        } catch (err) {
+          toast('Verification Failed', err.message, 'error');
+        }
+      },
+      onClose: function() {
+        toast('Cancelled', 'Payment was cancelled', 'warn');
+      }
+    });
+    handler.openIframe();
+  } catch(e) {
+    toast('Error', 'Failed to process ad setup', 'error');
+  } finally {
+    btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Publish Ad';
+    btn.disabled = false;
+  }
+}
 
   const title = document.getElementById('ad-title').value.trim();
   const desc = document.getElementById('ad-desc').value.trim();
