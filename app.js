@@ -3118,11 +3118,16 @@ async function executeMassProviderSuspension() {
 
 async function adminAiDeactivateUser(userId) {
   try {
-    // Pause all their products/gigs
+    // FIX: Use Edge Function to bypass RLS
+    await callEdge('admin-action', { 
+      action: 'toggle_commission', 
+      target_id: userId, 
+      data: { commission_paid: false, trial_end: new Date('2020-01-01').toISOString(), is_suspended: true } 
+    });
+    
     await db.from('products').update({ status: 'paused' }).eq('seller_id', userId).catch(() => {});
     await db.from('service_gigs').update({ status: 'paused' }).eq('provider_id', userId).catch(() => {});
-    // Mark commission as unpaid to trigger lockout and flag as suspended
-    await db.from('profiles').update({ commission_paid: false, trial_end: new Date('2020-01-01').toISOString(), is_suspended: true }).eq('id', userId);
+    
     toast('User Deactivated', `User ${userId.substring(0,8)} has been suspended by AI`, 'warn', 5000);
     loadAdminSellers();
   } catch(e) {
@@ -3132,18 +3137,19 @@ async function adminAiDeactivateUser(userId) {
 
 async function adminAiReactivateUser(userId) {
   try {
-    // Restore commission status + clear suspension flag + extend trial by 30 days
     const newTrialEnd = new Date();
     newTrialEnd.setDate(newTrialEnd.getDate() + 30);
-    await db.from('profiles').update({
-      commission_paid: true,
-      is_suspended: false,
-      trial_end: newTrialEnd.toISOString()
-    }).eq('id', userId);
-    // Re-enable all their products
+    
+    // FIX: Use Edge Function to bypass RLS
+    await callEdge('admin-action', { 
+      action: 'toggle_commission', 
+      target_id: userId, 
+      data: { commission_paid: true, is_suspended: false, trial_end: newTrialEnd.toISOString() } 
+    });
+
     await db.from('products').update({ status: 'active' }).eq('seller_id', userId).catch(() => {});
-    // Re-enable any service gigs
     await db.from('service_gigs').update({ status: 'active' }).eq('provider_id', userId).catch(() => {});
+    
     toast('User Reactivated ✅', `User ${userId.substring(0,8)} has been restored with 30-day access`, 'success', 5000);
     loadAdminSellers();
   } catch(e) {
@@ -3153,22 +3159,35 @@ async function adminAiReactivateUser(userId) {
 
 async function adminAiChangeRole(userId, newRole) {
   try {
-    await db.from('profiles').update({ role: newRole, accounts: newRole }).eq('id', userId);
+    // FIX: Route through edge function, with a fallback
+    await callEdge('admin-action', { 
+      action: 'toggle_commission', 
+      target_id: userId, 
+      data: { role: newRole, accounts: newRole } 
+    }).catch(() => db.from('profiles').update({ role: newRole, accounts: newRole }).eq('id', userId));
+    
     toast('Role Changed ✅', `User ${userId.substring(0,8)} is now a ${newRole}`, 'success', 5000);
     loadAdminSellers();
   } catch(e) {
     toast('Role Change Failed', e.message, 'error');
   }
 }
+}
 
 async function adminAiExtendTrial(userId, days) {
   try {
-    // Get current trial end, extend from now or from existing date
     const { data: profile } = await db.from('profiles').select('trial_end').eq('id', userId).single();
     const currentEnd = profile?.trial_end ? new Date(profile.trial_end) : new Date();
     const baseDate = currentEnd > new Date() ? currentEnd : new Date();
     baseDate.setDate(baseDate.getDate() + days);
-    await db.from('profiles').update({ trial_end: baseDate.toISOString(), is_suspended: false }).eq('id', userId);
+    
+    // FIX: Use Edge Function to bypass RLS
+    await callEdge('admin-action', { 
+      action: 'toggle_commission', 
+      target_id: userId, 
+      data: { trial_end: baseDate.toISOString(), is_suspended: false } 
+    });
+
     toast('Trial Extended ✅', `User ${userId.substring(0,8)} trial extended by ${days} days`, 'success', 5000);
     loadAdminSellers();
   } catch(e) {
@@ -3178,9 +3197,16 @@ async function adminAiExtendTrial(userId, days) {
 
 async function adminAiGrantCommission(userId) {
   try {
-    await db.from('profiles').update({ commission_paid: true, is_suspended: false }).eq('id', userId);
+    // Use the Edge Function to bypass RLS, just like your manual admin buttons do
+    await callEdge('admin-action', { 
+      action: 'toggle_commission', 
+      target_id: userId, 
+      data: { commission_paid: true, is_suspended: false } 
+    });
+
     // Re-enable their products
     await db.from('products').update({ status: 'active' }).eq('seller_id', userId).catch(() => {});
+    
     toast('Commission Granted ✅', `User ${userId.substring(0,8)} seller access activated`, 'success', 5000);
     loadAdminSellers();
   } catch(e) {
@@ -3621,6 +3647,38 @@ async function submitKyc(e) {
       if (error) throw new Error(`Failed to upload ${id}`);
       return db.storage.from('uploads').getPublicUrl(path).data.publicUrl;
     };
+
+    const [frontUrl, backUrl, selfieUrl] = await Promise.all([
+      uploadFile('kyc-front'), uploadFile('kyc-back'), uploadFile('kyc-selfie')
+    ]);
+
+    if (!frontUrl || !selfieUrl) throw new Error("Front photo and selfie are required");
+
+    await db.from('kyc_verifications').insert({
+      user_id: currentUser.id,
+      document_type: docType,
+      document_number: docNum,
+      full_name: name,
+      document_front_url: frontUrl,
+      document_back_url: backUrl,
+      selfie_url: selfieUrl,
+      status: 'pending'
+    });
+
+    // FIX: Use Edge function to update profile so RLS doesn't block it!
+    await callEdge('update-profile', { kyc_status: 'pending' })
+      .catch(() => db.from('profiles').update({ kyc_status: 'pending' }).eq('id', currentUser.id)); // Fallback just in case
+      
+    currentUser.profile.kyc_status = 'pending';
+    
+    toast('KYC Submitted', ' documents are pending review', 'success');
+    closeModal('kyc-modal');
+    checkAndPromptKyc(); // updates modal UI
+  } catch(e) {
+    toast('Error', e.message, 'error');
+    btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-shield-check"></i> Submit Verification';
+  }
+}
 
     const [frontUrl, backUrl, selfieUrl] = await Promise.all([
       uploadFile('kyc-front'), uploadFile('kyc-back'), uploadFile('kyc-selfie')
