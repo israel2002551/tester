@@ -3125,7 +3125,6 @@ async function adminAiChangeRole(userId, newRole) {
     toast('Role Change Failed', e.message, 'error');
   }
 }
-}
 
 async function adminAiExtendTrial(userId, days) {
   try {
@@ -3622,35 +3621,6 @@ async function submitKyc(e) {
     await callEdge('update-profile', { kyc_status: 'pending' })
       .catch(() => db.from('profiles').update({ kyc_status: 'pending' }).eq('id', currentUser.id)); // Fallback just in case
       
-    currentUser.profile.kyc_status = 'pending';
-    
-    toast('KYC Submitted', ' documents are pending review', 'success');
-    closeModal('kyc-modal');
-    checkAndPromptKyc(); // updates modal UI
-  } catch(e) {
-    toast('Error', e.message, 'error');
-    btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-shield-check"></i> Submit Verification';
-  }
-}
-
-    const [frontUrl, backUrl, selfieUrl] = await Promise.all([
-      uploadFile('kyc-front'), uploadFile('kyc-back'), uploadFile('kyc-selfie')
-    ]);
-
-    if (!frontUrl || !selfieUrl) throw new Error("Front photo and selfie are required");
-
-    await db.from('kyc_verifications').insert({
-      user_id: currentUser.id,
-      document_type: docType,
-      document_number: docNum,
-      full_name: name,
-      document_front_url: frontUrl,
-      document_back_url: backUrl,
-      selfie_url: selfieUrl,
-      status: 'pending'
-    });
-
-    await db.from('profiles').update({ kyc_status: 'pending' }).eq('id', currentUser.id);
     currentUser.profile.kyc_status = 'pending';
     
     toast('KYC Submitted', ' documents are pending review', 'success');
@@ -5310,85 +5280,6 @@ async function initiateAdPayment() {
   } catch(e) {
     toast('Error', 'Failed to process ad setup', 'error');
   } finally {
-    btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Publish Ad';
-    btn.disabled = false;
-  }
-}
-
-  const title = document.getElementById('ad-title').value.trim();
-  const desc = document.getElementById('ad-desc').value.trim();
-  const cta = document.getElementById('ad-cta-select').value;
-  const link = document.getElementById('ad-link').value.trim();
-  const fileInput = document.getElementById('ad-media-file');
-  const file = fileInput.files[0];
-
-  if (!title || !desc || !link || !file) {
-    return toast('Incomplete Form', 'Please fill all required fields and upload media', 'error');
-  }
-
-  // Pay ₦10,000 via Paystack
-  const adFee = 10000;
-  const btn = document.getElementById('ad-pay-btn');
-  btn.innerHTML = '<span class="spinner"></span> Processing...';
-  btn.disabled = true;
-
-  try {
-    const { data: profile } = await db.from('profiles').select('email').eq('id', currentUser.id).single();
-    
-    let handler = PaystackPop.setup({
-      key: PAYSTACK_PUBLIC_KEY,
-      email: profile?.email || currentUser.email || 'advertiser@buysell.ng',
-      amount: adFee * 100, // kobo
-      currency: 'NGN',
-      ref: 'AD_' + Math.floor(Math.random() * 1000000000 + 1),
-      callback: async function(response) {
-        toast('Payment Successful', 'Uploading advertisement...', 'success');
-        
-        const ext = file.name.split('.').pop();
-        const path = `ads/${currentUser.id}/${Date.now()}.${ext}`;
-        const { data: uploadData, error: uploadErr } = await db.storage.from('uploads').upload(path, file);
-        if (uploadErr) throw uploadErr;
-        
-        const { data: pubData } = db.storage.from('uploads').getPublicUrl(path);
-        const publicUrl = pubData.publicUrl;
-
-        const adData = {
-          advertiser_id: currentUser.id,
-          advertiser_type: currentUser.profile?.role || 'seller',
-          title: title,
-          description: desc,
-          media_url: publicUrl,
-          media_type: file.type.startsWith('video/') ? 'video' : 'image',
-          cta_text: cta,
-          cta_link: link,
-          payment_ref: response.reference,
-          payment_amount: adFee,
-          status: 'active',
-          expires_at: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString() // 3 weeks
-        };
-
-        const { error: adErr } = await db.from('advertisements').insert([adData]);
-        if (adErr) throw adErr;
-
-        toast('Success', 'Your advertisement is now live!', 'success');
-        document.getElementById('ad-title').value = '';
-        document.getElementById('ad-desc').value = '';
-        document.getElementById('ad-media-file').value = '';
-        document.getElementById('ad-media-preview-container').classList.add('hidden');
-        btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Publish Ad';
-        btn.disabled = false;
-        loadActiveAds();
-      },
-      onClose: function() {
-        toast('Cancelled', 'Payment was cancelled', 'warn');
-        btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Publish Ad';
-        btn.disabled = false;
-      }
-    });
-    handler.openIframe();
-  } catch(e) {
-    console.error('Ad payment err:', e);
-    toast('Error', 'Failed to process ad payment', 'error');
     btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Publish Ad';
     btn.disabled = false;
   }
