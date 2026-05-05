@@ -3032,17 +3032,18 @@ async function executeMassSuspension() {
     return;
   }
   
-  // Deactivate products of suspended sellers
-  await db.from('products').update({ status: 'paused' }).in('seller_id', targetIds).catch(() => {});
-  const { error } = await db.from('profiles').update({ updated_at: new Date().toISOString() }).in('id', targetIds);
-  
-  if (error) {
-    toast('Execution Error', error.message, 'error');
-    return;
+  // Route through edge function to bypass RLS
+  try {
+    const result = await callEdge('admin-action', {
+      action: 'mass_suspend',
+      target_id: targetIds[0],
+      data: { target_ids: targetIds, pause_table: 'products' }
+    });
+    toast('Enforcement Complete', `Successfully locked out ${targetIds.length} expired accounts.`, 'success', 6000);
+    loadAdminOverview();
+  } catch(e) {
+    toast('Execution Error', e.message, 'error');
   }
-  
-  toast('Enforcement Complete', `Successfully locked out ${targetIds.length} expired accounts.`, 'success', 6000);
-  loadAdminOverview();
 }
 
 // ====================================================
@@ -3060,27 +3061,26 @@ async function executeMassProviderSuspension() {
 
   if (!targetIds.length) { toast('No Action Needed', 'All providers are paid or in trial', 'success'); return; }
 
-  // Pause their gigs
-  await db.from('service_gigs').update({ status: 'paused' }).in('provider_id', targetIds).catch(() => {});
-  const { error } = await db.from('profiles').update({ updated_at: new Date().toISOString() }).in('id', targetIds);
-  if (error) { toast('Error', error.message, 'error'); return; }
-
-  toast('Providers Suspended', `${targetIds.length} expired accounts locked out`, 'success', 6000);
-  loadAdminOverview();
+  // Route through edge function to bypass RLS
+  try {
+    await callEdge('admin-action', {
+      action: 'mass_suspend',
+      target_id: targetIds[0],
+      data: { target_ids: targetIds, pause_table: 'service_gigs' }
+    });
+    toast('Providers Suspended', `${targetIds.length} expired accounts locked out`, 'success', 6000);
+    loadAdminOverview();
+  } catch(e) {
+    toast('Error', e.message, 'error');
+  }
 }
 
 async function adminAiDeactivateUser(userId) {
   try {
-    // FIX: Use Edge Function to bypass RLS
     await callEdge('admin-action', { 
-      action: 'toggle_commission', 
-      target_id: userId, 
-      data: { commission_paid: false, trial_end: new Date('2020-01-01').toISOString(), is_suspended: true } 
+      action: 'deactivate_user', 
+      target_id: userId
     });
-    
-    await db.from('products').update({ status: 'paused' }).eq('seller_id', userId).catch(() => {});
-    await db.from('service_gigs').update({ status: 'paused' }).eq('provider_id', userId).catch(() => {});
-    
     toast('User Deactivated', `User ${userId.substring(0,8)} has been suspended by AI`, 'warn', 5000);
     loadAdminSellers();
   } catch(e) {
@@ -3090,19 +3090,10 @@ async function adminAiDeactivateUser(userId) {
 
 async function adminAiReactivateUser(userId) {
   try {
-    const newTrialEnd = new Date();
-    newTrialEnd.setDate(newTrialEnd.getDate() + 30);
-    
-    // FIX: Use Edge Function to bypass RLS
     await callEdge('admin-action', { 
-      action: 'toggle_commission', 
-      target_id: userId, 
-      data: { commission_paid: true, is_suspended: false, trial_end: newTrialEnd.toISOString() } 
+      action: 'reactivate_user', 
+      target_id: userId
     });
-
-    await db.from('products').update({ status: 'active' }).eq('seller_id', userId).catch(() => {});
-    await db.from('service_gigs').update({ status: 'active' }).eq('provider_id', userId).catch(() => {});
-    
     toast('User Reactivated ✅', `User ${userId.substring(0,8)} has been restored with 30-day access`, 'success', 5000);
     loadAdminSellers();
   } catch(e) {
@@ -3112,13 +3103,11 @@ async function adminAiReactivateUser(userId) {
 
 async function adminAiChangeRole(userId, newRole) {
   try {
-    // FIX: Route through edge function, with a fallback
     await callEdge('admin-action', { 
       action: 'toggle_commission', 
       target_id: userId, 
       data: { role: newRole, accounts: newRole } 
-    }).catch(() => db.from('profiles').update({ role: newRole, accounts: newRole }).eq('id', userId));
-    
+    });
     toast('Role Changed ✅', `User ${userId.substring(0,8)} is now a ${newRole}`, 'success', 5000);
     loadAdminSellers();
   } catch(e) {
@@ -3149,16 +3138,10 @@ async function adminAiExtendTrial(userId, days) {
 
 async function adminAiGrantCommission(userId) {
   try {
-    // Use the Edge Function to bypass RLS, just like your manual admin buttons do
     await callEdge('admin-action', { 
-      action: 'toggle_commission', 
-      target_id: userId, 
-      data: { commission_paid: true, is_suspended: false } 
+      action: 'grant_commission', 
+      target_id: userId
     });
-
-    // Re-enable their products
-    await db.from('products').update({ status: 'active' }).eq('seller_id', userId).catch(() => {});
-    
     toast('Commission Granted ✅', `User ${userId.substring(0,8)} seller access activated`, 'success', 5000);
     loadAdminSellers();
   } catch(e) {
@@ -3168,7 +3151,7 @@ async function adminAiGrantCommission(userId) {
 
 async function adminAiResolveDispute(disputeId) {
   try {
-    await db.from('disputes').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', disputeId);
+    await callEdge('admin-action', { action: 'resolve_dispute', target_id: disputeId });
     toast('Dispute Resolved', `Dispute ${disputeId.substring(0,8)} closed by AI`, 'success');
     loadAdminDisputes();
   } catch(e) {
@@ -3179,10 +3162,11 @@ async function adminAiResolveDispute(disputeId) {
 async function adminAiApproveReceipt(receiptId) {
   try {
     const { data: receipt } = await db.from('commission_receipts').select('seller_id').eq('id', receiptId).single();
-    if (receipt?.seller_id) {
-      await db.from('profiles').update({ commission_paid: true }).eq('id', receipt.seller_id);
-    }
-    await db.from('commission_receipts').update({ status: 'approved', reviewed_at: new Date().toISOString() }).eq('id', receiptId);
+    await callEdge('admin-action', {
+      action: 'approve_receipt',
+      target_id: receiptId,
+      data: { seller_id: receipt?.seller_id }
+    });
     toast('Receipt Approved', 'Seller activated by AI', 'success');
     loadAdminReceipts();
   } catch(e) {
@@ -3192,7 +3176,11 @@ async function adminAiApproveReceipt(receiptId) {
 
 async function adminAiRejectReceipt(receiptId, reason) {
   try {
-    await db.from('commission_receipts').update({ status: 'rejected', reviewed_at: new Date().toISOString(), rejection_reason: reason }).eq('id', receiptId);
+    await callEdge('admin-action', {
+      action: 'reject_receipt',
+      target_id: receiptId,
+      data: { reason: reason }
+    });
     toast('Receipt Rejected', reason, 'warn');
     loadAdminReceipts();
   } catch(e) {
@@ -3202,7 +3190,7 @@ async function adminAiRejectReceipt(receiptId, reason) {
 
 async function adminAiApproveWithdrawal(withdrawalId) {
   try {
-    await db.from('withdrawals').update({ status: 'approved', processed_at: new Date().toISOString() }).eq('id', withdrawalId);
+    await callEdge('admin-action', { action: 'pay_withdrawal', target_id: withdrawalId });
     toast('Withdrawal Approved', 'Funds released', 'success');
     loadAdminWithdrawals();
   } catch(e) {
@@ -3210,10 +3198,13 @@ async function adminAiApproveWithdrawal(withdrawalId) {
   }
 }
 
-async function adminAiApproveKyc(kycId) {
+async function adminAiApproveKyc(kycId, userId) {
   try {
-    await db.from('kyc_submissions').update({ status: 'approved', reviewed_at: new Date().toISOString() }).eq('id', kycId);
-    await db.from('profiles').update({ kyc_verified: true }).eq('id', kycId);
+    await callEdge('admin-action', {
+      action: 'approve_kyc',
+      target_id: kycId,
+      data: { user_id: userId || kycId }
+    });
     toast('KYC Approved', 'User verified', 'success');
     loadAdminKyc();
   } catch(e) {
@@ -3221,9 +3212,13 @@ async function adminAiApproveKyc(kycId) {
   }
 }
 
-async function adminAiRejectKyc(kycId, reason) {
+async function adminAiRejectKyc(kycId, reason, userId) {
   try {
-    await db.from('kyc_submissions').update({ status: 'rejected', reviewed_at: new Date().toISOString(), rejection_reason: reason }).eq('id', kycId);
+    await callEdge('admin-action', {
+      action: 'reject_kyc',
+      target_id: kycId,
+      data: { reason: reason, user_id: userId || kycId }
+    });
     toast('KYC Rejected', reason, 'warn');
     loadAdminKyc();
   } catch(e) {
@@ -3679,8 +3674,11 @@ async function loadAdminKyc() {
 async function adminApproveKyc(kycId, userId) {
   if (!confirm('Approve KYC and verify this user?')) return;
   try {
-    await db.from('kyc_verifications').update({ status: 'approved', reviewed_at: new Date().toISOString() }).eq('id', kycId);
-    await db.from('profiles').update({ kyc_status: 'approved', kyc_verified: true }).eq('id', userId);
+    await callEdge('admin-action', {
+      action: 'approve_kyc',
+      target_id: kycId,
+      data: { user_id: userId }
+    });
     toast('KYC Approved', 'User is now a verified seller.', 'success');
     loadAdminKyc();
   } catch(e) { toast('Error', e.message, 'error'); }
@@ -3690,8 +3688,11 @@ async function adminRejectKyc(kycId, userId) {
   const note = prompt('Reason for rejection:');
   if (!note) return;
   try {
-    await db.from('kyc_verifications').update({ status: 'rejected', admin_note: note, reviewed_at: new Date().toISOString() }).eq('id', kycId);
-    await db.from('profiles').update({ kyc_status: 'rejected', kyc_verified: false }).eq('id', userId);
+    await callEdge('admin-action', {
+      action: 'reject_kyc',
+      target_id: kycId,
+      data: { reason: note, user_id: userId }
+    });
     toast('KYC Rejected', 'User must resubmit.', 'warn');
     loadAdminKyc();
   } catch(e) { toast('Error', e.message, 'error'); }
@@ -3746,18 +3747,11 @@ async function loadAdminReceipts() {
 async function approveReceipt(receiptId, sellerId) {
   if (!confirm('Approve this receipt and activate the seller?')) return;
   try {
-    // 1. Update receipt status
-    await db.from('commission_receipts').update({
-      status: 'approved',
-      reviewed_at: new Date().toISOString()
-    }).eq('id', receiptId);
-
-    // 2. Activate the seller's commission_paid flag
-    await db.from('profiles').update({
-      commission_paid: true,
-      updated_at: new Date().toISOString()
-    }).eq('id', sellerId);
-
+    await callEdge('admin-action', {
+      action: 'approve_receipt',
+      target_id: receiptId,
+      data: { seller_id: sellerId }
+    });
     toast('Receipt Approved ✅', 'Seller store is now active.', 'success');
     loadAdminReceipts();
   } catch(e) {
@@ -3768,12 +3762,11 @@ async function approveReceipt(receiptId, sellerId) {
 async function rejectReceipt(receiptId) {
   const note = prompt('Reason for rejection (optional):') || '';
   try {
-    await db.from('commission_receipts').update({
-      status: 'rejected',
-      admin_note: note,
-      reviewed_at: new Date().toISOString()
-    }).eq('id', receiptId);
-
+    await callEdge('admin-action', {
+      action: 'reject_receipt',
+      target_id: receiptId,
+      data: { reason: note }
+    });
     toast('Receipt Rejected', 'Seller has been notified.', 'warn');
     loadAdminReceipts();
   } catch(e) {
