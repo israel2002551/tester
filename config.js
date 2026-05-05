@@ -11,7 +11,7 @@ const EDGE_URL = SB_URL + '/functions/v1';
 const CLAUDE_EDGE_URL = `${EDGE_URL}/smooth-handler`;
 
 // ── Groq AI ───────────────────────────────────────────
-const GROQ_API_KEY = "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";
+const GROQ_API_KEY = "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";
 const GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL   = "llama-3.3-70b-versatile";
 
