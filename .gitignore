@@ -1,0 +1,12 @@
+# Secrets — never commit
+config.js
+
+# Python cache
+__pycache__/
+.ruff_cache/
+*.pyc
+
+# Logs / temp
+auth_hits.txt
+role_hits.txt
+signup_hits.txt
