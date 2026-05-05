@@ -1,16 +1,10 @@
 // ====================================================
-//  CONFIG
+//  BUYSELL Nigeria — Main Application
+//  Config loaded from config.js (secrets are .gitignored)
 // ====================================================
-const SB_URL  = 'https://obzhlmzswthnorkiqemh.supabase.co';
-const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9iemhsbXpzd3Robm9ya2lxZW1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxMDE2NjgsImV4cCI6MjA4ODY3NzY2OH0.5I4Ln0913h0AH5z4e64QBVx88igcIwEaM0Lz11FqDvU';
-const EDGE_URL = SB_URL + '/functions/v1';
-// ── GROQ DIRECT CALL (replaces CLAUDE_EDGE_URL / edge function) ──────────────
-const GROQ_API_KEY = "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";
-const GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL   = "llama-3.3-70b-versatile";
 
+// ── AI Helper (routes through secure Edge Function) ──
 async function callGroq(messages, systemPrompt = null) {
-  // Send the request to your secure backend instead of exposing the API key
   try {
     const data = await callEdge('chat-bot-handler', {
       messages: messages,
@@ -25,45 +19,9 @@ async function callGroq(messages, systemPrompt = null) {
   }
 }
 
-  // Deduplicate consecutive same-role
-  const deduped = [];
-  for (const msg of valid) {
-    if (deduped.length > 0 && deduped[deduped.length - 1].role === msg.role) {
-      deduped[deduped.length - 1].content += '\n' + msg.content;
-    } else {
-      deduped.push({ role: msg.role, content: msg.content });
-    }
-  }
-  if (deduped.length > 0 && deduped[0].role !== 'user') deduped[0].role = 'user';
-  groqMessages.push(...deduped);
-
-  if (groqMessages.filter(m => m.role !== 'system').length === 0) {
-    throw new Error('No valid messages to send.');
-  }
-
-  const response = await fetch(GROQ_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type':  'application/json',
-      'Authorization': `Bearer ${GROQ_API_KEY}`
-    },
-    body: JSON.stringify({
-      model:       GROQ_MODEL,
-      messages:    groqMessages,
-      max_tokens:  1024,
-      temperature: 0.7
-    })
-  });
-
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error?.message || 'Groq API error');
-  return data.choices[0].message.content;
-}
-
 let chatHistory = []; 
 let adminAiHistory = [];
 
-const CLAUDE_EDGE_URL = `${EDGE_URL}/smooth-handler`;
 /** Call a deployed Edge Function securely with the user's JWT */
 async function callEdge(fnName, body) {
   const session = (await db.auth.getSession()).data.session;
@@ -84,10 +42,6 @@ async function callEdge(fnName, body) {
   if (!res.ok) throw new Error(data.error || `${fnName} failed (${res.status})`);
   return data;
 }
-const ADMIN_EMAIL = 'israelefe093@gmail.com';
-const PAYSTACK_PUBLIC_KEY = 'pk_test_ecfb2bed734aa5eb754fad6ef5b62d44f817c782'; // Replace with live key
-const COMMISSION_AMOUNT = 500000; // ₦5,000 in kobo
-const PLATFORM_FEE_PCT = 0.03;
 
 const db = window.supabase.createClient(SB_URL, SB_KEY, {
   auth: {
