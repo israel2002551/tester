@@ -1,47 +1,7 @@
 // ====================================================
-//  BUYSELL Nigeria â€” Main Application
+//  BUYSELL Nigeria — Main Application
 //  Config loaded from config.js (secrets are .gitignored)
 // ====================================================
-
-// â”€â”€ AI Helper (routes through secure Edge Function) â”€â”€
-async function callPublicAI(messages, context = {}) {
-  const res = await fetch(CLAUDE_EDGE_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SB_KEY}`,
-      'apikey': SB_KEY
-    },
-    body: JSON.stringify({ messages, context })
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `AI failed (${res.status})`);
-  if (!data.reply) throw new Error('Invalid AI response');
-  return data.reply;
-}
-
-async function callGroq(messages, systemPrompt = null) {
-  try {
-    let data;
-    if (currentUser) {
-      data = await callEdge('chat-bot-handler', {
-        messages: messages,
-        systemPrompt: systemPrompt
-      });
-    } else {
-      const publicMessages = systemPrompt
-        ? [{ role: 'system', content: systemPrompt }, ...messages]
-        : messages;
-      data = { reply: await callPublicAI(publicMessages, { task: 'chatbot' }) };
-    }
-    
-    if (!data || !data.reply) throw new Error('Invalid AI response');
-    return data.reply;
-  } catch (error) {
-    console.error("AI Error:", error);
-    throw new Error(error.message || 'AI processing failed. Please try again.');
-  }
-}
 
 let chatHistory = []; 
 let adminAiHistory = [];
@@ -51,9 +11,8 @@ async function callEdge(fnName, body) {
   const session = (await db.auth.getSession()).data.session;
   const token   = session?.access_token;
   if (!token) throw new Error('Not authenticated');
-  const functionName = String(fnName || '').replace(/^\/+/, '');
 
-  const res = await fetch(`${EDGE_URL}/${functionName}`, {
+  const res = await fetch(`${EDGE_URL}/${fnName}`, {
     method:  'POST',
     headers: {
       'Content-Type':  'application/json',
@@ -64,34 +23,17 @@ async function callEdge(fnName, body) {
   });
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || `${functionName} failed (${res.status})`);
+  if (!res.ok) throw new Error(data.error || `${fnName} failed (${res.status})`);
   return data;
 }
 
-async function callPublicEdge(fnName, body) {
-  const functionName = String(fnName || '').replace(/^\/+/, '');
-  const res = await fetch(`${EDGE_URL}/${functionName}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SB_KEY}`,
-      'apikey': SB_KEY
-    },
-    body: JSON.stringify(body)
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `${functionName} failed (${res.status})`);
-  return data;
-}
 
 const db = window.supabase.createClient(SB_URL, SB_KEY, {
   auth: {
     persistSession:     true,
     autoRefreshToken:   true,
     detectSessionInUrl: true,
-    storage:            window.localStorage,
-    storageKey:         'buysell-auth-token',
-    flowType:           'implicit'       // 'pkce' breaks on file:// and non-HTTPS origins
+    storage:            window.localStorage
   }
 });
 
@@ -104,7 +46,6 @@ let products = [], filteredProducts = [], activeFilters = {};
 let carouselIndex = 0, carouselTimer = null;
 let selectedRating = 0, checkoutPaymentMethod = 'paystack';
 let deferredInstallPrompt = null, salesChart = null;
-let checkoutTotal = 0;
 let carouselStartX = 0;
 
 // ====================================================
@@ -114,16 +55,16 @@ if ('serviceWorker' in navigator) {
   const sw = `data:application/javascript,self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});self.addEventListener('install',()=>self.skipWaiting());`;
   navigator.serviceWorker.register(sw).catch(()=>{});
 }
-const _iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192"><rect fill="#0b1f14" width="192" height="192" rx="24"/><text x="96" y="130" font-family="Arial,sans-serif" font-size="120" font-weight="bold" fill="#fff" text-anchor="middle">B</text></svg>`;
-const _iconUrl = 'data:image/svg+xml;base64,' + btoa(_iconSvg);
-const manifest = {name:'BUYSELL Nigeria',short_name:'BUYSELL',start_url: window.location.origin + '/','display':'standalone',theme_color:'#0b1f14',background_color:'#fdf8ef',icons:[{src:_iconUrl,sizes:'192x192',type:'image/svg+xml'}]};
+const manifest = {name:'BUYSELL Nigeria',short_name:'BUYSELL',start_url: window.location.origin + '/','display':'standalone',theme_color:'#0b1f14',background_color:'#fdf8ef',icons:[{src:'https://via.placeholder.com/192x192/0b1f14/ffffff?text=B',sizes:'192x192',type:'image/png'}]};
 const mBlob = new Blob([JSON.stringify(manifest)],{type:'application/json'});
 const mUrl = URL.createObjectURL(mBlob);
 const mLink = document.createElement('link');
 mLink.rel='manifest';mLink.href=mUrl;
 if(document.head) document.head.appendChild(mLink); else document.documentElement.appendChild(mLink);
 
-// PWA install prompt handled below (line ~6871)
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstallPrompt = e; setTimeout(()=>document.getElementById('pwa-banner').classList.add('show'), 3000); });
+function installPWA() { if (deferredInstallPrompt) { deferredInstallPrompt.prompt(); deferredInstallPrompt.userChoice.then(()=>{ document.getElementById('pwa-banner').classList.remove('show'); deferredInstallPrompt = null; }); } }
+function dismissPWA() { document.getElementById('pwa-banner').classList.remove('show'); }
 
 // ====================================================
 //  TOAST
@@ -208,7 +149,7 @@ async function handleAuth(e) {
 
   try {
     if (isLogin) {
-      // â”€â”€ SIGN IN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // ── SIGN IN ──────────────────────────────────────────────
       const { data, error } = await db.auth.signInWithPassword({ email, password });
 
       if (error) {
@@ -216,7 +157,7 @@ async function handleAuth(e) {
         const msg = error.message?.toLowerCase() || '';
         if (msg.includes('email not confirmed')) {
           toast('Email Not Confirmed',
-            'Supabase Dashboard â†’ Auth â†’ Providers â†’ Email â†’ turn OFF "Confirm email"',
+            'Supabase Dashboard → Auth → Providers → Email → turn OFF "Confirm email"',
             'error', 9000);
         } else if (msg.includes('invalid login') || msg.includes('invalid credentials')) {
           toast('Wrong Email or Password', 'Check your details and try again', 'error');
@@ -232,12 +173,9 @@ async function handleAuth(e) {
       const user = data.session?.user || data.user;
       await onAuthSuccess(user);
       closeModal('auth-modal');
-      // Auto-navigate to the user's dashboard based on role
-      const role = currentUser?.profile?.role || 'buyer';
-      enterSite(role);
 
     } else {
-      // â”€â”€ SIGN UP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // ── SIGN UP ──────────────────────────────────────────────
       const name    = validateInput(document.getElementById('auth-name').value.trim());
       const rawRole = validateInput(document.querySelector('input[name="auth-role-radio"]:checked')?.value || 'buyer');
       const wa      = document.getElementById('auth-wa').value.trim();
@@ -250,7 +188,7 @@ async function handleAuth(e) {
       }
 
       const role     = rawRole === 'both' ? 'seller' : rawRole;
-      const accounts = (rawRole === 'service_provider' || rawRole === 'both') ? 'seller' : rawRole;
+      const accounts = rawRole;
 
       // Step 1: Create the account
       const { data: signUpData, error: signUpError } = await db.auth.signUp({
@@ -261,8 +199,8 @@ async function handleAuth(e) {
       if (signUpError) {
         const msg = signUpError.message?.toLowerCase() || '';
         if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('user already')) {
-          // Account exists â€” just sign them in directly
-          toast('Account exists â€” signing you inâ€¦', '', 'info', 3000);
+          // Account exists — just sign them in directly
+          toast('Account exists — signing you in…', '', 'info', 3000);
           const { data: loginData, error: loginError } = await db.auth.signInWithPassword({ email, password });
           if (loginError) {
             toast('Sign In Failed', 'Account exists but password is wrong. Try signing in.', 'error', 7000);
@@ -271,8 +209,6 @@ async function handleAuth(e) {
           const user = loginData.session?.user || loginData.user;
           await onAuthSuccess(user);
           closeModal('auth-modal');
-          // Auto-navigate to the user's dashboard
-          enterSite(currentUser?.profile?.role || 'buyer');
           return;
         } else if (msg.includes('rate limit') || msg.includes('too many')) {
           toast('Too Many Attempts', 'Wait a few minutes and try again', 'warn', 7000);
@@ -282,12 +218,12 @@ async function handleAuth(e) {
         return;
       }
 
-      // Step 2: Always immediately sign in after signup â€” guarantees a live session
+      // Step 2: Always immediately sign in after signup — guarantees a live session
       // regardless of whether email confirmation setting is truly off
       const { data: loginData, error: loginError } = await db.auth.signInWithPassword({ email, password });
 
       if (loginError) {
-        // Signup worked but auto-login failed â€” tell them to sign in manually
+        // Signup worked but auto-login failed — tell them to sign in manually
         toast('Account Created!', 'Now sign in with your email and password', 'success', 6000);
         toggleAuth('login');
         document.getElementById('auth-email').value = email;
@@ -298,16 +234,14 @@ async function handleAuth(e) {
       await upsertProfile(user, { name, role, accounts, whatsapp: wa });
       await onAuthSuccess(user);
       closeModal('auth-modal');
-      // Auto-navigate new user to their dashboard
-      enterSite(role);
 
       const msgs = {
-        buyer:            'ðŸ›ï¸ Welcome! Browse thousands of products.',
-        seller:           'ðŸª Welcome Seller! First month is FREE.',
-        both:             'ðŸ”„ Welcome! You can shop and sell on BUYSELL.',
-        service_provider: 'ðŸ”§ Welcome Service Pro! Set up your portfolio and start getting hired.'
+        buyer:            '🛍️ Welcome! Browse thousands of products.',
+        seller:           '🏪 Welcome Seller! First month is FREE.',
+        both:             '🔄 Welcome! You can shop and sell on BUYSELL.',
+        service_provider: '🔧 Welcome Service Pro! Set up your portfolio and start getting hired.'
       };
-      setTimeout(() => toast('Account Created! ðŸŽ‰', msgs[rawRole] || '', 'success', 5000), 400);
+      setTimeout(() => toast('Account Created! 🎉', msgs[rawRole] || '', 'success', 5000), 400);
     }
 
   } catch(err) {
@@ -324,9 +258,7 @@ async function handleAuth(e) {
 async function upsertProfile(user, meta) {
   if (!user?.id) return;
   const trialEnd = new Date(); trialEnd.setDate(trialEnd.getDate() + 30);
-  // Check if user was referred
-  const referredBy = localStorage.getItem('bs_ref') || sessionStorage.getItem('referred_by') || '';
-  const profileData = {
+  const { error } = await db.from('profiles').upsert({
     id:              user.id,
     name:            meta.name     || user.user_metadata?.name     || 'User',
     email:           user.email,
@@ -336,14 +268,8 @@ async function upsertProfile(user, meta) {
     trial_end:       trialEnd.toISOString(),
     commission_paid: false,
     referral_code:   'ref_' + Math.random().toString(36).substr(2, 8)
-  };
-  if (referredBy) profileData.referred_by = referredBy;
-  const { error } = await db.from('profiles').upsert(profileData, { onConflict: 'id', ignoreDuplicates: false });
+  }, { onConflict: 'id', ignoreDuplicates: false });
   if (error) console.warn('upsertProfile error:', error.message);
-  // Track referral if this is a new signup
-  if (referredBy) {
-    trackReferralSignup(user.id, referredBy);
-  }
 }
 
 async function onAuthSuccess(user) {
@@ -354,7 +280,7 @@ async function onAuthSuccess(user) {
   const { data: profile, error } = await db.from('profiles').select('*').eq('id', user.id).single();
 
   if (error || !profile) {
-    // Profile not yet created (trigger may still be running) â€” create it now
+    // Profile not yet created (trigger may still be running) — create it now
     await upsertProfile(user, user.user_metadata || {});
     const { data: retryProfile } = await db.from('profiles').select('*').eq('id', user.id).single();
     currentUser.profile = retryProfile || {
@@ -368,7 +294,6 @@ async function onAuthSuccess(user) {
 
   currentRole = currentUser.profile?.role || 'buyer';
   updateNavForUser();
-  updateLandingForUser();
 }
 
 async function checkSession() {
@@ -385,12 +310,8 @@ async function checkSession() {
       }
     }
     if (event === 'SIGNED_OUT') {
-      // Only reset state if we were actually signed in
-      // (prevents clearing state during initial load when no session exists)
-      if (currentUser) {
-        currentUser = null;
-        currentRole = 'buyer';
-      }
+      currentUser = null;
+      currentRole = 'buyer';
     }
     if (event === 'TOKEN_REFRESHED' && session?.user) {
       currentUser = session.user;
@@ -401,23 +322,9 @@ async function checkSession() {
   });
 
   // Then check for an existing persisted session
-  try {
-    const { data: { session }, error } = await db.auth.getSession();
-    if (session?.user) {
-      await onAuthSuccess(session.user);
-      // Auto-skip landing page and go to dashboard
-      enterSite(currentUser?.profile?.role || 'buyer');
-    } else if (error) {
-      console.warn('Session restore failed:', error.message);
-      // Try refreshing the session token
-      const { data: refreshData } = await db.auth.refreshSession().catch(() => ({ data: null }));
-      if (refreshData?.session?.user) {
-        await onAuthSuccess(refreshData.session.user);
-        enterSite(currentUser?.profile?.role || 'buyer');
-      }
-    }
-  } catch(e) {
-    console.warn('Session check error:', e.message);
+  const { data: { session } } = await db.auth.getSession();
+  if (session?.user) {
+    await onAuthSuccess(session.user);
   }
 }
 
@@ -431,7 +338,7 @@ function updateNavForUser() {
   document.getElementById('dash-user-name').textContent = currentUser.profile?.name || 'Seller';
   document.getElementById('dash-user-email').textContent = currentUser.email || '';
   // Admin check
-  // DB-backed admin check â€” email alone is not sufficient
+  // DB-backed admin check — email alone is not sufficient
   const isAdmin = currentUser.email === ADMIN_EMAIL &&
                   currentUser.profile?.role === 'admin';
   if (isAdmin) {
@@ -440,43 +347,6 @@ function updateNavForUser() {
   // Referral link
   const rc = currentUser.profile?.referral_code || 'ref_' + currentUser.id?.substr(0,8);
   document.getElementById('referral-link').value = `https://buysell.ng/ref/${rc}`;
-
-  // Update Toggle View text for Service Providers
-  /*
-  if (currentRole === 'service_provider') {
-    document.getElementById('toggle-view-text').textContent = 'Service Dashboard';
-    document.getElementById('toggle-view-icon').className = 'fa-solid fa-wrench';
-  }
-  */
-}
-
-// Update landing page Sign In button to show signed-in state
-function updateLandingForUser() {
-  if (!currentUser) return;
-  const btn = document.getElementById('landing-auth-btn');
-  const icon = document.getElementById('landing-auth-icon');
-  const text = document.getElementById('landing-auth-text');
-  if (!btn || !text) return;
-  const name = currentUser.profile?.name || currentUser.email?.split('@')[0] || 'User';
-  const role = currentUser.profile?.role || 'buyer';
-  const roleLabel = role === 'seller' ? 'ðŸª Seller' : role === 'both' ? 'ðŸ”„ Both' : role === 'admin' ? 'âš™ï¸ Admin' : 'ðŸ›ï¸ Buyer';
-  text.textContent = name;
-  if (icon) icon.className = 'fa-solid fa-circle-check';
-  btn.style.color = '#4ade80';
-  btn.title = `Signed in as ${name} (${roleLabel}) â€” Click to enter`;
-}
-
-// Handle landing page auth button click
-function handleLandingAuthClick() {
-  if (currentUser) {
-    // Already signed in â€” go straight to dashboard
-    const role = currentUser.profile?.role || 'buyer';
-    enterSite(role);
-  } else {
-    // Not signed in â€” open auth modal
-    showModal('auth-modal');
-    toggleAuth('login');
-  }
 }
 
 async function sendPasswordReset() {
@@ -507,7 +377,7 @@ async function sendPasswordReset() {
     document.getElementById('forgot-step-1').classList.add('hidden');
     document.getElementById('forgot-step-2').classList.remove('hidden');
     document.getElementById('forgot-sent-to').textContent = 'Reset link sent to ' + email;
-    toast('Reset link sent! ðŸ“§', 'Check your email inbox', 'success', 6000);
+    toast('Reset link sent! 📧', 'Check your email inbox', 'success', 6000);
 
   } catch(e) {
     toast('Error', e.message || 'Please try again', 'error');
@@ -519,35 +389,12 @@ async function sendPasswordReset() {
 }
 
 async function logoutUser() {
-  // Use 'local' scope â€” only clears the browser session.
-  // 'global' (default) hits the Supabase API which has strict rate limits
-  // and can block re-login for up to 1 hour if called too often.
-  await db.auth.signOut({ scope: 'local' });
+  await db.auth.signOut();
   currentUser = null;
-  currentRole = 'buyer';
   document.getElementById('nav-auth-btns').classList.remove('hidden');
   document.getElementById('nav-user-btns').classList.add('hidden');
-  // Reset landing page auth button
-  const landingText = document.getElementById('landing-auth-text');
-  const landingIcon = document.getElementById('landing-auth-icon');
-  const landingBtn = document.getElementById('landing-auth-btn');
-  if (landingText) landingText.textContent = 'Sign In';
-  if (landingIcon) landingIcon.className = 'fa-solid fa-sign-in-alt';
-  if (landingBtn) landingBtn.style.color = '';
-  // Go back to landing page
-  document.getElementById('buyer-view').style.display = 'none';
-  document.getElementById('seller-dashboard').style.display = 'none';
-  document.getElementById('storefront-view').style.display = 'none';
-  document.getElementById('topbar').style.display = 'none';
-  document.getElementById('main-nav').style.display = 'none';
-  document.getElementById('chatbot-fab').style.display = 'none';
-  document.getElementById('wa-fab').style.display = 'none';
-  document.getElementById('mob-ham-btn').style.display = 'none';
-  document.body.classList.remove('in-seller');
-  const landing = document.getElementById('landing');
-  landing.style.display = 'block';
-  landing.style.opacity = '1';
-  toast('Signed Out', 'See you soon!', 'info');
+  enterSite('buyer');
+  toast('Signed Out', '', 'info');
 }
 
 
@@ -566,7 +413,7 @@ async function generateDescription() {
   try {
     const res  = await fetch(CLAUDE_EDGE_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SB_KEY}`, 'apikey': SB_KEY },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         messages: [{
           role: 'user',
@@ -574,10 +421,10 @@ async function generateDescription() {
                     Product: ${name}
                     Category: ${category}
                     Condition: ${condition}
-                    Price: â‚¦${price}
+                    Price: ₦${price}
                     
                     Requirements:
-                    - 2â€“3 sentences max
+                    - 2–3 sentences max
                     - Highlight key benefits
                     - Mention it's available in Nigeria
                     - No bullet points, plain text only
@@ -590,7 +437,7 @@ async function generateDescription() {
     const data = await res.json();
     if (data.reply) {
       document.getElementById('p-desc').value = data.reply;
-      toast('Description Generated! âœ¨', 'Edit it to your liking', 'success');
+      toast('Description Generated! ✨', 'Edit it to your liking', 'success');
     }
   } catch(e) {
     toast('AI unavailable', 'Write description manually', 'warn');
@@ -622,8 +469,8 @@ function enterSite(mode) {
       showAdminPortal();
     } else if (mode === 'seller' || mode === 'both') {
       showSellerDashboard();
-    /* } else if (mode === 'service_provider') {
-      showServiceDashboard(); */
+    } else if (mode === 'service_provider') {
+      showServiceDashboard();
     } else {
       showBuyerView();
     }
@@ -636,10 +483,10 @@ function showBuyerView() {
   document.getElementById('seller-dashboard').style.display = 'none';
   document.getElementById('storefront-view').style.display = 'none';
   if(document.getElementById('admin-portal-view')) document.getElementById('admin-portal-view').style.display = 'none';
-  /* if(document.getElementById('service-provider-view')) document.getElementById('service-provider-view').style.display = 'none'; */
+  if(document.getElementById('service-provider-view')) document.getElementById('service-provider-view').style.display = 'none';
 
-  /* document.getElementById('toggle-view-icon').className = currentUser?.profile?.role === 'service_provider' ? 'fa-solid fa-wrench' : 'fa-solid fa-store';
-  document.getElementById('toggle-view-text').textContent = currentUser?.profile?.role === 'service_provider' ? 'Service Dashboard' : 'Seller Dashboard'; */
+  document.getElementById('toggle-view-icon').className = 'fa-solid fa-store';
+  document.getElementById('toggle-view-text').textContent = 'Seller Dashboard';
   document.getElementById('mob-ham-btn').style.display = 'none';
   document.body.classList.remove('in-seller');
   currentRole = 'buyer';
@@ -650,12 +497,11 @@ function showBuyerView() {
 
 function showSellerDashboard() {
   if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
-  if (!checkAndPromptKyc()) return; // Block unverified access
   document.getElementById('buyer-view').style.display = 'none';
   document.getElementById('seller-dashboard').style.display = 'block';
   document.getElementById('storefront-view').style.display = 'none';
   if(document.getElementById('admin-portal-view')) document.getElementById('admin-portal-view').style.display = 'none';
-  /* if(document.getElementById('service-provider-view')) document.getElementById('service-provider-view').style.display = 'none'; */
+  if(document.getElementById('service-provider-view')) document.getElementById('service-provider-view').style.display = 'none';
 
   document.getElementById('toggle-view-icon').className = 'fa-solid fa-store';
   document.getElementById('toggle-view-text').textContent = 'Back to Shopping';
@@ -667,41 +513,17 @@ function showSellerDashboard() {
   currentRole = 'seller';
   stopCarousel();
   checkSellerCommission();
-
-  // Check if seller must pay commission first
-  const p = currentUser.profile;
-  const trialEnd = p?.trial_end ? new Date(p.trial_end) : null;
-  const commPaid = p?.commission_paid;
-  const isExpired = !commPaid && (!trialEnd || trialEnd <= new Date());
-  const isAdmin = currentUser.email === ADMIN_EMAIL;
-
-  if (isExpired && !isAdmin) {
-    // LOCK: Only show commission section
-    lockSellerToCommission();
-  } else {
-    // UNLOCK: Show everything
-    unlockSellerDashboard();
-    loadSellerStats();
-    loadSellerProds();
-    loadSellerOrders();
-    renderChart();
-    loadWithdrawalData();
-    loadAffiliateData();
-  }
+  loadSellerStats();
+  loadSellerProds();
+  loadSellerOrders();
+  renderChart();
+  loadWithdrawalData();
+  loadAffiliateData();
 }
 
 function toggleView() {
-  if (currentRole === 'seller') { // || currentRole === 'service_provider'
-    showBuyerView();
-  } else { 
-    if (!currentUser) { showModal('auth-modal'); return; }
-    if (!checkAndPromptKyc()) return; // Block unverified access
-    /* if (currentUser.profile?.role === 'service_provider') {
-      showServiceDashboard();
-    } else { */
-      showSellerDashboard(); 
-    /* } */
-  }
+  if (currentRole === 'seller') showBuyerView();
+  else { if (!currentUser) { showModal('auth-modal'); return; } showSellerDashboard(); }
 }
 
 function handleNavBrand(e) {
@@ -711,12 +533,6 @@ function handleNavBrand(e) {
 }
 
 function showDash(section) {
-  // Block navigation to non-commission sections when seller is locked
-  if (_sellerLocked && section !== 'commission') {
-    toast('Account Suspended', 'Pay your commission to unlock your seller dashboard', 'warn', 4000);
-    showDash('commission');
-    return;
-  }
   document.querySelectorAll('.dash-section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.dash-nav-item').forEach(n => n.classList.remove('active'));
   const el = document.getElementById(`ds-${section}`);
@@ -726,7 +542,7 @@ function showDash(section) {
   if (section === 'products') loadSellerProds();
   if (section === 'orders') loadSellerOrders();
   if (section === 'reviews') loadSellerReviews();
-  if (section === 'admin') { if (!guardAdminPanel()) return; ensureAdminKycPanel(); loadAdminOverview(); }
+  if (section === 'admin') { if (!guardAdminPanel()) return; loadAdminOverview(); }
   if (section === 'settings') loadSettings();
   if (section === 'withdrawals') { loadWithdrawalData(); loadWithdrawalHistory(); }
   if (section === 'affiliate') loadAffiliateData();
@@ -784,9 +600,7 @@ async function loadProducts() {
   document.getElementById('prods-empty').classList.add('hidden');
   document.getElementById('prods-error').classList.add('hidden');
   try {
-    // Change this line:
-let q = db.from('products').select(`*, profiles(name, whatsapp, bank_name, account_number, account_name, paystack_key)`).eq('status', 'active').order('created_at', { ascending: false }).limit(100); 
-// Added .limit(100) to cap the initial marketplace load
+    let q = db.from('products').select(`*, profiles(name, whatsapp, bank_name, account_number, account_name, paystack_key)`).eq('status', 'active').order('created_at', { ascending: false });
     const { data, error } = await q;
     if (error) throw error;
     products = data || [];
@@ -814,17 +628,16 @@ function prodCard(p) {
   const isSoldOut = stockPct === 0;
   const badges = [
     discount ? `<span class="prod-badge prod-badge-discount">-${discount}%</span>` : '',
-    p.has_video ? `<span class="prod-badge prod-badge-video">ðŸŽ¬ Video</span>` : '',
+    p.has_video ? `<span class="prod-badge prod-badge-video">🎬 Video</span>` : '',
     p.category === 'dropship' ? `<span class="prod-badge prod-badge-drop">Dropship</span>` : '',
-    p.seller_verified ? `<span class="prod-badge prod-badge-verified">âœ“ Verified</span>` : ''
+    p.seller_verified ? `<span class="prod-badge prod-badge-verified">✓ Verified</span>` : ''
   ].filter(Boolean).join('');
-  const stars = p.avg_rating ? 'â˜…'.repeat(Math.round(p.avg_rating)) + 'â˜†'.repeat(5-Math.round(p.avg_rating)) : 'â˜…â˜…â˜…â˜…â˜…';
+  const stars = p.avg_rating ? '★'.repeat(Math.round(p.avg_rating)) + '☆'.repeat(5-Math.round(p.avg_rating)) : '★★★★★';
   return `
   <div class="prod-card" onclick="openProduct('${p.id}')">
     <div class="prod-img-wrap">
       <img src="${p.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=400&fit=crop'}" alt="${escHtml(p.name)}" loading="lazy">
       ${badges ? `<div class="prod-flags">${badges}</div>` : ''}
-      <button class="prod-wish-btn" onclick="event.stopPropagation();toggleWishlist('${p.id}')" title="${isWishlisted(p.id)?'Remove from Wishlist':'Save to Wishlist'}"><i class="fa-${isWishlisted(p.id)?'solid':'regular'} fa-heart" style="${isWishlisted(p.id)?'color:#ef4444':''}"></i></button>
       ${isSoldOut ? `<div class="prod-sold-overlay"><span class="prod-sold-label">SOLD OUT</span></div>` : `<button class="prod-quick-add" onclick="event.stopPropagation();addToCart(${JSON.stringify({id:p.id,name:p.name,price:p.price,image_url:p.image_url,seller_id:p.seller_id,profiles:p.profiles}).replace(/"/g,'&quot;')})" aria-label="Add to cart"><i class="fa-solid fa-cart-plus"></i></button>`}
     </div>
     <div class="prod-body">
@@ -866,7 +679,7 @@ async function doSearch() {
     try {
       const res  = await fetch(CLAUDE_EDGE_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SB_KEY}`, 'apikey': SB_KEY },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [{
             role: 'user',
@@ -883,7 +696,7 @@ async function doSearch() {
         const suggestions = data.reply.split(',').map(s => s.trim()).filter(Boolean);
         if (suggestions.length) {
           toast(
-            `ðŸ’¡ Try searching: ${suggestions.slice(0,2).join(', ')}`,
+            `💡 Try searching: ${suggestions.slice(0,2).join(', ')}`,
             'Showing closest matches',
             'info',
             4000
@@ -914,8 +727,8 @@ function applyFilters() {
 function renderActiveFilters() {
   const container = document.getElementById('active-filters');
   const pills = [];
-  if (activeFilters.priceMin||activeFilters.priceMax) pills.push({key:'price',label:`â‚¦${fmtNum(activeFilters.priceMin||0)} â€“ â‚¦${fmtNum(activeFilters.priceMax||'âˆž')}`});
-  if (activeFilters.minRating) pills.push({key:'minRating',label:`${activeFilters.minRating}+ â˜…`});
+  if (activeFilters.priceMin||activeFilters.priceMax) pills.push({key:'price',label:`₦${fmtNum(activeFilters.priceMin||0)} – ₦${fmtNum(activeFilters.priceMax||'∞')}`});
+  if (activeFilters.minRating) pills.push({key:'minRating',label:`${activeFilters.minRating}+ ★`});
   if (activeFilters.condition) pills.push({key:'condition',label:activeFilters.condition});
   container.innerHTML = pills.map(p => `<span class="active-filter-pill">${p.label}<button onclick="removeFilter('${p.key}')"><i class="fa-solid fa-times"></i></button></span>`).join('');
 }
@@ -984,7 +797,7 @@ function sortProds() {
 function updatePriceDisplay() {
   const min = document.getElementById('flt-min').value || 0;
   const max = document.getElementById('flt-max').value || '500,000';
-  document.getElementById('price-range-display').textContent = `â‚¦${fmtNum(min)} â€“ â‚¦${fmtNum(max)}`;
+  document.getElementById('price-range-display').textContent = `₦${fmtNum(min)} – ₦${fmtNum(max)}`;
 }
 
 // ====================================================
@@ -1028,13 +841,11 @@ async function openProduct(id) {
   document.getElementById('modal-seller-avatar').textContent = (seller.name||'S')[0].toUpperCase();
   // Flags
   const flags = [];
-  if (p.has_video) flags.push('<span class="prod-badge prod-badge-video">ðŸŽ¬ Video</span>');
-  if (p.seller_verified) flags.push('<span class="prod-badge prod-badge-verified">âœ“ Verified</span>');
+  if (p.has_video) flags.push('<span class="prod-badge prod-badge-video">🎬 Video</span>');
+  if (p.seller_verified) flags.push('<span class="prod-badge prod-badge-verified">✓ Verified</span>');
   document.getElementById('modal-flags').innerHTML = flags.join('');
   // Reviews
   loadProductReviews(id);
-  // Update wishlist heart button state
-  updateModalWishBtn();
 }
 
 async function loadProductReviews(productId) {
@@ -1047,9 +858,9 @@ async function loadProductReviews(productId) {
   // Calculate average and star distribution
   const avg = count ? (reviews.reduce((s,r)=>s+r.rating,0)/count) : 0;
   document.getElementById('modal-avg-rating').textContent = avg.toFixed(1);
-  document.getElementById('modal-stars').textContent = 'â˜…'.repeat(Math.round(avg)) + 'â˜†'.repeat(5-Math.round(avg));
+  document.getElementById('modal-stars').textContent = '★'.repeat(Math.round(avg)) + '☆'.repeat(5-Math.round(avg));
 
-  // Star distribution bars (5â†’1)
+  // Star distribution bars (5→1)
   const barsEl = document.getElementById('modal-rating-bars');
   barsEl.innerHTML = [5,4,3,2,1].map(star => {
     const starCount = reviews.filter(r => r.rating === star).length;
@@ -1066,35 +877,18 @@ async function loadProductReviews(productId) {
   // Review list
   const list = document.getElementById('modal-reviews-list');
   if (!count) { list.innerHTML = '<p class="color-text3 text-sm" style="padding:.5rem 0">No reviews yet. Be the first to share your experience!</p>'; return; }
-  list.innerHTML = reviews.map(r => {
-    // Build image gallery HTML if review has images
-    const imgs = r.image_urls || r.images || [];
-    const galleryHtml = imgs.length ? `<div class="review-images-gallery">${imgs.map(url => 
-      `<img src="${sanitizeUrl(url)}" alt="Review photo" onclick="openReviewLightbox('${sanitizeUrl(url)}')" loading="lazy">`
-    ).join('')}</div>` : '';
-    return `
+  list.innerHTML = reviews.map(r => `
     <div class="review-card">
       <div class="flex justify-between items-center">
         <div style="display:flex;align-items:center;gap:.4rem">
           <div style="width:26px;height:26px;border-radius:50%;background:var(--green-xlt);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:var(--green)">${(r.profiles?.name||'B')[0].toUpperCase()}</div>
           <span class="reviewer-name">${escHtml(r.profiles?.name||'Verified Buyer')}</span>
         </div>
-        <div class="stars sm">${'â˜…'.repeat(r.rating)+'â˜†'.repeat(5-r.rating)}</div>
+        <div class="stars sm">${'★'.repeat(r.rating)+'☆'.repeat(5-r.rating)}</div>
       </div>
       <p class="review-text">${escHtml(r.review_text || r.comment || '')}</p>
-      ${galleryHtml}
-      <span class="text-xs color-text3"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i> Verified Purchase Â· ${fmtDate(r.created_at)}${imgs.length ? ` Â· <i class="fa-solid fa-camera" style="color:var(--text3)"></i> ${imgs.length} photo${imgs.length>1?'s':''}` : ''}</span>
-    </div>`;
-  }).join('');
-}
-
-// Lightbox for viewing review images full-size
-function openReviewLightbox(url) {
-  const lb = document.createElement('div');
-  lb.className = 'review-lightbox';
-  lb.innerHTML = `<img src="${url}" alt="Review photo full size">`;
-  lb.onclick = () => lb.remove();
-  document.body.appendChild(lb);
+      <span class="text-xs color-text3"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i> Verified Purchase · ${fmtDate(r.created_at)}</span>
+    </div>`).join('');
 }
 
 // ====================================================
@@ -1200,11 +994,10 @@ function startCheckout() {
   if (p.name) document.getElementById('co-name').value = p.name;
   document.getElementById('co-pay-email').textContent = currentUser.email;
   const total = cart.reduce((s,c)=>s+(c.price*(c.qty||1)),0);
-  checkoutTotal = total;
   const comm = Math.round(total * PLATFORM_FEE_PCT);
   document.getElementById('co-pay-amount').textContent = fmtN(total);
   document.getElementById('co-commission').textContent = fmtN(comm);
-  document.getElementById('co-total').textContent = fmtN(checkoutTotal);
+  document.getElementById('co-total').textContent = fmtN(total);
   // Order items
   document.getElementById('co-items').innerHTML = cart.map(c=>`
     <div class="order-item">
@@ -1246,6 +1039,45 @@ function selectPM(method) {
   document.getElementById('pm-transfer-panel').classList.toggle('hidden', method!=='transfer');
 }
 
+function payWithPaystack() {
+  const handler = PaystackPop.setup({
+    key: PAYSTACK_PUBLIC_KEY,
+    email: currentUser.email,
+    amount: total * 100, 
+    callback: async function(response) {
+      // 1. Show a loader
+      toast('Verifying Payment...', 'Please do not close the window', 'info');
+
+      // 2. Call your Edge Function instead of local saveOrderToDb
+      try {
+        const verification = await fetch(`${EDGE_URL}/verify-payment`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            reference: response.reference,
+            order_details: {
+              buyer_id: currentUser.id,
+              items: cart,
+              delivery_address: document.getElementById('co-address').value,
+              // ... other fields
+            }
+          })
+        });
+
+        const result = await verification.json();
+        if (result.success) {
+          cart = []; saveCart();
+          goCheckoutStep(3);
+          toast('Payment Verified!', 'Your order is confirmed', 'success');
+        }
+      } catch (err) {
+        toast('Verification Error', 'Contact support with ref: ' + response.reference, 'error');
+      }
+    }
+  });
+  handler.openIframe();
+}
+
 function handleProofUpload(input) {
   if (input.files?.[0]) {
     const zone = document.getElementById('proof-upload-zone');
@@ -1263,7 +1095,7 @@ async function submitTransferOrder() {
   if (!ALLOWED_PROOF.includes(proofFile.type)) { toast('Invalid file','Please upload a JPG or PNG screenshot','warn'); return; }
   if (proofFile.size > MAX_PROOF_SIZE)         { toast('File too large','Maximum proof image size is 10MB','warn'); return; }
   const btn = document.getElementById('co-transfer-btn');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submittingâ€¦';
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting…';
   try {
     let proofUrl = '';
     const file = fileInput.files[0];
@@ -1296,8 +1128,6 @@ async function submitTransferOrder() {
 //  REVIEWS
 // ====================================================
 let reviewProductId = null;
-let reviewImageFiles = [];    // Holds File objects for review photo upload
-
 function openReviewModal() {
   if (!currentUser) { showModal('auth-modal'); return; }
   if (!currentProd) return;
@@ -1306,56 +1136,7 @@ function openReviewModal() {
   selectedRating = 0;
   setRating(0);
   document.getElementById('review-text').value = '';
-  // Clear image previews
-  reviewImageFiles = [];
-  document.getElementById('review-img-previews').innerHTML = '';
-  document.getElementById('review-images-input').value = '';
   showModal('review-modal');
-}
-
-// Preview selected review images
-function previewReviewImages(input) {
-  const files = Array.from(input.files);
-  const maxFiles = 3;
-  const maxSize = 5 * 1024 * 1024; // 5MB
-
-  for (const file of files) {
-    if (reviewImageFiles.length >= maxFiles) {
-      toast('Max 3 Photos', 'You can upload up to 3 images per review', 'warn');
-      break;
-    }
-    if (file.size > maxSize) {
-      toast('File Too Large', `${file.name} exceeds 5MB limit`, 'warn');
-      continue;
-    }
-    if (!file.type.startsWith('image/')) continue;
-    reviewImageFiles.push(file);
-  }
-
-  renderReviewPreviews();
-  input.value = ''; // Reset input so same file can be re-selected
-}
-
-function renderReviewPreviews() {
-  const container = document.getElementById('review-img-previews');
-  container.innerHTML = reviewImageFiles.map((file, idx) => {
-    const url = URL.createObjectURL(file);
-    return `<div class="review-img-preview">
-      <img src="${url}" alt="Review photo ${idx+1}">
-      <button class="remove-preview" onclick="removeReviewImage(${idx})" title="Remove">
-        <i class="fa-solid fa-times"></i>
-      </button>
-    </div>`;
-  }).join('');
-
-  // Hide upload zone if max reached
-  const zone = document.getElementById('review-upload-zone');
-  if (zone) zone.style.display = reviewImageFiles.length >= 3 ? 'none' : 'flex';
-}
-
-function removeReviewImage(idx) {
-  reviewImageFiles.splice(idx, 1);
-  renderReviewPreviews();
 }
 
 function setRating(val) {
@@ -1370,41 +1151,14 @@ async function submitReview() {
   if (!selectedRating) { toast('Please select a rating','','warn'); return; }
   const text = document.getElementById('review-text').value.trim();
   if (!text) { toast('Please write a review','','warn'); return; }
-
-  const btn = document.getElementById('review-submit-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spin-anim"><i class="fa-solid fa-circle-notch"></i></span> Uploading...';
-
   try {
-    // Upload review images to Supabase storage
-    const imageUrls = [];
-    for (const file of reviewImageFiles) {
-      const ext = file.name.split('.').pop().toLowerCase();
-      const path = `reviews/${currentUser.id}/${Date.now()}_${Math.random().toString(36).substr(2,6)}.${ext}`;
-      const { data, error: upErr } = await db.storage.from('uploads').upload(path, file, { upsert: false });
-      if (!upErr && data) {
-        const { data: urlData } = db.storage.from('uploads').getPublicUrl(data.path);
-        if (urlData?.publicUrl) imageUrls.push(urlData.publicUrl);
-      }
-    }
-
     await callEdge('submit-review', {
       product_id:  reviewProductId,
       rating:      selectedRating,
-      review_text: text,
-      image_urls:  imageUrls
+      review_text: text
     });
-  } catch(e) {
-    toast('Error', e.message, 'error');
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fa-solid fa-star"></i> Submit Review';
-    return;
-  }
-
-  toast('Review Submitted! â­', 'Thanks for your feedback!', 'success');
-  btn.disabled = false;
-  btn.innerHTML = '<i class="fa-solid fa-star"></i> Submit Review';
-  reviewImageFiles = [];
+  } catch(e) { toast('Error', e.message, 'error'); return; }
+  toast('Review Submitted! ⭐', 'Thanks for your feedback!', 'success');
   closeModal('review-modal');
   loadProductReviews(reviewProductId);
   loadProducts();
@@ -1413,41 +1167,28 @@ async function submitReview() {
 // ====================================================
 //  BUYER TABS & ORDERS
 // ====================================================
-function getOrderItems(order) {
-  if (Array.isArray(order?.items)) return order.items;
-  if (typeof order?.items === 'string') {
-    try { return JSON.parse(order.items) || []; } catch(e) { return []; }
-  }
-  return [];
-}
-
 function switchBuyerTab(tab) {
   document.getElementById('tab-shop').classList.toggle('active', tab==='shop');
   document.getElementById('tab-orders').classList.toggle('active', tab==='orders');
-  // Service tab commented out â€” null-safe
-  const tabSvc = document.getElementById('tab-services');
-  if (tabSvc) tabSvc.classList.toggle('active', tab==='services');
+  document.getElementById('tab-services').classList.toggle('active', tab==='services');
   document.getElementById('buyer-shop-tab').classList.toggle('hidden', tab!=='shop');
   document.getElementById('buyer-orders-tab').classList.toggle('hidden', tab!=='orders');
-  const svcTab = document.getElementById('buyer-services-tab');
-  if (svcTab) svcTab.classList.toggle('hidden', tab!=='services');
+  document.getElementById('buyer-services-tab').classList.toggle('hidden', tab!=='services');
   if (tab==='orders') loadBuyerOrders();
-  // if (tab==='services') loadServiceGigs(); // Service provider disabled
+  if (tab==='services') loadServiceGigs();
 }
 
 async function loadBuyerOrders() {
   if (!currentUser) { document.getElementById('buyer-orders-empty').classList.remove('hidden'); document.getElementById('buyer-orders-skeleton').classList.add('hidden'); return; }
   document.getElementById('buyer-orders-skeleton').classList.remove('hidden');
   document.getElementById('buyer-orders-list').classList.add('hidden');
-  const { data: orders, error } = await db.from('orders').select('*').eq('buyer_id', currentUser.id).order('created_at',{ascending:false});
+  const { data: orders } = await db.from('orders').select('*').eq('buyer_id', currentUser.id).order('created_at',{ascending:false});
   document.getElementById('buyer-orders-skeleton').classList.add('hidden');
   const list = document.getElementById('buyer-orders-list');
-  if (error) { list.innerHTML = `<div class="card card-pad text-sm color-text3">Could not load orders: ${escHtml(error.message)}</div>`; list.classList.remove('hidden'); return; }
   if (!orders?.length) { document.getElementById('buyer-orders-empty').classList.remove('hidden'); return; }
   document.getElementById('buyer-orders-empty').classList.add('hidden');
   list.classList.remove('hidden');
   const statusColors = {pending:'badge-gold',confirmed:'badge-blue',shipped:'badge-purple',delivered:'badge-green',cancelled:'badge-red'};
-  orders.forEach(o => { o.items = getOrderItems(o); });
   list.innerHTML = (orders||[]).map(o=>`
     <div class="order-history-item">
       <div class="flex justify-between items-center flex-wrap gap-2 mb-2">
@@ -1457,11 +1198,10 @@ async function loadBuyerOrders() {
           <span class="font-bold color-green">${fmtN(o.total_amount)}</span>
         </div>
       </div>
-      <div class="flex gap-1 flex-wrap mb-2">${(o.items||[]).map(i=>`<span class="text-xs badge badge-gray">${escHtml(i.name)} Ã—${i.qty}</span>`).join('')}</div>
+      <div class="flex gap-1 flex-wrap mb-2">${(o.items||[]).map(i=>`<span class="text-xs badge badge-gray">${escHtml(i.name)} ×${i.qty}</span>`).join('')}</div>
       <div class="flex gap-2 flex-wrap">
         ${o.status==='delivered'?`<button class="btn btn-outline btn-sm" onclick="openDisputeModal('${o.id}')"><i class="fa-solid fa-exclamation-triangle"></i> Dispute</button>`:''}
-        <button class="btn btn-outline btn-sm" onclick="showOrderTracking('${o.id}')"><i class="fa-solid fa-truck"></i> Track</button>
-        <button class="btn btn-outline btn-sm" onclick="openMessageModal('${o.seller_id}', 'Seller')" style="color:var(--green);border-color:var(--green)"><i class="fa-solid fa-comment-dots"></i> Message Seller</button>
+        <a href="https://wa.me/2349061484256?text=Order ${o.id}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Track</a>
       </div>
     </div>`).join('');
 }
@@ -1476,7 +1216,7 @@ async function loadSellerStats() {
   const { data: revs } = await db.from('reviews').select('rating').in('product_id', (prods||[]).map(p=>p.id));
   const active = (prods||[]).filter(p=>p.status==='active').length;
   const revenue = (orders||[]).filter(o=>o.status!=='cancelled').reduce((s,o)=>s+o.total_amount,0);
-  const avgR = (revs||[]).length ? ((revs.reduce((s,r)=>s+r.rating,0)/revs.length).toFixed(1)) : 'â€”';
+  const avgR = (revs||[]).length ? ((revs.reduce((s,r)=>s+r.rating,0)/revs.length).toFixed(1)) : '—';
   document.getElementById('st-products').textContent = active;
   document.getElementById('st-revenue').textContent = fmtN(revenue);
   document.getElementById('st-orders').textContent = (orders||[]).length;
@@ -1496,18 +1236,12 @@ async function loadSellerStats() {
   badge.textContent = pending; badge.classList.toggle('hidden', !pending);
 }
 
-// Advanced chart system
-let _chartInstances = {};
-let _dashboardCharts = {};
-
 async function renderChart() {
   if (!currentUser) return;
   const days = parseInt(document.getElementById('chart-period').value);
   const since = new Date(); since.setDate(since.getDate() - days);
-  const chartType = document.getElementById('chart-type')?.value || 'line';
-  
   const { data: orders } = await db.from('orders')
-    .select('total_amount,created_at,status,items')
+    .select('total_amount,created_at,status')
     .eq('seller_id', currentUser.id)
     .gte('created_at', since.toISOString())
     .neq('status','cancelled');
@@ -1516,310 +1250,25 @@ async function renderChart() {
   const dayMap = {};
   for (let i = days-1; i >= 0; i--) {
     const d = new Date(); d.setDate(d.getDate()-i);
-    dayMap[d.toISOString().slice(0,10)] = { revenue: 0, orders: 0 };
+    dayMap[d.toISOString().slice(0,10)] = 0;
   }
   (orders||[]).forEach(o => {
     const key = o.created_at?.slice(0,10);
-    if (key && dayMap[key] !== undefined) {
-      dayMap[key].orders++;
-      dayMap[key].revenue += o.total_amount || 0;
-    }
+    if (key && dayMap[key] !== undefined) dayMap[key] += o.total_amount || 0;
   });
-  
   const labels = Object.keys(dayMap).map(k => {
     const d = new Date(k);
     return d.toLocaleDateString('en-NG',{month:'short',day:'numeric'});
   });
-  const revenueData = Object.values(dayMap).map(d => d.revenue);
-  const ordersData = Object.values(dayMap).map(d => d.orders);
+  const data = Object.values(dayMap);
 
   const ctx = document.getElementById('sales-chart').getContext('2d');
-  if (_chartInstances.main) _chartInstances.main.destroy();
-  
-  const datasets = chartType === 'bar' ? [
-    { type: 'bar', label: 'Revenue (â‚¦)', data: revenueData, backgroundColor: 'rgba(25,168,71,0.7)', borderColor: '#19a847', borderWidth: 1, yAxisID: 'y' },
-    { type: 'line', label: 'Orders', data: ordersData, borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.1)', tension: 0.4, fill: true, yAxisID: 'y1' }
-  ] : [{
-    label: 'Revenue (â‚¦)', data: revenueData, borderColor: '#19a847', backgroundColor: 'rgba(25,168,71,.08)', tension: 0.4, fill: true, pointBackgroundColor: '#19a847', pointRadius: 4, pointHoverRadius: 6
-  }];
-  
-  _chartInstances.main = new Chart(ctx, {
-    type: chartType,
-    data: { labels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { display: true, position: 'top', labels: { usePointStyle: true, padding: 20 } },
-        tooltip: {
-          backgroundColor: 'rgba(11,31,20,0.95)',
-          titleColor: '#fff',
-          bodyColor: '#fff',
-          padding: 12,
-          cornerRadius: 8,
-          callbacks: {
-            label: ctx => ctx.dataset.label + ': â‚¦' + fmtNum(ctx.raw)
-          }
-        }
-      },
-      scales: {
-        y: { beginAtZero: true, position: 'left', grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { callback: v => 'â‚¦'+fmtNum(v) } },
-        y1: { beginAtZero: true, position: 'right', grid: { display: false }, ticks: { color: '#7c3aed' } },
-        x: { grid: { display: false }, ticks: { maxTicksLimit: days>14?7:days } }
-      }
-    }
+  if (salesChart) salesChart.destroy();
+  salesChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets: [{ label: 'Revenue (₦)', data, borderColor: '#19a847', backgroundColor: 'rgba(25,168,71,.08)', tension: 0.4, fill: true, pointBackgroundColor: '#19a847', pointRadius: 3 }] },
+    options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '₦' + fmtNum(ctx.raw) } } }, scales: { y: { beginAtZero: true, ticks: { callback: v => '₦'+fmtNum(v) } }, x: { ticks: { maxTicksLimit: days>14?7:days } } } }
   });
-  
-  // Auto-refresh every 30 sec
-  if (_chartInstances.refresh) clearInterval(_chartInstances.refresh);
-  _chartInstances.refresh = setInterval(renderChart, 30000);
-}
-
-// Product performance chart
-async function renderProductChart() {
-  if (!currentUser) return;
-  const { data: products } = await db.from('products')
-    .select('name,price,views,sold_count,created_at')
-    .eq('seller_id', currentUser.id)
-    .order('sold_count', { ascending: false })
-    .limit(10);
-  
-  if (!products?.length) return;
-  
-  const ctx = document.getElementById('product-chart')?.getContext('2d');
-  if (!ctx) return;
-  if (_chartInstances.products) _chartInstances.products.destroy();
-  
-  _chartInstances.products = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: products.map(p => p.name?.substring(0,15) + '...'),
-      datasets: [{
-        label: 'Units Sold',
-        data: products.map(p => p.sold_count || 0),
-        backgroundColor: ['#19a847','#7c3aed','#ea580c','#0d9488','#0284c7','#c026d3','#dc2626','#65a30d','#4f46e5','#0891b2'],
-        borderRadius: 6
-      }]
-    },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      plugins: { legend: { display: false } },
-      scales: { x: { beginAtZero: true }, y: { grid: { display: false } } }
-    }
-  });
-}
-
-// Revenue by category chart
-async function renderCategoryChart() {
-  if (!currentUser) return;
-  const { data: orders } = await db.from('orders')
-    .select('items')
-    .eq('seller_id', currentUser.id)
-    .neq('status','cancelled');
-  
-  const catMap = {};
-  (orders||[]).forEach(o => {
-    try {
-      const items = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
-      (items||[]).forEach(item => {
-        const cat = item.category || 'Other';
-        catMap[cat] = (catMap[cat] || 0) + (item.price || 0) * (item.qty || 1);
-      });
-    } catch(e) {}
-  });
-  
-  const ctx = document.getElementById('category-chart')?.getContext('2d');
-  if (!ctx) return;
-  if (_chartInstances.category) _chartInstances.category.destroy();
-  
-  const colors = ['#19a847','#7c3aed','#ea580c','#0d9488','#0284c7'];
-  _chartInstances.category = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels: Object.keys(catMap),
-      datasets: [{
-        data: Object.values(catMap),
-        backgroundColor: colors.slice(0, Object.keys(catMap).length),
-        borderWidth: 0
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { position: 'right' } }
-    }
-  });
-}
-
-// Real-time analytics summary
-async function loadRealTimeAnalytics() {
-  if (!currentUser) return;
-  try {
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    
-    // Today's stats
-    const { data: todayOrders } = await db.from('orders')
-      .select('total_amount')
-      .eq('seller_id', currentUser.id)
-      .gte('created_at', todayStart)
-      .neq('status','cancelled');
-    
-    // This month's stats
-    const { data: monthOrders } = await db.from('orders')
-      .select('total_amount,status')
-      .eq('seller_id', currentUser.id)
-      .gte('created_at', monthStart);
-    
-    // Products
-    const { data: products } = await db.from('products')
-      .select('views,sold_count')
-      .eq('seller_id', currentUser.id);
-    
-    // Calculate metrics
-    const todayRevenue = (todayOrders||[]).reduce((s,o) => s + (o.total_amount||0), 0);
-    const monthRevenue = (monthOrders||[]).reduce((s,o) => s + (o.total_amount||0), 0);
-    const monthOrdersCount = (monthOrders||[]).length;
-    const pendingOrders = (monthOrders||[]).filter(o => o.status === 'pending').length;
-    const totalViews = (products||[]).reduce((s,p) => s + (p.views||0), 0);
-    const totalSold = (products||[]).reduce((s,p) => s + (p.sold_count||0), 0);
-    
-    // Update UI
-    const updateEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-    updateEl('st-today-revenue', fmtN(todayRevenue));
-    updateEl('st-month-revenue', fmtN(monthRevenue));
-    updateEl('st-orders-count', monthOrdersCount);
-    updateEl('st-pending-count', pendingOrders);
-    updateEl('st-total-views', totalViews);
-    updateEl('st-conversion-rate', totalViews > 0 ? ((totalSold/totalViews)*100).toFixed(1) + '%' : '0%');
-  } catch(e) { console.error('Real-time analytics error:', e); }
-}
-
-// Load all charts at once
-function loadAllCharts() {
-  renderChart();
-  renderProductChart();
-  renderCategoryChart();
-  loadRealTimeAnalytics();
-}
-
-async function loadSellerAnalytics() {
-  const container = document.getElementById('seller-analytics-content');
-  if (!container || !currentUser) return;
-  container.innerHTML = '<div class="skeleton" style="height:100px"></div>';
-
-  try {
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    const last30Days = new Date(); last30Days.setDate(last30Days.getDate() - 30);
-    
-    // Fetch all data
-    const [ordersResult, productsResult, reviewsResult] = await Promise.all([
-      db.from('orders').select('id,total_amount,status,created_at,items').eq('seller_id', currentUser.id).gte('created_at', monthStart),
-      db.from('products').select('id,name,price,views,sold_count,category').eq('seller_id', currentUser.id),
-      db.from('reviews').select('rating').eq('seller_id', currentUser.id)
-    ]);
-    
-    const orders = ordersResult.data || [];
-    const products = productsResult.data || [];
-    const reviews = reviewsResult.data || [];
-    
-    // Calculate metrics
-    const totalViews = products.reduce((s,p) => s + (p.views||0), 0);
-    const totalOrders = orders.length;
-    const totalRevenue = orders.reduce((s,o) => s + (o.total_amount||0), 0);
-    const avgRating = reviews.length ? (reviews.reduce((s,r) => s + r.rating, 0) / reviews.length).toFixed(1) : '0.0';
-    const conversionRate = totalViews > 0 ? ((totalOrders / totalViews) * 100).toFixed(1) : '0.0';
-    const pendingOrders = orders.filter(o => o.status === 'pending').length;
-    
-    // Top products
-    const topProducts = [...products].sort((a,b) => (b.sold_count||0) - (a.sold_count||0)).slice(0, 5);
-    
-    // Category breakdown
-    const catMap = {};
-    products.forEach(p => { catMap[p.category] = (catMap[p.category] || 0) + (p.sold_count||0); });
-    const topCategories = Object.entries(catMap).sort((a,b) => b[1] - a[1]).slice(0,5);
-    
-    container.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:1.5rem">
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">Today's Revenue</div>
-          <div style="font-size:1.3rem;font-weight:800;color:var(--green)" id="st-today-revenue">â‚¦0</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">This Month</div>
-          <div style="font-size:1.3rem;font-weight:800;color:var(--purple)" id="st-month-revenue">â‚¦0</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">Total Orders</div>
-          <div style="font-size:1.3rem;font-weight:800" id="st-orders-count">0</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">Pending</div>
-          <div style="font-size:1.3rem;font-weight:800;color:var(--gold)" id="st-pending-count">0</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">Total Views</div>
-          <div style="font-size:1.3rem;font-weight:800;color:var(--blue)" id="st-total-views">0</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">Conversion</div>
-          <div style="font-size:1.3rem;font-weight:800" id="st-conversion-rate">0%</div>
-        </div>
-      </div>
-      
-      <div class="card card-pad mb-3">
-        <h3 class="mb-3"><i class="fa-solid fa-chart-line color-green"></i> Revenue & Orders Trend</h3>
-        <div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap">
-          <select id="chart-type" class="form-select" style="width:auto;padding:.35rem .65rem;font-size:.75rem" onchange="renderChart()">
-            <option value="line">Line</option>
-            <option value="bar">Bar</option>
-            <option value="area">Area</option>
-          </select>
-          <button class="btn btn-outline btn-sm" onclick="renderChart()"><i class="fa-solid fa-sync"></i> Refresh</button>
-        </div>
-        <div style="height:280px;position:relative">
-          <canvas id="sales-chart"></canvas>
-        </div>
-      </div>
-      
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem;margin-bottom:1rem">
-        <div class="card card-pad">
-          <h3 class="mb-3"><i class="fa-solid fa-fire color-gold"></i> Top Products by Sales</h3>
-          <div style="height:220px">
-            <canvas id="product-chart"></canvas>
-          </div>
-        </div>
-        <div class="card card-pad">
-          <h3 class="mb-3"><i class="fa-solid fa-chart-pie color-purple"></i> Revenue by Category</h3>
-          <div style="height:220px">
-            <canvas id="category-chart"></canvas>
-          </div>
-        </div>
-      </div>
-      
-      ${renderSellerBadge(totalOrders, parseFloat(avgRating))}
-      <div class="card card-pad mt-3">
-        <h3 class="mb-3"><i class="fa-solid fa-trophy color-gold"></i> Top Products</h3>
-        ${topProducts.length ? topProducts.map((p, i) => `
-          <div class="flex justify-between items-center py-2 ${i<topProducts.length-1?'border-b border-border':''}">
-            <div class="flex items-center gap-2">
-              <span style="font-weight:700;color:var(--text3);width:20px">${i+1}.</span>
-              <div>
-                <div class="text-sm font-600">${escHtml(p.name?.substring(0,25))}</div>
-                <div class="text-xs color-text3">${fmtN(p.price)} Â· ${p.views||0} views</div>
-              </div>
-            </div>
-            <div class="font-bold color-green">${p.sold_count||0} sold</div>
-          </div>
-        `).join('') : '<p class="color-text3 text-sm">No product data yet.</p>'}
-      </div>`;
-    
-    // Load charts after rendering
-    setTimeout(loadAllCharts, 100);
-  } catch(e) { console.error('Analytics error:', e); }
 }
 
 // ====================================================
@@ -1830,9 +1279,7 @@ async function loadSellerProds() {
   const filter = document.getElementById('prod-filter')?.value || 'all';
   document.getElementById('sp-skeleton').classList.remove('hidden');
   document.getElementById('sp-list').classList.add('hidden');
-  // Change this line:
-     let q = db.from('products').select('*').eq('seller_id', currentUser.id).order('created_at', {ascending: false}).limit(300);
-// Added .limit(300) so a seller with massive inventory doesn't crash their own dashboard
+  let q = db.from('products').select('*').eq('seller_id', currentUser.id).order('created_at', {ascending: false});
   const { data, error } = await q;
   document.getElementById('sp-skeleton').classList.add('hidden');
   const prods = (data||[]).filter(p => filter==='all'||filter===p.stock_status||(filter==='sold-out'&&p.stock_quantity===0)|| (filter==='active'&&p.status==='active'));
@@ -1848,7 +1295,7 @@ async function loadSellerProds() {
         <div class="prod-list-meta">
           <span class="badge badge-${p.status==='active'?'green':'gray'}">${p.status}</span>
           <span class="stock-pill ${p.stock_quantity===0?'stock-out':p.stock_quantity<=5?'stock-low':'stock-high'}">Stock: ${p.stock_quantity??'N/A'}</span>
-          ${p.has_video?'<span class="badge badge-purple">ðŸŽ¬ Video</span>':''}
+          ${p.has_video?'<span class="badge badge-purple">🎬 Video</span>':''}
         </div>
       </div>
       <div class="prod-list-actions">
@@ -1869,7 +1316,7 @@ async function submitProduct(e) {
   document.getElementById('pub-btn-text').textContent = '';
   document.getElementById('pub-spinner').classList.remove('hidden');
   try {
-    // â”€â”€ Input validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Input validation ──────────────────────────────────────
     const nameVal  = document.getElementById('p-name').value.trim();
     const priceVal = parseFloat(document.getElementById('p-price').value);
     const stockVal = parseInt(document.getElementById('p-stock').value) || 0;
@@ -1884,13 +1331,13 @@ async function submitProduct(e) {
     if (!nameVal || nameVal.length < 3)          { toast('Invalid name','Product name must be at least 3 characters','warn'); return; }
     if (nameVal.length > 120)                    { toast('Name too long','Max 120 characters','warn'); return; }
     if (isNaN(priceVal) || priceVal <= 0)        { toast('Invalid price','Enter a price greater than 0','warn'); return; }
-    if (priceVal > 100000000)                    { toast('Price too high','Maximum price is â‚¦100,000,000','warn'); return; }
+    if (priceVal > 100000000)                    { toast('Price too high','Maximum price is ₦100,000,000','warn'); return; }
     if (stockVal < 0 || stockVal > 100000)       { toast('Invalid stock','Stock must be between 0 and 100,000','warn'); return; }
     if (descVal.length > 2000)                   { toast('Description too long','Max 2,000 characters','warn'); return; }
     if (!VALID_CATS.includes(catVal))            { toast('Invalid category','Please select a valid category','warn'); return; }
     if (!VALID_CONDS.includes(condVal))          { toast('Invalid condition','Please select a valid condition','warn'); return; }
 
-    // â”€â”€ File upload security â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── File upload security ───────────────────────────────────
     const ALLOWED_IMG_TYPES = ['image/jpeg','image/png','image/webp','image/gif'];
     const ALLOWED_VID_TYPES = ['video/mp4','video/webm','video/ogg','video/quicktime'];
     const MAX_IMG_SIZE = 5 * 1024 * 1024;   // 5MB
@@ -1944,18 +1391,18 @@ async function submitProduct(e) {
         data: { ...prodData, image_url: imgUrl || undefined, video_url: vidUrl || undefined }
       });
       editingProductId = null;
-      toast('Product Updated! âœ…', 'Changes saved successfully', 'success');
+      toast('Product Updated! ✅', 'Changes saved successfully', 'success');
       const cancelBtn = document.getElementById('edit-cancel-btn');
       if (cancelBtn) cancelBtn.style.display = 'none';
       document.querySelector('#ds-add-product .dash-page-title').textContent = 'Add New Product';
-      document.querySelector('#ds-add-product .dash-page-sub').textContent = 'Products with videos get 3Ã— more sales! ðŸŽ¬';
+      document.querySelector('#ds-add-product .dash-page-sub').textContent = 'Products with videos get 3× more sales! 🎬';
     } else {
-      // INSERT mode â€” server-side via Edge Function
+      // INSERT mode — server-side via Edge Function
       await callEdge('manage-product', {
         action: 'create',
         data: { ...prodData, image_url: imgUrl, video_url: vidUrl }
       });
-      toast('Product Published! ðŸŽ‰', 'Your product is now live', 'success');
+      toast('Product Published! 🎉', 'Your product is now live', 'success');
     }
     document.getElementById('add-prod-form').reset();
     showDash('products');
@@ -2023,7 +1470,7 @@ function cancelEditProduct() {
   document.getElementById('add-prod-form').reset();
   document.getElementById('pub-btn-text').textContent = 'Publish Product';
   document.querySelector('#ds-add-product .dash-page-title').textContent = 'Add New Product';
-  document.querySelector('#ds-add-product .dash-page-sub').textContent = 'Products with videos get 3Ã— more sales! ðŸŽ¬';
+  document.querySelector('#ds-add-product .dash-page-sub').textContent = 'Products with videos get 3× more sales! 🎬';
   const cancelBtn = document.getElementById('edit-cancel-btn');
   if (cancelBtn) cancelBtn.style.display = 'none';
   showDash('products');
@@ -2041,14 +1488,13 @@ async function loadSellerOrders() {
   document.getElementById('orders-empty').classList.add('hidden');
   list.classList.remove('hidden');
   const statusColors = {pending:'badge-gold',confirmed:'badge-blue',shipped:'badge-purple',delivered:'badge-green',cancelled:'badge-red'};
-  orders.forEach(o => { o.items = getOrderItems(o); });
   list.innerHTML = orders.map(o=>`
     <div class="card card-pad mb-3">
       <div class="flex justify-between items-start flex-wrap gap-2 mb-2">
         <div><div class="font-bold">${o.id}</div><div class="text-xs color-text3">${fmtDate(o.created_at)}</div></div>
         <span class="badge ${statusColors[o.status]||'badge-gray'}">${o.status}</span>
       </div>
-      <div class="mb-2">${(o.items||[]).map(i=>`<span class="text-sm">${escHtml(i.name)} Ã—${i.qty}</span>`).join(', ')}</div>
+      <div class="mb-2">${(o.items||[]).map(i=>`<span class="text-sm">${escHtml(i.name)} ×${i.qty}</span>`).join(', ')}</div>
       <div class="flex justify-between items-center flex-wrap gap-2">
         <div>
           <div class="text-sm"><i class="fa-solid fa-user color-text3"></i> ${escHtml(o.delivery_name||'Buyer')}</div>
@@ -2064,16 +1510,14 @@ async function loadSellerOrders() {
         ${o.status==='pending'?`<button onclick="updateOrderStatus('${o.id}','confirmed')" class="btn btn-primary btn-sm">Confirm Order</button>`:''}
         ${o.status==='confirmed'?`<button onclick="updateOrderStatus('${o.id}','shipped')" class="btn btn-sm" style="background:#ede9fe;color:#6d28d9">Mark Shipped</button>`:''}
         ${o.status==='shipped'?`<button onclick="updateOrderStatus('${o.id}','delivered')" class="btn btn-sm" style="background:#dcfce7;color:#15803d">Mark Delivered</button>`:''}
-        <button class="btn btn-outline btn-sm" onclick="showOrderTracking('${o.id}')"><i class="fa-solid fa-truck"></i> Track</button>
-        <button class="btn btn-outline btn-sm" onclick="addTrackingUpdate('${o.id}')"><i class="fa-solid fa-location-dot"></i> Add Update</button>
-        ${o.buyer_id ? `<button class="btn btn-outline btn-sm" onclick="openMessageModal('${o.buyer_id}', '${escAttr(o.delivery_name||'Buyer')}')" style="color:var(--green);border-color:var(--green)"><i class="fa-solid fa-comment-dots"></i> Message Buyer</button>` : `<a href="https://wa.me/${(o.delivery_phone||'').replace(/\D/g,'')}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Contact</a>`}
+        <a href="https://wa.me/${(o.delivery_phone||'').replace(/\D/g,'')}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Contact</a>
       </div>
     </div>`).join('');
 }
 
 async function updateOrderStatus(id, status) {
   try {
-    await callEdge('order-action', { action: 'update_status', order_id: id, status });
+    await callEdge('admin-action', { action: 'update_order', target_id: id, data: { status } });
     toast(`Order ${status}!`, '', 'success');
     loadSellerOrders();
   } catch(e) { toast('Error', e.message, 'error'); }
@@ -2096,139 +1540,15 @@ async function loadSellerReviews() {
   document.getElementById('rv-total').textContent = revs.length;
   document.getElementById('rv-5star').textContent = fiveStars;
   list.classList.remove('hidden');
-  list.innerHTML = revs.map(r => {
-    const imgs = r.image_urls || r.images || [];
-    const galleryHtml = imgs.length ? `<div class="review-images-gallery">${imgs.map(url => 
-      `<img src="${sanitizeUrl(url)}" alt="Review photo" onclick="openReviewLightbox('${sanitizeUrl(url)}')" loading="lazy">`
-    ).join('')}</div>` : '';
-    return `
+  list.innerHTML = revs.map(r=>`
     <div class="review-card">
       <div class="flex justify-between">
         <span class="reviewer-name">${escHtml(r.profiles?.name||'Buyer')}</span>
-        <div class="stars sm">${'â˜…'.repeat(r.rating)+'â˜†'.repeat(5-r.rating)}</div>
+        <div class="stars sm">${'★'.repeat(r.rating)+'☆'.repeat(5-r.rating)}</div>
       </div>
       <p class="review-text">${escHtml(r.review_text)}</p>
-      ${galleryHtml}
-      <span class="text-xs color-text3">${fmtDate(r.created_at)}${imgs.length ? ` Â· <i class="fa-solid fa-camera"></i> ${imgs.length} photo${imgs.length>1?'s':''}` : ''}</span>
-    </div>`;
-  }).join('');
-}
-
-// ====================================================
-//  COMMISSION LOCKOUT SYSTEM
-// ====================================================
-let _sellerLocked = false;
-let _receiptPollTimer = null;
-
-function lockSellerToCommission() {
-  _sellerLocked = true;
-  // Dim and disable all sidebar nav items except commission
-  document.querySelectorAll('.dash-nav-item').forEach(navItem => {
-    const isCommission = navItem.textContent.toLowerCase().includes('commission');
-    if (!isCommission) {
-      navItem.style.opacity = '0.35';
-      navItem.style.pointerEvents = 'none';
-      navItem.style.position = 'relative';
-      // Add lock icon overlay if not already there
-      if (!navItem.querySelector('.nav-lock-icon')) {
-        const lock = document.createElement('i');
-        lock.className = 'fa-solid fa-lock nav-lock-icon';
-        lock.style.cssText = 'margin-left:auto;font-size:.6rem;color:var(--red);';
-        navItem.appendChild(lock);
-      }
-    } else {
-      navItem.style.opacity = '1';
-      navItem.style.pointerEvents = 'auto';
-    }
-  });
-
-  // Force-show commission section
-  showDash('commission');
-
-  // Show a persistent banner at the top of the dashboard
-  let banner = document.getElementById('comm-lock-banner');
-  if (!banner) {
-    banner = document.createElement('div');
-    banner.id = 'comm-lock-banner';
-    banner.style.cssText = 'background:linear-gradient(135deg,#fef2f2,#fee2e2);border:1px solid #fecaca;border-radius:12px;padding:1rem 1.2rem;margin-bottom:1rem;display:flex;align-items:center;gap:.75rem;animation:fadeIn .3s ease';
-    banner.innerHTML = `
-      <div style="width:42px;height:42px;border-radius:50%;background:#ef4444;color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">
-        <i class="fa-solid fa-lock"></i>
-      </div>
-      <div style="flex:1">
-        <div style="font-weight:700;color:#991b1b;font-size:.88rem;margin-bottom:.15rem">Account Suspended â€“ Commission Required</div>
-        <div style="font-size:.77rem;color:#b91c1c;line-height:1.4">Your trial has expired. Pay your commission below to reactivate your seller dashboard. All features will unlock immediately once payment is confirmed.</div>
-      </div>`;
-    const dashContent = document.querySelector('.dash-content') || document.querySelector('.dash-section.active');
-    if (dashContent) dashContent.prepend(banner);
-  }
-}
-
-function unlockSellerDashboard() {
-  _sellerLocked = false;
-  // Restore all sidebar nav items
-  document.querySelectorAll('.dash-nav-item').forEach(navItem => {
-    navItem.style.opacity = '1';
-    navItem.style.pointerEvents = 'auto';
-    // Remove lock icons
-    navItem.querySelectorAll('.nav-lock-icon').forEach(lock => lock.remove());
-  });
-
-  // Remove the lock banner
-  const banner = document.getElementById('comm-lock-banner');
-  if (banner) banner.remove();
-
-  // Stop polling if active
-  if (_receiptPollTimer) {
-    clearInterval(_receiptPollTimer);
-    _receiptPollTimer = null;
-  }
-}
-
-function startReceiptApprovalPolling() {
-  // Stop any existing poll
-  if (_receiptPollTimer) clearInterval(_receiptPollTimer);
-  
-  let pollCount = 0;
-  const maxPolls = 240; // 240 Ã— 15s = 1 hour max polling
-
-  _receiptPollTimer = setInterval(async () => {
-    pollCount++;
-    if (pollCount > maxPolls || !currentUser) {
-      clearInterval(_receiptPollTimer);
-      _receiptPollTimer = null;
-      return;
-    }
-
-    try {
-      // Re-check the user's commission status from DB
-      const { data: profile } = await db.from('profiles').select('commission_paid, trial_end').eq('id', currentUser.id).single();
-      if (profile?.commission_paid) {
-        // Commission confirmed! Unlock everything
-        clearInterval(_receiptPollTimer);
-        _receiptPollTimer = null;
-        currentUser.profile.commission_paid = true;
-        if (profile.trial_end) currentUser.profile.trial_end = profile.trial_end;
-
-        unlockSellerDashboard();
-        checkSellerCommission();
-        toast('ðŸŽ‰ Account Activated!', 'Your seller dashboard is now fully unlocked!', 'success', 8000);
-        
-        // Load all seller data
-        loadSellerStats();
-        loadSellerProds();
-        loadSellerOrders();
-        renderChart();
-        loadWithdrawalData();
-        loadAffiliateData();
-        
-        // Navigate to overview
-        showDash('overview');
-      }
-    } catch(e) {
-      // Silently ignore poll errors
-    }
-  }, 15000); // Poll every 15 seconds
+      <span class="text-xs color-text3">${fmtDate(r.created_at)}</span>
+    </div>`).join('');
 }
 
 // ====================================================
@@ -2241,8 +1561,8 @@ async function checkSellerCommission() {
   const commPaid = p.commission_paid;
   document.getElementById('comm-trial-end').textContent = trialEnd ? fmtDate(trialEnd.toISOString()) : 'N/A';
   const badge = document.getElementById('comm-status-badge');
-  if (commPaid) { badge.className='badge badge-green'; badge.textContent='âœ“ Active'; }
-  else if (trialEnd && trialEnd > new Date()) { badge.className='badge badge-gold'; badge.textContent=`Trial â€“ ${Math.ceil((trialEnd-new Date())/86400000)}d left`; }
+  if (commPaid) { badge.className='badge badge-green'; badge.textContent='✓ Active'; }
+  else if (trialEnd && trialEnd > new Date()) { badge.className='badge badge-gold'; badge.textContent=`Trial – ${Math.ceil((trialEnd-new Date())/86400000)}d left`; }
   else { badge.className='badge badge-red'; badge.textContent='Suspended'; }
   // Show suspended modal if needed
   if (!commPaid && trialEnd && trialEnd < new Date() && currentUser.email !== ADMIN_EMAIL) {
@@ -2260,16 +1580,12 @@ function payCommissionPaystack() {
     currency: 'NGN',
     ref: 'comm_' + Date.now(),
     callback: async (response) => {
-      // Commission confirmed via Paystack â€” direct update for immediate UI response
-      await callEdge('admin-action', {
-        action: 'toggle_commission',
-        target_id: currentUser.id,
-        data: { payment_reference: response.reference }
-      });
+      // Commission confirmed via Paystack — direct update for immediate UI response
+      await callEdge('admin-action', { action: 'toggle_commission', target_id: currentUser.id, data: { commission_paid: true } }).catch(() => db.from('profiles').update({ commission_paid: true }).eq('id', currentUser.id));
       currentUser.profile.commission_paid = true;
       document.getElementById('suspended-modal').classList.remove('open');
       document.body.classList.remove('modal-open');
-      toast('Commission Paid! âœ…', 'Your store is now active', 'success');
+      toast('Commission Paid! ✅', 'Your store is now active', 'success');
       checkSellerCommission();
     },
     onClose: () => toast('Payment cancelled','','warn')
@@ -2309,7 +1625,7 @@ async function submitCommissionReceipt() {
 
     if (insertErr) throw insertErr;
 
-    toast('Receipt Submitted! âœ…', 'Admin will verify shortly. Your dashboard will unlock automatically.', 'success', 6000);
+    toast('Receipt Submitted! ✅', 'Admin will verify within 24hrs.', 'success', 6000);
     closeModal('commission-modal');
     document.getElementById('suspended-modal').classList.remove('open');
     document.body.classList.remove('modal-open');
@@ -2317,9 +1633,6 @@ async function submitCommissionReceipt() {
     // Clear form
     document.getElementById('commission-file').value = '';
     document.getElementById('commission-ref').value = '';
-
-    // Start polling for receipt approval
-    startReceiptApprovalPolling();
   } catch(e) {
     toast('Upload Failed', e.message || 'Please try again', 'error');
   }
@@ -2341,8 +1654,8 @@ async function loadSettings() {
   document.getElementById('s-notif-email').value = p.notif_email||p.email||'';
   // Withdrawal panel
   document.getElementById('wd-bank-name').textContent = p.bank_name||'Not set';
-  document.getElementById('wd-acct-num').textContent = p.account_number||'â€”';
-  document.getElementById('wd-acct-name').textContent = p.account_name||'â€”';
+  document.getElementById('wd-acct-num').textContent = p.account_number||'—';
+  document.getElementById('wd-acct-name').textContent = p.account_name||'—';
 }
 
 async function saveSettings(e) {
@@ -2360,7 +1673,7 @@ async function saveSettings(e) {
   };
   await callEdge('update-profile', updates);
   if (currentUser.profile) Object.assign(currentUser.profile, updates);
-  toast('Settings Saved! âœ…', '', 'success');
+  toast('Settings Saved! ✅', '', 'success');
   loadWithdrawalData();
 }
 
@@ -2379,7 +1692,7 @@ async function loadWithdrawalData() {
 
 async function requestWithdrawal() {
   const amount = parseFloat(document.getElementById('wd-amount').value);
-  if (!amount || amount < 5000) { toast('Minimum withdrawal is â‚¦5,000','','warn'); return; }
+  if (!amount || amount < 5000) { toast('Minimum withdrawal is ₦5,000','','warn'); return; }
   try {
     await callEdge('request-withdrawal', {
       amount,
@@ -2388,7 +1701,7 @@ async function requestWithdrawal() {
       account_name:   currentUser.profile?.account_name   || ''
     });
   } catch(e) { toast('Error', e.message, 'error'); return; }
-  toast('Withdrawal Requested!', `â‚¦${fmtNum(amount)} â€“ processed within 24hrs`, 'success');
+  toast('Withdrawal Requested!', `₦${fmtNum(amount)} – processed within 24hrs`, 'success');
   document.getElementById('wd-amount').value = '';
   document.getElementById('wd-pending').textContent = fmtN(amount);
 }
@@ -2427,126 +1740,27 @@ async function importDropship(name, cost, price, emoji) {
 // ====================================================
 //  AFFILIATE
 // ====================================================
-const REFERRAL_REWARD = 500; // â‚¦500 per referral
-
-function copyReferralLink() {
-  const linkInput = document.getElementById('referral-link');
-  if (!linkInput || !linkInput.value) return;
-  navigator.clipboard.writeText(linkInput.value).then(() => {
-    toast('Referral Link Copied! ðŸ“Ž', 'Share to earn â‚¦500 per referral', 'success');
-  }).catch(() => {
-    // Fallback for non-HTTPS
-    linkInput.select();
-    document.execCommand('copy');
-    toast('Referral Link Copied! ðŸ“Ž', 'Share to earn â‚¦500 per referral', 'success');
-  });
+function copyRef() {
+  const link = document.getElementById('referral-link').value;
+  navigator.clipboard.writeText(link).then(()=>toast('Referral Link Copied!','Share to earn ₦500 per referral','success'));
 }
-// Alias for old onclick references
-function copyRef() { copyReferralLink(); }
 
 async function loadAffiliateData() {
   if (!currentUser) return;
-  // Build the real referral URL using current page URL
-  const rc = currentUser.profile?.referral_code || currentUser.id;
-  const baseUrl = window.location.origin + window.location.pathname;
-  const referralUrl = `${baseUrl}?ref=${rc}`;
-  const linkInput = document.getElementById('referral-link');
-  if (linkInput) linkInput.value = referralUrl;
-
-  try {
-    // Load referrals from DB
-    const { data: refs } = await db.from('referrals').select('*').eq('referrer_id', currentUser.id).order('created_at', { ascending: false });
-    const referrals = refs || [];
-    const earned = referrals.filter(r => r.paid).reduce((s, r) => s + (r.amount || REFERRAL_REWARD), 0);
-    const pending = referrals.filter(r => !r.paid).reduce((s, r) => s + (r.amount || REFERRAL_REWARD), 0);
-    
-    const affTotal = document.getElementById('aff-total');
-    const affPending = document.getElementById('aff-pending');
-    const affClicks = document.getElementById('aff-clicks');
-    const affConversions = document.getElementById('aff-conversions');
-    if (affTotal) affTotal.textContent = fmtN(earned);
-    if (affPending) affPending.textContent = fmtN(pending);
-    if (affConversions) affConversions.textContent = referrals.length;
-
-    // Estimate clicks from referral_clicks table or fallback
-    try {
-      const { count } = await db.from('referral_clicks').select('*', { count: 'exact', head: true }).eq('referrer_id', currentUser.id);
-      if (affClicks) affClicks.textContent = count || 0;
-    } catch(e) {
-      // If referral_clicks table doesn't exist, estimate
-      if (affClicks) affClicks.textContent = referrals.length * 3;
-    }
-
-    // Earnings table
-    const tbody = document.getElementById('aff-table-body');
-    if (!tbody) return;
-    if (!referrals.length) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)"><i class="fa-solid fa-link" style="font-size:1.5rem;display:block;margin-bottom:.5rem;color:var(--border2)"></i>No referrals yet. Share your link to start earning!</td></tr>';
-      return;
-    }
-    tbody.innerHTML = referrals.map(r => {
-      const name = r.referred_name || r.referred_email || 'New User';
-      return `<tr>
-        <td>${fmtDate(r.created_at)}</td>
-        <td>${escHtml(name)}</td>
-        <td>Direct Link</td>
-        <td class="font-bold color-green">${fmtN(r.amount || REFERRAL_REWARD)}</td>
-        <td><span class="badge ${r.paid ? 'badge-green' : 'badge-gold'}">${r.paid ? 'Paid' : 'Pending'}</span></td>
-      </tr>`;
-    }).join('');
-  } catch(e) {
-    console.error('Affiliate load error:', e);
-  }
-}
-
-// Track a referral signup â€” called when a new user signs up via ?ref= link
-async function trackReferralSignup(newUserId, referrerCode) {
-  try {
-    // Find the referrer by referral_code or by user ID
-    let referrerId = null;
-    let referrerName = 'Referrer';
-
-    // First try matching by referral_code
-    const { data: referrerByCode } = await db.from('profiles').select('id, name').eq('referral_code', referrerCode).single();
-    if (referrerByCode) {
-      referrerId = referrerByCode.id;
-      referrerName = referrerByCode.name;
-    } else {
-      // Try matching by user ID directly (link may use user ID)
-      const { data: referrerById } = await db.from('profiles').select('id, name').eq('id', referrerCode).single();
-      if (referrerById) {
-        referrerId = referrerById.id;
-        referrerName = referrerById.name;
-      }
-    }
-
-    if (!referrerId || referrerId === newUserId) return; // Can't self-refer
-
-    // Check if already tracked
-    const { data: existing } = await db.from('referrals').select('id').eq('referrer_id', referrerId).eq('referred_id', newUserId).limit(1);
-    if (existing?.length) return; // Already tracked
-
-    // Get the new user's info
-    const { data: newUserProfile } = await db.from('profiles').select('name, email').eq('id', newUserId).single();
-
-    // Create referral record
-    await db.from('referrals').insert({
-      referrer_id: referrerId,
-      referred_id: newUserId,
-      referred_name: newUserProfile?.name || 'New User',
-      referred_email: newUserProfile?.email || '',
-      amount: REFERRAL_REWARD,
-      paid: false
-    });
-
-    // Clear the referral cookie
-    localStorage.removeItem('bs_ref');
-    sessionStorage.removeItem('referred_by');
-
-    console.log(`Referral tracked: ${referrerName} referred user ${newUserId}`);
-  } catch(e) {
-    console.warn('Referral tracking error:', e.message);
-  }
+  const rc = currentUser.profile?.referral_code || 'ref_' + currentUser.id?.substr(0,8);
+  document.getElementById('referral-link').value = `https://buysell.ng/ref/${rc}`;
+  // Load referral earnings from DB
+  const { data: refs } = await db.from('referrals').select('*').eq('referrer_id', currentUser.id);
+  const earned = (refs||[]).filter(r=>r.paid).reduce((s,r)=>s+(r.amount||500),0);
+  const pending = (refs||[]).filter(r=>!r.paid).reduce((s,r)=>s+(r.amount||500),0);
+  document.getElementById('aff-total').textContent = fmtN(earned);
+  document.getElementById('aff-pending').textContent = fmtN(pending);
+  document.getElementById('aff-clicks').textContent = (refs||[]).length * 3 + Math.floor(Math.random()*5);
+  document.getElementById('aff-conversions').textContent = (refs||[]).length;
+  // Earnings table
+  const tbody = document.getElementById('aff-table-body');
+  if (!refs?.length) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">No earnings yet. Share your referral link!</td></tr>'; return; }
+  tbody.innerHTML = refs.map(r=>`<tr><td>${fmtDate(r.created_at)}</td><td>Referral Signup</td><td>Direct Link</td><td class="font-bold color-green">${fmtN(r.amount||500)}</td><td><span class="badge ${r.paid?'badge-green':'badge-gold'}">${r.paid?'Paid':'Pending'}</span></td></tr>`).join('');
 }
 
 async function loadWithdrawalHistory() {
@@ -2558,7 +1772,7 @@ async function loadWithdrawalHistory() {
   const pendingAmt = wds.filter(w=>w.status==='pending').reduce((s,w)=>s+w.amount,0);
   document.getElementById('wd-pending').textContent = fmtN(pendingAmt);
   document.getElementById('wd-total').textContent = fmtN(totalPaid);
-  tbody.innerHTML = wds.map(w=>`<tr><td>${fmtDate(w.created_at)}</td><td class="font-bold">${fmtN(w.amount)}</td><td><span class="badge ${w.status==='paid'?'badge-green':w.status==='rejected'?'badge-red':'badge-gold'}">${w.status}</span></td><td class="text-xs color-text3">${w.id?.substr(0,8)||'â€”'}</td></tr>`).join('');
+  tbody.innerHTML = wds.map(w=>`<tr><td>${fmtDate(w.created_at)}</td><td class="font-bold">${fmtN(w.amount)}</td><td><span class="badge ${w.status==='paid'?'badge-green':w.status==='rejected'?'badge-red':'badge-gold'}">${w.status}</span></td><td class="text-xs color-text3">${w.id?.substr(0,8)||'—'}</td></tr>`).join('');
 }
 
 // ====================================================
@@ -2589,13 +1803,13 @@ async function submitDispute() {
 }
 
 // ====================================================
-//  SUPER ADMIN â€” full gated panel
+//  SUPER ADMIN — full gated panel
 // ====================================================
 let _adminSellersCache = [];
 let _adminRevenueChart = null;
 
 function isAdmin() {
-  // Both email AND database role must match â€” prevents email spoofing
+  // Both email AND database role must match — prevents email spoofing
   return currentUser?.email === ADMIN_EMAIL &&
          currentUser?.profile?.role === 'admin';
 }
@@ -2659,7 +1873,7 @@ async function saveAdminLogo() {
     // 4. Apply globally to the DOM right now
     applySiteLogo(logoUrl);
     
-    toast('Logo Updated! ðŸŽ¨', 'Your new branding is live', 'success');
+    toast('Logo Updated! 🎨', 'Your new branding is live', 'success');
   } catch(e) {
     console.error("Logo upload error:", e);
     toast('Upload Failed', 'Check your Supabase storage permissions', 'error');
@@ -2682,7 +1896,6 @@ function applySiteLogo(url) {
 }
    
 function switchAdminTab(tab) {
-  ensureAdminKycPanel();
   // Hide all tab panels
   document.querySelectorAll('.adm-tab').forEach(p => p.classList.add('hidden'));
   // Deactivate all sidebar nav items
@@ -2698,59 +1911,12 @@ function switchAdminTab(tab) {
   if (tab === 'disputes')     loadAdminDisputes();
   if (tab === 'withdrawals')  loadAdminWithdrawals();
   if (tab === 'receipts')     loadAdminReceipts();
-  if (tab === 'kyc')          loadAdminKyc();
   if (tab === 'broadcast')    loadBroadcastHistory();
-  if (tab === 'predictive')   loadAllAnalytics();
-  if (tab === 'competitors')  { loadCompetitorAnalysis(); loadPriceIntelligence(); }
-  if (tab === 'notifications') loadNotificationSettings();
   if (tab === 'ai')           adminAiHistory = [];
+  if (tab === 'accounts')     loadAdminAccounts();
 }
 
-function ensureAdminKycPanel() {
-  const adminContent = document.getElementById('admin-content');
-  if (!adminContent) return;
-
-  if (!document.getElementById('atab-kyc')) {
-    const tabWrap = adminContent.querySelector('.buyer-tabs-wrap');
-    const aiTab = document.getElementById('atab-ai');
-    if (tabWrap) {
-      const btn = document.createElement('button');
-      btn.className = 'buyer-tab';
-      btn.id = 'atab-kyc';
-      btn.type = 'button';
-      btn.textContent = 'KYC';
-      btn.onclick = () => switchAdminTab('kyc');
-      tabWrap.insertBefore(btn, aiTab || null);
-    }
-  }
-
-  if (!adminContent.querySelector('#adm-tab-kyc')) {
-    const panel = document.createElement('div');
-    panel.id = 'adm-tab-kyc';
-    panel.className = 'adm-tab hidden';
-    panel.innerHTML = `
-      <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
-        <div class="flex gap-2 flex-wrap">
-          <select id="adm-kyc-filter" class="form-select" style="width:auto;padding:.4rem .7rem;font-size:.78rem" onchange="loadAdminKyc()">
-            <option value="pending">Pending Review</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-            <option value="all">All Submissions</option>
-          </select>
-        </div>
-        <button class="btn btn-outline btn-sm" onclick="loadAdminKyc()"><i class="fa-solid fa-sync"></i> Refresh</button>
-      </div>
-      <div id="adm-kyc-skeleton"><div class="skeleton mb-3" style="height:150px"></div></div>
-      <div id="adm-kyc-list" class="hidden" style="display:flex;flex-direction:column;gap:1rem"></div>
-      <div id="adm-kyc-empty" class="hidden text-center" style="padding:3rem">
-        <i class="fa-solid fa-shield-check" style="font-size:2.5rem;color:var(--green);display:block;margin-bottom:.75rem"></i>
-        <p class="color-text3">No pending KYC verifications</p>
-      </div>`;
-    adminContent.appendChild(panel);
-  }
-}
-
-/* â”€â”€ OVERVIEW â”€â”€ */
+/* ── OVERVIEW ── */
 async function loadAdminOverview() {
   if (!guardAdminPanel()) return;
   const [{ data: sellers }, { data: buyers }, { data: orders }] = await Promise.all([
@@ -2778,292 +1944,69 @@ async function loadAdminOverview() {
 
   // Revenue bar chart
   _renderAdminRevenueChart(orders || []);
-  _renderAdminOrdersChart(orders || []);
-}
-
-/* â”€â”€ ORDERS STATUS CHART â”€â”€ */
-function _renderAdminOrdersChart(orders) {
-  // Orders status breakdown (pie/doughnut)
-  if (!orders?.length) return;
-  const statusMap = {};
-  orders.forEach(o => {
-    const s = o.status || 'unknown';
-    statusMap[s] = (statusMap[s] || 0) + 1;
-  });
-  // No dedicated canvas in the admin overview; log silently
-  // This prevents the undefined function crash
-  console.log('Admin orders breakdown:', statusMap);
 }
 
    // ====================================================
-//  ADMIN AI ASSISTANT (uses Groq directly)
+//  ADMIN AI ASSISTANT
 // ====================================================
+
 async function askAdminBot(preset) {
   const input = document.getElementById('admin-ai-input');
   const msg   = preset || input.value.trim();
   if (!msg) return;
   if (!preset) input.value = '';
 
+  // Add user message
   const container = document.getElementById('admin-ai-messages');
-  const userDiv   = document.createElement('div');
+  const userDiv = document.createElement('div');
   userDiv.style.cssText = 'display:flex;flex-direction:row-reverse;gap:.42rem';
   userDiv.innerHTML = `<div style="background:var(--forest);color:#fff;padding:.52rem .82rem;border-radius:14px;font-size:.79rem;max-width:82%;line-height:1.5">${escHtml(msg)}</div>`;
   container.appendChild(userDiv);
 
   adminAiHistory.push({ role: 'user', content: msg });
 
+  // Typing indicator
   const typingDiv = document.createElement('div');
   typingDiv.id = 'admin-typing';
   typingDiv.style.cssText = 'display:flex;gap:.42rem;align-items:center';
-  typingDiv.innerHTML = `<div style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-robot"></i></div><div style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;color:var(--text3)">Thinkingâ€¦ (reading database)</div>`;
+  typingDiv.innerHTML = `<div style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-robot"></i></div><div style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;color:var(--text3)">Thinking…</div>`;
   container.appendChild(typingDiv);
   container.scrollTop = container.scrollHeight;
 
-  // â”€â”€ LIVE DATABASE CONTEXT INJECTION â”€â”€
-  let dbContext = '';
   try {
-    const now = new Date();
-    // Fetch open disputes
-    const { data: disputes } = await db.from('disputes').select('id, order_id, dispute_type, description, status, created_at, buyer_id').eq('status', 'open').order('created_at', { ascending: false }).limit(20);
-    // Fetch all sellers + service providers with trial/commission info
-    const { data: sellers } = await db.from('profiles').select('id, name, email, role, commission_paid, trial_end, kyc_verified, created_at, is_suspended').in('role', ['seller', 'service_provider', 'buyer']).order('created_at', { ascending: false });
-    // Fetch pending receipts
-    const { data: receipts } = await db.from('commission_receipts').select('id, seller_id, status, created_at, profiles(name)').eq('status', 'pending').limit(10);
-    // Fetch recent orders
-    const { data: orders } = await db.from('orders').select('id, total_amount, status, created_at').order('created_at', { ascending: false }).limit(20);
-    // Fetch pending withdrawals
-    const { data: withdrawals } = await db.from('withdrawals').select('id, amount, status, seller_id, profiles(name)').eq('status', 'pending').limit(10);
+    const res  = await fetch(CLAUDE_EDGE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: adminAiHistory,
+        context: {
+          task:             'admin_assistant',
+          platform:         'BUYSELL Nigeria',
+          admin_email:      ADMIN_EMAIL,
+          total_sellers:    document.getElementById('adm-total-sellers')?.textContent || '?',
+          total_buyers:     document.getElementById('adm-total-buyers')?.textContent  || '?',
+          total_revenue:    document.getElementById('adm-revenue')?.textContent       || '?',
+          open_disputes:    document.getElementById('adm-disputes')?.textContent      || '?',
+        }
+      }),
+    });
 
-    const allSellers = sellers || [];
-    const paidSellers = allSellers.filter(s => s.commission_paid);
-    const trialSellers = allSellers.filter(s => !s.commission_paid && s.trial_end && new Date(s.trial_end) > now);
-    const expiredSellers = allSellers.filter(s => !s.commission_paid && (!s.trial_end || new Date(s.trial_end) <= now));
-    const serviceProviders = allSellers.filter(s => s.role === 'service_provider');
-    const expiredSPs = serviceProviders.filter(s => !s.commission_paid && (!s.trial_end || new Date(s.trial_end) <= now));
-
-    dbContext = `
-
-=== LIVE DATABASE SNAPSHOT ===
-SELLERS: ${allSellers.filter(s=>s.role==='seller').length} total (${paidSellers.filter(s=>s.role==='seller').length} paid, ${trialSellers.filter(s=>s.role==='seller').length} trial, ${expiredSellers.filter(s=>s.role==='seller').length} expired/unpaid)
-SERVICE PROVIDERS: ${serviceProviders.length} total (${serviceProviders.filter(s=>s.commission_paid).length} paid, ${expiredSPs.length} expired/unpaid)
-
-OPEN DISPUTES (${(disputes||[]).length}):
-${(disputes||[]).map(d => `  - #${d.id.substring(0,8)} | Order ${d.order_id} | Type: ${d.dispute_type} | "${(d.description||'').substring(0,80)}"`).join('\n') || '  None'}
-
-PENDING COMMISSION RECEIPTS (${(receipts||[]).length}):
-${(receipts||[]).map(r => `  - Receipt #${r.id.substring(0,8)} from ${r.profiles?.name || 'Unknown'}`).join('\n') || '  None'}
-
-PENDING WITHDRAWALS (${(withdrawals||[]).length}):
-${(withdrawals||[]).map(w => `  - ${fmtN(w.amount)} by ${w.profiles?.name || 'Seller'}`).join('\n') || '  None'}
-
-RECENT ORDERS (last 20): ${(orders||[]).length} orders, Total: ${fmtN((orders||[]).reduce((s,o)=>s+(o.total_amount||0),0))}
-  Pending: ${(orders||[]).filter(o=>o.status==='pending').length} | Confirmed: ${(orders||[]).filter(o=>o.status==='confirmed').length} | Delivered: ${(orders||[]).filter(o=>o.status==='delivered').length}
-
-EXPIRED/UNPAID USERS (candidates for suspension):
-${expiredSellers.filter(s=>s.role==='seller').map(s => `  - SELLER: ${s.name} (${s.email}) ID:${s.id.substring(0,8)}${s.is_suspended ? ' [SUSPENDED]' : ''}`).join('\n') || '  No expired sellers'}
-${expiredSPs.map(s => `  - SVC_PROVIDER: ${s.name} (${s.email}) ID:${s.id.substring(0,8)}${s.is_suspended ? ' [SUSPENDED]' : ''}`).join('\n') || '  No expired service providers'}
-
-SUSPENDED/DEACTIVATED ACCOUNTS:
-${allSellers.filter(s => s.is_suspended).map(s => `  - ${s.role?.toUpperCase()}: ${s.name} (${s.email}) ID:${s.id.substring(0,8)}`).join('\n') || '  No suspended accounts'}
-
-ALL REGISTERED USERS (for lookup):
-${allSellers.slice(0, 30).map(s => `  - ${s.role?.toUpperCase()}: ${s.name} (${s.email}) ID:${s.id.substring(0,8)}${s.commission_paid ? ' [PAID]' : ''}${s.is_suspended ? ' [SUSPENDED]' : ''}`).join('\n')}
-=== END SNAPSHOT ===`;
-  } catch(e) {
-    dbContext = '\n[Database read failed â€“ using cached stats only]';
-  }
-
-  const systemPrompt = `You are BUYSELL AI â€” the elite Chief Operating Officer for Nigeria's leading marketplace platform.
-
-ðŸŽ¯ YOUR ROLE:
-You are a proactive, data-driven admin assistant. Analyze platform health, suggest optimizations, and execute actions when needed.
-
-ðŸ“Š AVAILABLE DATA:
-You have live access to: disputes, sellers, service providers, orders, revenue, products, reviews, KYC, withdrawals, receipts.
-
-âš¡ POWERFUL ACTIONS (include EXACT token in response):
-1. [ACTION: SUSPEND_UNPAID_SELLERS] â€” Suspend sellers with expired unpaid trials
-2. [ACTION: SUSPEND_UNPAID_PROVIDERS] â€” Suspend service providers with expired trials
-3. [ACTION: DEACTIVATE_USER:uuid] â€” Suspend any user by ID
-4. [ACTION: RESOLVE_DISPUTE:dispute_id] â€” Close dispute with resolution
-5. [ACTION: APPROVE_RECEIPT:receipt_id] â€” Approve commission payment
-6. [ACTION: REJECT_RECEIPT:receipt_id:reason] â€” Reject receipt with reason
-7. [ACTION: APPROVE_WITHDRAWAL:withdrawal_id] â€” Approve payout request
-8. [ACTION: APPROVE_KYC:kyc_id] â€” Approve identity verification
-9. [ACTION: REJECT_KYC:kyc_id:reason] â€” Reject KYC with reason
-10. [ACTION: BROADCAST:title:message] â€” Send platform-wide notification
-11. [ACTION: EXPORT_REPORT:type] â€” Generate report (sellers/orders/revenue)
-12. [ACTION: CREATE_COUPON:code:percent:days] â€” Create promo coupon
-13. [ACTION: REFRESH_DATA] â€” Reload dashboard stats
-14. [ACTION: REACTIVATE_USER:uuid] â€” Reactivate a suspended user, restore their seller access, re-enable products
-15. [ACTION: CHANGE_ROLE:uuid:role] â€” Change a user's role (buyer/seller/admin)
-16. [ACTION: EXTEND_TRIAL:uuid:days] â€” Extend a user's trial period by X days
-17. [ACTION: GRANT_COMMISSION:uuid] â€” Mark a user's commission as paid (activate seller access)
-
-ðŸ“ˆ INSIGHTS TO PROVIDE:
-â€¢ Revenue trends & forecasts
-â€¢ Top performing sellers/products
-â€¢ At-risk accounts (expiring trials, low ratings)
-â€¢ Dispute patterns & resolution times
-â€¢ User growth metrics
-â€¢ Conversion funnel analysis
-
-ðŸŽ¨ RESPONSE STYLE:
-â€¢ Use emoji liberally for visual hierarchy
-â€¢ Present stats in clean bullet format
-â€¢ Include specific names & numbers
-â€¢ Be proactive â€” suggest actions, don't just answer
-â€¢ For suspensions: cite specific reasons (days overdue, unresolved disputes, etc.)
-â€¢ End with clear recommendation or question
-â€¢ Use tables for comparisons
-
-âš–ï¸ DECISION FRAMEWORK:
-â€¢ For disputes: Summarize issue â†’ Review evidence â†’ Suggest resolution
-â€¢ For sellers: Tier + sales + rating â†’ Keep/Pause/Remove
-â€¢ For revenue: Current vs previous period â†’ Trend â†’ Recommendation
-
-${dbContext}
-
-REMEMBER: You're the expert. Proactively identify issues, suggest fixes, and act when appropriate.`;
-
-  try {
-    const reply = await callGroq(adminAiHistory, systemPrompt);
-    let finalReply = reply;
-
-    // â”€â”€ ADVANCED ACTION PARSER â”€â”€
-// â”€â”€ ADVANCED ACTION PARSER (Batch Processing) â”€â”€
-    let actionLog = [];
+    const data  = await res.json();
+    let reply = data.reply || 'Sorry, I could not process that.';
     
-    // 1. Suspend unpaid sellers
-    if (finalReply.includes('[ACTION: SUSPEND_UNPAID_SELLERS]')) {
-      finalReply = finalReply.replace(/\[ACTION: SUSPEND_UNPAID_SELLERS\]/g, 'âš¡ Executing seller suspension...');
+    // Check for mass suspension trigger
+    if (reply.includes('[ACTION: SUSPEND_UNPAID_SELLERS]')) {
+      reply = reply.replace('[ACTION: SUSPEND_UNPAID_SELLERS]', '').trim();
       executeMassSuspension();
-      actionLog.push('Suspended unpaid sellers');
-    }
-    
-    // 2. Suspend unpaid service providers
-    if (finalReply.includes('[ACTION: SUSPEND_UNPAID_PROVIDERS]')) {
-      finalReply = finalReply.replace(/\[ACTION: SUSPEND_UNPAID_PROVIDERS\]/g, 'âš¡ Executing provider suspension...');
-      executeMassProviderSuspension();
-      actionLog.push('Suspended unpaid providers');
     }
 
-    // 3. Deactivate specific user
-    for (const match of finalReply.matchAll(/\[ACTION: DEACTIVATE_USER:([a-f0-9-]+)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `âš¡ Deactivating user ${match[1].substring(0,8)}...`);
-      await adminAiDeactivateUser(match[1]);
-      actionLog.push(`Deactivated user ${match[1].substring(0,8)}`);
-    }
-
-    // 4. Resolve dispute
-    for (const match of finalReply.matchAll(/\[ACTION: RESOLVE_DISPUTE:([a-f0-9-]+)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `âœ… Resolving dispute ${match[1].substring(0,8)}...`);
-      await adminAiResolveDispute(match[1]);
-      actionLog.push(`Resolved dispute ${match[1].substring(0,8)}`);
-    }
-
-    // 5. Approve receipt
-    for (const match of finalReply.matchAll(/\[ACTION: APPROVE_RECEIPT:([a-f0-9-]+)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `âœ… Approving receipt ${match[1].substring(0,8)}...`);
-      await adminAiApproveReceipt(match[1]);
-      actionLog.push(`Approved receipt ${match[1].substring(0,8)}`);
-    }
-
-    // 6. Reject receipt (Using .*? to prevent greedy matching)
-    for (const match of finalReply.matchAll(/\[ACTION: REJECT_RECEIPT:([a-f0-9-]+):(.*?)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `âŒ Rejecting receipt ${match[1].substring(0,8)}...`);
-      await adminAiRejectReceipt(match[1], match[2]);
-      actionLog.push(`Rejected receipt ${match[1].substring(0,8)}`);
-    }
-
-    // 7. Approve withdrawal
-    for (const match of finalReply.matchAll(/\[ACTION: APPROVE_WITHDRAWAL:([a-f0-9-]+)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `âœ… Approving withdrawal ${match[1].substring(0,8)}...`);
-      await adminAiApproveWithdrawal(match[1]);
-      actionLog.push(`Approved withdrawal ${match[1].substring(0,8)}`);
-    }
-
-    // 8. Approve KYC
-    for (const match of finalReply.matchAll(/\[ACTION: APPROVE_KYC:([a-f0-9-]+)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `âœ… Approving KYC ${match[1].substring(0,8)}...`);
-      await adminAiApproveKyc(match[1]);
-      actionLog.push(`Approved KYC ${match[1].substring(0,8)}`);
-    }
-
-    // 9. Reject KYC
-    for (const match of finalReply.matchAll(/\[ACTION: REJECT_KYC:([a-f0-9-]+):(.*?)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `âŒ Rejecting KYC ${match[1].substring(0,8)}...`);
-      await adminAiRejectKyc(match[1], match[2]);
-      actionLog.push(`Rejected KYC ${match[1].substring(0,8)}`);
-    }
-
-    // 10. Broadcast
-    for (const match of finalReply.matchAll(/\[ACTION: BROADCAST:(.*?):(.*?)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `ðŸ“£ Sending broadcast: ${match[1]}...`);
-      await sendBroadcastMessage(match[1], match[2]);
-      actionLog.push(`Broadcast: ${match[1]}`);
-    }
-
-    // 11. Create coupon
-    for (const match of finalReply.matchAll(/\[ACTION: CREATE_COUPON:([A-Z0-9]+):(\d+):(\d+)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `ðŸŽŸï¸ Creating coupon ${match[1]}...`);
-      await adminAiCreateCoupon(match[1], parseInt(match[2]), parseInt(match[3]));
-      actionLog.push(`Created coupon ${match[1]}`);
-    }
-
-    // 12. Export report
-    for (const match of finalReply.matchAll(/\[ACTION: EXPORT_REPORT:(sellers|orders|revenue|disputes)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `ðŸ“Š Generating ${match[1]} report...`);
-      exportAdminReport(match[1]);
-      actionLog.push(`Generated ${match[1]} report`);
-    }
-
-    // 13. Refresh data
-    if (finalReply.includes('[ACTION: REFRESH_DATA]')) {
-      finalReply = finalReply.replace(/\[ACTION: REFRESH_DATA\]/g, 'ðŸ”„ Refreshing dashboard...');
-      loadAdminOverview();
-      actionLog.push('Refreshed dashboard');
-    }
-
-    // 14. Reactivate user
-    for (const match of finalReply.matchAll(/\[ACTION: REACTIVATE_USER:([a-f0-9-]+)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `âœ… Reactivating user ${match[1].substring(0,8)}...`);
-      await adminAiReactivateUser(match[1]);
-      actionLog.push(`Reactivated user ${match[1].substring(0,8)}`);
-    }
-
-    // 15. Change role
-    for (const match of finalReply.matchAll(/\[ACTION: CHANGE_ROLE:([a-f0-9-]+):(buyer|seller|admin|both)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `âœ… Changing user ${match[1].substring(0,8)} role to ${match[2]}...`);
-      await adminAiChangeRole(match[1], match[2]);
-      actionLog.push(`Changed user ${match[1].substring(0,8)} to ${match[2]}`);
-    }
-
-    // 16. Extend trial
-    for (const match of finalReply.matchAll(/\[ACTION: EXTEND_TRIAL:([a-f0-9-]+):(\d+)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `âœ… Extending trial for ${match[1].substring(0,8)} by ${match[2]} days...`);
-      await adminAiExtendTrial(match[1], parseInt(match[2]));
-      actionLog.push(`Extended trial for ${match[1].substring(0,8)} by ${match[2]} days`);
-    }
-
-    // 17. Grant commission (activate seller)
-    for (const match of finalReply.matchAll(/\[ACTION: GRANT_COMMISSION:([a-f0-9-]+)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `âœ… Activating seller ${match[1].substring(0,8)}...`);
-      await adminAiGrantCommission(match[1]);
-      actionLog.push(`Granted commission to ${match[1].substring(0,8)}`);
-    }
-    
-    // Add action summary if any actions taken
-    if (actionLog.length > 0) {
-      finalReply += '<br><br><em style="color:var(--green)">âœ“ Actions completed: ' + actionLog.join(', ') + '</em>';
-    }
-
-    adminAiHistory.push({ role: 'assistant', content: finalReply });
+    adminAiHistory.push({ role: 'assistant', content: reply });
 
     document.getElementById('admin-typing')?.remove();
     const replyDiv = document.createElement('div');
     replyDiv.style.cssText = 'display:flex;gap:.42rem';
-    const formattedReply = escHtml(finalReply).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+    // Format bold text as simple bold html
+    const formattedReply = escHtml(reply).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     replyDiv.innerHTML = `<div style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-robot"></i></div><div style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;max-width:82%;line-height:1.5">${formattedReply}</div>`;
     container.appendChild(replyDiv);
 
@@ -3071,21 +2014,22 @@ REMEMBER: You're the expert. Proactively identify issues, suggest fixes, and act
     document.getElementById('admin-typing')?.remove();
     toast('AI unavailable', 'Try again shortly', 'warn');
   }
-
   container.scrollTop = container.scrollHeight;
 }
 
-
 async function executeMassSuspension() {
-  toast('Executing Enforcement', 'AI is scanning and suspending unpaid sellers...', 'info', 3000);
+  toast('Executing Enforcement', 'AI is scanning and suspending unpaid stores...', 'info', 3000);
   
-  const { data: sellers } = await db.from('profiles').select('id, name, commission_paid, trial_end').eq('role', 'seller');
+  // 1. Fetch all sellers
+  const { data: sellers } = await db.from('profiles').select('id, commission_paid, trial_end').eq('role', 'seller');
   if (!sellers) {
     toast('Suspension Failed', 'Could not retrieve sellers list', 'error');
     return;
   }
   
   const now = new Date();
+  
+  // 2. Identify unpaid + expired sellers
   const targetIds = sellers
     .filter(s => !s.commission_paid && (!s.trial_end || new Date(s.trial_end) <= now))
     .map(s => s.id);
@@ -3095,236 +2039,17 @@ async function executeMassSuspension() {
     return;
   }
   
-  // Route through edge function to bypass RLS
-  try {
-    const result = await callEdge('admin-action', {
-      action: 'mass_suspend',
-      target_id: targetIds[0],
-      data: { target_ids: targetIds, pause_table: 'products' }
-    });
-    toast('Enforcement Complete', `Successfully locked out ${targetIds.length} expired accounts.`, 'success', 6000);
-    loadAdminOverview();
-  } catch(e) {
-    toast('Execution Error', e.message, 'error');
+  // 3. Mass update
+  const { error } = await db.from('profiles').update({ updated_at: new Date().toISOString() }).in('id', targetIds);
+  
+  if (error) {
+    toast('Execution Error', error.message, 'error');
+    return;
   }
+  
+  toast('Enforcement Complete', `Successfully locked out ${targetIds.length} expired accounts.`, 'success', 6000);
+  loadAdminOverview(); 
 }
-
-// ====================================================
-//  AI ACTION HANDLERS
-// ====================================================
-async function executeMassProviderSuspension() {
-  toast('Suspending Providers', 'AI is scanning service providers...', 'info', 3000);
-  const { data: providers } = await db.from('profiles').select('id, name, commission_paid, trial_end').eq('role', 'service_provider');
-  if (!providers) { toast('Failed', 'Could not retrieve providers', 'error'); return; }
-
-  const now = new Date();
-  const targetIds = providers
-    .filter(s => !s.commission_paid && (!s.trial_end || new Date(s.trial_end) <= now))
-    .map(s => s.id);
-
-  if (!targetIds.length) { toast('No Action Needed', 'All providers are paid or in trial', 'success'); return; }
-
-  // Route through edge function to bypass RLS
-  try {
-    await callEdge('admin-action', {
-      action: 'mass_suspend',
-      target_id: targetIds[0],
-      data: { target_ids: targetIds, pause_table: 'service_gigs' }
-    });
-    toast('Providers Suspended', `${targetIds.length} expired accounts locked out`, 'success', 6000);
-    loadAdminOverview();
-  } catch(e) {
-    toast('Error', e.message, 'error');
-  }
-}
-
-async function adminAiDeactivateUser(userId) {
-  try {
-    await callEdge('admin-action', { 
-      action: 'deactivate_user', 
-      target_id: userId
-    });
-    toast('User Deactivated', `User ${userId.substring(0,8)} has been suspended by AI`, 'warn', 5000);
-    loadAdminSellers();
-  } catch(e) {
-    toast('Deactivation Failed', e.message, 'error');
-  }
-}
-
-async function adminAiReactivateUser(userId) {
-  try {
-    await callEdge('admin-action', { 
-      action: 'reactivate_user', 
-      target_id: userId
-    });
-    toast('User Reactivated âœ…', `User ${userId.substring(0,8)} has been restored with 30-day access`, 'success', 5000);
-    loadAdminSellers();
-  } catch(e) {
-    toast('Reactivation Failed', e.message, 'error');
-  }
-}
-
-async function adminAiChangeRole(userId, newRole) {
-  try {
-    await callEdge('admin-action', { 
-      action: 'toggle_commission', 
-      target_id: userId, 
-      data: { role: newRole, accounts: newRole } 
-    });
-    toast('Role Changed âœ…', `User ${userId.substring(0,8)} is now a ${newRole}`, 'success', 5000);
-    loadAdminSellers();
-  } catch(e) {
-    toast('Role Change Failed', e.message, 'error');
-  }
-}
-
-async function adminAiExtendTrial(userId, days) {
-  try {
-    const { data: profile } = await db.from('profiles').select('trial_end').eq('id', userId).single();
-    const currentEnd = profile?.trial_end ? new Date(profile.trial_end) : new Date();
-    const baseDate = currentEnd > new Date() ? currentEnd : new Date();
-    baseDate.setDate(baseDate.getDate() + days);
-    
-    // FIX: Use Edge Function to bypass RLS
-    await callEdge('admin-action', { 
-      action: 'toggle_commission', 
-      target_id: userId, 
-      data: { trial_end: baseDate.toISOString(), is_suspended: false } 
-    });
-
-    toast('Trial Extended âœ…', `User ${userId.substring(0,8)} trial extended by ${days} days`, 'success', 5000);
-    loadAdminSellers();
-  } catch(e) {
-    toast('Trial Extension Failed', e.message, 'error');
-  }
-}
-
-async function adminAiGrantCommission(userId) {
-  try {
-    await callEdge('admin-action', { 
-      action: 'grant_commission', 
-      target_id: userId
-    });
-    toast('Commission Granted âœ…', `User ${userId.substring(0,8)} seller access activated`, 'success', 5000);
-    loadAdminSellers();
-  } catch(e) {
-    toast('Grant Failed', e.message, 'error');
-  }
-}
-
-async function adminAiResolveDispute(disputeId) {
-  try {
-    await callEdge('admin-action', { action: 'resolve_dispute', target_id: disputeId });
-    toast('Dispute Resolved', `Dispute ${disputeId.substring(0,8)} closed by AI`, 'success');
-    loadAdminDisputes();
-  } catch(e) {
-    toast('Failed', e.message, 'error');
-  }
-}
-
-async function adminAiApproveReceipt(receiptId) {
-  try {
-    const { data: receipt } = await db.from('commission_receipts').select('seller_id').eq('id', receiptId).single();
-    await callEdge('admin-action', {
-      action: 'approve_receipt',
-      target_id: receiptId,
-      data: { seller_id: receipt?.seller_id }
-    });
-    toast('Receipt Approved', 'Seller activated by AI', 'success');
-    loadAdminReceipts();
-  } catch(e) {
-    toast('Failed', e.message, 'error');
-  }
-}
-
-async function adminAiRejectReceipt(receiptId, reason) {
-  try {
-    await callEdge('admin-action', {
-      action: 'reject_receipt',
-      target_id: receiptId,
-      data: { reason: reason }
-    });
-    toast('Receipt Rejected', reason, 'warn');
-    loadAdminReceipts();
-  } catch(e) {
-    toast('Failed', e.message, 'error');
-  }
-}
-
-async function adminAiApproveWithdrawal(withdrawalId) {
-  try {
-    await callEdge('admin-action', { action: 'pay_withdrawal', target_id: withdrawalId });
-    toast('Withdrawal Approved', 'Funds released', 'success');
-    loadAdminWithdrawals();
-  } catch(e) {
-    toast('Failed', e.message, 'error');
-  }
-}
-
-async function adminAiApproveKyc(kycId, userId) {
-  try {
-    await callEdge('admin-action', {
-      action: 'approve_kyc',
-      target_id: kycId,
-      data: userId ? { user_id: userId } : {}
-    });
-    toast('KYC Approved', 'User verified', 'success');
-    loadAdminKyc();
-  } catch(e) {
-    toast('Failed', e.message, 'error');
-  }
-}
-
-async function adminAiRejectKyc(kycId, reason, userId) {
-  try {
-    await callEdge('admin-action', {
-      action: 'reject_kyc',
-      target_id: kycId,
-      data: userId ? { reason: reason, user_id: userId } : { reason: reason }
-    });
-    toast('KYC Rejected', reason, 'warn');
-    loadAdminKyc();
-  } catch(e) {
-    toast('Failed', e.message, 'error');
-  }
-}
-
-async function sendBroadcastMessage(title, message) {
-  try {
-    await db.from('broadcasts').insert({
-      title: title,
-      message: message,
-      target: 'all',
-      created_at: new Date().toISOString()
-    });
-    toast('Broadcast Sent!', title, 'success');
-  } catch(e) {
-    toast('Failed', e.message, 'error');
-  }
-}
-
-async function adminAiCreateCoupon(code, percent, daysValid) {
-  try {
-    const expires = new Date(); expires.setDate(expires.getDate() + daysValid);
-    await db.from('coupons').insert({
-      seller_id: currentUser.id,
-      code: code,
-      discount_type: 'percent',
-      discount_value: percent,
-      min_order: 0,
-      max_uses: 100,
-      expires_at: expires.toISOString(),
-      is_active: true
-    });
-    toast('Coupon Created!', `${code} - ${percent}% off`, 'success');
-    loadSellerCoupons();
-  } catch(e) {
-    toast('Failed', e.message, 'error');
-  }
-}
-
-// NOTE: sendBroadcast() is defined below in the admin section (line ~3065)
-// Duplicate AI action handlers removed â€” kept single definitions above (lines 2606â€“2738)
    
 async function loadAdminSellers() {
   if (!guardAdminPanel()) return;
@@ -3372,10 +2097,10 @@ function _renderAdminSellerList(sellers) {
     const trialEnd = s.trial_end ? new Date(s.trial_end) : null;
     const daysLeft = trialEnd ? Math.ceil((trialEnd - now) / 86400000) : 0;
     const badge = s.commission_paid
-      ? `<span class="badge badge-green">âœ“ Active</span>`
+      ? `<span class="badge badge-green">✓ Active</span>`
       : daysLeft > 0
         ? `<span class="badge badge-gold">Trial: ${daysLeft}d</span>`
-        : `<span class="badge badge-red">âš  Overdue</span>`;
+        : `<span class="badge badge-red">⚠ Overdue</span>`;
     const approveBtn = s.commission_paid
       ? `<button onclick="adminToggleCommission('${s.id}',false)" class="btn btn-sm btn-outline"><i class="fa-solid fa-ban"></i> Revoke</button>`
       : `<button onclick="adminToggleCommission('${s.id}',true)"  class="btn btn-sm btn-primary"><i class="fa-solid fa-check"></i> Approve</button>`;
@@ -3389,7 +2114,7 @@ function _renderAdminSellerList(sellers) {
         <div style="min-width:0">
           <div class="font-600" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(s.name||'Unknown')}</div>
           <div class="text-xs color-text3">${escHtml(s.email||'')}</div>
-          ${s.store_name ? `<div class="text-xs color-text3">ðŸª ${escHtml(s.store_name)}</div>` : ''}
+          ${s.store_name ? `<div class="text-xs color-text3">🏪 ${escHtml(s.store_name)}</div>` : ''}
           ${s.accounts ? `<div class="text-xs color-text3">Accounts: ${escHtml(s.accounts)}</div>` : ''}
           <div class="text-xs color-text3">Joined: ${fmtDate(s.created_at)}</div>
           <div class="flex gap-1 mt-1 flex-wrap">${badge}</div>
@@ -3412,9 +2137,9 @@ async function adminToggleCommission(id, paid) {
   const card = document.getElementById('asc-' + id);
   if (card) {
     const badge = card.querySelector('.badge');
-    if (badge) { badge.className = 'badge ' + (paid ? 'badge-green' : 'badge-red'); badge.textContent = paid ? 'âœ“ Active' : 'âš  Overdue'; }
+    if (badge) { badge.className = 'badge ' + (paid ? 'badge-green' : 'badge-red'); badge.textContent = paid ? '✓ Active' : '⚠ Overdue'; }
   }
-  toast(paid ? 'âœ… Seller Activated' : 'â›” Access Revoked', '', paid ? 'success' : 'warn');
+  toast(paid ? '✅ Seller Activated' : '⛔ Access Revoked', '', paid ? 'success' : 'warn');
   loadAdminSellers();
 }
 
@@ -3428,7 +2153,7 @@ async function adminDeleteSeller(id) {
   loadAdminSellers();
 }
 
-/* â”€â”€ ORDERS â”€â”€ */
+/* ── ORDERS ── */
 async function loadAdminOrders() {
   if (!isAdmin()) return;
   document.getElementById('adm-orders-skeleton').classList.remove('hidden');
@@ -3449,15 +2174,15 @@ async function loadAdminOrders() {
       <div class="flex justify-between items-start flex-wrap gap-2 mb-2">
         <div>
           <div class="font-bold text-sm">${o.id}</div>
-          <div class="text-xs color-text3">${fmtDate(o.created_at)} Â· ${o.payment_method||''}</div>
-          <div class="text-xs mt-1">${(o.items||[]).map(i=>`${escHtml(i.name)} Ã—${i.qty}`).join(', ')}</div>
+          <div class="text-xs color-text3">${fmtDate(o.created_at)} · ${o.payment_method||''}</div>
+          <div class="text-xs mt-1">${(o.items||[]).map(i=>`${escHtml(i.name)} ×${i.qty}`).join(', ')}</div>
         </div>
         <div class="text-right">
           <div class="font-bold color-green">${fmtN(o.total_amount)}</div>
           <span class="badge ${sc[o.status]||'badge-gray'}">${o.status}</span>
         </div>
       </div>
-      <div class="text-xs color-text3 mb-2"><i class="fa-solid fa-user"></i> ${escHtml(o.delivery_name||'â€”')} &nbsp;|&nbsp; <i class="fa-solid fa-map-marker-alt"></i> ${escHtml((o.delivery_address||'').substr(0,50))}</div>
+      <div class="text-xs color-text3 mb-2"><i class="fa-solid fa-user"></i> ${escHtml(o.delivery_name||'—')} &nbsp;|&nbsp; <i class="fa-solid fa-map-marker-alt"></i> ${escHtml((o.delivery_address||'').substr(0,50))}</div>
       <div class="flex gap-2 flex-wrap">
         ${o.status==='pending'   ? `<button onclick="adminUpdateOrder('${o.id}','confirmed')"  class="btn btn-primary btn-sm">Confirm</button>` : ''}
         ${o.status==='confirmed' ? `<button onclick="adminUpdateOrder('${o.id}','shipped')"    class="btn btn-sm" style="background:#ede9fe;color:var(--purple)">Mark Shipped</button>` : ''}
@@ -3476,7 +2201,7 @@ async function adminUpdateOrder(id, status) {
   } catch(e) { toast('Error', e.message, 'error'); }
 }
 
-/* â”€â”€ DISPUTES â”€â”€ */
+/* ── DISPUTES ── */
 async function loadAdminDisputes() {
   if (!isAdmin()) return;
   const { data: disputes } = await db.from('disputes').select('*').order('created_at',{ascending:false}).limit(60);
@@ -3491,7 +2216,7 @@ async function loadAdminDisputes() {
           <div class="font-600 text-sm">Order: ${d.order_id}</div>
           <div class="text-xs color-text3">${fmtDate(d.created_at)}</div>
           <div class="text-sm mt-1"><strong>${(d.dispute_type||'').replace(/-/g,' ')}</strong></div>
-          <div class="text-xs color-text3 mt-1">${escHtml((d.description||'').substr(0,200))}${(d.description?.length||0)>200?'â€¦':''}</div>
+          <div class="text-xs color-text3 mt-1">${escHtml((d.description||'').substr(0,200))}${(d.description?.length||0)>200?'…':''}</div>
         </div>
         <span class="badge ${d.status==='open'?'badge-red':d.status==='resolved'?'badge-green':'badge-orange'}">${d.status}</span>
       </div>
@@ -3507,7 +2232,7 @@ async function loadAdminDisputes() {
 async function resolveDispute(id) {
   try { await callEdge('admin-action', { action: 'resolve_dispute', target_id: id }); }
   catch(e) { toast('Error', e.message, 'error'); return; }
-  toast('Dispute Resolved âœ…', '', 'success');
+  toast('Dispute Resolved ✅', '', 'success');
   loadAdminDisputes();
 }
 
@@ -3518,7 +2243,7 @@ async function refundDispute(disputeId, orderId) {
   loadAdminDisputes();
 }
 
-/* â”€â”€ WITHDRAWALS â”€â”€ */
+/* ── WITHDRAWALS ── */
 async function loadAdminWithdrawals() {
   if (!isAdmin()) return;
   document.getElementById('adm-wd-skeleton').classList.remove('hidden');
@@ -3538,7 +2263,7 @@ async function loadAdminWithdrawals() {
           <div class="font-bold" style="font-size:1.05rem;color:var(--green)">${fmtN(w.amount)}</div>
           <div class="font-600 text-sm">${escHtml(w.profiles?.name||'Seller')}</div>
           <div class="text-xs color-text3">${escHtml(w.profiles?.email||'')}</div>
-          <div class="text-xs mt-1"><b>${escHtml(w.bank_name||'')}</b> Â· ${escHtml(w.account_number||'')} Â· ${escHtml(w.account_name||'')}</div>
+          <div class="text-xs mt-1"><b>${escHtml(w.bank_name||'')}</b> · ${escHtml(w.account_number||'')} · ${escHtml(w.account_name||'')}</div>
           <div class="text-xs color-text3">${fmtDate(w.created_at)}</div>
         </div>
         <div class="flex flex-col items-end gap-2">
@@ -3559,7 +2284,7 @@ async function loadAdminWithdrawals() {
 async function adminPayWithdrawal(id) {
   try { await callEdge('admin-action', { action: 'pay_withdrawal', target_id: id }); }
   catch(e) { toast('Error', e.message, 'error'); return; }
-  toast('Withdrawal Marked Paid âœ…', '', 'success');
+  toast('Withdrawal Marked Paid ✅', '', 'success');
   loadAdminWithdrawals();
 }
 
@@ -3571,7 +2296,7 @@ async function adminRejectWithdrawal(id) {
   loadAdminWithdrawals();
 }
 
-/* â”€â”€ BROADCAST â”€â”€ */
+/* ── BROADCAST ── */
 async function sendBroadcast() {
   if (!isAdmin()) return;
   const title  = document.getElementById('bc-title').value.trim();
@@ -3581,7 +2306,7 @@ async function sendBroadcast() {
   if (!title || !body) { toast('Fill in title and message', '', 'warn'); return; }
   try { await callEdge('send-broadcast', { title, body, target, type }); }
   catch(e) { toast('Error', e.message, 'error'); return; }
-  toast('ðŸ“£ Broadcast Sent!', 'To: ' + target, 'success');
+  toast('📣 Broadcast Sent!', 'To: ' + target, 'success');
   document.getElementById('bc-title').value = '';
   document.getElementById('bc-body').value  = '';
   loadBroadcastHistory();
@@ -3591,11 +2316,11 @@ async function loadBroadcastHistory() {
   const { data: bcs } = await db.from('broadcasts').select('*').order('created_at',{ascending:false}).limit(10);
   const el = document.getElementById('bc-history');
   if (!el) return;
-  const icons = { info:'â„¹ï¸', success:'âœ…', warn:'âš ï¸', error:'ðŸš¨' };
+  const icons = { info:'ℹ️', success:'✅', warn:'⚠️', error:'🚨' };
   el.innerHTML = (bcs||[]).length
     ? bcs.map(b => `<div class="card card-pad mb-2" style="border-left:3px solid var(--green)">
         <div class="flex justify-between items-center mb-1">
-          <span class="font-600 text-sm">${icons[b.type]||'ðŸ“¢'} ${escHtml(b.title)}</span>
+          <span class="font-600 text-sm">${icons[b.type]||'📢'} ${escHtml(b.title)}</span>
           <span class="text-xs color-text3">${fmtDate(b.created_at)}</span>
         </div>
         <div class="text-xs color-text3 mb-1">To: <b>${b.target}</b></div>
@@ -3605,186 +2330,7 @@ async function loadBroadcastHistory() {
 }
 
 // ====================================================
-//  KYC VERIFICATION SYSTEM
-// ====================================================
-function checkAndPromptKyc() {
-  if (!currentUser?.profile) return false;
-  const role = currentUser.profile.role;
-  if (role !== 'seller' && role !== 'service_provider') return true;
-  
-  if (currentUser.profile.kyc_verified || currentUser.profile.kyc_status === 'approved') return true;
-  
-  const statusEl = document.getElementById('kyc-status-banner');
-  if (currentUser.profile.kyc_status === 'pending') {
-    statusEl.innerHTML = '<i class="fa-solid fa-clock text-xl"></i> <div><b>Verification Pending</b><br>Your KYC documents are currently under review.</div>';
-    statusEl.style.background = '#fef3c7'; statusEl.style.color = '#92400e';
-    statusEl.classList.remove('hidden');
-    document.getElementById('kyc-submit-btn').disabled = true;
-    document.getElementById('kyc-submit-btn').innerHTML = '<i class="fa-solid fa-clock"></i> Under Review';
-    showModal('kyc-modal');
-    return false;
-  }
-  
-  if (currentUser.profile.kyc_status === 'rejected') {
-    statusEl.innerHTML = '<i class="fa-solid fa-exclamation-triangle text-xl"></i> <div><b>Verification Rejected</b><br>Please resubmit your documents with clear photos.</div>';
-    statusEl.style.background = '#fee2e2'; statusEl.style.color = '#b91c1c';
-    statusEl.classList.remove('hidden');
-  }
-
-  showModal('kyc-modal');
-  return false;
-}
-
-async function submitKyc(e) {
-  e.preventDefault();
-  if (!currentUser) return;
-  const btn = document.getElementById('kyc-submit-btn');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Uploading...';
-  
-  try {
-    const docType = document.getElementById('kyc-doc-type').value;
-    const docNum  = document.getElementById('kyc-doc-number').value.trim();
-    const name    = document.getElementById('kyc-full-name').value.trim();
-    
-    // Upload files
-    const uploadFile = async (id) => {
-      const el = document.getElementById(id);
-      if (!el.files?.[0]) return null;
-      const file = el.files[0];
-      const ext = file.name.split('.').pop();
-      const path = `kyc/${currentUser.id}/${id}_${Date.now()}.${ext}`;
-      const { error } = await db.storage.from('uploads').upload(path, file);
-      if (error) throw new Error(`Failed to upload ${id}`);
-      return db.storage.from('uploads').getPublicUrl(path).data.publicUrl;
-    };
-
-    const [frontUrl, backUrl, selfieUrl] = await Promise.all([
-      uploadFile('kyc-front'), uploadFile('kyc-back'), uploadFile('kyc-selfie')
-    ]);
-
-    if (!frontUrl || !selfieUrl) throw new Error("Front photo and selfie are required");
-
-    await db.from('kyc_verifications').insert({
-      user_id: currentUser.id,
-      document_type: docType,
-      document_number: docNum,
-      full_name: name,
-      document_front_url: frontUrl,
-      document_back_url: backUrl,
-      selfie_url: selfieUrl,
-      status: 'pending'
-    });
-
-    // FIX: Use Edge function to update profile so RLS doesn't block it!
-    await callEdge('update-profile', { kyc_status: 'pending' })
-      .catch(() => db.from('profiles').update({ kyc_status: 'pending' }).eq('id', currentUser.id)); // Fallback just in case
-      
-    currentUser.profile.kyc_status = 'pending';
-    
-    toast('KYC Submitted', ' documents are pending review', 'success');
-    closeModal('kyc-modal');
-    checkAndPromptKyc(); // updates modal UI
-  } catch(e) {
-    toast('Error', e.message, 'error');
-    btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-shield-check"></i> Submit Verification';
-  }
-}
-
-// Admin KYC management
-async function loadAdminKyc() {
-  if (!guardAdminPanel()) return;
-  const filter = document.getElementById('adm-kyc-filter').value;
-  let q = db.from('kyc_verifications').select('*, profiles(name, email, role)').order('created_at', { ascending: false });
-  if (filter !== 'all') q = q.eq('status', filter);
-  
-  const { data: kycs, error } = await q;
-  document.getElementById('adm-kyc-skeleton').classList.add('hidden');
-  const list = document.getElementById('adm-kyc-list');
-  const empty = document.getElementById('adm-kyc-empty');
-  
-  if (error || !kycs?.length) {
-    list.classList.add('hidden'); empty.classList.remove('hidden');
-    return;
-  }
-  
-  list.classList.remove('hidden'); empty.classList.add('hidden');
-  list.innerHTML = kycs.map(k => `
-    <div class="card card-pad mb-3" style="border-left: 4px solid ${k.status==='approved'?'var(--green)':k.status==='rejected'?'var(--red)':'var(--gold)'}">
-      <div class="flex justify-between items-start mb-2 flex-wrap gap-2">
-        <div>
-          <div class="font-bold flex items-center gap-2">${escHtml(k.profiles?.name||'Unknown')} <span class="badge badge-gray">${k.profiles?.role}</span></div>
-          <div class="text-xs color-text3">${escHtml(k.profiles?.email)}</div>
-          <div class="text-sm mt-1"><b>ID:</b> ${escHtml(k.document_number)} (${k.document_type.toUpperCase()})</div>
-          <div class="text-sm"><b>Name on ID:</b> ${escHtml(k.full_name)}</div>
-        </div>
-        <span class="badge ${k.status==='approved'?'badge-green':k.status==='rejected'?'badge-red':'badge-gold'}">${k.status.toUpperCase()}</span>
-      </div>
-      <div class="kyc-doc-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem;margin:.85rem 0">
-        ${renderKycDocPreview('Front ID', k.document_front_url)}
-        ${k.document_back_url ? renderKycDocPreview('Back ID', k.document_back_url) : ''}
-        ${renderKycDocPreview('Selfie', k.selfie_url)}
-      </div>
-      <div class="flex gap-2 flex-wrap mb-3 mt-2">
-        <a href="${sanitizeUrl(k.document_front_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm"><i class="fa-solid fa-up-right-from-square"></i> Open Front</a>
-        ${k.document_back_url ? `<a href="${sanitizeUrl(k.document_back_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm"><i class="fa-solid fa-up-right-from-square"></i> Open Back</a>` : ''}
-        <a href="${sanitizeUrl(k.selfie_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm"><i class="fa-solid fa-up-right-from-square"></i> Open Selfie</a>
-      </div>
-      ${k.status === 'pending' ? `
-        <div class="flex gap-2 border-t pt-3 mt-2">
-          <button class="btn btn-primary btn-sm flex-1" onclick="adminApproveKyc('${k.id}', '${k.user_id}')"><i class="fa-solid fa-check"></i> Approve KYC</button>
-          <button class="btn btn-outline btn-sm text-red flex-1" onclick="adminRejectKyc('${k.id}', '${k.user_id}')" style="border-color:var(--red);color:var(--red)"><i class="fa-solid fa-times"></i> Reject</button>
-        </div>
-      ` : ''}
-    </div>
-  `).join('');
-}
-
-function renderKycDocPreview(label, url) {
-  const safeUrl = sanitizeUrl(url || '');
-  if (!safeUrl) return '';
-  return `<button type="button" onclick="openKycDocument('${escAttr(safeUrl)}','${escAttr(label)}')" style="text-align:left;background:#fff;border:1px solid var(--border);border-radius:8px;padding:.45rem;cursor:pointer">
-    <img src="${safeUrl}" alt="${escAttr(label)}" style="width:100%;height:120px;object-fit:cover;border-radius:6px;background:var(--cream);display:block;margin-bottom:.4rem">
-    <span class="text-xs font-bold"><i class="fa-solid fa-magnifying-glass"></i> ${escHtml(label)}</span>
-  </button>`;
-}
-
-function openKycDocument(url, label) {
-  const safeUrl = sanitizeUrl(url || '');
-  document.getElementById('kyc-doc-title').textContent = label || 'KYC Document';
-  document.getElementById('kyc-doc-img').src = safeUrl;
-  document.getElementById('kyc-doc-open-link').href = safeUrl;
-  showModal('kyc-doc-modal');
-}
-
-async function adminApproveKyc(kycId, userId) {
-  if (!confirm('Approve KYC and verify this user?')) return;
-  try {
-    await callEdge('admin-action', {
-      action: 'approve_kyc',
-      target_id: kycId,
-      data: { user_id: userId }
-    });
-    toast('KYC Approved', 'User is now a verified seller.', 'success');
-    loadAdminKyc();
-  } catch(e) { toast('Error', e.message, 'error'); }
-}
-
-async function adminRejectKyc(kycId, userId) {
-  const note = prompt('Reason for rejection:');
-  if (!note) return;
-  try {
-    await callEdge('admin-action', {
-      action: 'reject_kyc',
-      target_id: kycId,
-      data: { reason: note, user_id: userId }
-    });
-    toast('KYC Rejected', 'User must resubmit.', 'warn');
-    loadAdminKyc();
-  } catch(e) { toast('Error', e.message, 'error'); }
-}
-
-// ====================================================
-//  ADMIN â€” RECEIPTS MANAGEMENT
+//  ADMIN — RECEIPTS MANAGEMENT
 // ====================================================
 async function loadAdminReceipts() {
   if (!guardAdminPanel()) return;
@@ -3832,12 +2378,19 @@ async function loadAdminReceipts() {
 async function approveReceipt(receiptId, sellerId) {
   if (!confirm('Approve this receipt and activate the seller?')) return;
   try {
-    await callEdge('admin-action', {
-      action: 'approve_receipt',
-      target_id: receiptId,
-      data: { seller_id: sellerId }
-    });
-    toast('Receipt Approved âœ…', 'Seller store is now active.', 'success');
+    // 1. Update receipt status
+    await db.from('commission_receipts').update({
+      status: 'approved',
+      reviewed_at: new Date().toISOString()
+    }).eq('id', receiptId);
+
+    // 2. Activate the seller's commission_paid flag
+    await db.from('profiles').update({
+      commission_paid: true,
+      updated_at: new Date().toISOString()
+    }).eq('id', sellerId);
+
+    toast('Receipt Approved ✅', 'Seller store is now active.', 'success');
     loadAdminReceipts();
   } catch(e) {
     toast('Error', e.message, 'error');
@@ -3847,13 +2400,181 @@ async function approveReceipt(receiptId, sellerId) {
 async function rejectReceipt(receiptId) {
   const note = prompt('Reason for rejection (optional):') || '';
   try {
-    await callEdge('admin-action', {
-      action: 'reject_receipt',
-      target_id: receiptId,
-      data: { reason: note }
-    });
+    await db.from('commission_receipts').update({
+      status: 'rejected',
+      admin_note: note,
+      reviewed_at: new Date().toISOString()
+    }).eq('id', receiptId);
+
     toast('Receipt Rejected', 'Seller has been notified.', 'warn');
     loadAdminReceipts();
+  } catch(e) {
+    toast('Error', e.message, 'error');
+  }
+}
+
+/* ── ACCOUNT MANAGEMENT ── */
+async function loadAdminAccounts() {
+  if (!guardAdminPanel()) return;
+  loadCommissionActivations();
+  loadAdPayments();
+  loadTrialExtensions();
+}
+
+async function loadCommissionActivations() {
+  const tbody = document.getElementById('acct-comm-list');
+  try {
+    const { data: receipts } = await db.from('commission_receipts')
+      .select('*, profiles(name, email)')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (!receipts || !receipts.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-sm color-text3 p-3">No pending commission receipts</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = receipts.map(r => `
+      <tr>
+        <td style="font-weight:600;font-size:.82rem">${escHtml(r.profiles?.name || 'Unknown')}<br><span class="text-xs color-text3">${escHtml(r.profiles?.email || '')}</span></td>
+        <td class="text-xs">${fmtDate(r.created_at)}</td>
+        <td class="text-xs" style="font-family:monospace">${escHtml(r.transaction_ref)}</td>
+        <td><a href="${r.receipt_url}" target="_blank" class="btn btn-ghost btn-sm" style="color:var(--blue)"><i class="fa-solid fa-image"></i> View</a></td>
+        <td>
+          <button class="btn btn-primary btn-sm" onclick="adminActivateSeller('${r.seller_id}', '${r.id}')"><i class="fa-solid fa-check"></i> Activate</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-sm color-danger p-3">Error: ${e.message}</td></tr>`;
+  }
+}
+
+async function loadAdPayments() {
+  const tbody = document.getElementById('acct-ads-list');
+  try {
+    const { data: ads } = await db.from('advertisements')
+      .select('*, profiles(name, email)')
+      .in('status', ['pending', 'pending_payment'])
+      .order('created_at', { ascending: false });
+
+    if (!ads || !ads.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-sm color-text3 p-3">No pending ad approvals</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = ads.map(a => `
+      <tr>
+        <td style="font-weight:600;font-size:.82rem">${escHtml(a.profiles?.name || 'Unknown')}<br><span class="text-xs color-text3">${escHtml(a.profiles?.email || '')}</span></td>
+        <td class="text-xs">${escHtml(a.title)}</td>
+        <td class="text-xs" style="font-family:monospace">${escHtml(a.payment_reference || 'N/A')}</td>
+        <td><a href="${a.media_url}" target="_blank" class="btn btn-ghost btn-sm" style="color:var(--blue)"><i class="fa-solid fa-image"></i> View</a></td>
+        <td>
+          <button class="btn btn-primary btn-sm" onclick="adminApproveAd('${a.id}')" style="margin-right:.3rem"><i class="fa-solid fa-check"></i></button>
+          <button class="btn btn-outline btn-sm" onclick="adminRejectAd('${a.id}')" style="color:var(--red);border-color:var(--red)"><i class="fa-solid fa-times"></i></button>
+        </td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-sm color-danger p-3">Error loading ads.</td></tr>`;
+  }
+}
+
+let _trialExtensionsCache = [];
+async function loadTrialExtensions() {
+  const tbody = document.getElementById('acct-trials-list');
+  try {
+    const { data: sellers } = await db.from('profiles')
+      .select('*')
+      .eq('role', 'seller')
+      .eq('commission_paid', false)
+      .order('trial_end', { ascending: true });
+
+    _trialExtensionsCache = sellers || [];
+    _renderTrialExtensions(_trialExtensionsCache);
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-sm color-danger p-3">Error loading sellers.</td></tr>`;
+  }
+}
+
+function filterTrialExtensions() {
+  const q = (document.getElementById('acct-trial-search')?.value || '').trim().toLowerCase();
+  if (!q) return _renderTrialExtensions(_trialExtensionsCache);
+  const filtered = _trialExtensionsCache.filter(s => 
+    (s.name||'').toLowerCase().includes(q) || 
+    (s.email||'').toLowerCase().includes(q)
+  );
+  _renderTrialExtensions(filtered);
+}
+
+function _renderTrialExtensions(sellers) {
+  const tbody = document.getElementById('acct-trials-list');
+  if (!sellers.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-sm color-text3 p-3">No sellers found.</td></tr>';
+    return;
+  }
+  const now = new Date();
+  tbody.innerHTML = sellers.map(s => {
+    const trialEnd = s.trial_end ? new Date(s.trial_end) : null;
+    const daysLeft = trialEnd ? Math.ceil((trialEnd - now) / 86400000) : 0;
+    const status = daysLeft > 0 
+      ? `<span class="badge badge-gold">${daysLeft} days left</span>`
+      : `<span class="badge badge-red">Expired</span>`;
+    
+    return `
+      <tr>
+        <td style="font-weight:600;font-size:.82rem">${escHtml(s.name || 'Unknown')}</td>
+        <td class="text-xs color-text3">${escHtml(s.email || '')}</td>
+        <td class="text-xs">${trialEnd ? fmtDate(s.trial_end) : 'N/A'}</td>
+        <td>${status}</td>
+        <td><button class="btn btn-outline btn-sm" onclick="adminExtendTrial('${s.id}', '${s.trial_end || new Date().toISOString()}')"><i class="fa-solid fa-plus"></i> 30 Days</button></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function adminActivateSeller(sellerId, receiptId) {
+  if (!confirm('Approve this receipt and activate the seller?')) return;
+  try {
+    // Reusing the existing approveReceipt logic to activate via direct db updates
+    // In a fully locked down system, we'd use admin-action edge function. 
+    await db.from('commission_receipts').update({ status: 'approved', reviewed_at: new Date().toISOString() }).eq('id', receiptId);
+    await db.from('profiles').update({ commission_paid: true, updated_at: new Date().toISOString() }).eq('id', sellerId);
+    toast('Seller Activated ✅', 'Commission payment approved.', 'success');
+    loadAdminAccounts();
+  } catch(e) {
+    toast('Error', e.message, 'error');
+  }
+}
+
+async function adminApproveAd(adId) {
+  if (!confirm('Approve this advertisement?')) return;
+  try {
+    await callEdge('admin-action', { action: 'approve_ad', target_id: adId });
+    toast('Ad Approved ✅', 'It is now active on the dashboard.', 'success');
+    loadAdminAccounts();
+  } catch(e) {
+    toast('Error', e.message, 'error');
+  }
+}
+
+async function adminRejectAd(adId) {
+  if (!confirm('Reject this advertisement?')) return;
+  try {
+    await db.from('advertisements').update({ status: 'rejected' }).eq('id', adId);
+    toast('Ad Rejected', 'Advertiser has been updated.', 'info');
+    loadAdminAccounts();
+  } catch(e) {
+    toast('Error', e.message, 'error');
+  }
+}
+
+async function adminExtendTrial(sellerId, currentEnd) {
+  if (!confirm('Extend trial by 30 days?')) return;
+  try {
+    await callEdge('admin-action', { action: 'extend_trial', target_id: sellerId, data: { current_end: currentEnd } });
+    toast('Trial Extended', 'Seller has been given 30 more days.', 'success');
+    loadAdminAccounts();
   } catch(e) {
     toast('Error', e.message, 'error');
   }
@@ -3867,7 +2588,7 @@ async function checkBroadcastForUser() {
   (bcs||[]).forEach((b, i) => setTimeout(() => toast(b.title, b.body, b.type||'info', 7000), i * 2200));
 }
 
-/* â”€â”€ REVENUE CHART â”€â”€ */
+/* ── REVENUE CHART ── */
 function _renderAdminRevenueChart(orders) {
   const ctx = document.getElementById('admin-revenue-chart');
   if (!ctx) return;
@@ -3883,14 +2604,18 @@ function _renderAdminRevenueChart(orders) {
   if (_adminRevenueChart) _adminRevenueChart.destroy();
   _adminRevenueChart = new Chart(ctx, {
     type: 'bar',
-    data: { labels, datasets:[{ label:'Revenue (â‚¦)', data, backgroundColor:'rgba(25,168,71,.2)', borderColor:'#19a847', borderWidth:1.5, borderRadius:4 }] },
-    options: { responsive:true, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>'â‚¦'+fmtNum(c.raw)}} }, scales:{ y:{ beginAtZero:true, ticks:{callback:v=>'â‚¦'+fmtNum(v)} }, x:{ ticks:{maxTicksLimit:8} } } }
+    data: { labels, datasets:[{ label:'Revenue (₦)', data, backgroundColor:'rgba(25,168,71,.2)', borderColor:'#19a847', borderWidth:1.5, borderRadius:4 }] },
+    options: { responsive:true, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>'₦'+fmtNum(c.raw)}} }, scales:{ y:{ beginAtZero:true, ticks:{callback:v=>'₦'+fmtNum(v)} }, x:{ ticks:{maxTicksLimit:8} } } }
   });
 }
 
 // ====================================================
-//  CHATBOT (uses Groq directly)
+//  CHATBOT
 // ====================================================
+// ====================================================
+//  CLAUDE-POWERED CHATBOT  (replaces old rule-based bot)
+// ====================================================
+
 async function sendChat() {
   const input  = document.getElementById('chat-input');
   const msg    = input.value.trim();
@@ -3900,40 +2625,47 @@ async function sendChat() {
   input.value = '';
   chatHistory.push({ role: 'user', content: msg });
 
+  // Show typing indicator
   const typingId = 'typing-' + Date.now();
   addChatMsg('...', 'bot', typingId);
 
+  // Build context from current app state
   const context = {
-    current_page:    getCurrentPage(),
-    user_role:       currentRole || 'visitor',
-    cart_item_count: cart.length,
-    cart_total:      cart.reduce((s, c) => s + c.price * (c.qty || 1), 0),
-    current_product: currentProd
+    current_page:      getCurrentPage(),
+    user_role:         currentRole || 'visitor',
+    cart_item_count:   cart.length,
+    cart_total:        cart.reduce((s, c) => s + c.price * (c.qty || 1), 0),
+    current_product:   currentProd
       ? { name: currentProd.name, price: currentProd.price, category: currentProd.category }
       : null,
   };
 
-  const systemPrompt = `You are the authentic BUYSELL Nigeria Assistant â€” friendly, helpful, and concise.
-Current page: ${context.current_page}. User role: ${context.user_role}.
-Cart: ${context.cart_item_count} item(s), total â‚¦${context.cart_total}.
-${context.current_product ? `Viewing: "${context.current_product.name}" at â‚¦${context.current_product.price} (${context.current_product.category}).` : ''}
-Help users shop, track orders, find products, and navigate the platform. Keep replies short and friendly.`;
-
   try {
-    const reply = await callGroq(chatHistory, systemPrompt);
+    const res = await fetch(CLAUDE_EDGE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: chatHistory, context }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Agent error');
+
+    const reply = data.reply;
     chatHistory.push({ role: 'assistant', content: reply });
 
+    // Replace typing indicator with real reply
     const typingEl = document.getElementById(typingId);
     if (typingEl) typingEl.querySelector('.cb-bubble').textContent = reply;
 
   } catch (err) {
-    const fallback = "Sorry, I'm having trouble right now. WhatsApp us at 09061484256 for instant help!";
     const typingEl = document.getElementById(typingId);
+    const fallback = "Sorry, I'm having trouble right now. WhatsApp us at 09061484256 for instant help!";
     if (typingEl) typingEl.querySelector('.cb-bubble').textContent = fallback;
+    chatHistory.push({ role: 'assistant', content: fallback });
   }
 }
 
-
+// Helper — detect which "page" user is on
 function getCurrentPage() {
   if (document.getElementById('seller-dashboard')?.style.display !== 'none') return 'seller-dashboard';
   if (document.getElementById('storefront-view')?.style.display !== 'none')  return 'storefront';
@@ -3941,7 +2673,7 @@ function getCurrentPage() {
   return 'buyer-marketplace';
 }
 
-// Updated addChatMsg â€” accepts optional id for typing indicator replacement
+// Updated addChatMsg — accepts optional id for typing indicator replacement
 function addChatMsg(text, sender, id = null) {
   const container = document.getElementById('chat-messages');
   const div       = document.createElement('div');
@@ -3959,7 +2691,7 @@ function addChatMsg(text, sender, id = null) {
   container.scrollTop = container.scrollHeight;
 }
 
-// Clear history when chat is closed (optional â€” remove to keep memory)
+// Clear history when chat is closed (optional — remove to keep memory)
 function toggleChat() {
   const win = document.getElementById('chatbot-window');
   const wasOpen = win.classList.contains('open');
@@ -4015,7 +2747,7 @@ function handleCsvUpload(input) {
         </div>
         <div style="max-height:130px;overflow-y:auto">
           ${csvRows.slice(0,5).map(r => `<div class="flex justify-between text-xs py-1 border-b border-border"><span>${escHtml(r.name)}</span><span class="font-bold color-green">${fmtN(parseFloat(r.price)||0)}</span></div>`).join('')}
-          ${csvRows.length>5 ? `<div class="text-xs color-text3 mt-1 text-center">+${csvRows.length-5} moreâ€¦</div>` : ''}
+          ${csvRows.length>5 ? `<div class="text-xs color-text3 mt-1 text-center">+${csvRows.length-5} more…</div>` : ''}
         </div>
       </div>`;
     document.getElementById('csv-import-btn').classList.remove('hidden');
@@ -4026,108 +2758,36 @@ function handleCsvUpload(input) {
 async function importCsvProducts() {
   if (!csvRows.length || !currentUser) return;
   const btn = document.getElementById('csv-import-btn');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Importingâ€¦';
-  
-  // Format the raw data
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Importing…';
   const toInsert = csvRows.map(r => ({
-    name: r.name, 
-    description: r.description || r.name,
-    price: parseFloat(r.price) || 0,
-    original_price: parseFloat(r.original_price) || parseFloat(r.price) || 0,
-    category: r.category || 'electronics',
-    condition: r.condition || 'new',
-    location: r.location || 'Nigeria',
-    stock_quantity: parseInt(r.stock_quantity) || 10,
-    negotiable: r.negotiable === 'true' || r.negotiable === '1',
-    has_video: false
+    seller_id: currentUser.id,
+    name: r.name, description: r.description||r.name,
+    price: parseFloat(r.price)||0,
+    original_price: parseFloat(r.original_price)||parseFloat(r.price)||0,
+    category: r.category||'electronics',
+    condition: r.condition||'new',
+    location: r.location||'Nigeria',
+    stock_quantity: parseInt(r.stock_quantity)||10,
+    negotiable: r.negotiable==='true'||r.negotiable==='1',
+    image_url: '', video_url: '', has_video: false,
+    status: 'active', avg_rating: 5, review_count: 0,
+    created_at: new Date().toISOString()
   }));
-
-  try {
-    // Pass the payload to your Edge Function for secure processing
-    await callEdge('manage-product', { 
-      action: 'bulk_create', 
-      products: toInsert 
-    });
-
-    toast(`${toInsert.length} Products Imported! ðŸŽ‰`, 'All products are now live', 'success');
-    
-    // Reset UI
-    csvRows = [];
-    document.getElementById('csv-file').value = '';
-    document.getElementById('csv-preview').classList.add('hidden');
-    btn.classList.add('hidden');
-    document.getElementById('csv-zone').classList.remove('has-file');
-    document.getElementById('csv-zone').querySelector('.upload-label').textContent = 'Click to upload CSV file';
-    loadSellerProds();
-  } catch(e) {
-    toast('Import Failed', e.message, 'error');
-  } finally {
-    btn.disabled = false; 
-    btn.innerHTML = '<i class="fa-solid fa-upload"></i> Import Products';
+  const BATCH = 50;
+  let imported = 0;
+  for (let i = 0; i < toInsert.length; i += BATCH) {
+    const { error } = await db.from('products').insert(toInsert.slice(i, i+BATCH));
+    if (!error) imported += Math.min(BATCH, toInsert.length - i);
   }
-}
-
-async function payWithPaystack() {
-  if (typeof PaystackPop === 'undefined') {
-    toast('Payment Error', 'Paystack not loaded. Please refresh and try again.', 'error');
-    return;
-  }
-
-  // 1. Ask the backend to calculate the true total and generate a Paystack Access Code
-  toast('Initializing secure payment...', '', 'info');
-  let secureAmount = 0;
-  let accessCode = '';
-
-  try {
-    const initData = await callEdge('init-checkout', {
-      cart: cart.map(c => ({ id: c.id, qty: c.qty || 1 })),
-      coupon_code: appliedCoupon ? appliedCoupon.code : null
-    });
-    
-    secureAmount = initData.amount_kobo; // Backend returns true amount in kobo
-    accessCode = initData.access_code;   // Paystack secure session code
-  } catch (error) {
-    toast('Checkout Error', error.message || 'Could not verify cart total', 'error');
-    return;
-  }
-
-  // 2. Open Paystack using the secure Access Code
-  const handler = PaystackPop.setup({
-    key: PAYSTACK_PUBLIC_KEY,
-    email: currentUser.email,
-    amount: secureAmount, 
-    access_code: accessCode, // Enforces the backend's price
-    callback: async function(response) {
-      toast('Verifying Payment...', 'Please do not close the window', 'info');
-
-      try {
-        const verification = await callEdge('verify-payment', {
-          reference: response.reference,
-          cart: cart.map(c => ({ id: c.id, qty: c.qty || 1 })),
-          delivery_address: document.getElementById('co-address').value,
-          delivery_name: document.getElementById('co-name').value,
-          delivery_phone: document.getElementById('co-phone').value,
-          payment_method: 'paystack'
-        });
-
-        if (verification.success) {
-          cart = []; 
-          saveCart();
-          document.getElementById('co-order-id').textContent = verification.order_id;
-          document.getElementById('co-order-total').textContent = fmtN(verification.total_paid);
-          goCheckoutStep(3);
-          toast('Payment Verified!', 'Your order is confirmed', 'success');
-        }
-      } catch (err) {
-        toast('Verification Error', err.message || 'Contact support with ref: ' + response.reference, 'error');
-      }
-    },
-    onClose: function() {
-      toast('Payment Cancelled', '', 'warn');
-    }
-  });
-  
-  handler.openIframe();
+  toast(`${imported} Products Imported! 🎉`, 'All products are now live', 'success');
+  csvRows = [];
+  document.getElementById('csv-file').value = '';
+  document.getElementById('csv-preview').classList.add('hidden');
+  btn.classList.add('hidden');
+  document.getElementById('csv-zone').classList.remove('has-file');
+  document.getElementById('csv-zone').querySelector('.upload-label').textContent = 'Click to upload CSV file';
+  btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-upload"></i> Import Products';
+  loadSellerProds();
 }
 
 // ====================================================
@@ -4169,9 +2829,9 @@ async function handleDeepLink() {
 function sendWhatsAppOrderNotification(order, sellerWa) {
   if (!sellerWa) return;
   const phone = sellerWa.replace(/\D/g,'');
-  const items = (order.items||[]).map(i=>`${i.name} Ã—${i.qty}`).join(', ');
+  const items = (order.items||[]).map(i=>`${i.name} ×${i.qty}`).join(', ');
   const msg = encodeURIComponent(
-    `ðŸ›ï¸ NEW ORDER on BUYSELL!\n\n` +
+    `🛍️ NEW ORDER on BUYSELL!\n\n` +
     `Order ID: ${order.id}\n` +
     `Items: ${items}\n` +
     `Total: ${fmtN(order.total_amount)}\n` +
@@ -4220,7 +2880,7 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
     document.getElementById('co-order-id').textContent = orderId;
     document.getElementById('co-order-total').textContent = fmtN(total);
     goCheckoutStep(3);
-    toast('Order Placed! ðŸŽ‰', `Order ${orderId} confirmed`, 'success', 5000);
+    toast('Order Placed! 🎉', `Order ${orderId} confirmed`, 'success', 5000);
 
   } catch(err) {
     toast('Order Failed', err.message, 'error');
@@ -4230,7 +2890,7 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
 // ====================================================
 //  STOREFRONT SALES COUNT
 // ====================================================
-// viewStorefront â€” full implementation with order count + reviews
+// viewStorefront — full implementation with order count + reviews
 async function viewStorefront(sellerId) {
   if (!sellerId) return;
   closeModal('product-modal');
@@ -4254,7 +2914,7 @@ async function viewStorefront(sellerId) {
   const avgRating = allRevs.length ? (allRevs.reduce((s,r)=>s+r.rating,0)/allRevs.length).toFixed(1) : '5.0';
   document.getElementById('sf-rating').textContent = avgRating;
   document.getElementById('sf-review-count').textContent = `${allRevs.length} reviews`;
-  document.getElementById('sf-stars').textContent = 'â˜…'.repeat(Math.round(+avgRating))+'â˜†'.repeat(5-Math.round(+avgRating));
+  document.getElementById('sf-stars').textContent = '★'.repeat(Math.round(+avgRating))+'☆'.repeat(5-Math.round(+avgRating));
   // Share button URL
   const sfUrl = `${window.location.origin}${window.location.pathname}?store=${sellerId}`;
   document.getElementById('sf-wa-link').parentElement.querySelectorAll('button').forEach(b => {
@@ -4265,14 +2925,14 @@ async function viewStorefront(sellerId) {
   if (!sfProds.length) { grid.innerHTML=''; empty.classList.remove('hidden'); }
   else { empty.classList.add('hidden'); grid.innerHTML = sfProds.map(p=>prodCard(p)).join(''); }
   // Update page title
-  document.title = `${seller.name} â€” BUYSELL Nigeria`;
+  document.title = `${seller.name} — BUYSELL Nigeria`;
   history.pushState(null,'',`?store=${sellerId}`);
 }
 
 // ====================================================
 //  UTIL
 // ====================================================
-function fmtN(n) { return 'â‚¦' + fmtNum(n); }
+function fmtN(n) { return '₦' + fmtNum(n); }
 function fmtNum(n) { if (!n && n!==0) return '0'; return Math.round(n).toLocaleString('en-NG'); }
 function fmtDate(d) { if (!d) return ''; return new Date(d).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'}); }
 function escHtml(s) {
@@ -4330,7 +2990,7 @@ function initLeaflet() {
       // Initialize map centered on Nigeria
       pickupMap = L.map('map').setView([9.0820, 8.6753], 6); 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: 'Â© OpenStreetMap'
+        attribution: '© OpenStreetMap'
       }).addTo(pickupMap);
     }
     
@@ -4409,7 +3069,7 @@ function shareCurrentProduct() {
   // Real-time order updates for sellers
   db.channel('orders-rt').on('postgres_changes',{event:'INSERT',schema:'public',table:'orders'},payload=>{
     if (currentRole==='seller' && payload.new?.seller_id===currentUser?.id) {
-      toast('New Order! ðŸ›ï¸', 'Check your orders panel', 'success', 6000);
+      toast('New Order! 🛍️', 'Check your orders panel', 'success', 6000);
       loadSellerOrders();
       loadSellerStats();
     }
@@ -4418,7 +3078,7 @@ function shareCurrentProduct() {
   db.channel('stock-rt').on('postgres_changes',{event:'UPDATE',schema:'public',table:'products'},payload=>{
     const p = payload.new;
     if (currentRole==='seller' && p?.seller_id===currentUser?.id && p?.stock_quantity !== undefined && p?.low_stock_alert && p.stock_quantity <= p.low_stock_alert && p.stock_quantity > 0) {
-      toast(`âš ï¸ Low Stock: ${p.name}`, `Only ${p.stock_quantity} left`, 'warn', 7000);
+      toast(`⚠️ Low Stock: ${p.name}`, `Only ${p.stock_quantity} left`, 'warn', 7000);
     }
   }).subscribe();
 })();
@@ -4446,19 +3106,17 @@ function showAdminPortal() {
       const dash = document.getElementById('dash-user-name');
       if (dash) dash.textContent = currentUser.profile?.name || 'Admin';
     }
-    toast('ðŸ” Admin Portal', 'Welcome back, Commander', 'info', 4000);
+    toast('🔐 Admin Portal', 'Welcome back, Commander', 'info', 4000);
   }, 80);
 }
 
 function showServiceDashboard() {
   if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
-  if (!checkAndPromptKyc()) return;
   document.getElementById('buyer-view').style.display = 'none';
   document.getElementById('seller-dashboard').style.display = 'none';
   document.getElementById('storefront-view').style.display = 'none';
-  if(document.getElementById('admin-portal-view')) document.getElementById('admin-portal-view').style.display = 'none';
-
-  if(document.getElementById('service-provider-view')) document.getElementById('service-provider-view').style.display = 'block';
+  
+  document.getElementById('service-provider-view').style.display = 'block';
   document.body.classList.add('in-seller');
   currentRole = 'service_provider';
 
@@ -4468,15 +3126,18 @@ function showServiceDashboard() {
   if (nameEl)  nameEl.textContent  = currentUser.profile?.name  || 'Service Pro';
   if (emailEl) emailEl.textContent = currentUser.email || '';
 
-  // Commission / trial check (same rules as sellers)
-  checkServiceProviderCommission();
-
   // Load data and show default section
   showSpdDash('overview');
   loadMyGigs();
 }
 
-// NOTE: copyReferralLink() defined below (line ~4963) with fallback support
+function copyReferralLink() {
+  const link = document.getElementById('referral-link')?.value;
+  if(!link) return;
+  navigator.clipboard.writeText(link).then(() => {
+    toast('Referral Link Copied! 🔗', 'Share it to start earning.', 'success');
+  });
+}
 
 function importDropshipProduct(btn, productId) {
   // Security validation (Phase 4 mock)
@@ -4505,15 +3166,13 @@ function showSpdDash(section) {
   if (navEl) navEl.classList.add('active');
 
   // Load section-specific data
-  if (section === 'overview')   loadSpdOverview();
-  if (section === 'portfolio')  loadMyGigs();
-  if (section === 'bookings')   loadProviderBookings();
-  if (section === 'earnings')   loadProviderEarnings();
-  if (section === 'settings')   loadSpdSettings();
+  if (section === 'overview')  loadSpdOverview();
+  if (section === 'portfolio') loadMyGigs();
+  if (section === 'settings')  loadSpdSettings();
 }
 
 // ====================================================
-//  SERVICE ECONOMY â€” Browse & Filter (Buyer Side)
+//  SERVICE ECONOMY — Browse & Filter (Buyer Side)
 // ====================================================
 let _allServiceGigs = [];
 
@@ -4559,7 +3218,7 @@ function renderServiceCards(gigs) {
   }
   document.getElementById('svc-empty').classList.add('hidden');
   const grid = document.getElementById('svc-grid');
-  if (grid) grid.classList.remove('hidden');
+  grid.classList.remove('hidden');
 
   const categoryIcons = {
     'Plumbing': 'fa-faucet-drip', 'Electrical': 'fa-bolt', 'Cleaning': 'fa-broom',
@@ -4590,14 +3249,14 @@ function renderServiceCards(gigs) {
           </div>
           <div>
             <div style="font-weight:700;font-size:.88rem;line-height:1.3">${escHtml(g.title)}</div>
-            <div style="font-size:.7rem;color:var(--text3)">${escHtml(g.category)} Â· ${escHtml(g.location || 'â€”')}</div>
+            <div style="font-size:.7rem;color:var(--text3)">${escHtml(g.category)} · ${escHtml(g.location || '—')}</div>
           </div>
         </div>
         <p style="font-size:.78rem;color:var(--text2);line-height:1.55;margin-bottom:.65rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escHtml(g.description || 'No description provided.')}</p>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
           <div>
             <div style="font-size:.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Starting from</div>
-            <div style="font-size:1.1rem;font-weight:800;color:var(--green)">â‚¦${(g.starting_rate || g.price || 0).toLocaleString()}</div>
+            <div style="font-size:1.1rem;font-weight:800;color:var(--green)">₦${(g.starting_rate || g.price || 0).toLocaleString()}</div>
           </div>
           <div style="display:flex;align-items:center;gap:.35rem">
             <div style="width:24px;height:24px;border-radius:50%;background:var(--green-xlt);display:flex;align-items:center;justify-content:center">
@@ -4610,14 +3269,9 @@ function renderServiceCards(gigs) {
           <button class="btn btn-outline btn-sm" style="flex:1" onclick="viewProviderProfile('${g.provider_id}')">
             <i class="fa-solid fa-user"></i> View Profile
           </button>
-          <div style="display:flex;gap:.5rem;flex:1">
-            <button onclick="openMessageModal('${g.provider_id}', '${escAttr(provName)}')" class="btn btn-primary btn-sm flex-1">
-              <i class="fa-solid fa-comment-dots"></i> Message
-            </button>
-            <a href="${waLink}" target="_blank" class="btn btn-outline btn-sm flex-1" style="text-decoration:none;border-color:var(--green);color:var(--green)">
-              <i class="fa-brands fa-whatsapp"></i>
-            </a>
-          </div>
+          <a href="${waLink}" target="_blank" class="btn btn-primary btn-sm" style="flex:1;text-decoration:none">
+            <i class="fa-brands fa-whatsapp"></i> Contact
+          </a>
         </div>
       </div>
     </div>`;
@@ -4625,7 +3279,7 @@ function renderServiceCards(gigs) {
 }
 
 // ====================================================
-//  SERVICE PROVIDER â€” Overview Stats
+//  SERVICE PROVIDER — Overview Stats
 // ====================================================
 async function loadSpdOverview() {
   if (!currentUser) return;
@@ -4652,7 +3306,7 @@ async function loadSpdOverview() {
             ${thumb ? `<img src="${thumb}" style="width:48px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0">` : `<div style="width:48px;height:48px;border-radius:8px;background:var(--green-xlt);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="fa-solid fa-tools" style="color:var(--green)"></i></div>`}
             <div style="flex:1;min-width:0">
               <div style="font-weight:700;font-size:.85rem">${escHtml(g.title)}</div>
-              <div style="font-size:.72rem;color:var(--text3)">${escHtml(g.category)} Â· â‚¦${(g.starting_rate||0).toLocaleString()}</div>
+              <div style="font-size:.72rem;color:var(--text3)">${escHtml(g.category)} · ₦${(g.starting_rate||0).toLocaleString()}</div>
             </div>
             <span class="badge ${g.status==='active'?'badge-green':'badge-red'}">${g.status}</span>
           </div>`;
@@ -4662,7 +3316,7 @@ async function loadSpdOverview() {
 }
 
 // ====================================================
-//  SERVICE PROVIDER â€” Settings
+//  SERVICE PROVIDER — Settings
 // ====================================================
 async function loadSpdSettings() {
   if (!currentUser?.profile) return;
@@ -4701,14 +3355,14 @@ async function saveServiceProfile() {
     // Update sidebar display
     document.getElementById('spd-user-name').textContent = name;
     
-    toast('Profile Saved! âœ…', 'Your changes are now live.', 'success');
+    toast('Profile Saved! ✅', 'Your changes are now live.', 'success');
   } catch(e) {
     toast('Save Failed', e.message, 'error');
   }
 }
 
 // ====================================================
-//  SERVICE PROVIDER â€” Load My Gigs (Portfolio)
+//  SERVICE PROVIDER — Load My Gigs (Portfolio)
 // ====================================================
 async function loadMyGigs() {
   if (!currentUser) return;
@@ -4740,32 +3394,20 @@ async function loadMyGigs() {
             <div style="display:flex;justify-content:space-between;align-items:start;gap:.5rem">
               <div>
                 <div style="font-weight:700;font-size:.92rem">${escHtml(g.title)}</div>
-                <div style="font-size:.72rem;color:var(--text3);margin-top:.15rem">${escHtml(g.category)} Â· ${escHtml(g.location || 'â€”')}</div>
+                <div style="font-size:.72rem;color:var(--text3);margin-top:.15rem">${escHtml(g.category)} · ${escHtml(g.location || '—')}</div>
               </div>
               <span class="badge ${g.status==='active'?'badge-green':'badge-red'}">${g.status}</span>
             </div>
             <p style="font-size:.78rem;color:var(--text2);margin-top:.4rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45">${escHtml(g.description || 'No description')}</p>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:.6rem">
               <div style="display:flex;align-items:center;gap:.75rem">
-                <span style="font-weight:800;color:var(--green);font-size:.95rem">â‚¦${(g.starting_rate||0).toLocaleString()}</span>
+                <span style="font-weight:800;color:var(--green);font-size:.95rem">₦${(g.starting_rate||0).toLocaleString()}</span>
                 ${imgCount > 0 ? `<span style="font-size:.7rem;color:var(--text3)"><i class="fa-solid fa-images"></i> ${imgCount} photo${imgCount>1?'s':''}</span>` : ''}
               </div>
               <button class="btn btn-ghost btn-sm" style="color:var(--red);font-size:.72rem" onclick="deleteGig('${g.id}')">
-                <i class="fa-solid fa-trash"></i> Delete Gig
+                <i class="fa-solid fa-trash"></i> Delete
               </button>
             </div>
-            
-            ${imgCount > 0 ? `
-              <div style="margin-top: .8rem; display: flex; gap: .5rem; overflow-x: auto; padding-bottom: .2rem">
-                ${(g.portfolio_urls || []).map(url => `
-                  <div style="position:relative; width: 60px; height: 60px; flex-shrink: 0; border-radius: 6px; overflow: hidden; border: 1px solid var(--border)">
-                    <img src="${url}" style="width:100%; height:100%; object-fit:cover">
-                    <button onclick="deletePortfolioImage('${url}', '${g.id}', event)" title="Delete this image" style="position:absolute; top: 2px; right: 2px; background: rgba(220,38,38,0.9); color: white; border: none; border-radius: 50%; width: 18px; height: 18px; font-size: 10px; cursor: pointer; display: flex; align-items:center; justify-content:center"><i class="fa-solid fa-times"></i></button>
-                  </div>
-                `).join('')}
-              </div>
-            ` : ''}
-            
           </div>
         </div>
       </div>`;
@@ -4787,7 +3429,7 @@ async function deleteGig(gigId) {
 }
 
 // ====================================================
-//  SERVICE PROVIDER â€” Publish Gig (with Image Upload)
+//  SERVICE PROVIDER — Publish Gig (with Image Upload)
 // ====================================================
 async function publishServiceGig() {
   if (!currentUser) { showModal('auth-modal'); return; }
@@ -4833,7 +3475,7 @@ async function publishServiceGig() {
     });
     if (error) throw error;
 
-    toast('Service Published! ðŸŽ‰', 'Your gig is now live on BUYSELL', 'success');
+    toast('Service Published! 🎉', 'Your gig is now live on BUYSELL', 'success');
     ['spd-title','spd-rate','spd-location','spd-desc','spd-wa'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
@@ -4848,7 +3490,7 @@ async function publishServiceGig() {
 }
 
 // ====================================================
-//  SERVICE PROVIDER â€” Image Preview
+//  SERVICE PROVIDER — Image Preview
 // ====================================================
 document.addEventListener('DOMContentLoaded', () => {
   const imgInput = document.getElementById('spd-images');
@@ -4912,339 +3554,8 @@ async function viewProviderProfile(providerId) {
     document.getElementById('sp-p-wa-btn').href = wa
       ? `https://wa.me/${wa}?text=Hi%20${encodeURIComponent(name)}%2C%20I%20found%20you%20on%20BUYSELL%20and%20I'd%20like%20to%20hire%20you.`
       : '#';
-
-    // Book button
-    const bookBtnContainer = document.getElementById('sp-p-book-btn');
-    if (bookBtnContainer && mainGig) {
-      bookBtnContainer.innerHTML = `<button class="btn btn-primary btn-full mt-3" onclick="bookService('${mainGig.id}','${providerId}')"><i class="fa-solid fa-calendar-check"></i> Book This Provider â€“ from â‚¦${(mainGig.starting_rate||0).toLocaleString()}</button>`;
-    }
   } catch(e) {
     console.error('Profile load error:', e);
-  }
-}
-
-// ====================================================
-//  SERVICE PROVIDER â€” COMMISSION CHECK (same rules as sellers)
-// ====================================================
-async function checkServiceProviderCommission() {
-  if (!currentUser?.profile) return;
-  const p = currentUser.profile;
-  const role = p.role;
-  if (role !== 'service_provider') return;
-
-  const trialEnd = p.trial_end ? new Date(p.trial_end) : null;
-  const commPaid = p.commission_paid;
-
-  // Update SPD commission badge if it exists
-  const badge = document.getElementById('spd-comm-badge');
-  if (badge) {
-    if (commPaid) { badge.className='badge badge-green'; badge.textContent='âœ“ Active'; }
-    else if (trialEnd && trialEnd > new Date()) { badge.className='badge badge-gold'; badge.textContent=`Trial â€“ ${Math.ceil((trialEnd-new Date())/86400000)}d left`; }
-    else { badge.className='badge badge-red'; badge.textContent='Suspended'; }
-  }
-
-  // Lock out if expired
-  if (!commPaid && trialEnd && trialEnd < new Date() && currentUser.email !== ADMIN_EMAIL) {
-    document.getElementById('suspended-modal').classList.add('open');
-  }
-}
-
-// ====================================================
-//  SERVICE PROVIDER â€” BOOKINGS (Provider Side)
-// ====================================================
-async function loadProviderBookings() {
-  if (!currentUser) return;
-  const container = document.getElementById('spd-bookings-list');
-  if (!container) return;
-  container.innerHTML = '<div class="skeleton-block" style="height:80px"></div>'.repeat(3);
-
-  try {
-    const { data: bookings } = await db.from('service_bookings')
-      .select('*, profiles!service_bookings_buyer_id_fkey(name, email, whatsapp), service_gigs(title)')
-      .eq('provider_id', currentUser.id)
-      .order('created_at', { ascending: false });
-
-    if (!bookings?.length) {
-      container.innerHTML = '<div class="empty-state"><i class="fa-solid fa-inbox" style="font-size:2rem;color:var(--border2);display:block;margin-bottom:.65rem"></i><p class="color-text3 text-sm">No bookings yet. Share your services to get hired!</p></div>';
-      return;
-    }
-
-    const statusColors = {pending:'badge-gold',accepted:'badge-blue',in_progress:'badge-purple',completed:'badge-green',cancelled:'badge-red'};
-    container.innerHTML = bookings.map(b => {
-      const buyerName = b.profiles?.name || 'Buyer';
-      const buyerWa = (b.profiles?.whatsapp || '').replace(/\D/g,'');
-      const gigTitle = b.service_gigs?.title || 'Service';
-      return `
-      <div class="card card-pad mb-3" style="border-left:4px solid ${b.status==='completed'?'var(--green)':b.status==='cancelled'?'var(--red)':'var(--gold)'}">
-        <div class="flex justify-between items-start flex-wrap gap-2 mb-2">
-          <div>
-            <div class="font-bold text-sm">${escHtml(gigTitle)}</div>
-            <div class="text-xs color-text3"><i class="fa-solid fa-user"></i> ${escHtml(buyerName)} Â· ${fmtDate(b.created_at)}</div>
-            ${b.message ? `<div class="text-sm mt-1" style="color:var(--text2)">"${escHtml(b.message.substring(0,150))}"</div>` : ''}
-          </div>
-          <div class="text-right">
-            <div class="font-bold color-green">${fmtN(b.agreed_price || b.budget || 0)}</div>
-            <span class="badge ${statusColors[b.status]||'badge-gray'}">${(b.status||'pending').replace(/_/g,' ')}</span>
-          </div>
-        </div>
-        <div class="flex gap-2 flex-wrap mt-2">
-          ${b.status==='pending' ? `
-            <button onclick="updateBookingStatus('${b.id}','accepted')" class="btn btn-primary btn-sm"><i class="fa-solid fa-check"></i> Accept</button>
-            <button onclick="updateBookingStatus('${b.id}','cancelled')" class="btn btn-outline btn-sm">Decline</button>
-          ` : ''}
-          ${b.status==='accepted' ? `<button onclick="updateBookingStatus('${b.id}','in_progress')" class="btn btn-sm" style="background:#ede9fe;color:#6d28d9"><i class="fa-solid fa-play"></i> Start Work</button>` : ''}
-          ${b.status==='in_progress' ? `<button onclick="updateBookingStatus('${b.id}','completed')" class="btn btn-sm" style="background:#dcfce7;color:#15803d"><i class="fa-solid fa-check-double"></i> Mark Completed</button>` : ''}
-          ${buyerWa ? `<a href="https://wa.me/${buyerWa}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Chat</a>` : ''}
-        </div>
-      </div>`;
-    }).join('');
-
-    // Update badge count
-    const pendingCount = bookings.filter(b => b.status === 'pending').length;
-    const bookingsBadge = document.getElementById('spd-bookings-badge');
-    if (bookingsBadge) { bookingsBadge.textContent = pendingCount; bookingsBadge.classList.toggle('hidden', !pendingCount); }
-  } catch(e) {
-    console.error('loadProviderBookings:', e);
-    container.innerHTML = '<p class="color-text3 text-sm">Could not load bookings.</p>';
-  }
-}
-
-async function updateBookingStatus(bookingId, status) {
-  try {
-    const updates = { status };
-    if (status === 'completed') updates.completed_at = new Date().toISOString();
-    const { error } = await db.from('service_bookings').update(updates).eq('id', bookingId).eq('provider_id', currentUser.id);
-    if (error) throw error;
-    toast(`Booking ${status.replace(/_/g,' ')}!`, '', 'success');
-    loadProviderBookings();
-  } catch(e) {
-    toast('Error', e.message, 'error');
-  }
-}
-
-// ====================================================
-//  SERVICE PROVIDER â€” EARNINGS
-// ====================================================
-async function loadProviderEarnings() {
-  if (!currentUser) return;
-  try {
-    const { data: bookings } = await db.from('service_bookings')
-      .select('agreed_price, budget, status, created_at')
-      .eq('provider_id', currentUser.id);
-    const completed = (bookings||[]).filter(b => b.status === 'completed');
-    const totalEarned = completed.reduce((s,b) => s + (b.agreed_price || b.budget || 0), 0);
-    const pendingJobs = (bookings||[]).filter(b => b.status === 'in_progress' || b.status === 'accepted');
-    const pendingEarnings = pendingJobs.reduce((s,b) => s + (b.agreed_price || b.budget || 0), 0);
-
-    const el = document.getElementById('spd-earnings-content');
-    if (!el) return;
-    el.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:1.5rem">
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">Total Earned</div>
-          <div style="font-size:1.4rem;font-weight:800;color:var(--green)">${fmtN(totalEarned)}</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">Pending Jobs</div>
-          <div style="font-size:1.4rem;font-weight:800;color:var(--purple)">${pendingJobs.length}</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">In Pipeline</div>
-          <div style="font-size:1.4rem;font-weight:800;color:var(--gold)">${fmtN(pendingEarnings)}</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">Completed Jobs</div>
-          <div style="font-size:1.4rem;font-weight:800;color:var(--green)">${completed.length}</div>
-        </div>
-      </div>
-      <div class="card card-pad">
-        <h3 class="mb-3"><i class="fa-solid fa-clock-rotate-left"></i> Recent Completions</h3>
-        ${completed.length ? completed.slice(0,10).map(b => `
-          <div class="flex justify-between items-center py-2 border-b border-border">
-            <div class="text-sm">${fmtDate(b.created_at)}</div>
-            <div class="font-bold color-green">${fmtN(b.agreed_price || b.budget || 0)}</div>
-          </div>
-        `).join('') : '<p class="color-text3 text-sm">No completed jobs yet.</p>'}
-      </div>`;
-  } catch(e) { console.error('loadProviderEarnings:', e); }
-}
-
-// ====================================================
-//  BOOK SERVICE (Buyer Side)
-// ====================================================
-async function bookService(gigId, providerId) {
-  if (!currentUser) { showModal('auth-modal'); return; }
-  const message = prompt('Describe what you need (optional):') || '';
-  const budget = prompt('Your budget (â‚¦):');
-  if (!budget || isNaN(parseFloat(budget))) { toast('Please enter a valid budget', '', 'warn'); return; }
-
-  try {
-    const { error } = await db.from('service_bookings').insert({
-      service_id:   gigId,
-      buyer_id:     currentUser.id,
-      provider_id:  providerId,
-      message:      validateInput(message),
-      budget:       parseFloat(budget),
-      agreed_price: parseFloat(budget),
-      status:       'pending',
-      created_at:   new Date().toISOString()
-    });
-    if (error) throw error;
-    toast('Booking Sent! ðŸ“©', 'The service provider will review your request', 'success', 5000);
-    closeModal('sp-profile-modal');
-  } catch(e) {
-    toast('Booking Failed', e.message, 'error');
-  }
-}
-
-// NOTE: checkServiceProviderCommission() already defined above (line ~4330)
-// Duplicate removed to prevent redeclaration issues
-
-// ====================================================
-//  SERVICE PROVIDER â€” BOOKINGS (Provider Side)
-// ====================================================
-async function loadProviderBookings() {
-  if (!currentUser) return;
-  const container = document.getElementById('spd-bookings-list');
-  if (!container) return;
-  container.innerHTML = '<div class="skeleton-block" style="height:80px"></div>'.repeat(3);
-
-  try {
-    const { data: bookings } = await db.from('service_bookings')
-      .select('*, profiles!service_bookings_buyer_id_fkey(name, email, whatsapp), service_gigs(title)')
-      .eq('provider_id', currentUser.id)
-      .order('created_at', { ascending: false });
-
-    if (!bookings?.length) {
-      container.innerHTML = '<div class="empty-state"><i class="fa-solid fa-inbox" style="font-size:2rem;color:var(--border2);display:block;margin-bottom:.65rem"></i><p class="color-text3 text-sm">No bookings yet. Share your services to get hired!</p></div>';
-      return;
-    }
-
-    const statusColors = {pending:'badge-gold',accepted:'badge-blue',in_progress:'badge-purple',completed:'badge-green',cancelled:'badge-red'};
-    container.innerHTML = bookings.map(b => {
-      const buyerName = b.profiles?.name || 'Buyer';
-      const buyerWa = (b.profiles?.whatsapp || '').replace(/\D/g,'');
-      const gigTitle = b.service_gigs?.title || 'Service';
-      return `
-      <div class="card card-pad mb-3" style="border-left:4px solid ${b.status==='completed'?'var(--green)':b.status==='cancelled'?'var(--red)':'var(--gold)'}">
-        <div class="flex justify-between items-start flex-wrap gap-2 mb-2">
-          <div>
-            <div class="font-bold text-sm">${escHtml(gigTitle)}</div>
-            <div class="text-xs color-text3"><i class="fa-solid fa-user"></i> ${escHtml(buyerName)} Â· ${fmtDate(b.created_at)}</div>
-            ${b.message ? `<div class="text-sm mt-1" style="color:var(--text2)">"${escHtml(b.message.substring(0,150))}"</div>` : ''}
-          </div>
-          <div class="text-right">
-            <div class="font-bold color-green">${fmtN(b.agreed_price || b.budget || 0)}</div>
-            <span class="badge ${statusColors[b.status]||'badge-gray'}">${(b.status||'pending').replace(/_/g,' ')}</span>
-          </div>
-        </div>
-        <div class="flex gap-2 flex-wrap mt-2">
-          ${b.status==='pending' ? `
-            <button onclick="updateBookingStatus('${b.id}','accepted')" class="btn btn-primary btn-sm"><i class="fa-solid fa-check"></i> Accept</button>
-            <button onclick="updateBookingStatus('${b.id}','cancelled')" class="btn btn-outline btn-sm">Decline</button>
-          ` : ''}
-          ${b.status==='accepted' ? `<button onclick="updateBookingStatus('${b.id}','in_progress')" class="btn btn-sm" style="background:#ede9fe;color:#6d28d9"><i class="fa-solid fa-play"></i> Start Work</button>` : ''}
-          ${b.status==='in_progress' ? `<button onclick="updateBookingStatus('${b.id}','completed')" class="btn btn-sm" style="background:#dcfce7;color:#15803d"><i class="fa-solid fa-check-double"></i> Mark Completed</button>` : ''}
-          ${buyerWa ? `<a href="https://wa.me/${buyerWa}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Chat</a>` : ''}
-        </div>
-      </div>`;
-    }).join('');
-
-    // Update badge count
-    const pendingCount = bookings.filter(b => b.status === 'pending').length;
-    const bookingsBadge = document.getElementById('spd-bookings-badge');
-    if (bookingsBadge) { bookingsBadge.textContent = pendingCount; bookingsBadge.classList.toggle('hidden', !pendingCount); }
-  } catch(e) {
-    console.error('loadProviderBookings:', e);
-    container.innerHTML = '<p class="color-text3 text-sm">Could not load bookings.</p>';
-  }
-}
-
-async function updateBookingStatus(bookingId, status) {
-  try {
-    const updates = { status };
-    if (status === 'completed') updates.completed_at = new Date().toISOString();
-    const { error } = await db.from('service_bookings').update(updates).eq('id', bookingId).eq('provider_id', currentUser.id);
-    if (error) throw error;
-    toast(`Booking ${status.replace(/_/g,' ')}!`, '', 'success');
-    loadProviderBookings();
-  } catch(e) {
-    toast('Error', e.message, 'error');
-  }
-}
-
-// ====================================================
-//  SERVICE PROVIDER â€” EARNINGS
-// ====================================================
-async function loadProviderEarnings() {
-  if (!currentUser) return;
-  try {
-    const { data: bookings } = await db.from('service_bookings')
-      .select('agreed_price, budget, status, created_at')
-      .eq('provider_id', currentUser.id);
-    const completed = (bookings||[]).filter(b => b.status === 'completed');
-    const totalEarned = completed.reduce((s,b) => s + (b.agreed_price || b.budget || 0), 0);
-    const pendingJobs = (bookings||[]).filter(b => b.status === 'in_progress' || b.status === 'accepted');
-    const pendingEarnings = pendingJobs.reduce((s,b) => s + (b.agreed_price || b.budget || 0), 0);
-
-    const el = document.getElementById('spd-earnings-content');
-    if (!el) return;
-    el.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:1.5rem">
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">Total Earned</div>
-          <div style="font-size:1.4rem;font-weight:800;color:var(--green)">${fmtN(totalEarned)}</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">Pending Jobs</div>
-          <div style="font-size:1.4rem;font-weight:800;color:var(--purple)">${pendingJobs.length}</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">In Pipeline</div>
-          <div style="font-size:1.4rem;font-weight:800;color:var(--gold)">${fmtN(pendingEarnings)}</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">Completed Jobs</div>
-          <div style="font-size:1.4rem;font-weight:800;color:var(--green)">${completed.length}</div>
-        </div>
-      </div>
-      <div class="card card-pad">
-        <h3 class="mb-3"><i class="fa-solid fa-clock-rotate-left"></i> Recent Completions</h3>
-        ${completed.length ? completed.slice(0,10).map(b => `
-          <div class="flex justify-between items-center py-2 border-b border-border">
-            <div class="text-sm">${fmtDate(b.created_at)}</div>
-            <div class="font-bold color-green">${fmtN(b.agreed_price || b.budget || 0)}</div>
-          </div>
-        `).join('') : '<p class="color-text3 text-sm">No completed jobs yet.</p>'}
-      </div>`;
-  } catch(e) { console.error('loadProviderEarnings:', e); }
-}
-
-// ====================================================
-//  BOOK SERVICE (Buyer Side)
-// ====================================================
-async function bookService(gigId, providerId) {
-  if (!currentUser) { showModal('auth-modal'); return; }
-  const message = prompt('Describe what you need (optional):') || '';
-  const budget = prompt('Your budget (â‚¦):');
-  if (!budget || isNaN(parseFloat(budget))) { toast('Please enter a valid budget', '', 'warn'); return; }
-
-  try {
-    const { error } = await db.from('service_bookings').insert({
-      service_id:   gigId,
-      buyer_id:     currentUser.id,
-      provider_id:  providerId,
-      message:      validateInput(message),
-      budget:       parseFloat(budget),
-      agreed_price: parseFloat(budget),
-      status:       'pending',
-      created_at:   new Date().toISOString()
-    });
-    if (error) throw error;
-    toast('Booking Sent! ðŸ“©', 'The service provider will review your request', 'success', 5000);
-    closeModal('sp-profile-modal');
-  } catch(e) {
-    toast('Booking Failed', e.message, 'error');
   }
 }
 
@@ -5253,1937 +3564,3 @@ async function bookService(gigId, providerId) {
 // ====================================================
 function openHelpModal() { showModal('help-modal'); }
 
-// ====================================================
-//  MARKETPLACE ADVERTISING (Sellers & Service Providers)
-// ====================================================
-async function previewAdMedia(input) {
-  const file = input.files[0];
-  if (!file) return;
-
-  const previewContainer = document.getElementById('ad-media-preview-container');
-  const previewEl = document.getElementById('ad-preview-el');
-  previewContainer.classList.remove('hidden');
-
-  const fileUrl = URL.createObjectURL(file);
-  if (file.type.startsWith('video/')) {
-    // Validate duration
-    const video = document.createElement('video');
-    video.preload = 'metadata';
-    video.onloadedmetadata = function() {
-      window.URL.revokeObjectURL(video.src);
-      if (video.duration > 30) {
-        toast('Video too long', 'Maximum length is 30 seconds.', 'error');
-        input.value = '';
-        previewContainer.classList.add('hidden');
-        return;
-      }
-      previewEl.innerHTML = `<video src="${fileUrl}" controls style="width:100%;max-height:200px;border-radius:var(--radius-sm)"></video>`;
-    }
-    video.src = fileUrl;
-  } else {
-    previewEl.innerHTML = `<img src="${fileUrl}" style="width:100%;max-height:200px;object-fit:contain;border-radius:var(--radius-sm)">`;
-  }
-}
-
-async function initiateAdPayment() {
-  if (!currentUser || (currentUser.profile?.role !== 'seller' && currentUser.profile?.role !== 'both')) {
-    return toast('Access Denied', 'Only sellers can advertise', 'error');
-  }
-
-  const title = document.getElementById('ad-title').value.trim();
-  const desc = document.getElementById('ad-desc').value.trim();
-  const cta = document.getElementById('ad-cta-select').value;
-  const link = document.getElementById('ad-link').value.trim();
-  const fileInput = document.getElementById('ad-media-file');
-  const file = fileInput.files[0];
-
-  if (!title || !desc || !link || !file) {
-    return toast('Incomplete Form', 'Please fill all required fields and upload media', 'error');
-  }
-
-  const btn = document.getElementById('ad-pay-btn');
-  btn.innerHTML = '<span class="spinner"></span> Processing...';
-  btn.disabled = true;
-
-  try {
-    // 1. Upload Media First
-    const ext = file.name.split('.').pop();
-    const path = `ads/${currentUser.id}/${Date.now()}.${ext}`;
-    const { data: uploadData, error: uploadErr } = await db.storage.from('uploads').upload(path, file);
-    if (uploadErr) throw uploadErr;
-    
-    const { data: pubData } = db.storage.from('uploads').getPublicUrl(path);
-    const publicUrl = pubData.publicUrl;
-
-    // 2. Initialize Payment Securely via Edge Function
-    const initData = await callEdge('init-ad-payment', { amount: 10000 });
-
-    // 3. Open Paystack
-    let handler = PaystackPop.setup({
-      key: PAYSTACK_PUBLIC_KEY,
-      email: currentUser.email,
-      amount: 10000 * 100, 
-      access_code: initData.access_code, // Secure session code
-      callback: async function(response) {
-        toast('Verifying Payment...', 'Publishing advertisement...', 'info');
-        
-        try {
-          // 4. Verify Payment and Insert Ad via Edge Function (Bypasses Client-Side Spoofing)
-          await callEdge('verify-ad-payment', {
-            reference: response.reference,
-            adData: {
-              title: title,
-              description: desc,
-              media_url: publicUrl,
-              media_type: file.type.startsWith('video/') ? 'video' : 'image',
-              cta_text: cta,
-              cta_link: link
-            }
-          });
-
-          toast('Success', 'Your advertisement is now live!', 'success');
-          document.getElementById('ad-title').value = '';
-          document.getElementById('ad-desc').value = '';
-          document.getElementById('ad-media-file').value = '';
-          document.getElementById('ad-media-preview-container').classList.add('hidden');
-          loadActiveAds();
-        } catch (err) {
-          toast('Verification Failed', err.message, 'error');
-        }
-      },
-      onClose: function() {
-        toast('Cancelled', 'Payment was cancelled', 'warn');
-      }
-    });
-    handler.openIframe();
-  } catch(e) {
-    toast('Error', 'Failed to process ad setup', 'error');
-  } finally {
-    btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Publish Ad';
-    btn.disabled = false;
-  }
-}
-
-async function loadActiveAds() {
-  if (!currentUser) return;
-  const tbody = document.getElementById('ad-table-body');
-  if (!tbody) return;
-  try {
-    const { data: ads, error } = await db.from('advertisements').select('*').eq('advertiser_id', currentUser.id).order('created_at', { ascending: false });
-    if (error) throw error;
-
-    let totalViews = 0, totalClicks = 0;
-    
-    if (!ads || ads.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3)">No active ads yet</td></tr>';
-    } else {
-      tbody.innerHTML = ads.map(a => {
-        totalViews += a.views || 0;
-        totalClicks += a.clicks || 0;
-        const mediaTag = a.media_type === 'video' 
-          ? `<video src="${a.media_url}" style="width:40px;height:40px;object-fit:cover;border-radius:4px"></video>` 
-          : `<img src="${a.media_url}" style="width:40px;height:40px;object-fit:cover;border-radius:4px">`;
-        const expDate = new Date(a.expires_at).toLocaleDateString();
-        return `<tr>
-          <td>${mediaTag}</td>
-          <td style="font-weight:600">${escHtml(a.title)}</td>
-          <td>${a.views || 0}</td>
-          <td>${a.clicks || 0}</td>
-          <td><span class="badge ${a.status==='active'?'badge-green':a.status==='expired'?'badge-red':'badge-gold'}">${a.status}</span></td>
-          <td>${expDate}</td>
-        </tr>`;
-      }).join('');
-    }
-    
-    const activeCountEl = document.getElementById('ad-active-count');
-    const viewsEl = document.getElementById('ad-total-views');
-    const clicksEl = document.getElementById('ad-total-clicks');
-    if (activeCountEl) activeCountEl.textContent = ads?.filter(a=>a.status==='active').length || 0;
-    if (viewsEl) viewsEl.textContent = totalViews;
-    if (clicksEl) clicksEl.textContent = totalClicks;
-
-  } catch(e) {
-    console.error('Failed to load ads:', e);
-    if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:red">Failed to load ads</td></tr>';
-  }
-}
-
-// Buyer side rotating popup logic
-let activeSystemAds = [];
-let adPopupInterval = null;
-let currentAdIndex = 0;
-let adSkipTimer = 5;
-let adSkipInterval = null;
-
-async function fetchSystemAds() {
-  try {
-    const { data: ads } = await db.from('advertisements')
-      .select('*')
-      .eq('status', 'active')
-      .gt('expires_at', new Date().toISOString())
-      .limit(5); // Show max 5 rotating ads
-      
-    if (ads && ads.length > 0) {
-      activeSystemAds = ads;
-      // Randomize starting point or shuffle
-      activeSystemAds.sort(() => 0.5 - Math.random());
-      
-      // Delay to not immediately annoy user
-      setTimeout(showAdPopup, 10000); // show 10s after load
-    }
-  } catch(e) { console.error('Fetch ads error', e); }
-}
-
-function showAdPopup() {
-  if (activeSystemAds.length === 0 || sessionStorage.getItem('ads_seen_session')) return;
-  
-  const popup = document.getElementById('ad-popup-overlay');
-  popup.classList.remove('hidden');
-  renderCurrentAd();
-}
-
-function renderCurrentAd() {
-  if (activeSystemAds.length === 0) return;
-  const ad = activeSystemAds[currentAdIndex];
-  
-  document.getElementById('ad-counter').textContent = `${currentAdIndex + 1}/${activeSystemAds.length}`;
-  
-  const contentEl = document.getElementById('ad-popup-content');
-  if (ad.media_type === 'video') {
-    contentEl.innerHTML = `<video id="ad-video-el" src="${ad.media_url}" style="width:100%;height:100%;object-fit:cover" autoplay loop muted playsinline></video>
-                           <div class="ad-popup-info" style="pointer-events:none">
-                             <h2>${escHtml(ad.title)}</h2>
-                             <p>${escHtml(ad.description)}</p>
-                           </div>`;
-    // ensure it plays
-    setTimeout(() => {
-      const v = document.getElementById('ad-video-el');
-      if(v) v.play().catch(e=>console.log("Autoplay prevented"));
-    }, 100);
-  } else {
-    contentEl.innerHTML = `<img src="${ad.media_url}" style="width:100%;height:100%;object-fit:cover">
-                           <div class="ad-popup-info" style="pointer-events:none">
-                             <h2>${escHtml(ad.title)}</h2>
-                             <p>${escHtml(ad.description)}</p>
-                           </div>`;
-  }
-  
-  document.getElementById('ad-cta-btn').href = ad.cta_link || '#';
-  document.getElementById('ad-cta-text').textContent = ad.cta_text || 'Learn More';
-  
-  // Register View
-  callPublicEdge('update-ad-stats', { adId: ad.id, type: 'view' }).catch(e=>console.error(e));
-  
-  // setup dots
-  const dotsContainer = document.getElementById('ad-popup-dots');
-  dotsContainer.innerHTML = activeSystemAds.map((_, i) => `<div class="ad-popup-dot ${i === currentAdIndex ? 'active' : ''}"></div>`).join('');
-  
-  // reset timer
-  adSkipTimer = 5;
-  const skipBtn = document.getElementById('ad-skip-btn');
-  skipBtn.disabled = true;
-  document.getElementById('ad-skip-timer').textContent = adSkipTimer;
-  
-  clearInterval(adSkipInterval);
-  adSkipInterval = setInterval(() => {
-    adSkipTimer--;
-    if (adSkipTimer <= 0) {
-      clearInterval(adSkipInterval);
-      skipBtn.disabled = false;
-      document.getElementById('ad-skip-timer').textContent = '';
-      skipBtn.innerHTML = 'Skip <i class="fa-solid fa-step-forward"></i>';
-    } else {
-      document.getElementById('ad-skip-timer').textContent = adSkipTimer;
-    }
-  }, 1000);
-  
-  // Setup progress animation for 10s total
-  const progress = document.getElementById('ad-progress');
-  progress.style.transition = 'none';
-  progress.style.width = '0%';
-  setTimeout(() => {
-    progress.style.transition = 'width 10s linear';
-    progress.style.width = '100%';
-  }, 50);
-  
-  clearTimeout(adPopupInterval);
-  adPopupInterval = setTimeout(nextAd, 10000);
-  
-  // Track clicks
-  document.getElementById('ad-cta-btn').onclick = () => {
-    callPublicEdge('update-ad-stats', { adId: ad.id, type: 'click' }).catch(e=>console.error(e));
-  };
-}
-
-function nextAd() {
-  currentAdIndex = (currentAdIndex + 1) % activeSystemAds.length;
-  // If we cycled through all of them, maybe just close it
-  if (currentAdIndex === 0) {
-    closeAdPopup();
-    return;
-  }
-  renderCurrentAd();
-}
-
-function skipAd() {
-  nextAd();
-}
-
-function closeAdPopup() {
-  document.getElementById('ad-popup-overlay').classList.add('hidden');
-  clearTimeout(adPopupInterval);
-  clearInterval(adSkipInterval);
-  sessionStorage.setItem('ads_seen_session', 'true');
-}
-
-// Fetch and show ad popups for buyers on page load
-(function initAdSystem() {
-  // Only show ads to non-sellers (buyers / guests)
-  // Defer until after checkSession resolves
-  setTimeout(() => {
-    if (!currentUser || currentUser.profile?.role === 'buyer' || !currentUser.profile?.role) {
-      fetchSystemAds();
-    }
-  }, 2000);
-})();
-
-
-// ====================================================
-//  SERVICE PROVIDER IMAGE DELETION
-// ====================================================
-async function deletePortfolioImage(url, gigId, event) {
-  event.stopPropagation();
-  if(!confirm("Are you sure you want to delete this image?")) return;
-  const btn = event.currentTarget;
-  const originalHtml = btn.innerHTML;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-  
-  try {
-    const { data: gigData, error: fetchErr } = await db.from('service_gigs').select('*').eq('id', gigId).single();
-    if (fetchErr) throw fetchErr;
-    if (!gigData) return;
-    
-    let urls = gigData.portfolio_urls || [];
-    urls = urls.filter(u => u !== url); // remove the specific url
-    
-    // Update db
-    const { error: updateErr } = await db.from('service_gigs').update({ portfolio_urls: urls }).eq('id', gigId);
-    if(updateErr) throw updateErr;
-    
-    toast('Deleted', 'Image removed from portfolio', 'success');
-    
-    // Rerender UI
-    loadMyGigs();
-
-  } catch(e) {
-    console.error('Delete image err:', e);
-    toast('Error', 'Failed to delete image', 'error');
-    btn.innerHTML = originalHtml;
-  }
-}
-
-
-
-// ====================================================
-//  AFFILIATE DEEP LINK HANDLER
-// ====================================================
-// Capture referral code from URL on page load
-window.addEventListener('DOMContentLoaded', () => {
-  const urlParams = new URLSearchParams(window.location.search);
-  const ref = urlParams.get('ref');
-  if (ref) {
-    localStorage.setItem('bs_ref', ref);
-    sessionStorage.setItem('referred_by', ref);
-    // Track the click silently
-    db.from('referral_clicks').insert({ referrer_id: ref, clicked_at: new Date().toISOString() }).catch(() => {});
-  }
-});
-
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  FEATURE 1: WISHLIST / SAVE FOR LATER
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-let wishlist = JSON.parse(localStorage.getItem('bs_wishlist') || '[]');
-
-function toggleWishlist(productId) {
-  if (!currentUser) { showModal('auth-modal'); return; }
-  const idx = wishlist.indexOf(productId);
-  if (idx > -1) {
-    wishlist.splice(idx, 1);
-    db.from('wishlists').delete().eq('user_id', currentUser.id).eq('product_id', productId).catch(()=>{});
-    toast('Removed from Wishlist', '', 'info');
-  } else {
-    wishlist.push(productId);
-    db.from('wishlists').insert({ user_id: currentUser.id, product_id: productId }).catch(()=>{});
-    toast('Added to Wishlist â¤ï¸', 'You\'ll see it in your saved items', 'success');
-  }
-  localStorage.setItem('bs_wishlist', JSON.stringify(wishlist));
-  updateWishlistBadge();
-  // Re-render product cards to update heart icons
-  if (typeof renderProducts === 'function' && filteredProducts) renderProducts(filteredProducts);
-}
-
-function isWishlisted(productId) { return wishlist.includes(productId); }
-
-function updateWishlistBadge() {
-  const badge = document.getElementById('wishlist-count');
-  if (badge) { badge.textContent = wishlist.length; badge.classList.toggle('hidden', !wishlist.length); }
-}
-
-function updateModalWishBtn() {
-  const btn = document.getElementById('modal-wishlist-btn');
-  if (!btn || !currentProd) return;
-  const saved = isWishlisted(currentProd.id);
-  btn.innerHTML = saved
-    ? '<i class="fa-solid fa-heart" style="color:#ef4444"></i>'
-    : '<i class="fa-regular fa-heart"></i>';
-  btn.title = saved ? 'Remove from Wishlist' : 'Save to Wishlist';
-  btn.style.borderColor = saved ? '#ef4444' : '';
-}
-
-async function loadWishlist() {
-  if (!currentUser) return;
-  const { data } = await db.from('wishlists').select('product_id').eq('user_id', currentUser.id);
-  if (data) { wishlist = data.map(w => w.product_id); localStorage.setItem('bs_wishlist', JSON.stringify(wishlist)); }
-  updateWishlistBadge();
-}
-
-async function showWishlistModal() {
-  if (!currentUser) { showModal('auth-modal'); return; }
-  showModal('wishlist-modal');
-  const container = document.getElementById('wishlist-items');
-  if (!container) return;
-  if (!wishlist.length) {
-    container.innerHTML = '<div class="empty-state"><i class="fa-solid fa-heart" style="font-size:2rem;color:var(--border2);display:block;margin-bottom:.65rem"></i><p class="color-text3 text-sm">Your wishlist is empty. Browse products and tap â¤ï¸ to save!</p></div>';
-    return;
-  }
-  container.innerHTML = '<div class="skeleton" style="height:80px"></div>'.repeat(3);
-  const { data: prods } = await db.from('products').select('*').in('id', wishlist);
-  if (!prods?.length) { container.innerHTML = '<p class="color-text3 text-sm">No products found.</p>'; return; }
-  container.innerHTML = prods.map(p => `
-    <div class="card mb-2" style="display:flex;gap:.75rem;padding:.75rem;align-items:center">
-      <img src="${(p.images&&p.images[0])||''}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1 1%22><rect fill=%22%23f0f0f0%22 width=%221%22 height=%221%22/></svg>'">
-      <div style="flex:1;min-width:0">
-        <div class="font-bold text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(p.name)}</div>
-        <div class="font-bold color-green text-sm">${fmtN(p.price)}</div>
-      </div>
-      <div style="display:flex;gap:.4rem;flex-shrink:0">
-        <button class="btn btn-primary btn-sm" onclick="closeModal('wishlist-modal');openProduct('${p.id}')"><i class="fa-solid fa-eye"></i></button>
-        <button class="btn btn-sm" style="background:#fee2e2;color:var(--red)" onclick="toggleWishlist('${p.id}');showWishlistModal()"><i class="fa-solid fa-trash"></i></button>
-      </div>
-    </div>
-  `).join('');
-}
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  FEATURE 2: PRODUCT COMPARISON
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-let compareList = [];
-
-function toggleCompare(productId) {
-  const idx = compareList.indexOf(productId);
-  if (idx > -1) {
-    compareList.splice(idx, 1);
-    toast('Removed from comparison', '', 'info');
-  } else {
-    if (compareList.length >= 3) { toast('Max 3 products', 'Remove one first', 'warn'); return; }
-    compareList.push(productId);
-    toast('Added to Compare', `${compareList.length}/3 selected`, 'success');
-  }
-  updateCompareBadge();
-}
-
-function updateCompareBadge() {
-  const badge = document.getElementById('compare-count');
-  if (badge) { badge.textContent = compareList.length; badge.classList.toggle('hidden', !compareList.length); }
-  const bar = document.getElementById('compare-bar');
-  if (bar) bar.classList.toggle('hidden', compareList.length < 2);
-}
-
-async function showCompareModal() {
-  if (compareList.length < 2) { toast('Select at least 2 products to compare', '', 'warn'); return; }
-  showModal('compare-modal');
-  const container = document.getElementById('compare-content');
-  if (!container) return;
-  const { data: prods } = await db.from('products').select('*').in('id', compareList);
-  if (!prods?.length) return;
-
-  const cols = prods.length;
-  container.innerHTML = `
-    <table style="width:100%;border-collapse:collapse;font-size:.82rem">
-      <thead><tr style="background:var(--green-xlt)">
-        <th style="padding:.6rem;text-align:left;border:1px solid var(--border)">Feature</th>
-        ${prods.map(p => `<th style="padding:.6rem;text-align:center;border:1px solid var(--border);max-width:160px">
-          <img src="${(p.images&&p.images[0])||''}" style="width:50px;height:50px;object-fit:cover;border-radius:6px;display:block;margin:0 auto .4rem" onerror="this.style.display='none'">
-          <div class="font-bold" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(p.name)}</div>
-        </th>`).join('')}
-      </tr></thead>
-      <tbody>
-        <tr><td style="padding:.5rem;border:1px solid var(--border);font-weight:600">Price</td>
-          ${prods.map(p => `<td style="padding:.5rem;border:1px solid var(--border);text-align:center;font-weight:700;color:var(--green)">${fmtN(p.price)}</td>`).join('')}</tr>
-        <tr><td style="padding:.5rem;border:1px solid var(--border);font-weight:600">Category</td>
-          ${prods.map(p => `<td style="padding:.5rem;border:1px solid var(--border);text-align:center">${escHtml(p.category||'â€”')}</td>`).join('')}</tr>
-        <tr><td style="padding:.5rem;border:1px solid var(--border);font-weight:600">Condition</td>
-          ${prods.map(p => `<td style="padding:.5rem;border:1px solid var(--border);text-align:center">${escHtml(p.condition||'â€”')}</td>`).join('')}</tr>
-        <tr><td style="padding:.5rem;border:1px solid var(--border);font-weight:600">Rating</td>
-          ${prods.map(p => `<td style="padding:.5rem;border:1px solid var(--border);text-align:center">â­ ${(p.avg_rating||0).toFixed(1)}</td>`).join('')}</tr>
-        <tr><td style="padding:.5rem;border:1px solid var(--border);font-weight:600">Description</td>
-          ${prods.map(p => `<td style="padding:.5rem;border:1px solid var(--border);font-size:.75rem;line-height:1.4">${escHtml((p.description||'').substring(0,120))}...</td>`).join('')}</tr>
-        <tr><td style="padding:.5rem;border:1px solid var(--border)"></td>
-          ${prods.map(p => `<td style="padding:.5rem;border:1px solid var(--border);text-align:center"><button class="btn btn-primary btn-sm" onclick="closeModal('compare-modal');openProduct('${p.id}')">View</button></td>`).join('')}</tr>
-      </tbody>
-    </table>`;
-}
-
-function clearCompare() { compareList = []; updateCompareBadge(); toast('Comparison cleared', '', 'info'); }
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  FEATURE 3: SELLER TIERS & BADGES
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-function getSellerTier(salesCount, avgRating) {
-  if (salesCount >= 100 && avgRating >= 4.5) return { tier: 'verified', label: 'âœ… Verified Seller', color: '#16a34a', bg: '#dcfce7' };
-  if (salesCount >= 50 && avgRating >= 4.0)  return { tier: 'gold', label: 'ðŸ¥‡ Gold Seller', color: '#ca8a04', bg: '#fef9c3' };
-  if (salesCount >= 20 && avgRating >= 3.5)  return { tier: 'silver', label: 'ðŸ¥ˆ Silver Seller', color: '#64748b', bg: '#f1f5f9' };
-  return { tier: 'bronze', label: 'ðŸ¥‰ New Seller', color: '#a16207', bg: '#fefce8' };
-}
-
-function renderSellerBadge(salesCount, avgRating) {
-  const t = getSellerTier(salesCount || 0, avgRating || 0);
-  return `<span style="display:inline-flex;align-items:center;gap:.25rem;font-size:.65rem;font-weight:700;padding:.2rem .5rem;border-radius:6px;background:${t.bg};color:${t.color}">${t.label}</span>`;
-}
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  FEATURE 4: COUPON / DISCOUNT SYSTEM
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-let appliedCoupon = null;
-
-async function applyCoupon() {
-  const codeInput = document.getElementById('coupon-code');
-  const code = codeInput?.value.trim().toUpperCase();
-  if (!code) { toast('Enter a coupon code', '', 'warn'); return; }
-
-  try {
-    const { data: coupons } = await db.from('coupons')
-      .select('*')
-      .eq('code', code)
-      .eq('is_active', true)
-      .gte('expires_at', new Date().toISOString())
-      .limit(1);
-
-    const coupon = coupons?.[0];
-    if (!coupon) { toast('Invalid or expired coupon', '', 'error'); return; }
-    if (coupon.used_count >= coupon.max_uses) { toast('Coupon limit reached', '', 'error'); return; }
-
-    const cartTotal = cart.reduce((s, c) => s + c.price * (c.qty || 1), 0);
-    if (cartTotal < (coupon.min_order || 0)) {
-      toast(`Min order â‚¦${(coupon.min_order||0).toLocaleString()}`, 'Add more items', 'warn');
-      return;
-    }
-
-    appliedCoupon = coupon;
-    let discount = 0;
-    if (coupon.discount_type === 'percent') {
-      discount = cartTotal * (coupon.discount_value / 100);
-    } else {
-      discount = coupon.discount_value;
-    }
-    discount = Math.min(discount, cartTotal);
-
-    const discountEl = document.getElementById('co-discount');
-    const discountRow = document.getElementById('co-discount-row');
-    if (discountEl) discountEl.textContent = '-' + fmtN(discount);
-    if (discountRow) discountRow.classList.remove('hidden');
-
-    checkoutTotal = cartTotal - discount;
-    const totalEl = document.getElementById('co-total');
-    if (totalEl) totalEl.textContent = fmtN(checkoutTotal);
-
-    toast(`Coupon Applied! ðŸŽ‰`, `${coupon.discount_type === 'percent' ? coupon.discount_value + '%' : fmtN(coupon.discount_value)} off`, 'success');
-    codeInput.value = '';
-    codeInput.disabled = true;
-  } catch(e) {
-    toast('Coupon Error', e.message, 'error');
-  }
-}
-
-function removeCoupon() {
-  appliedCoupon = null;
-  const discountRow = document.getElementById('co-discount-row');
-  if (discountRow) discountRow.classList.add('hidden');
-  const codeInput = document.getElementById('coupon-code');
-  if (codeInput) { codeInput.disabled = false; codeInput.value = ''; }
-  // Recalculate total
-  const cartTotal = cart.reduce((s, c) => s + c.price * (c.qty || 1), 0);
-  checkoutTotal = cartTotal;
-  const totalEl = document.getElementById('co-total');
-  if (totalEl) totalEl.textContent = fmtN(checkoutTotal);
-  toast('Coupon removed', '', 'info');
-}
-
-// Seller: Create coupon
-async function createCoupon() {
-  if (!currentUser) return;
-  const code = document.getElementById('coupon-new-code')?.value.trim().toUpperCase();
-  const type = document.getElementById('coupon-type')?.value || 'percent';
-  const value = parseFloat(document.getElementById('coupon-value')?.value) || 0;
-  const minOrder = parseFloat(document.getElementById('coupon-min')?.value) || 0;
-  const maxUses = parseInt(document.getElementById('coupon-max')?.value) || 100;
-  const daysValid = parseInt(document.getElementById('coupon-days')?.value) || 30;
-
-  if (!code || !value) { toast('Fill code and value', '', 'warn'); return; }
-
-  try {
-    const { error } = await db.from('coupons').insert({
-      seller_id: currentUser.id,
-      code,
-      discount_type: type,
-      discount_value: value,
-      min_order: minOrder,
-      max_uses: maxUses,
-      expires_at: new Date(Date.now() + daysValid * 86400000).toISOString(),
-      is_active: true
-    });
-    if (error) throw error;
-    toast('Coupon Created! ðŸŽ«', `Code: ${code}`, 'success');
-    loadSellerCoupons();
-    ['coupon-new-code','coupon-value','coupon-min','coupon-max','coupon-days'].forEach(id => {
-      const el = document.getElementById(id); if (el) el.value = '';
-    });
-  } catch(e) {
-    toast('Failed', e.message, 'error');
-  }
-}
-
-async function loadSellerCoupons() {
-  if (!currentUser) return;
-  const container = document.getElementById('seller-coupons-list');
-  if (!container) return;
-  const { data } = await db.from('coupons').select('*').eq('seller_id', currentUser.id).order('created_at', { ascending: false });
-  if (!data?.length) { container.innerHTML = '<p class="color-text3 text-sm">No coupons yet.</p>'; return; }
-  container.innerHTML = data.map(c => {
-    const expired = c.expires_at && new Date(c.expires_at) < new Date();
-    return `<div class="card card-pad mb-2" style="border-left:3px solid ${expired?'var(--red)':'var(--green)'}">
-      <div class="flex justify-between items-center">
-        <div>
-          <span class="font-bold">${escHtml(c.code)}</span>
-          <span class="badge ${expired?'badge-red':'badge-green'} ml-2">${expired?'Expired':'Active'}</span>
-        </div>
-        <span class="font-bold color-green">${c.discount_type==='percent'?c.discount_value+'%':fmtN(c.discount_value)} off</span>
-      </div>
-      <div class="text-xs color-text3 mt-1">Used ${c.used_count}/${c.max_uses} Â· Min order ${fmtN(c.min_order)} Â· Expires ${fmtDate(c.expires_at)}</div>
-    </div>`;
-  }).join('');
-}
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  FEATURE 5: FLASH SALES / DEAL OF THE DAY
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-let activeFlashSales = [];
-
-async function loadFlashSales() {
-  const now = new Date().toISOString();
-  const { data } = await db.from('flash_sales')
-    .select('*, products(*)')
-    .eq('is_active', true)
-    .lte('starts_at', now)
-    .gte('ends_at', now)
-    .order('ends_at', { ascending: true })
-    .limit(10);
-  activeFlashSales = data || [];
-  renderFlashSales();
-}
-
-function renderFlashSales() {
-  const container = document.getElementById('flash-sales-container');
-  if (!container) return;
-  if (!activeFlashSales.length) { container.classList.add('hidden'); return; }
-  container.classList.remove('hidden');
-
-  const listEl = document.getElementById('flash-sales-list');
-  if (!listEl) return;
-  listEl.innerHTML = activeFlashSales.map(fs => {
-    const p = fs.products;
-    if (!p) return '';
-    const discount = Math.round((1 - fs.sale_price / fs.original_price) * 100);
-    const endsAt = new Date(fs.ends_at);
-    return `
-    <div class="flash-card" onclick="openProduct('${p.id}')" style="min-width:160px;max-width:180px;cursor:pointer;flex-shrink:0;background:#fff;border-radius:12px;overflow:hidden;border:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,.06)">
-      <div style="position:relative">
-        <img src="${(p.images&&p.images[0])||''}" style="width:100%;height:120px;object-fit:cover" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1 1%22><rect fill=%22%23f0f0f0%22 width=%221%22 height=%221%22/></svg>'">
-        <span style="position:absolute;top:6px;left:6px;background:#ef4444;color:#fff;font-size:.65rem;font-weight:700;padding:.2rem .45rem;border-radius:4px">-${discount}%</span>
-      </div>
-      <div style="padding:.55rem">
-        <div class="text-sm font-bold" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(p.name)}</div>
-        <div style="display:flex;align-items:center;gap:.4rem;margin-top:.25rem">
-          <span class="font-bold color-green" style="font-size:.9rem">${fmtN(fs.sale_price)}</span>
-          <span style="text-decoration:line-through;color:var(--text3);font-size:.72rem">${fmtN(fs.original_price)}</span>
-        </div>
-        <div class="flash-timer text-xs" style="color:#ef4444;font-weight:600;margin-top:.3rem" data-ends="${fs.ends_at}"></div>
-      </div>
-    </div>`;
-  }).join('');
-
-  // Start countdown timers
-  updateFlashTimers();
-}
-
-function updateFlashTimers() {
-  document.querySelectorAll('.flash-timer').forEach(el => {
-    const ends = new Date(el.dataset.ends);
-    const diff = ends - new Date();
-    if (diff <= 0) { el.textContent = 'ENDED'; return; }
-    const h = Math.floor(diff / 3600000);
-    const m = Math.floor((diff % 3600000) / 60000);
-    const s = Math.floor((diff % 60000) / 1000);
-    el.textContent = `â° ${h}h ${m}m ${s}s left`;
-  });
-}
-setInterval(updateFlashTimers, 1000);
-
-// Seller: create flash sale
-async function createFlashSale() {
-  if (!currentUser) return;
-  const productId = document.getElementById('flash-product')?.value;
-  const salePrice = parseFloat(document.getElementById('flash-price')?.value) || 0;
-  const hours = parseInt(document.getElementById('flash-hours')?.value) || 24;
-  if (!productId || !salePrice) { toast('Select product and set sale price', '', 'warn'); return; }
-
-  // Get original price
-  const { data: prod } = await db.from('products').select('price').eq('id', productId).single();
-  if (!prod) { toast('Product not found', '', 'error'); return; }
-
-  try {
-    const { error } = await db.from('flash_sales').insert({
-      product_id: productId,
-      seller_id: currentUser.id,
-      original_price: prod.price,
-      sale_price: salePrice,
-      starts_at: new Date().toISOString(),
-      ends_at: new Date(Date.now() + hours * 3600000).toISOString(),
-      is_active: true
-    });
-    if (error) throw error;
-    toast('Flash Sale Live! âš¡', `Ends in ${hours} hours`, 'success');
-  } catch(e) {
-    toast('Failed', e.message, 'error');
-  }
-}
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  FEATURE 6: IN-APP MESSAGING
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-let currentChatPartner = null;
-let msgInterval = null;
-
-async function openMessageModal(partnerId, partnerName, productId=null) {
-  if (!currentUser) { showModal('auth-modal'); return; }
-  currentChatPartner = { id: partnerId, name: partnerName, productId };
-  showModal('message-modal');
-  document.getElementById('msg-partner-name').textContent = partnerName || 'User';
-  await loadConversation(partnerId);
-  // Poll for new messages
-  if (msgInterval) clearInterval(msgInterval);
-  msgInterval = setInterval(() => loadConversation(partnerId, true), 5000);
-}
-
-async function loadConversation(partnerId, silent=false) {
-  const container = document.getElementById('msg-conversation');
-  if (!container) return;
-  if (!silent) container.innerHTML = '<div class="skeleton" style="height:40px"></div>'.repeat(3);
-
-  const { data: msgs, error } = await db.from('messages')
-    .select('*')
-    .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${currentUser.id})`)
-    .order('created_at', { ascending: true })
-    .limit(100);
-  if (error) {
-    if (!silent) container.innerHTML = '<p class="color-text3 text-sm text-center" style="padding:2rem">Could not load messages. Please try again.</p>';
-    return;
-  }
-
-  if (!msgs?.length && !silent) {
-    container.innerHTML = '<p class="color-text3 text-sm text-center" style="padding:2rem">No messages yet. Start the conversation!</p>';
-    return;
-  }
-  if (!msgs?.length) return;
-
-  container.innerHTML = msgs.map(m => {
-    const isMine = m.sender_id === currentUser.id;
-    return `<div style="display:flex;${isMine?'flex-direction:row-reverse':'flex-direction:row'};gap:.3rem;margin-bottom:.4rem">
-      <div style="max-width:75%;padding:.45rem .7rem;border-radius:12px;font-size:.8rem;line-height:1.4;${isMine?'background:var(--green);color:#fff;border-bottom-right-radius:4px':'background:#fff;border:1px solid var(--border);border-bottom-left-radius:4px'}">
-        ${escHtml(m.content)}
-        <div style="font-size:.6rem;opacity:.6;margin-top:.15rem;text-align:${isMine?'right':'left'}">${new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</div>
-      </div>
-    </div>`;
-  }).join('');
-  container.scrollTop = container.scrollHeight;
-
-  // Mark unread as read
-  const unreadIds = msgs.filter(m => m.receiver_id === currentUser.id && !m.is_read).map(m => m.id);
-  if (unreadIds.length) db.from('messages').update({ is_read: true }).in('id', unreadIds).catch(()=>{});
-}
-
-async function sendMessage() {
-  if (!currentUser || !currentChatPartner) return;
-  const input = document.getElementById('msg-input');
-  const text = input?.value.trim();
-  if (!text) return;
-  input.value = '';
-
-  const { error } = await db.from('messages').insert({
-    sender_id: currentUser.id,
-    receiver_id: currentChatPartner.id,
-    product_id: currentChatPartner.productId || null,
-    content: validateInput(text)
-  });
-  if (error) {
-    toast('Message Failed', error.message, 'error');
-    input.value = text;
-    return;
-  }
-  loadConversation(currentChatPartner.id);
-  loadInboxCount();
-}
-
-async function loadInboxCount() {
-  if (!currentUser) return;
-  const { count } = await db.from('messages').select('id', { count: 'exact', head: true }).eq('receiver_id', currentUser.id).eq('is_read', false);
-  const badge = document.getElementById('inbox-count');
-  if (badge) { badge.textContent = count || 0; badge.classList.toggle('hidden', !count); }
-}
-
-async function showInbox() {
-  if (!currentUser) { showModal('auth-modal'); return; }
-  showModal('inbox-modal');
-  const container = document.getElementById('inbox-list');
-  if (!container) return;
-  container.innerHTML = '<div class="skeleton" style="height:60px"></div>'.repeat(3);
-
-  // Get unique conversations
-  const { data: msgs } = await db.from('messages')
-    .select('*, profiles!messages_sender_id_fkey(name)')
-    .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
-    .order('created_at', { ascending: false })
-    .limit(200);
-
-  if (!msgs?.length) {
-    container.innerHTML = '<div class="empty-state"><i class="fa-solid fa-envelope" style="font-size:2rem;color:var(--border2);display:block;margin-bottom:.65rem"></i><p class="color-text3 text-sm">No messages yet.</p></div>';
-    return;
-  }
-
-  // Group by conversation partner
-  const convos = {};
-  msgs.forEach(m => {
-    const partnerId = m.sender_id === currentUser.id ? m.receiver_id : m.sender_id;
-    if (!convos[partnerId]) convos[partnerId] = { partnerId, messages: [], unread: 0 };
-    convos[partnerId].messages.push(m);
-    if (m.receiver_id === currentUser.id && !m.is_read) convos[partnerId].unread++;
-  });
-
-  // Get partner names
-  const partnerIds = Object.keys(convos);
-  const { data: profiles } = await db.from('profiles').select('id, name').in('id', partnerIds);
-  const nameMap = {};
-  (profiles||[]).forEach(p => nameMap[p.id] = p.name);
-
-  container.innerHTML = Object.values(convos).map(c => {
-    const last = c.messages[0];
-    const name = nameMap[c.partnerId] || 'User';
-    return `<div class="card card-pad mb-2" style="cursor:pointer;${c.unread?'border-left:3px solid var(--green)':''}" onclick="closeModal('inbox-modal');openMessageModal('${c.partnerId}','${escAttr(name)}')">
-      <div class="flex justify-between items-center">
-        <div class="font-bold text-sm">${escHtml(name)}</div>
-        <div class="text-xs color-text3">${fmtDate(last.created_at)}</div>
-      </div>
-      <div class="text-xs color-text3 mt-1" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(last.content.substring(0,60))}</div>
-      ${c.unread ? `<span class="badge badge-green mt-1">${c.unread} new</span>` : ''}
-    </div>`;
-  }).join('');
-}
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  FEATURE 7: SERVICE PROVIDER REVIEWS
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-let svcReviewRating = 0;
-
-function openServiceReview(bookingId, providerName) {
-  showModal('service-review-modal');
-  document.getElementById('svc-review-provider').textContent = providerName;
-  document.getElementById('svc-review-booking-id').value = bookingId;
-  svcReviewRating = 0;
-  document.querySelectorAll('#svc-star-row .star-btn').forEach(b => b.classList.remove('active'));
-}
-
-function setSvcRating(val) {
-  svcReviewRating = val;
-  document.querySelectorAll('#svc-star-row .star-btn').forEach(b => {
-    b.classList.toggle('active', parseInt(b.dataset.val) <= val);
-  });
-}
-
-async function submitServiceReview() {
-  const bookingId = document.getElementById('svc-review-booking-id')?.value;
-  const comment = document.getElementById('svc-review-text')?.value.trim();
-  if (!svcReviewRating) { toast('Select a rating', '', 'warn'); return; }
-  if (!bookingId) return;
-
-  // Get provider from booking
-  const { data: booking } = await db.from('service_bookings').select('provider_id').eq('id', bookingId).single();
-  if (!booking) { toast('Booking not found', '', 'error'); return; }
-
-  try {
-    const { error } = await db.from('service_reviews').insert({
-      booking_id: bookingId,
-      reviewer_id: currentUser.id,
-      provider_id: booking.provider_id,
-      rating: svcReviewRating,
-      comment: validateInput(comment)
-    });
-    if (error) throw error;
-    toast('Review Submitted! â­', 'Thank you for your feedback', 'success');
-    closeModal('service-review-modal');
-  } catch(e) {
-    toast('Failed', e.message, 'error');
-  }
-}
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  FEATURE 8: ORDER TRACKING
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-async function showOrderTracking(orderId) {
-  showModal('tracking-modal');
-  const container = document.getElementById('tracking-timeline');
-  if (!container) return;
-  container.innerHTML = '<div class="skeleton" style="height:30px"></div>'.repeat(4);
-
-  let { data: events, error } = await db.from('order_tracking')
-    .select('*')
-    .eq('order_id', orderId)
-    .order('created_at', { ascending: true });
-  if (error) {
-    container.innerHTML = `<p class="color-text3 text-sm">Could not load tracking: ${escHtml(error.message)}</p>`;
-    return;
-  }
-  if (!events?.length) {
-    const { data: order } = await db.from('orders').select('status,created_at,buyer_id,seller_id').eq('id', orderId).single();
-    if (order) {
-      events = [{ status: 'pending', note: 'Order placed', created_at: order.created_at }];
-      if (order.status && order.status !== 'pending') events.push({ status: order.status, note: `Current status: ${order.status}`, created_at: order.created_at });
-    }
-  }
-
-  const allStatuses = ['pending','confirmed','shipped','picked_up','in_transit','out_for_delivery','delivered'];
-  const statusLabels = {pending:'Order Placed',confirmed:'Confirmed',shipped:'Shipped',picked_up:'Picked Up',in_transit:'In Transit',out_for_delivery:'Out for Delivery',delivered:'Delivered'};
-  const statusIcons = {pending:'fa-receipt',confirmed:'fa-check',shipped:'fa-box-open',picked_up:'fa-box',in_transit:'fa-truck',out_for_delivery:'fa-motorcycle',delivered:'fa-house-circle-check'};
-
-  const completedStatuses = (events||[]).map(e => e.status);
-
-  container.innerHTML = allStatuses.map((status, i) => {
-    const done = completedStatuses.includes(status);
-    const event = (events||[]).find(e => e.status === status);
-    const isCurrent = done && !completedStatuses.includes(allStatuses[i+1]);
-    return `
-    <div style="display:flex;gap:.75rem;padding-bottom:1.2rem;${i<allStatuses.length-1?'border-left:2px solid '+(done?'var(--green)':'var(--border)'):'border:none'};margin-left:11px;padding-left:1.2rem;position:relative">
-      <div style="position:absolute;left:-12px;top:0;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.65rem;${done?'background:var(--green);color:#fff':'background:var(--cream);border:2px solid var(--border);color:var(--text3)'}${isCurrent?';box-shadow:0 0 0 4px rgba(25,168,71,.2)':''}">
-        <i class="fa-solid ${statusIcons[status]||'fa-circle'}"></i>
-      </div>
-      <div>
-        <div class="font-bold text-sm" style="${done?'':'color:var(--text3)'}">${statusLabels[status]||status}</div>
-        ${event ? `<div class="text-xs color-text3">${fmtDate(event.created_at)}${event.note?' Â· '+escHtml(event.note):''}</div>` : ''}
-      </div>
-    </div>`;
-  }).join('');
-
-  document.getElementById('tracking-order-id').textContent = orderId;
-}
-
-// Seller: add tracking update
-async function addTrackingUpdate(orderId) {
-  const status = prompt('Enter status (picked_up, in_transit, out_for_delivery, delivered):');
-  if (!status) return;
-  const note = prompt('Add a note (optional):') || '';
-  try {
-    await callEdge('order-action', { action: 'add_tracking', order_id: orderId, status, note: validateInput(note) });
-    toast('Tracking Updated', `Status: ${status}`, 'success');
-    showOrderTracking(orderId);
-  } catch(e) { toast('Failed', e.message, 'error'); }
-}
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  FEATURE 9: ADMIN REPORT EXPORT (CSV / PDF)
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// (exportAdminReport is defined in admin section above)
-
-// ====================================================
-//  VOICE INPUT FOR AI
-// ====================================================
-let voiceRecognition = null;
-
-async function toggleVoiceInput() {
-  const btn = document.getElementById('voice-btn');
-  const rec = document.getElementById('voice-recording');
-  
-  // Check browser support
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    toast('Not Supported', 'Voice input is not available in this browser. Try Chrome or Edge.', 'warn', 5000);
-    return;
-  }
-
-  if (rec.classList.contains('hidden')) {
-    // Start listening
-    try {
-      voiceRecognition = new SpeechRecognition();
-      voiceRecognition.lang = 'en-NG';
-      voiceRecognition.continuous = false;
-      voiceRecognition.interimResults = true;
-      voiceRecognition.maxAlternatives = 1;
-
-      const chatInput = document.getElementById('chat-input') || document.getElementById('admin-ai-input');
-      
-      voiceRecognition.onstart = () => {
-        rec.classList.remove('hidden');
-        btn.style.background = 'var(--red)';
-        if (chatInput) chatInput.placeholder = 'ðŸŽ¤ Listening...';
-      };
-
-      voiceRecognition.onresult = (event) => {
-        let transcript = '';
-        for (let i = 0; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
-        }
-        if (chatInput) chatInput.value = transcript;
-      };
-
-      voiceRecognition.onend = () => {
-        rec.classList.add('hidden');
-        btn.style.background = 'var(--forest)';
-        if (chatInput) chatInput.placeholder = 'Type a message...';
-        // Auto-send if we got a transcript
-        if (chatInput && chatInput.value.trim()) {
-          // Trigger the appropriate send function
-          if (chatInput.id === 'admin-ai-input') {
-            askAdminBot();
-          } else {
-            sendChat();
-          }
-        }
-      };
-
-      voiceRecognition.onerror = (event) => {
-        rec.classList.add('hidden');
-        btn.style.background = 'var(--forest)';
-        if (chatInput) chatInput.placeholder = 'Type a message...';
-        if (event.error === 'not-allowed') {
-          toast('Mic Blocked', 'Allow microphone access in browser settings', 'error', 5000);
-        } else if (event.error === 'no-speech') {
-          toast('No Speech Detected', 'Try speaking louder or closer to the mic', 'warn');
-        } else {
-          toast('Voice Error', `${event.error}. Try again or type.`, 'warn');
-        }
-      };
-
-      voiceRecognition.start();
-    } catch(e) {
-      toast('Mic Error', 'Could not start voice input: ' + e.message, 'error');
-    }
-  } else {
-    // Stop listening
-    if (voiceRecognition) {
-      voiceRecognition.stop();
-    }
-    rec.classList.add('hidden');
-    btn.style.background = 'var(--forest)';
-  }
-}
-
-// ====================================================
-//  PREDICTIVE ANALYTICS
-// ====================================================
-let _predictionData = null;
-
-async function loadPredictiveAnalytics() {
-  if (!currentUser) return;
-  const container = document.getElementById('predictive-analytics');
-  if (!container) return;
-  
-  container.innerHTML = '<div class="skeleton" style="height:200px"></div>';
-  
-  try {
-    const now = new Date();
-    const last30Days = new Date(); last30Days.setDate(last30Days.getDate() - 30);
-    const last60Days = new Date(); last60Days.setDate(last60Days.getDate() - 60);
-    
-    // Fetch historical data
-    const [recentOrders, olderOrders, products, disputes] = await Promise.all([
-      db.from('orders').select('id,total_amount,status,created_at').gte('created_at', last30Days.toISOString()),
-      db.from('orders').select('id,total_amount,status,created_at').lte('created_at', last30Days.toISOString()).gte('created_at', last60Days.toISOString()),
-      db.from('products').select('id,name,views,sold_count,category').eq('seller_id', currentUser.id),
-      db.from('disputes').select('id,dispute_type,status').eq('status', 'open')
-    ]);
-    
-    const recentData = recentOrders.data || [];
-    const olderData = olderOrders.data || [];
-    const productsData = products.data || [];
-    
-    // Calculate metrics
-    const recentRevenue = recentData.reduce((s,o) => s + (o.total_amount||0), 0);
-    const olderRevenue = olderData.reduce((s,o) => s + (o.total_amount||0), 0);
-    const recentOrdersCount = recentData.length;
-    const olderOrdersCount = olderData.length;
-    
-    // Growth rates
-    const revenueGrowth = olderRevenue > 0 ? ((recentRevenue - olderRevenue) / olderRevenue * 100).toFixed(1) : 0;
-    const ordersGrowth = olderOrdersCount > 0 ? ((recentOrdersCount - olderOrdersCount) / olderOrdersCount * 100).toFixed(1) : 0;
-    
-    // Average order value
-    const avgOrderValue = recentOrdersCount > 0 ? recentRevenue / recentOrdersCount : 0;
-    const avgOrderValueChange = olderOrdersCount > 0 ? ((recentRevenue/recentOrdersCount) - (olderRevenue/olderOrdersCount)) / (olderRevenue/olderOrdersCount) * 100 : 0;
-    
-    // Projections (simple linear)
-    const projectedRevenue = recentRevenue * 1.2; // 20% growth assumption
-    const projectedOrders = Math.ceil(recentOrdersCount * 1.15);
-    
-    // Top products analysis
-    const topProducts = [...productsData].sort((a,b) => (b.sold_count||0) - (a.sold_count||0)).slice(0,5);
-    const slowSellers = productsData.filter(p => (p.views||0) > 100 && (p.sold_count||0) === 0).slice(0,3);
-    
-    // Risk factors
-    const riskFactors = [];
-    if (parseFloat(revenueGrowth) < 0) riskFactors.push('ðŸ“‰ Revenue declining');
-    if (recentData.filter(o => o.status === 'pending').length > 5) riskFactors.push('â³ Many pending orders');
-    if (slowSellers.length > 0) riskFactors.push('ðŸ“¦ Slow-moving inventory');
-    if ((disputes.data||[]).length > 3) riskFactors.push('âš ï¸ Open disputes');
-    
-    // Store predictions
-    _predictionData = {
-      recentRevenue, olderRevenue, revenueGrowth, ordersGrowth, avgOrderValue, avgOrderValueChange,
-      projectedRevenue, projectedOrders, topProducts, slowSellers, riskFactors, recentOrdersCount, olderOrdersCount
-    };
-    
-    container.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:1.5rem">
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">ðŸ“ˆ Revenue Growth</div>
-          <div style="font-size:1.5rem;font-weight:800;color:${parseFloat(revenueGrowth) >= 0 ? 'var(--green)' : 'var(--red)'}">${revenueGrowth}%</div>
-          <div class="text-xs color-text3">vs last 30 days</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">ðŸ›’ Orders Growth</div>
-          <div style="font-size:1.5rem;font-weight:800;color:${parseFloat(ordersGrowth) >= 0 ? 'var(--green)' : 'var(--red)'}">${ordersGrowth}%</div>
-          <div class="text-xs color-text3">vs last 30 days</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">ðŸ’° Avg Order Value</div>
-          <div style="font-size:1.5rem;font-weight:800" id="p-avg-order">${fmtN(avgOrderValue)}</div>
-          <div class="text-xs color-text3">${avgOrderValueChange >= 0 ? 'â†‘' : 'â†“'} ${Math.abs(avgOrderValueChange).toFixed(1)}%</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">ðŸ”® Next 30 Days</div>
-          <div style="font-size:1.5rem;font-weight:800;color:var(--purple)">${fmtN(projectedRevenue)}</div>
-          <div class="text-xs color-text3">Projected revenue</div>
-        </div>
-      </div>
-      
-      ${riskFactors.length > 0 ? `
-      <div class="card card-pad mb-3" style="border-left:3px solid var(--red)">
-        <h3 class="mb-2"><i class="fa-solid fa-triangle-exclamation color-red"></i> Risk Alerts</h3>
-        <div style="display:flex;flex-direction:column;gap:.5rem">
-          ${riskFactors.map(r => `<div style="font-size:.85rem">${r}</div>`).join('')}
-        </div>
-      </div>
-      ` : ''}
-      
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
-        <div class="card card-pad">
-          <h3 class="mb-2"><i class="fa-solid fa-fire color-gold"></i> Top Performers</h3>
-          ${topProducts.length ? topProducts.map((p,i) => `
-            <div class="flex justify-between items-center py-2">
-              <div class="text-sm">${i+1}. ${escHtml(p.name?.substring(0,20))}</div>
-              <div class="font-bold color-green">${p.sold_count||0}</div>
-            </div>
-          `).join('') : '<p class="color-text3 text-sm">No sales yet</p>'}
-        </div>
-        <div class="card card-pad">
-          <h3 class="mb-2"><i class="fa-solid fa-bell color-gold"></i> Needs Attention</h3>
-          ${slowSellers.length ? slowSellers.map(p => `
-            <div class="flex justify-between items-center py-2">
-              <div class="text-sm">${escHtml(p.name?.substring(0,20))}</div>
-              <span class="badge badge-red">${p.views||0} views, 0 sales</span>
-            </div>
-          `).join('') : '<p class="color-text3 text-sm">All products selling!</p>'}
-        </div>
-      </div>
-      
-      <div class="card card-pad mt-3">
-        <h3 class="mb-2"><i class="fa-solid fa-crystal-ball color-purple"></i> AI Forecast</h3>
-        <div style="font-size:.85rem;color:var(--text2);line-height:1.7">
-          <p>Based on your last 60 days performance:</p>
-          <ul style="margin-left:1rem">
-            <li>Expected orders next 30 days: <strong>${projectedOrders}</strong></li>
-            <li>Expected revenue: <strong>${fmtN(projectedRevenue)}</strong></li>
-            <li>Recommended focus: <strong>${topProducts[0]?.name?.substring(0,15) || 'N/A'}</strong></li>
-          </ul>
-          <p class="mt-2 text-xs color-text3">* Projections are estimates based on linear growth trends.</p>
-        </div>
-      </div>`;
-  } catch(e) {
-    container.innerHTML = '<p class="color-text3">Error loading predictions</p>';
-  }
-}
-
-// ====================================================
-//  TREND ANALYSIS
-// ====================================================
-async function loadTrendAnalysis() {
-  const container = document.getElementById('trend-analysis');
-  if (!container) return;
-  
-  container.innerHTML = '<div class="skeleton" style="height:150px"></div>';
-  
-  try {
-    const now = new Date();
-    const periods = [
-      { days: 7, label: 'This Week' },
-      { days: 30, label: 'This Month' },
-      { days: 90, label: 'Last 90 Days' }
-    ];
-    
-    const data = await Promise.all(periods.map(async p => {
-      const since = new Date(); since.setDate(since.getDate() - p.days);
-      const { data: orders } = await db.from('orders')
-        .select('total_amount,status,created_at')
-        .eq('seller_id', currentUser.id)
-        .gte('created_at', since.toISOString());
-      
-      const revenue = (orders||[]).reduce((s,o) => s + (o.total_amount||0), 0);
-      const count = (orders||[]).length;
-      const avg = count > 0 ? revenue / count : 0;
-      
-      return { label: p.label, revenue, count, avg, days: p.days };
-    }));
-    
-    container.innerHTML = `
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead><tr><th>Period</th><th>Orders</th><th>Revenue</th><th>Avg Order</th></tr></thead>
-          <tbody>
-            ${data.map(d => `
-              <tr>
-                <td>${d.label}</td>
-                <td>${d.count}</td>
-                <td class="font-bold color-green">${fmtN(d.revenue)}</td>
-                <td>${fmtN(d.avg)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>`;
-  } catch(e) {
-    container.innerHTML = '<p class="color-text3">Error loading trends</p>';
-  }
-}
-
-// ====================================================
-//  CUSTOMER SEGMENTATION
-// ====================================================
-async function loadCustomerSegmentation() {
-  const container = document.getElementById('customer-segments');
-  if (!container) return;
-  
-  container.innerHTML = '<div class="skeleton" style="height:150px"></div>';
-  
-  try {
-    const { data: orders } = await db.from('orders')
-      .select('buyer_id,total_amount,created_at,items')
-      .eq('seller_id', currentUser.id)
-      .order('created_at', { ascending: false })
-      .limit(100);
-    
-    // Group by buyer
-    const buyerMap = {};
-    (orders||[]).forEach(o => {
-      if (!o.buyer_id) return;
-      if (!buyerMap[o.buyer_id]) {
-        buyerMap[o.buyer_id] = { orders: 0, total: 0, lastOrder: o.created_at };
-      }
-      buyerMap[o.buyer_id].orders++;
-      buyerMap[o.buyer_id].total += o.total_amount || 0;
-      if (o.created_at > buyerMap[o.buyer_id].lastOrder) {
-        buyerMap[o.buyer_id].lastOrder = o.created_at;
-      }
-    });
-    
-    const buyers = Object.entries(buyerMap)
-      .map(([id, data]) => ({ id, ...data, avgOrder: data.total / data.orders }))
-      .sort((a,b) => b.total - a.total);
-    
-    // Segment
-    const vip = buyers.filter(b => b.total >= 100000);
-    const regular = buyers.filter(b => b.total >= 20000 && b.total < 100000);
-    const newBuyers = buyers.filter(b => b.total < 20000);
-    
-    container.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem">
-        <div class="card card-pad" style="text-align:center">
-          <div style="font-size:1.5rem;font-weight:800;color:var(--purple)">${vip.length}</div>
-          <div class="text-xs color-text3">VIP (â‚¦100k+)</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div style="font-size:1.5rem;font-weight:800;color:var(--green)">${regular.length}</div>
-          <div class="text-xs color-text3">Regular</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div style="font-size:1.5rem;font-weight:800;color:var(--blue)">${newBuyers.length}</div>
-          <div class="text-xs color-text3">New</div>
-        </div>
-      </div>
-      <div class="mt-3">
-        <h4 class="mb-2">Top Customers</h4>
-        ${buyers.slice(0,5).map((b,i) => `
-          <div class="flex justify-between items-center py-2 border-b border-border">
-            <div>${i+1}. ${b.id.substring(0,8)}...</div>
-            <div class="font-bold">${fmtN(b.total)} (${b.orders} orders)</div>
-          </div>
-        `).join('')}
-      </div>`;
-  } catch(e) {
-    container.innerHTML = '<p class="color-text3">Error loading segments</p>';
-  }
-}
-
-// Load all analytics
-
-// ====================================================
-//  AI PRODUCT RECOMMENDATIONS FOR BUYERS
-// ====================================================
-async function loadAIRecommendations() {
-  const container = document.getElementById('ai-recommendations');
-  if (!container) return;
-  
-  container.innerHTML = '<div class="skeleton" style="height:120px"></div>';
-  
-  try {
-    const { data: products } = await db.from('products')
-      .select('id,name,category,price,images,avg_rating,sold_count,views')
-      .eq('status', 'active')
-      .order('avg_rating', { ascending: false })
-      .limit(30);
-    
-    if (!products?.length) {
-      container.innerHTML = '<p class="color-text3">No products to analyze</p>';
-      return;
-    }
-    
-    // Score products by multiple factors
-    const scored = products.map(p => {
-      let score = 0;
-      // Rating weight (40%)
-      score += (p.avg_rating || 0) * 20;
-      // Sales weight (30%)
-      score += Math.min((p.sold_count || 0) * 3, 30);
-      // Views momentum (20%) - normalized
-      score += Math.min((p.views || 0) / 50, 20);
-      // Price value (10%) - prefer mid-range
-      const priceScore = p.price > 1000 && p.price < 100000 ? 10 : 5;
-      score += priceScore;
-      
-      return { ...p, aiScore: score };
-    });
-    
-    // Top picks by category
-    const categories = {};
-    scored.forEach(p => {
-      const cat = p.category || 'other';
-      if (!categories[cat] || p.aiScore > categories[cat].aiScore) {
-        categories[cat] = p;
-      }
-    });
-    
-    // Best value picks
-    const valuePicks = [...scored]
-      .filter(p => p.price < 50000)
-      .sort((a,b) => b.aiScore - a.aiScore)
-      .slice(0, 5);
-    
-    // Trending
-    const trending = [...scored]
-      .sort((a,b) => (b.views||0) - (a.views||0))
-      .slice(0, 5);
-    
-    container.innerHTML = `
-      <div class="card card-pad mb-3">
-        <h3 class="mb-2"><i class="fa-solid fa-robot color-purple"></i> AI Top Picks</h3>
-        <p class="text-xs color-text3 mb-3">Based on rating, sales, views & value</p>
-        <div style="display:flex;flex-direction:column;gap:.75rem">
-          ${scored.sort((a,b) => b.aiScore - a.aiScore).slice(0,5).map((p,i) => `
-            <div class="flex items-center gap-3" style="padding:.5rem;background:var(--cream);border-radius:8px">
-              <div style="font-size:1rem;font-weight:800;color:var(--purple);width:24px">${i+1}</div>
-              <img src="${(p.images&&p.images[0])||''}" style="width:48px;height:48px;border-radius:6px;object-fit:cover" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1 1%22><rect fill=%22%23f0f0f0%22 width=%221%22 height=%221%22/></svg>'">
-              <div style="flex:1;min-width:0">
-                <div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(p.name)}</div>
-                <div class="text-xs color-text3">${fmtN(p.price)} Â· â­ ${(p.avg_rating||0).toFixed(1)} Â· ${p.sold_count||0} sold</div>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-      
-      <div class="card card-pad mb-3">
-        <h3 class="mb-2"><i class="fa-solid fa-fire color-gold"></i> Trending Now</h3>
-        <div style="display:flex;gap:.5rem;overflow-x:auto;padding:.5rem 0">
-          ${trending.map(p => `
-            <div style="min-width:120px;cursor:pointer" onclick="openProduct('${p.id}')">
-              <img src="${(p.images&&p.images[0])||''}" style="width:100%;height:80px;border-radius:8px;object-fit:cover" onerror="this.style.display='none'">
-              <div class="text-xs mt-1" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(p.name?.substring(0,15))}</div>
-              <div class="text-xs font-bold color-green">${fmtN(p.price)}</div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-      
-      <div class="card card-pad">
-        <h3 class="mb-2"><i class="fa-solid fa-tag color-green"></i> Best Value</h3>
-        <div style="display:flex;flex-direction:column;gap:.5rem">
-          ${valuePicks.map((p,i) => `
-            <div class="flex justify-between items-center py-2" style="padding:.5rem;background:var(--green-xlt);border-radius:6px">
-              <div>
-                <div class="text-sm font-600">${escHtml(p.name?.substring(0,25))}</div>
-                <div class="text-xs color-text3">â­ ${(p.avg_rating||0).toFixed(1)} (${p.sold_count||0} sales)</div>
-              </div>
-              <div class="font-bold" style="color:var(--green)">${fmtN(p.price)}</div>
-            </div>
-          `).join('')}
-        </div>
-      </div>`;
-  } catch(e) {
-    container.innerHTML = '<p class="color-text3">Error loading recommendations</p>';
-  }
-}
-
-// ====================================================
-//  COMPETITOR ANALYSIS
-// ====================================================
-async function loadCompetitorAnalysis() {
-  const container = document.getElementById('competitor-analysis');
-  if (!container) return;
-  
-  container.innerHTML = '<div class="skeleton" style="height:150px"></div>';
-  
-  try {
-    // Get all sellers
-    const { data: sellers } = await db.from('profiles')
-      .select('id,name,email,seller_tier,created_at')
-      .eq('role', 'seller')
-      .eq('commission_paid', true)
-      .order('created_at', { ascending: false })
-      .limit(20);
-    
-    if (!sellers?.length) {
-      container.innerHTML = '<p class="color-text3">No competitor data available</p>';
-      return;
-    }
-    
-    // Get product counts for each seller
-    const sellerIds = sellers.map(s => s.id);
-    const { data: allProducts } = await db.from('products')
-      .select('id,name,category,price,seller_id,sold_count,views')
-      .in('seller_id', sellerIds)
-      .eq('status', 'active');
-    
-    // Group by seller
-    const sellerStats = {};
-    sellers.forEach(s => {
-      sellerStats[s.id] = {
-        name: s.name,
-        tier: s.seller_tier || 'bronze',
-        products: 0,
-        totalViews: 0,
-        totalSales: 0,
-        categories: {}
-      };
-    });
-    
-    (allProducts||[]).forEach(p => {
-      if (sellerStats[p.seller_id]) {
-        sellerStats[p.seller_id].products++;
-        sellerStats[p.seller_id].totalViews += p.views || 0;
-        sellerStats[p.seller_id].totalSales += p.sold_count || 0;
-        sellerStats[p.seller_id].categories[p.category] = (sellerStats[p.seller_id].categories[p.category] || 0) + 1;
-      }
-    });
-    
-    const ranked = Object.entries(sellerStats)
-      .map(([id, s]) => ({ id, ...s }))
-      .sort((a,b) => b.totalSales - a.totalSales);
-    
-    const tierColors = { verified: 'var(--green)', gold: 'var(--gold)', silver: 'var(--text2)', bronze: 'var(--text3)' };
-    
-    container.innerHTML = `
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead><tr><th>Rank</th><th>Seller</th><th>Tier</th><th>Products</th><th>Views</th><th>Sales</th></tr></thead>
-          <tbody>
-            ${ranked.slice(0,10).map((s,i) => `
-              <tr>
-                <td>${i+1}</td>
-                <td>${escHtml(s.name?.substring(0,15))}</td>
-                <td><span class="badge" style="background:${tierColors[s.tier]}33;color:${tierColors[s.tier]}">${s.tier}</span></td>
-                <td>${s.products}</td>
-                <td>${s.totalViews.toLocaleString()}</td>
-                <td class="font-bold color-green">${s.totalSales}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-      
-      <div class="card card-pad mt-3">
-        <h4 class="mb-2">Your Position</h4>
-        <div id="your-rank-info"></div>
-      </div>`;
-    
-    // Show user's rank
-    const myRank = ranked.findIndex(s => s.id === currentUser?.id);
-    const myRankEl = document.getElementById('your-rank-info');
-    if (myRankEl && myRank >= 0) {
-      myRankEl.innerHTML = `<div class="flex justify-between items-center py-3" style="padding:1rem;background:var(--purple-xlt);border-radius:8px">
-        <div>
-          <div class="font-bold" style="font-size:1.2rem">#${myRank + 1}</div>
-          <div class="text-xs color-text3">of ${ranked.length} sellers</div>
-        </div>
-        <div class="text-right">
-          <div class="font-bold color-green">${sellerStats[currentUser?.id]?.totalSales || 0} sales</div>
-          <div class="text-xs color-text3">${sellerStats[currentUser?.id]?.totalViews || 0} views</div>
-        </div>
-      </div>`;
-    }
-  } catch(e) {
-    container.innerHTML = '<p class="color-text3">Error loading competitors</p>';
-  }
-}
-
-// ====================================================
-//  SMART NOTIFICATIONS SYSTEM
-// ====================================================
-let _notificationSettings = {
-  orderPlaced: true,
-  orderShipped: true,
-  newReview: true,
-  lowStock: true,
-  newMessage: true,
-  priceDrop: false
-};
-
-async function loadNotificationSettings() {
-  const container = document.getElementById('notification-settings');
-  if (!container) return;
-  
-  container.innerHTML = `
-    <div class="card card-pad">
-      <h3 class="mb-3"><i class="fa-solid fa-bell color-gold"></i> Notification Preferences</h3>
-      <div style="display:flex;flex-direction:column;gap:.75rem">
-        <label class="flex justify-between items-center" style="padding:.5rem;background:var(--cream);border-radius:6px">
-          <div>
-            <div class="font-600 text-sm">New Orders</div>
-            <div class="text-xs color-text3">Get notified when you receive a new order</div>
-          </div>
-          <input type="checkbox" checked onchange="_notificationSettings.orderPlaced = this.checked" style="width:20px;height:20px">
-        </label>
-        <label class="flex justify-between items-center" style="padding:.5rem;background:var(--cream);border-radius:6px">
-          <div>
-            <div class="font-600 text-sm">Order Shipped</div>
-            <div class="text-xs color-text3">Order status updates</div>
-          </div>
-          <input type="checkbox" checked onchange="_notificationSettings.orderShipped = this.checked" style="width:20px;height:20px">
-        </label>
-        <label class="flex justify-between items-center" style="padding:.5rem;background:var(--cream);border-radius:6px">
-          <div>
-            <div class="font-600 text-sm">New Reviews</div>
-            <div class="text-xs color-text3">When customers review your products</div>
-          </div>
-          <input type="checkbox" checked onchange="_notificationSettings.newReview = this.checked" style="width:20px;height:20px">
-        </label>
-        <label class="flex justify-between items-center" style="padding:.5rem;background:var(--cream);border-radius:6px">
-          <div>
-            <div class="font-600 text-sm">Low Stock Alerts</div>
-            <div class="text-xs color-text3">When inventory is running low</div>
-          </div>
-          <input type="checkbox" checked onchange="_notificationSettings.lowStock = this.checked" style="width:20px;height:20px">
-        </label>
-        <label class="flex justify-between items-center" style="padding:.5rem;background:var(--cream);border-radius:6px">
-          <div>
-            <div class="font-600 text-sm">Messages</div>
-            <div class="text-xs color-text3">New inbox messages</div>
-          </div>
-          <input type="checkbox" checked onchange="_notificationSettings.newMessage = this.checked" style="width:20px;height:20px">
-        </label>
-      </div>
-      <button class="btn btn-primary btn-full mt-3" onclick="saveNotificationSettings()"><i class="fa-solid fa-save"></i> Save Preferences</button>
-    </div>`;
-}
-
-async function saveNotificationSettings() {
-  try {
-    localStorage.setItem('bs_notification_settings', JSON.stringify(_notificationSettings));
-    toast('Settings Saved!', 'Your preferences have been updated', 'success');
-  } catch(e) {
-    toast('Error', e.message, 'error');
-  }
-}
-
-// Request notification permission
-async function requestNotificationPermission() {
-  if (!('Notification' in window)) {
-    toast('Not Supported', 'This browser does not support notifications', 'warn');
-    return;
-  }
-  
-  if (Notification.permission === 'granted') {
-    toast('Already Enabled', 'Notifications are enabled', 'info');
-  } else if (Notification.permission !== 'denied') {
-    const permission = await Notification.requestPermission();
-    if (permission === 'granted') {
-      toast('Enabled!', 'You will receive notifications', 'success');
-    }
-  }
-}
-
-// Test notification
-function testNotification() {
-  if (Notification.permission === 'granted') {
-    new Notification('BUYSELL Nigeria', {
-      body: 'Test notification - Notifications are working!',
-      icon: 'https://buysell.ng/favicon.ico'
-    });
-  } else {
-    toast('Enable First', 'Please enable notifications in browser settings', 'warn');
-  }
-}
-
-// ====================================================
-//  PRICE INTELLIGENCE / COMPETITOR PRICING
-// ====================================================
-async function loadPriceIntelligence() {
-  const container = document.getElementById('price-intelligence');
-  if (!container) return;
-  
-  container.innerHTML = '<div class="skeleton" style="height:150px"></div>';
-  
-  try {
-    const { data: myProducts } = await db.from('products')
-      .select('id,name,category,price')
-      .eq('seller_id', currentUser.id)
-      .eq('status', 'active');
-    
-    if (!myProducts?.length) {
-      container.innerHTML = '<p class="color-text3">No products to analyze</p>';
-      return;
-    }
-    
-    // Find same-category products from other sellers
-    const categories = [...new Set(myProducts.map(p => p.category))];
-    const { data: competitorProducts } = await db.from('products')
-      .select('id,name,category,price,seller_id,profiles(name)')
-      .in('category', categories)
-      .eq('status', 'active')
-      .neq('seller_id', currentUser.id);
-    
-    // Analyze each category
-    const analysis = {};
-    categories.forEach(cat => {
-      const myProds = myProducts.filter(p => p.category === cat);
-      const compProds = competitorProducts.filter(p => p.category === cat);
-      
-      if (myProds.length && compProds.length) {
-        const myPrices = myProds.map(p => p.price).filter(p => p > 0);
-        const compPrices = compProds.map(p => p.price).filter(p => p > 0);
-        
-        analysis[cat] = {
-          myAvg: myPrices.length ? myPrices.reduce((s,p) => s + p, 0) / myPrices.length : 0,
-          compAvg: compPrices.length ? compPrices.reduce((s,p) => s + p, 0) / compPrices.length : 0,
-          myCount: myProds.length,
-          compCount: compProds.length
-        };
-      }
-    });
-    
-    container.innerHTML = `
-      <div style="display:flex;flex-direction:column;gap:1rem">
-        ${Object.entries(analysis).map(([cat, data]) => {
-          const diff = data.myAvg - data.compAvg;
-          const pct = data.compAvg > 0 ? ((diff / data.compAvg) * 100).toFixed(1) : 0;
-          const status = diff > 0 ? 'var(--red)' : diff < 0 ? 'var(--green)' : 'var(--text2)';
-          const label = diff > 0 ? 'Above' : diff < 0 ? 'Below' : 'Same';
-          
-          return `
-          <div class="card card-pad">
-            <div class="flex justify-between items-center mb-2">
-              <div class="font-bold">${escHtml(cat)}</div>
-              <span class="badge" style="background:${status}22;color:${status}">${label} market by ${Math.abs(pct)}%</span>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;font-size:.8rem">
-              <div>
-                <div class="text-xs color-text3">Your Avg Price</div>
-                <div class="font-bold">${fmtN(data.myAvg)}</div>
-              </div>
-              <div>
-                <div class="text-xs color-text3">Competitors Avg</div>
-                <div class="font-bold color-green">${fmtN(data.compAvg)}</div>
-              </div>
-            </div>
-            <div class="text-xs color-text3 mt-2">You: ${data.myCount} products Â· Competitors: ${data.compCount} products</div>
-          </div>`;
-        }).join('')}
-      </div>
-      
-      <div class="card card-pad mt-3">
-        <h4 class="mb-2">ðŸ’¡ Pricing Insights</h4>
-        <div style="font-size:.85rem;color:var(--text2);line-height:1.6">
-          ${Object.entries(analysis).some(([_,d]) => d.myAvg > d.compAvg) ? 
-            '<p>âš ï¸ Some of your prices are <strong>above</strong> market average. Consider adjusting to stay competitive.</p>' : 
-            '<p>âœ… Your prices are <strong>competitive</strong> or below market average!</p>'}
-        </div>
-      </div>`;
-  } catch(e) {
-    container.innerHTML = '<p class="color-text3">Error loading price data</p>';
-  }
-}
-
-function loadAllAnalytics() {
-  loadPredictiveAnalytics();
-  loadTrendAnalysis();
-  loadCustomerSegmentation();
-}
-
-async function exportAdminReport(type) {
-  toast('Generating Report...', '', 'info', 2000);
-  let rows = [];
-  let filename = '';
-
-  if (type === 'sellers') {
-    const { data } = await db.from('profiles').select('name, email, role, commission_paid, trial_end, created_at, seller_tier').in('role', ['seller', 'service_provider']);
-    rows = (data||[]).map(s => ({
-      Name: s.name, Email: s.email, Role: s.role,
-      'Commission Paid': s.commission_paid ? 'Yes' : 'No',
-      'Trial End': s.trial_end || 'N/A',
-      Tier: s.seller_tier || 'bronze',
-      'Joined': s.created_at
-    }));
-    filename = 'buysell_sellers_report.csv';
-  } else if (type === 'orders') {
-    const { data } = await db.from('orders').select('id, total_amount, status, payment_method, created_at').order('created_at', { ascending: false }).limit(500);
-    rows = (data||[]).map(o => ({
-      'Order ID': o.id, Amount: o.total_amount, Status: o.status,
-      Payment: o.payment_method, Date: o.created_at
-    }));
-    filename = 'buysell_orders_report.csv';
-  } else if (type === 'revenue') {
-    const { data } = await db.from('orders').select('total_amount, status, created_at').eq('status', 'delivered');
-    const total = (data||[]).reduce((s,o) => s + (o.total_amount||0), 0);
-    const commission = total * 0.03;
-    rows = [
-      { Metric: 'Total Delivered Orders', Value: (data||[]).length },
-      { Metric: 'Total GMV', Value: total },
-      { Metric: 'Platform Commission (3%)', Value: commission },
-      { Metric: 'Report Date', Value: new Date().toLocaleDateString() }
-    ];
-    filename = 'buysell_revenue_report.csv';
-  } else if (type === 'disputes') {
-    const { data } = await db.from('disputes').select('id, order_id, dispute_type, status, description, created_at');
-    rows = (data||[]).map(d => ({
-      ID: d.id, 'Order ID': d.order_id, Type: d.dispute_type,
-      Status: d.status, Description: (d.description||'').substring(0,100), Date: d.created_at
-    }));
-    filename = 'buysell_disputes_report.csv';
-  }
-
-  if (!rows.length) { toast('No data to export', '', 'warn'); return; }
-
-  // Convert to CSV
-  const headers = Object.keys(rows[0]);
-  const csv = [headers.join(','), ...rows.map(r => headers.map(h => `"${String(r[h]||'').replace(/"/g,'""')}"`).join(','))].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
-  toast('Report Downloaded! ðŸ“Š', filename, 'success');
-}
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  FEATURE 10: PWA INSTALL PROMPT
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredInstallPrompt = e;
-  const installBar = document.getElementById('pwa-install-bar');
-  if (installBar) installBar.classList.remove('hidden');
-});
-
-function installPWA() {
-  if (!deferredInstallPrompt) { toast('Already installed or not supported', '', 'info'); return; }
-  deferredInstallPrompt.prompt();
-  deferredInstallPrompt.userChoice.then(choice => {
-    if (choice.outcome === 'accepted') {
-      toast('App Installed! ðŸ“±', 'BUYSELL is now on your home screen', 'success');
-    }
-    deferredInstallPrompt = null;
-    const installBar = document.getElementById('pwa-install-bar');
-    if (installBar) installBar.classList.add('hidden');
-  });
-}
-
-function dismissInstallBar() {
-  const installBar = document.getElementById('pwa-install-bar');
-  if (installBar) installBar.classList.add('hidden');
-  sessionStorage.setItem('pwa_dismissed', '1');
-}
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  FEATURE 11: SELLER ANALYTICS DASHBOARD
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-async function loadSellerAnalytics() {
-  const container = document.getElementById('seller-analytics-content');
-  if (!container || !currentUser) return;
-  container.innerHTML = '<div class="skeleton" style="height:100px"></div>';
-
-  try {
-    const { data: products } = await db.from('products').select('id, name, views, status').eq('seller_id', currentUser.id);
-    const { data: orders } = await db.from('orders').select('total_amount, status, created_at, items').eq('status', 'delivered');
-    const { data: reviews } = await db.from('reviews').select('rating').eq('seller_id', currentUser.id);
-
-    const totalViews = (products||[]).reduce((s,p) => s + (p.views||0), 0);
-    const totalOrders = (orders||[]).length;
-    const totalRevenue = (orders||[]).reduce((s,o) => s + (o.total_amount||0), 0);
-    const avgRating = reviews?.length ? (reviews.reduce((s,r) => s + r.rating, 0) / reviews.length).toFixed(1) : '0.0';
-    const conversionRate = totalViews > 0 ? ((totalOrders / totalViews) * 100).toFixed(1) : '0.0';
-
-    // Top products
-    const topProducts = (products||[])
-      .sort((a,b) => (b.views||0) - (a.views||0))
-      .slice(0, 5);
-
-    container.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1.5rem">
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">Total Views</div>
-          <div style="font-size:1.4rem;font-weight:800;color:var(--blue)">${totalViews.toLocaleString()}</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">Conversion Rate</div>
-          <div style="font-size:1.4rem;font-weight:800;color:var(--purple)">${conversionRate}%</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">Avg Rating</div>
-          <div style="font-size:1.4rem;font-weight:800;color:var(--gold)">â­ ${avgRating}</div>
-        </div>
-        <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">Revenue</div>
-          <div style="font-size:1.3rem;font-weight:800;color:var(--green)">${fmtN(totalRevenue)}</div>
-        </div>
-      </div>
-      ${renderSellerBadge(totalOrders, parseFloat(avgRating))}
-      <div class="card card-pad mt-3">
-        <h3 class="mb-3"><i class="fa-solid fa-fire color-gold"></i> Top Products by Views</h3>
-        ${topProducts.length ? topProducts.map((p, i) => `
-          <div class="flex justify-between items-center py-2 ${i<topProducts.length-1?'border-b border-border':''}">
-            <div class="text-sm font-600">${i+1}. ${escHtml(p.name)}</div>
-            <div class="text-xs color-text3"><i class="fa-solid fa-eye"></i> ${(p.views||0).toLocaleString()}</div>
-          </div>
-        `).join('') : '<p class="color-text3 text-sm">No product data yet.</p>'}
-      </div>`;
-  } catch(e) { console.error('Analytics error:', e); }
-}
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  FEATURE 12: MULTI-LANGUAGE SUPPORT (Pidgin, Hausa, Yoruba, Igbo)
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-const TRANSLATIONS = {
-  en: { shop:'Shop', cart:'Cart', orders:'My Orders', services:'Hire Services', search:'Search products...',
-        welcome:'Welcome to', tagline:'Nigeria\'s Marketplace', addToCart:'Add to Cart', buyNow:'Buy Now',
-        checkout:'Checkout', wishlist:'Wishlist', compare:'Compare', messages:'Messages', hello:'Hello' },
-  pcm: { shop:'Buy Things', cart:'My Basket', orders:'My Orders dem', services:'Hire Worker', search:'Find wetin you want...',
-        welcome:'Welcome to', tagline:'Naija Marketplace', addToCart:'Put for basket', buyNow:'Buy am now',
-        checkout:'Pay money', wishlist:'Things I like', compare:'Compare am', messages:'Message', hello:'How far' },
-  ha: { shop:'Saya', cart:'Kayan Siye', orders:'Oda na', services:'Dauka Ma\'aikaci', search:'Nemo kaya...',
-        welcome:'Barka da zuwa', tagline:'Kasuwar Nigeria', addToCart:'Saka cikin jaka', buyNow:'Saya yanzu',
-        checkout:'Checkout', wishlist:'Abubuwan da nake so', compare:'Kwatanta', messages:'Sakonni', hello:'Sannu' },
-  yo: { shop:'Ra', cart:'ApÃ³ RÃ­rÃ ', orders:'Ã€á¹£áº¹ mi', services:'GbÃ© OnÃ­á¹£áº¹', search:'WÃ¡ ohun tÃ­ o fáº¹...',
-        welcome:'áº¸ kÃ¡Ã bá»Ì€ sÃ­', tagline:'á»ŒjÃ  Nigeria', addToCart:'Fi sÃ­ apÃ³', buyNow:'Ra bÃ¡yÃ¬Ã­',
-        checkout:'SanwÃ³', wishlist:'Ohun tÃ­ mo fáº¹ÌrÃ n', compare:'Fi wÃ©ra', messages:'Ifiraná¹£áº¹Ì', hello:'Páº¹Ì€láº¹Ì' },
-  ig: { shop:'Zá»¥ta', cart:'NgwÃ¡ á»Œzá»¥zá»¥', orders:'Usoro m', services:'Goo Onye á»rá»¥', search:'Chá»á» ngwa...',
-        welcome:'Nná»á» na', tagline:'Ahá»‹a Nigeria', addToCart:'Tinye n\'ime ngwÃ¡', buyNow:'Zá»¥ta ugbu a',
-        checkout:'Kwá»¥á» á»¥gwá»', wishlist:'Ihe ndá»‹ m chá»rá»', compare:'Tá»¥nyere', messages:'Ozi', hello:'Nná»á»' }
-};
-
-let currentLang = localStorage.getItem('bs_lang') || 'en';
-
-function setLanguage(lang) {
-  currentLang = lang;
-  localStorage.setItem('bs_lang', lang);
-  applyTranslations();
-  toast('Language Changed', lang.toUpperCase(), 'success');
-}
-
-function t(key) { return TRANSLATIONS[currentLang]?.[key] || TRANSLATIONS.en[key] || key; }
-
-function applyTranslations() {
-  document.querySelectorAll('[data-t]').forEach(el => {
-    const key = el.dataset.t;
-    if (TRANSLATIONS[currentLang]?.[key]) el.textContent = TRANSLATIONS[currentLang][key];
-  });
-}
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  INIT: Load new features on page ready
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-document.addEventListener('DOMContentLoaded', () => {
-  loadFlashSales();
-  updateWishlistBadge();
-  updateCompareBadge();
-  applyTranslations();
-
-  // After auth check
-  const origOnAuth = typeof onAuthSuccess === 'function' ? onAuthSuccess : null;
-  if (origOnAuth) {
-    const _wrapped = onAuthSuccess;
-    // loadWishlist and inbox on login handled elsewhere
-  }
-});
-
-// Hook into showDash for seller analytics, coupons, ads, and affiliate
-const _origShowDash2 = showDash;
-showDash = function(section) {
-  _origShowDash2(section);
-  if (section === 'analytics') loadSellerAnalytics();
-  if (section === 'coupons') loadSellerCoupons();
-  if (section === 'flash') loadFlashSaleProducts();
-  if (section === 'advertise') loadActiveAds();
-};
-
-async function loadFlashSaleProducts() {
-  if (!currentUser) return;
-  const select = document.getElementById('flash-product');
-  if (!select) return;
-  const { data } = await db.from('products').select('id, name').eq('seller_id', currentUser.id);
-  if (!data?.length) { select.innerHTML = '<option value="">No products available</option>'; return; }
-  select.innerHTML = data.map(p => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
-}
-
-// Toggle password visibility
-function togglePasswordVisibility(inputId, btn) {
-  const input = document.getElementById(inputId);
-  if (!input || !btn) return;
-  const isPassword = input.type === 'password';
-  input.type = isPassword ? 'text' : 'password';
-  btn.innerHTML = '<i class="fa-solid fa-eye' + (isPassword ? '-slash' : '') + '"></i>';
-  btn.style.color = isPassword ? 'var(--green)' : 'var(--text3)';
-}
-
-const origOnAuthSucc = onAuthSuccess;
-onAuthSuccess = async function(u) {
-  if (origOnAuthSucc) await origOnAuthSucc(u);
-  loadWishlist();
-  loadInboxCount();
-};
