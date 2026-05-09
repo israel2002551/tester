@@ -103,6 +103,7 @@ function toggleAuth(mode) {
   document.getElementById('auth-form').classList.toggle('hidden',          isForgot);
   document.getElementById('auth-forgot-panel').classList.toggle('hidden',  !isForgot);
   document.getElementById('forgot-link-row').classList.toggle('hidden',    !isLogin || isForgot);
+  document.getElementById('auth-oauth-panel')?.classList.toggle('hidden', isForgot);
 
   if (isForgot) {
     // Reset forgot panel to step 1
@@ -120,6 +121,33 @@ function toggleAuth(mode) {
   document.getElementById('auth-btn-text').textContent = isLogin ? 'Sign In' : 'Create Account';
   document.getElementById('auth-password').setAttribute('autocomplete', isLogin ? 'current-password' : 'new-password');
   if (isSignup) selectRole('buyer');
+}
+
+async function signInWithGoogle() {
+  const rawRole = document.querySelector('input[name="auth-role-radio"]:checked')?.value || 'buyer';
+  const role = rawRole === 'both' ? 'seller' : rawRole;
+  localStorage.setItem('bs_google_profile_hint', JSON.stringify({
+    role,
+    accounts: rawRole,
+    whatsapp: document.getElementById('auth-wa')?.value.trim() || '',
+  }));
+
+  try {
+    const { error } = await db.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin + window.location.pathname,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'select_account',
+        },
+      },
+    });
+    if (error) throw error;
+  } catch (err) {
+    localStorage.removeItem('bs_google_profile_hint');
+    toast('Google Sign In Failed', err.message || 'Please try again', 'error');
+  }
 }
 
 // Role card selector
@@ -283,22 +311,29 @@ async function upsertProfile(user, meta) {
 async function onAuthSuccess(user) {
   if (!user) return;
   currentUser = user;
+  let googleProfileHint = {};
+  try {
+    googleProfileHint = JSON.parse(localStorage.getItem('bs_google_profile_hint') || '{}');
+  } catch {
+    googleProfileHint = {};
+  }
 
   // Load profile from DB
   const { data: profile, error } = await db.from('profiles').select('*').eq('id', user.id).single();
 
   if (error || !profile) {
     // Profile not yet created (trigger may still be running) — create it now
-    await upsertProfile(user, user.user_metadata || {});
+    await upsertProfile(user, { ...(user.user_metadata || {}), ...googleProfileHint });
     const { data: retryProfile } = await db.from('profiles').select('*').eq('id', user.id).single();
     currentUser.profile = retryProfile || {
-      role: user.user_metadata?.role || 'buyer',
-      name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+      role: googleProfileHint.role || user.user_metadata?.role || 'buyer',
+      name: user.user_metadata?.name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
       email: user.email
     };
   } else {
     currentUser.profile = profile;
   }
+  localStorage.removeItem('bs_google_profile_hint');
 
   currentRole = currentUser.profile?.role || 'buyer';
   updateNavForUser();
