@@ -1753,7 +1753,7 @@
 <div id="admin-portal-view" style="display:none;min-height:100vh;background:var(--forest);">
   <div style="display:flex;height:100vh;">
     <!-- Admin Sidebar -->
-    <div style="width:250px;background:#06140c;color:#fff;padding:1.5rem;display:flex;flex-direction:column;overflow-y:auto;">
+    <div class="admin-sidebar" style="width:250px;background:#06140c;color:#fff;padding:1.5rem;display:flex;flex-direction:column;overflow-y:auto;">
       <h2 style="font-family:'Syne',sans-serif;font-size:1.5rem;margin-bottom:.5rem;color:var(--gold);">B.N Admin</h2>
       <p style="font-size:.72rem;color:rgba(255,255,255,.35);margin-bottom:2rem;">Super Admin Command Center</p>
       <nav style="flex:1">
@@ -1785,12 +1785,14 @@
         <p class="dash-page-sub mb-3">Full platform control — israelefe093@gmail.com</p>
 
         <!-- Admin Tab Bar (mobile fallback) -->
-        <div class="buyer-tabs-wrap" style="margin-bottom:1.5rem;overflow-x:auto;-webkit-overflow-scrolling:touch;display:none" id="ap-mobile-tabs">
+        <div class="buyer-tabs-wrap admin-mobile-tabs" style="margin-bottom:1.5rem;overflow-x:auto;-webkit-overflow-scrolling:touch;display:none" id="ap-mobile-tabs">
           <button class="buyer-tab active" onclick="switchAdminTab('overview')">📊 Overview</button>
           <button class="buyer-tab" onclick="switchAdminTab('sellers')">🏪 Sellers</button>
           <button class="buyer-tab" onclick="switchAdminTab('orders')">📦 Orders</button>
           <button class="buyer-tab" onclick="switchAdminTab('disputes')">⚖️ Disputes</button>
           <button class="buyer-tab" onclick="switchAdminTab('withdrawals')">💸 Payouts</button>
+          <button class="buyer-tab" onclick="switchAdminTab('receipts')">🧾 Receipts</button>
+          <button class="buyer-tab" onclick="switchAdminTab('kyc')">🪪 KYC</button>
           <button class="buyer-tab" onclick="switchAdminTab('broadcast')">📣 Broadcast</button>
           <button class="buyer-tab" onclick="switchAdminTab('ai')">🤖 AI</button>
           <button class="buyer-tab" onclick="switchAdminTab('branding')">🎨 Branding</button>
@@ -2409,9 +2411,7 @@
 </div>
 -->
 
-<form id="paystack-form" style="display:none">
-  <script data-cfasync="false" src="https://js.paystack.co/v1/inline.js"></script>
-</form>
+<script data-cfasync="false" src="https://js.paystack.co/v1/inline.js"></script>
 <script data-cfasync="false" src="config.js"></script>
 <script src="app.js"></script>
 
@@ -2423,3 +2423,4 @@
 </div>
 </body>
 </html>
+
