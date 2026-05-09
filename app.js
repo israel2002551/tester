@@ -861,6 +861,7 @@ async function openProduct(id) {
   if (p.has_video) flags.push('<span class="prod-badge prod-badge-video">🎬 Video</span>');
   if (p.seller_verified) flags.push('<span class="prod-badge prod-badge-verified">✓ Verified</span>');
   document.getElementById('modal-flags').innerHTML = flags.join('');
+  updateModalWishBtn();
   // Reviews
   loadProductReviews(id);
 }
@@ -1056,43 +1057,44 @@ function selectPM(method) {
   document.getElementById('pm-transfer-panel').classList.toggle('hidden', method!=='transfer');
 }
 
-function payWithPaystack() {
+async function payWithPaystack() {
   if (cart.length === 0) { toast('Cart is empty', '', 'warn'); return; }
   const total = cart.reduce((s, c) => s + (c.price * (c.qty || 1)), 0);
   if (total <= 0) { toast('Invalid total amount', '', 'error'); return; }
+  if (!currentUser) { showModal('auth-modal'); return; }
+  if (typeof PaystackPop === 'undefined') { toast('Payment unavailable', 'Paystack could not load. Please try again.', 'error'); return; }
 
   const handler = PaystackPop.setup({
     key: PAYSTACK_PUBLIC_KEY,
     email: currentUser.email,
     amount: total * 100, 
+    metadata: {
+      user_id: currentUser.id,
+      cart: cart.map(c => ({ id: c.id, qty: c.qty || 1 })),
+    },
     callback: async function(response) {
-      // 1. Show a loader
       toast('Verifying Payment...', 'Please do not close the window', 'info');
 
-      // 2. Call your Edge Function instead of local saveOrderToDb
       try {
-        const verification = await fetch(`${EDGE_URL}/verify-payment`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            reference: response.reference,
-            order_details: {
-              buyer_id: currentUser.id,
-              items: cart,
-              delivery_address: document.getElementById('co-address').value,
-              // ... other fields
-            }
-          })
+        const result = await callEdge('verify-payment', {
+          reference: response.reference,
+          cart: cart.map(c => ({ id: c.id, qty: c.qty || 1 })),
+          delivery_name: document.getElementById('co-name').value.trim(),
+          delivery_phone: document.getElementById('co-phone').value.trim(),
+          delivery_address: document.getElementById('co-address').value.trim(),
+          payment_method: 'paystack',
         });
-
-        const result = await verification.json();
         if (result.success) {
+          const seller = cart[0]?.profiles;
+          if (seller?.whatsapp) sendWhatsAppOrderNotification({ id: result.order_id, total_amount: result.total_paid }, seller.whatsapp);
           cart = []; saveCart();
+          document.getElementById('co-order-id').textContent = result.order_id || '';
+          document.getElementById('co-order-total').textContent = fmtN(result.total_paid || total);
           goCheckoutStep(3);
           toast('Payment Verified!', 'Your order is confirmed', 'success');
         }
       } catch (err) {
-        toast('Verification Error', 'Contact support with ref: ' + response.reference, 'error');
+        toast('Verification Error', (err.message || 'Contact support') + ' Ref: ' + response.reference, 'error');
       }
     }
   });
@@ -1655,12 +1657,20 @@ function payCommissionPaystack() {
     ref: 'comm_' + Date.now(),
     callback: async (response) => {
       // Commission confirmed via Paystack — direct update for immediate UI response
-      await callEdge('admin-action', { action: 'toggle_commission', target_id: currentUser.id, data: { commission_paid: true } }).catch(() => db.from('profiles').update({ commission_paid: true }).eq('id', currentUser.id));
+      try {
+      await callEdge('admin-action', {
+        action: 'toggle_commission',
+        target_id: currentUser.id,
+        data: { commission_paid: true, payment_reference: response.reference }
+      });
       currentUser.profile.commission_paid = true;
       document.getElementById('suspended-modal').classList.remove('open');
       document.body.classList.remove('modal-open');
       toast('Commission Paid! ✅', 'Your store is now active', 'success');
       checkSellerCommission();
+      } catch (err) {
+        toast('Verification Failed', err.message || 'Please contact support with your payment reference.', 'error');
+      }
     },
     onClose: () => toast('Payment cancelled','','warn')
   });
@@ -3139,6 +3149,7 @@ function shareCurrentProduct() {
   if (savedLogo) applySiteLogo(savedLogo);
   await checkSession();
   updateCartCount();
+  updateWishlistCount();
   handleDeepLink();
   checkBroadcastForUser();
   // Real-time order updates for sellers
@@ -3811,13 +3822,33 @@ function dismissInstallBar() {
 //  WISHLIST
 // ====================================================
 let wishlist = JSON.parse(localStorage.getItem('bs_wishlist') || '[]');
-function saveWishlist() { localStorage.setItem('bs_wishlist', JSON.stringify(wishlist)); }
+function saveWishlist() { localStorage.setItem('bs_wishlist', JSON.stringify(wishlist)); updateWishlistCount(); }
+
+function updateWishlistCount() {
+  const countEl = document.getElementById('wishlist-count');
+  if (!countEl) return;
+  countEl.textContent = wishlist.length;
+  countEl.classList.toggle('hidden', wishlist.length === 0);
+}
+
+function updateModalWishBtn() {
+  const btn = document.getElementById('modal-wishlist-btn');
+  const productId = currentProd?.id;
+  if (!btn || !productId) return;
+  const saved = wishlist.includes(productId);
+  btn.innerHTML = saved
+    ? '<i class="fa-solid fa-heart" style="color:#ef4444"></i>'
+    : '<i class="fa-regular fa-heart"></i>';
+  btn.setAttribute('aria-label', saved ? 'Remove from wishlist' : 'Save to wishlist');
+}
 
 function toggleWishlist(productId) {
+  if (!productId) return;
   const idx = wishlist.indexOf(productId);
   if (idx > -1) { wishlist.splice(idx, 1); toast('Removed', 'Removed from wishlist', 'info'); }
   else { wishlist.push(productId); toast('Added ❤️', 'Added to wishlist', 'success'); }
   saveWishlist();
+  updateModalWishBtn();
   document.querySelectorAll(`[data-wish="${productId}"]`).forEach(btn => {
     btn.innerHTML = wishlist.includes(productId) ? '<i class="fa-solid fa-heart" style="color:#ef4444"></i>' : '<i class="fa-regular fa-heart"></i>';
   });
@@ -3883,6 +3914,16 @@ async function showCompareModal() {
 //  MESSAGING
 // ====================================================
 let currentChatPartner = null;
+
+function openMessageModal(partnerId, partnerName = 'Seller', productId = null) {
+  if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
+  if (!partnerId) { toast('Seller unavailable', 'This product seller could not be found.', 'error'); return; }
+  if (partnerId === currentUser.id) { toast('This is your listing', 'You cannot message yourself about this product.', 'info'); return; }
+  const label = partnerName || 'Seller';
+  openConversation(partnerId, label);
+  const input = document.getElementById('msg-input');
+  if (input && productId && !input.value) input.placeholder = `Ask ${label} about this product...`;
+}
 
 async function showInbox() {
   showModal('inbox-modal');
