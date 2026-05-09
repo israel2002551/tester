@@ -1160,7 +1160,7 @@
         <!-- <div id="role-sp-note" class="hidden" style="margin-top:.5rem;font-size:.76rem;color:var(--text3);background:#f3e8ff;border-radius:6px;padding:.5rem .75rem"><i class="fa-solid fa-tools" style="color:var(--purple)"></i> You'll get a dedicated Service Dashboard to post gigs, set pricing, and connect with local clients via WhatsApp.</div> -->
       </div>
       <div class="form-group"><label class="form-label">Email <span class="req">*</span></label><input type="email" id="auth-email" class="form-input" required placeholder="you@email.com" autocomplete="email"></div>
-      <div class="form-group" style="position:relative"><label class="form-label">Password <span class="req">*</span></label><div style="position:relative"><input type="password" id="auth-password" class="form-input" required placeholder="Min 6 characters autocomplete="current-password" style="padding-right:2.5rem"><button type="button" onclick="togglePasswordVisibility('auth-password',this)" id="auth-pw-toggle" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text3);cursor:pointer;font-size:.85rem"><i class="fa-solid fa-eye"></i></button></div></div>
+      <div class="form-group" style="position:relative"><label class="form-label">Password <span class="req">*</span></label><div style="position:relative"><input type="password" id="auth-password" class="form-input" required placeholder="Min 6 characters" autocomplete="current-password" style="padding-right:2.5rem"><button type="button" onclick="togglePasswordVisibility('auth-password',this)" id="auth-pw-toggle" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text3);cursor:pointer;font-size:.85rem"><i class="fa-solid fa-eye"></i></button></div></div>
       <div id="auth-wa-group" class="form-group hidden"><label class="form-label">WhatsApp Number <span class="req">*</span></label><input type="tel" id="auth-wa" class="form-input" placeholder="0801 234 5678" inputmode="tel"></div>
       <div id="auth-terms-group" class="form-group hidden" style="margin-bottom:.75rem">
         <label style="display:flex;align-items:flex-start;gap:.5rem;cursor:pointer;font-size:.78rem;color:var(--text2);line-height:1.5">
@@ -2325,6 +2325,19 @@
     <h2 class="mb-1"><i class="fa-solid fa-truck color-green"></i> Order Tracking</h2>
     <p class="color-text3 text-sm mb-3">Order: <span class="font-bold" id="tracking-order-id"></span></p>
     <div id="tracking-timeline" style="padding-left:.5rem"></div>
+  </div>
+</div>
+
+<div id="kyc-doc-modal" class="modal-overlay">
+  <div class="modal-box" style="max-width:720px">
+    <button class="modal-close" onclick="closeModal('kyc-doc-modal')"><i class="fa-solid fa-times"></i></button>
+    <div class="flex justify-between items-center mb-3 gap-2 flex-wrap">
+      <h2 id="kyc-doc-title" style="margin:0;font-size:1.05rem">KYC Document</h2>
+      <a id="kyc-doc-open-link" href="#" target="_blank" rel="noopener" class="btn btn-outline btn-sm"><i class="fa-solid fa-up-right-from-square"></i> Open Original</a>
+    </div>
+    <div style="background:var(--cream);border:1px solid var(--border);border-radius:8px;padding:.5rem;max-height:72vh;overflow:auto">
+      <img id="kyc-doc-img" src="" alt="KYC document" style="width:100%;height:auto;display:block;border-radius:6px">
+    </div>
   </div>
 </div>
 
