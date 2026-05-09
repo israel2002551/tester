@@ -55,7 +55,7 @@ if ('serviceWorker' in navigator) {
   const sw = `data:application/javascript,self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});self.addEventListener('install',()=>self.skipWaiting());`;
   navigator.serviceWorker.register(sw).catch(()=>{});
 }
-const manifest = {name:'BUYSELL Nigeria',short_name:'BUYSELL',start_url: window.location.origin + '/','display':'standalone',theme_color:'#0b1f14',background_color:'#fdf8ef',icons:[{src:'https://via.placeholder.com/192x192/0b1f14/ffffff?text=B',sizes:'192x192',type:'image/png'}]};
+const manifest = {name:'BUYSELL Nigeria',short_name:'BUYSELL',start_url: window.location.origin + '/','display':'standalone',theme_color:'#0b1f14',background_color:'#fdf8ef',icons:[]};
 const mBlob = new Blob([JSON.stringify(manifest)],{type:'application/json'});
 const mUrl = URL.createObjectURL(mBlob);
 const mLink = document.createElement('link');
@@ -454,6 +454,15 @@ function showProfile() { if (!currentUser) { showModal('auth-modal'); } else { t
 // ====================================================
 //  SITE NAVIGATION
 // ====================================================
+function handleLandingAuthClick() {
+  if (currentUser) {
+    enterSite(currentUser.profile?.role || 'buyer');
+  } else {
+    showModal('auth-modal');
+    toggleAuth('login');
+  }
+}
+
 function enterSite(mode) {
   document.getElementById('landing').style.opacity = '0';
   setTimeout(() => {
