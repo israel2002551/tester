@@ -1,9 +1,9 @@
 // ====================================================
-//  BUYSELL Nigeria — Main Application
+//  BUYSELL Nigeria â€” Main Application
 //  Config loaded from config.js (secrets are .gitignored)
 // ====================================================
 
-// ── AI Helper (routes through secure Edge Function) ──
+// â”€â”€ AI Helper (routes through secure Edge Function) â”€â”€
 async function callPublicAI(messages, context = {}) {
   const res = await fetch(CLAUDE_EDGE_URL, {
     method: 'POST',
@@ -208,7 +208,7 @@ async function handleAuth(e) {
 
   try {
     if (isLogin) {
-      // ── SIGN IN ──────────────────────────────────────────────
+      // â”€â”€ SIGN IN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const { data, error } = await db.auth.signInWithPassword({ email, password });
 
       if (error) {
@@ -216,7 +216,7 @@ async function handleAuth(e) {
         const msg = error.message?.toLowerCase() || '';
         if (msg.includes('email not confirmed')) {
           toast('Email Not Confirmed',
-            'Supabase Dashboard → Auth → Providers → Email → turn OFF "Confirm email"',
+            'Supabase Dashboard â†’ Auth â†’ Providers â†’ Email â†’ turn OFF "Confirm email"',
             'error', 9000);
         } else if (msg.includes('invalid login') || msg.includes('invalid credentials')) {
           toast('Wrong Email or Password', 'Check your details and try again', 'error');
@@ -237,7 +237,7 @@ async function handleAuth(e) {
       enterSite(role);
 
     } else {
-      // ── SIGN UP ──────────────────────────────────────────────
+      // â”€â”€ SIGN UP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const name    = validateInput(document.getElementById('auth-name').value.trim());
       const rawRole = validateInput(document.querySelector('input[name="auth-role-radio"]:checked')?.value || 'buyer');
       const wa      = document.getElementById('auth-wa').value.trim();
@@ -261,8 +261,8 @@ async function handleAuth(e) {
       if (signUpError) {
         const msg = signUpError.message?.toLowerCase() || '';
         if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('user already')) {
-          // Account exists — just sign them in directly
-          toast('Account exists — signing you in…', '', 'info', 3000);
+          // Account exists â€” just sign them in directly
+          toast('Account exists â€” signing you inâ€¦', '', 'info', 3000);
           const { data: loginData, error: loginError } = await db.auth.signInWithPassword({ email, password });
           if (loginError) {
             toast('Sign In Failed', 'Account exists but password is wrong. Try signing in.', 'error', 7000);
@@ -282,12 +282,12 @@ async function handleAuth(e) {
         return;
       }
 
-      // Step 2: Always immediately sign in after signup — guarantees a live session
+      // Step 2: Always immediately sign in after signup â€” guarantees a live session
       // regardless of whether email confirmation setting is truly off
       const { data: loginData, error: loginError } = await db.auth.signInWithPassword({ email, password });
 
       if (loginError) {
-        // Signup worked but auto-login failed — tell them to sign in manually
+        // Signup worked but auto-login failed â€” tell them to sign in manually
         toast('Account Created!', 'Now sign in with your email and password', 'success', 6000);
         toggleAuth('login');
         document.getElementById('auth-email').value = email;
@@ -302,12 +302,12 @@ async function handleAuth(e) {
       enterSite(role);
 
       const msgs = {
-        buyer:            '🛍️ Welcome! Browse thousands of products.',
-        seller:           '🏪 Welcome Seller! First month is FREE.',
-        both:             '🔄 Welcome! You can shop and sell on BUYSELL.',
-        service_provider: '🔧 Welcome Service Pro! Set up your portfolio and start getting hired.'
+        buyer:            'ðŸ›ï¸ Welcome! Browse thousands of products.',
+        seller:           'ðŸª Welcome Seller! First month is FREE.',
+        both:             'ðŸ”„ Welcome! You can shop and sell on BUYSELL.',
+        service_provider: 'ðŸ”§ Welcome Service Pro! Set up your portfolio and start getting hired.'
       };
-      setTimeout(() => toast('Account Created! 🎉', msgs[rawRole] || '', 'success', 5000), 400);
+      setTimeout(() => toast('Account Created! ðŸŽ‰', msgs[rawRole] || '', 'success', 5000), 400);
     }
 
   } catch(err) {
@@ -354,7 +354,7 @@ async function onAuthSuccess(user) {
   const { data: profile, error } = await db.from('profiles').select('*').eq('id', user.id).single();
 
   if (error || !profile) {
-    // Profile not yet created (trigger may still be running) — create it now
+    // Profile not yet created (trigger may still be running) â€” create it now
     await upsertProfile(user, user.user_metadata || {});
     const { data: retryProfile } = await db.from('profiles').select('*').eq('id', user.id).single();
     currentUser.profile = retryProfile || {
@@ -431,7 +431,7 @@ function updateNavForUser() {
   document.getElementById('dash-user-name').textContent = currentUser.profile?.name || 'Seller';
   document.getElementById('dash-user-email').textContent = currentUser.email || '';
   // Admin check
-  // DB-backed admin check — email alone is not sufficient
+  // DB-backed admin check â€” email alone is not sufficient
   const isAdmin = currentUser.email === ADMIN_EMAIL &&
                   currentUser.profile?.role === 'admin';
   if (isAdmin) {
@@ -459,21 +459,21 @@ function updateLandingForUser() {
   if (!btn || !text) return;
   const name = currentUser.profile?.name || currentUser.email?.split('@')[0] || 'User';
   const role = currentUser.profile?.role || 'buyer';
-  const roleLabel = role === 'seller' ? '🏪 Seller' : role === 'both' ? '🔄 Both' : role === 'admin' ? '⚙️ Admin' : '🛍️ Buyer';
+  const roleLabel = role === 'seller' ? 'ðŸª Seller' : role === 'both' ? 'ðŸ”„ Both' : role === 'admin' ? 'âš™ï¸ Admin' : 'ðŸ›ï¸ Buyer';
   text.textContent = name;
   if (icon) icon.className = 'fa-solid fa-circle-check';
   btn.style.color = '#4ade80';
-  btn.title = `Signed in as ${name} (${roleLabel}) — Click to enter`;
+  btn.title = `Signed in as ${name} (${roleLabel}) â€” Click to enter`;
 }
 
 // Handle landing page auth button click
 function handleLandingAuthClick() {
   if (currentUser) {
-    // Already signed in — go straight to dashboard
+    // Already signed in â€” go straight to dashboard
     const role = currentUser.profile?.role || 'buyer';
     enterSite(role);
   } else {
-    // Not signed in — open auth modal
+    // Not signed in â€” open auth modal
     showModal('auth-modal');
     toggleAuth('login');
   }
@@ -507,7 +507,7 @@ async function sendPasswordReset() {
     document.getElementById('forgot-step-1').classList.add('hidden');
     document.getElementById('forgot-step-2').classList.remove('hidden');
     document.getElementById('forgot-sent-to').textContent = 'Reset link sent to ' + email;
-    toast('Reset link sent! 📧', 'Check your email inbox', 'success', 6000);
+    toast('Reset link sent! ðŸ“§', 'Check your email inbox', 'success', 6000);
 
   } catch(e) {
     toast('Error', e.message || 'Please try again', 'error');
@@ -519,7 +519,7 @@ async function sendPasswordReset() {
 }
 
 async function logoutUser() {
-  // Use 'local' scope — only clears the browser session.
+  // Use 'local' scope â€” only clears the browser session.
   // 'global' (default) hits the Supabase API which has strict rate limits
   // and can block re-login for up to 1 hour if called too often.
   await db.auth.signOut({ scope: 'local' });
@@ -574,10 +574,10 @@ async function generateDescription() {
                     Product: ${name}
                     Category: ${category}
                     Condition: ${condition}
-                    Price: ₦${price}
+                    Price: â‚¦${price}
                     
                     Requirements:
-                    - 2–3 sentences max
+                    - 2â€“3 sentences max
                     - Highlight key benefits
                     - Mention it's available in Nigeria
                     - No bullet points, plain text only
@@ -590,7 +590,7 @@ async function generateDescription() {
     const data = await res.json();
     if (data.reply) {
       document.getElementById('p-desc').value = data.reply;
-      toast('Description Generated! ✨', 'Edit it to your liking', 'success');
+      toast('Description Generated! âœ¨', 'Edit it to your liking', 'success');
     }
   } catch(e) {
     toast('AI unavailable', 'Write description manually', 'warn');
@@ -814,11 +814,11 @@ function prodCard(p) {
   const isSoldOut = stockPct === 0;
   const badges = [
     discount ? `<span class="prod-badge prod-badge-discount">-${discount}%</span>` : '',
-    p.has_video ? `<span class="prod-badge prod-badge-video">🎬 Video</span>` : '',
+    p.has_video ? `<span class="prod-badge prod-badge-video">ðŸŽ¬ Video</span>` : '',
     p.category === 'dropship' ? `<span class="prod-badge prod-badge-drop">Dropship</span>` : '',
-    p.seller_verified ? `<span class="prod-badge prod-badge-verified">✓ Verified</span>` : ''
+    p.seller_verified ? `<span class="prod-badge prod-badge-verified">âœ“ Verified</span>` : ''
   ].filter(Boolean).join('');
-  const stars = p.avg_rating ? '★'.repeat(Math.round(p.avg_rating)) + '☆'.repeat(5-Math.round(p.avg_rating)) : '★★★★★';
+  const stars = p.avg_rating ? 'â˜…'.repeat(Math.round(p.avg_rating)) + 'â˜†'.repeat(5-Math.round(p.avg_rating)) : 'â˜…â˜…â˜…â˜…â˜…';
   return `
   <div class="prod-card" onclick="openProduct('${p.id}')">
     <div class="prod-img-wrap">
@@ -883,7 +883,7 @@ async function doSearch() {
         const suggestions = data.reply.split(',').map(s => s.trim()).filter(Boolean);
         if (suggestions.length) {
           toast(
-            `💡 Try searching: ${suggestions.slice(0,2).join(', ')}`,
+            `ðŸ’¡ Try searching: ${suggestions.slice(0,2).join(', ')}`,
             'Showing closest matches',
             'info',
             4000
@@ -914,8 +914,8 @@ function applyFilters() {
 function renderActiveFilters() {
   const container = document.getElementById('active-filters');
   const pills = [];
-  if (activeFilters.priceMin||activeFilters.priceMax) pills.push({key:'price',label:`₦${fmtNum(activeFilters.priceMin||0)} – ₦${fmtNum(activeFilters.priceMax||'∞')}`});
-  if (activeFilters.minRating) pills.push({key:'minRating',label:`${activeFilters.minRating}+ ★`});
+  if (activeFilters.priceMin||activeFilters.priceMax) pills.push({key:'price',label:`â‚¦${fmtNum(activeFilters.priceMin||0)} â€“ â‚¦${fmtNum(activeFilters.priceMax||'âˆž')}`});
+  if (activeFilters.minRating) pills.push({key:'minRating',label:`${activeFilters.minRating}+ â˜…`});
   if (activeFilters.condition) pills.push({key:'condition',label:activeFilters.condition});
   container.innerHTML = pills.map(p => `<span class="active-filter-pill">${p.label}<button onclick="removeFilter('${p.key}')"><i class="fa-solid fa-times"></i></button></span>`).join('');
 }
@@ -984,7 +984,7 @@ function sortProds() {
 function updatePriceDisplay() {
   const min = document.getElementById('flt-min').value || 0;
   const max = document.getElementById('flt-max').value || '500,000';
-  document.getElementById('price-range-display').textContent = `₦${fmtNum(min)} – ₦${fmtNum(max)}`;
+  document.getElementById('price-range-display').textContent = `â‚¦${fmtNum(min)} â€“ â‚¦${fmtNum(max)}`;
 }
 
 // ====================================================
@@ -1028,8 +1028,8 @@ async function openProduct(id) {
   document.getElementById('modal-seller-avatar').textContent = (seller.name||'S')[0].toUpperCase();
   // Flags
   const flags = [];
-  if (p.has_video) flags.push('<span class="prod-badge prod-badge-video">🎬 Video</span>');
-  if (p.seller_verified) flags.push('<span class="prod-badge prod-badge-verified">✓ Verified</span>');
+  if (p.has_video) flags.push('<span class="prod-badge prod-badge-video">ðŸŽ¬ Video</span>');
+  if (p.seller_verified) flags.push('<span class="prod-badge prod-badge-verified">âœ“ Verified</span>');
   document.getElementById('modal-flags').innerHTML = flags.join('');
   // Reviews
   loadProductReviews(id);
@@ -1047,9 +1047,9 @@ async function loadProductReviews(productId) {
   // Calculate average and star distribution
   const avg = count ? (reviews.reduce((s,r)=>s+r.rating,0)/count) : 0;
   document.getElementById('modal-avg-rating').textContent = avg.toFixed(1);
-  document.getElementById('modal-stars').textContent = '★'.repeat(Math.round(avg)) + '☆'.repeat(5-Math.round(avg));
+  document.getElementById('modal-stars').textContent = 'â˜…'.repeat(Math.round(avg)) + 'â˜†'.repeat(5-Math.round(avg));
 
-  // Star distribution bars (5→1)
+  // Star distribution bars (5â†’1)
   const barsEl = document.getElementById('modal-rating-bars');
   barsEl.innerHTML = [5,4,3,2,1].map(star => {
     const starCount = reviews.filter(r => r.rating === star).length;
@@ -1079,11 +1079,11 @@ async function loadProductReviews(productId) {
           <div style="width:26px;height:26px;border-radius:50%;background:var(--green-xlt);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:var(--green)">${(r.profiles?.name||'B')[0].toUpperCase()}</div>
           <span class="reviewer-name">${escHtml(r.profiles?.name||'Verified Buyer')}</span>
         </div>
-        <div class="stars sm">${'★'.repeat(r.rating)+'☆'.repeat(5-r.rating)}</div>
+        <div class="stars sm">${'â˜…'.repeat(r.rating)+'â˜†'.repeat(5-r.rating)}</div>
       </div>
       <p class="review-text">${escHtml(r.review_text || r.comment || '')}</p>
       ${galleryHtml}
-      <span class="text-xs color-text3"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i> Verified Purchase · ${fmtDate(r.created_at)}${imgs.length ? ` · <i class="fa-solid fa-camera" style="color:var(--text3)"></i> ${imgs.length} photo${imgs.length>1?'s':''}` : ''}</span>
+      <span class="text-xs color-text3"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i> Verified Purchase Â· ${fmtDate(r.created_at)}${imgs.length ? ` Â· <i class="fa-solid fa-camera" style="color:var(--text3)"></i> ${imgs.length} photo${imgs.length>1?'s':''}` : ''}</span>
     </div>`;
   }).join('');
 }
@@ -1263,7 +1263,7 @@ async function submitTransferOrder() {
   if (!ALLOWED_PROOF.includes(proofFile.type)) { toast('Invalid file','Please upload a JPG or PNG screenshot','warn'); return; }
   if (proofFile.size > MAX_PROOF_SIZE)         { toast('File too large','Maximum proof image size is 10MB','warn'); return; }
   const btn = document.getElementById('co-transfer-btn');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting…';
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submittingâ€¦';
   try {
     let proofUrl = '';
     const file = fileInput.files[0];
@@ -1401,7 +1401,7 @@ async function submitReview() {
     return;
   }
 
-  toast('Review Submitted! ⭐', 'Thanks for your feedback!', 'success');
+  toast('Review Submitted! â­', 'Thanks for your feedback!', 'success');
   btn.disabled = false;
   btn.innerHTML = '<i class="fa-solid fa-star"></i> Submit Review';
   reviewImageFiles = [];
@@ -1424,7 +1424,7 @@ function getOrderItems(order) {
 function switchBuyerTab(tab) {
   document.getElementById('tab-shop').classList.toggle('active', tab==='shop');
   document.getElementById('tab-orders').classList.toggle('active', tab==='orders');
-  // Service tab commented out — null-safe
+  // Service tab commented out â€” null-safe
   const tabSvc = document.getElementById('tab-services');
   if (tabSvc) tabSvc.classList.toggle('active', tab==='services');
   document.getElementById('buyer-shop-tab').classList.toggle('hidden', tab!=='shop');
@@ -1457,7 +1457,7 @@ async function loadBuyerOrders() {
           <span class="font-bold color-green">${fmtN(o.total_amount)}</span>
         </div>
       </div>
-      <div class="flex gap-1 flex-wrap mb-2">${(o.items||[]).map(i=>`<span class="text-xs badge badge-gray">${escHtml(i.name)} ×${i.qty}</span>`).join('')}</div>
+      <div class="flex gap-1 flex-wrap mb-2">${(o.items||[]).map(i=>`<span class="text-xs badge badge-gray">${escHtml(i.name)} Ã—${i.qty}</span>`).join('')}</div>
       <div class="flex gap-2 flex-wrap">
         ${o.status==='delivered'?`<button class="btn btn-outline btn-sm" onclick="openDisputeModal('${o.id}')"><i class="fa-solid fa-exclamation-triangle"></i> Dispute</button>`:''}
         <button class="btn btn-outline btn-sm" onclick="showOrderTracking('${o.id}')"><i class="fa-solid fa-truck"></i> Track</button>
@@ -1476,7 +1476,7 @@ async function loadSellerStats() {
   const { data: revs } = await db.from('reviews').select('rating').in('product_id', (prods||[]).map(p=>p.id));
   const active = (prods||[]).filter(p=>p.status==='active').length;
   const revenue = (orders||[]).filter(o=>o.status!=='cancelled').reduce((s,o)=>s+o.total_amount,0);
-  const avgR = (revs||[]).length ? ((revs.reduce((s,r)=>s+r.rating,0)/revs.length).toFixed(1)) : '—';
+  const avgR = (revs||[]).length ? ((revs.reduce((s,r)=>s+r.rating,0)/revs.length).toFixed(1)) : 'â€”';
   document.getElementById('st-products').textContent = active;
   document.getElementById('st-revenue').textContent = fmtN(revenue);
   document.getElementById('st-orders').textContent = (orders||[]).length;
@@ -1537,10 +1537,10 @@ async function renderChart() {
   if (_chartInstances.main) _chartInstances.main.destroy();
   
   const datasets = chartType === 'bar' ? [
-    { type: 'bar', label: 'Revenue (₦)', data: revenueData, backgroundColor: 'rgba(25,168,71,0.7)', borderColor: '#19a847', borderWidth: 1, yAxisID: 'y' },
+    { type: 'bar', label: 'Revenue (â‚¦)', data: revenueData, backgroundColor: 'rgba(25,168,71,0.7)', borderColor: '#19a847', borderWidth: 1, yAxisID: 'y' },
     { type: 'line', label: 'Orders', data: ordersData, borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.1)', tension: 0.4, fill: true, yAxisID: 'y1' }
   ] : [{
-    label: 'Revenue (₦)', data: revenueData, borderColor: '#19a847', backgroundColor: 'rgba(25,168,71,.08)', tension: 0.4, fill: true, pointBackgroundColor: '#19a847', pointRadius: 4, pointHoverRadius: 6
+    label: 'Revenue (â‚¦)', data: revenueData, borderColor: '#19a847', backgroundColor: 'rgba(25,168,71,.08)', tension: 0.4, fill: true, pointBackgroundColor: '#19a847', pointRadius: 4, pointHoverRadius: 6
   }];
   
   _chartInstances.main = new Chart(ctx, {
@@ -1559,12 +1559,12 @@ async function renderChart() {
           padding: 12,
           cornerRadius: 8,
           callbacks: {
-            label: ctx => ctx.dataset.label + ': ₦' + fmtNum(ctx.raw)
+            label: ctx => ctx.dataset.label + ': â‚¦' + fmtNum(ctx.raw)
           }
         }
       },
       scales: {
-        y: { beginAtZero: true, position: 'left', grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { callback: v => '₦'+fmtNum(v) } },
+        y: { beginAtZero: true, position: 'left', grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { callback: v => 'â‚¦'+fmtNum(v) } },
         y1: { beginAtZero: true, position: 'right', grid: { display: false }, ticks: { color: '#7c3aed' } },
         x: { grid: { display: false }, ticks: { maxTicksLimit: days>14?7:days } }
       }
@@ -1746,11 +1746,11 @@ async function loadSellerAnalytics() {
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:1.5rem">
         <div class="card card-pad" style="text-align:center">
           <div class="text-xs color-text3 mb-1">Today's Revenue</div>
-          <div style="font-size:1.3rem;font-weight:800;color:var(--green)" id="st-today-revenue">₦0</div>
+          <div style="font-size:1.3rem;font-weight:800;color:var(--green)" id="st-today-revenue">â‚¦0</div>
         </div>
         <div class="card card-pad" style="text-align:center">
           <div class="text-xs color-text3 mb-1">This Month</div>
-          <div style="font-size:1.3rem;font-weight:800;color:var(--purple)" id="st-month-revenue">₦0</div>
+          <div style="font-size:1.3rem;font-weight:800;color:var(--purple)" id="st-month-revenue">â‚¦0</div>
         </div>
         <div class="card card-pad" style="text-align:center">
           <div class="text-xs color-text3 mb-1">Total Orders</div>
@@ -1809,7 +1809,7 @@ async function loadSellerAnalytics() {
               <span style="font-weight:700;color:var(--text3);width:20px">${i+1}.</span>
               <div>
                 <div class="text-sm font-600">${escHtml(p.name?.substring(0,25))}</div>
-                <div class="text-xs color-text3">${fmtN(p.price)} · ${p.views||0} views</div>
+                <div class="text-xs color-text3">${fmtN(p.price)} Â· ${p.views||0} views</div>
               </div>
             </div>
             <div class="font-bold color-green">${p.sold_count||0} sold</div>
@@ -1848,7 +1848,7 @@ async function loadSellerProds() {
         <div class="prod-list-meta">
           <span class="badge badge-${p.status==='active'?'green':'gray'}">${p.status}</span>
           <span class="stock-pill ${p.stock_quantity===0?'stock-out':p.stock_quantity<=5?'stock-low':'stock-high'}">Stock: ${p.stock_quantity??'N/A'}</span>
-          ${p.has_video?'<span class="badge badge-purple">🎬 Video</span>':''}
+          ${p.has_video?'<span class="badge badge-purple">ðŸŽ¬ Video</span>':''}
         </div>
       </div>
       <div class="prod-list-actions">
@@ -1869,7 +1869,7 @@ async function submitProduct(e) {
   document.getElementById('pub-btn-text').textContent = '';
   document.getElementById('pub-spinner').classList.remove('hidden');
   try {
-    // ── Input validation ──────────────────────────────────────
+    // â”€â”€ Input validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const nameVal  = document.getElementById('p-name').value.trim();
     const priceVal = parseFloat(document.getElementById('p-price').value);
     const stockVal = parseInt(document.getElementById('p-stock').value) || 0;
@@ -1884,13 +1884,13 @@ async function submitProduct(e) {
     if (!nameVal || nameVal.length < 3)          { toast('Invalid name','Product name must be at least 3 characters','warn'); return; }
     if (nameVal.length > 120)                    { toast('Name too long','Max 120 characters','warn'); return; }
     if (isNaN(priceVal) || priceVal <= 0)        { toast('Invalid price','Enter a price greater than 0','warn'); return; }
-    if (priceVal > 100000000)                    { toast('Price too high','Maximum price is ₦100,000,000','warn'); return; }
+    if (priceVal > 100000000)                    { toast('Price too high','Maximum price is â‚¦100,000,000','warn'); return; }
     if (stockVal < 0 || stockVal > 100000)       { toast('Invalid stock','Stock must be between 0 and 100,000','warn'); return; }
     if (descVal.length > 2000)                   { toast('Description too long','Max 2,000 characters','warn'); return; }
     if (!VALID_CATS.includes(catVal))            { toast('Invalid category','Please select a valid category','warn'); return; }
     if (!VALID_CONDS.includes(condVal))          { toast('Invalid condition','Please select a valid condition','warn'); return; }
 
-    // ── File upload security ───────────────────────────────────
+    // â”€â”€ File upload security â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const ALLOWED_IMG_TYPES = ['image/jpeg','image/png','image/webp','image/gif'];
     const ALLOWED_VID_TYPES = ['video/mp4','video/webm','video/ogg','video/quicktime'];
     const MAX_IMG_SIZE = 5 * 1024 * 1024;   // 5MB
@@ -1944,18 +1944,18 @@ async function submitProduct(e) {
         data: { ...prodData, image_url: imgUrl || undefined, video_url: vidUrl || undefined }
       });
       editingProductId = null;
-      toast('Product Updated! ✅', 'Changes saved successfully', 'success');
+      toast('Product Updated! âœ…', 'Changes saved successfully', 'success');
       const cancelBtn = document.getElementById('edit-cancel-btn');
       if (cancelBtn) cancelBtn.style.display = 'none';
       document.querySelector('#ds-add-product .dash-page-title').textContent = 'Add New Product';
-      document.querySelector('#ds-add-product .dash-page-sub').textContent = 'Products with videos get 3× more sales! 🎬';
+      document.querySelector('#ds-add-product .dash-page-sub').textContent = 'Products with videos get 3Ã— more sales! ðŸŽ¬';
     } else {
-      // INSERT mode — server-side via Edge Function
+      // INSERT mode â€” server-side via Edge Function
       await callEdge('manage-product', {
         action: 'create',
         data: { ...prodData, image_url: imgUrl, video_url: vidUrl }
       });
-      toast('Product Published! 🎉', 'Your product is now live', 'success');
+      toast('Product Published! ðŸŽ‰', 'Your product is now live', 'success');
     }
     document.getElementById('add-prod-form').reset();
     showDash('products');
@@ -2023,7 +2023,7 @@ function cancelEditProduct() {
   document.getElementById('add-prod-form').reset();
   document.getElementById('pub-btn-text').textContent = 'Publish Product';
   document.querySelector('#ds-add-product .dash-page-title').textContent = 'Add New Product';
-  document.querySelector('#ds-add-product .dash-page-sub').textContent = 'Products with videos get 3× more sales! 🎬';
+  document.querySelector('#ds-add-product .dash-page-sub').textContent = 'Products with videos get 3Ã— more sales! ðŸŽ¬';
   const cancelBtn = document.getElementById('edit-cancel-btn');
   if (cancelBtn) cancelBtn.style.display = 'none';
   showDash('products');
@@ -2048,7 +2048,7 @@ async function loadSellerOrders() {
         <div><div class="font-bold">${o.id}</div><div class="text-xs color-text3">${fmtDate(o.created_at)}</div></div>
         <span class="badge ${statusColors[o.status]||'badge-gray'}">${o.status}</span>
       </div>
-      <div class="mb-2">${(o.items||[]).map(i=>`<span class="text-sm">${escHtml(i.name)} ×${i.qty}</span>`).join(', ')}</div>
+      <div class="mb-2">${(o.items||[]).map(i=>`<span class="text-sm">${escHtml(i.name)} Ã—${i.qty}</span>`).join(', ')}</div>
       <div class="flex justify-between items-center flex-wrap gap-2">
         <div>
           <div class="text-sm"><i class="fa-solid fa-user color-text3"></i> ${escHtml(o.delivery_name||'Buyer')}</div>
@@ -2105,11 +2105,11 @@ async function loadSellerReviews() {
     <div class="review-card">
       <div class="flex justify-between">
         <span class="reviewer-name">${escHtml(r.profiles?.name||'Buyer')}</span>
-        <div class="stars sm">${'★'.repeat(r.rating)+'☆'.repeat(5-r.rating)}</div>
+        <div class="stars sm">${'â˜…'.repeat(r.rating)+'â˜†'.repeat(5-r.rating)}</div>
       </div>
       <p class="review-text">${escHtml(r.review_text)}</p>
       ${galleryHtml}
-      <span class="text-xs color-text3">${fmtDate(r.created_at)}${imgs.length ? ` · <i class="fa-solid fa-camera"></i> ${imgs.length} photo${imgs.length>1?'s':''}` : ''}</span>
+      <span class="text-xs color-text3">${fmtDate(r.created_at)}${imgs.length ? ` Â· <i class="fa-solid fa-camera"></i> ${imgs.length} photo${imgs.length>1?'s':''}` : ''}</span>
     </div>`;
   }).join('');
 }
@@ -2156,7 +2156,7 @@ function lockSellerToCommission() {
         <i class="fa-solid fa-lock"></i>
       </div>
       <div style="flex:1">
-        <div style="font-weight:700;color:#991b1b;font-size:.88rem;margin-bottom:.15rem">Account Suspended – Commission Required</div>
+        <div style="font-weight:700;color:#991b1b;font-size:.88rem;margin-bottom:.15rem">Account Suspended â€“ Commission Required</div>
         <div style="font-size:.77rem;color:#b91c1c;line-height:1.4">Your trial has expired. Pay your commission below to reactivate your seller dashboard. All features will unlock immediately once payment is confirmed.</div>
       </div>`;
     const dashContent = document.querySelector('.dash-content') || document.querySelector('.dash-section.active');
@@ -2190,7 +2190,7 @@ function startReceiptApprovalPolling() {
   if (_receiptPollTimer) clearInterval(_receiptPollTimer);
   
   let pollCount = 0;
-  const maxPolls = 240; // 240 × 15s = 1 hour max polling
+  const maxPolls = 240; // 240 Ã— 15s = 1 hour max polling
 
   _receiptPollTimer = setInterval(async () => {
     pollCount++;
@@ -2212,7 +2212,7 @@ function startReceiptApprovalPolling() {
 
         unlockSellerDashboard();
         checkSellerCommission();
-        toast('🎉 Account Activated!', 'Your seller dashboard is now fully unlocked!', 'success', 8000);
+        toast('ðŸŽ‰ Account Activated!', 'Your seller dashboard is now fully unlocked!', 'success', 8000);
         
         // Load all seller data
         loadSellerStats();
@@ -2241,8 +2241,8 @@ async function checkSellerCommission() {
   const commPaid = p.commission_paid;
   document.getElementById('comm-trial-end').textContent = trialEnd ? fmtDate(trialEnd.toISOString()) : 'N/A';
   const badge = document.getElementById('comm-status-badge');
-  if (commPaid) { badge.className='badge badge-green'; badge.textContent='✓ Active'; }
-  else if (trialEnd && trialEnd > new Date()) { badge.className='badge badge-gold'; badge.textContent=`Trial – ${Math.ceil((trialEnd-new Date())/86400000)}d left`; }
+  if (commPaid) { badge.className='badge badge-green'; badge.textContent='âœ“ Active'; }
+  else if (trialEnd && trialEnd > new Date()) { badge.className='badge badge-gold'; badge.textContent=`Trial â€“ ${Math.ceil((trialEnd-new Date())/86400000)}d left`; }
   else { badge.className='badge badge-red'; badge.textContent='Suspended'; }
   // Show suspended modal if needed
   if (!commPaid && trialEnd && trialEnd < new Date() && currentUser.email !== ADMIN_EMAIL) {
@@ -2260,7 +2260,7 @@ function payCommissionPaystack() {
     currency: 'NGN',
     ref: 'comm_' + Date.now(),
     callback: async (response) => {
-      // Commission confirmed via Paystack — direct update for immediate UI response
+      // Commission confirmed via Paystack â€” direct update for immediate UI response
       await callEdge('admin-action', {
         action: 'toggle_commission',
         target_id: currentUser.id,
@@ -2269,7 +2269,7 @@ function payCommissionPaystack() {
       currentUser.profile.commission_paid = true;
       document.getElementById('suspended-modal').classList.remove('open');
       document.body.classList.remove('modal-open');
-      toast('Commission Paid! ✅', 'Your store is now active', 'success');
+      toast('Commission Paid! âœ…', 'Your store is now active', 'success');
       checkSellerCommission();
     },
     onClose: () => toast('Payment cancelled','','warn')
@@ -2309,7 +2309,7 @@ async function submitCommissionReceipt() {
 
     if (insertErr) throw insertErr;
 
-    toast('Receipt Submitted! ✅', 'Admin will verify shortly. Your dashboard will unlock automatically.', 'success', 6000);
+    toast('Receipt Submitted! âœ…', 'Admin will verify shortly. Your dashboard will unlock automatically.', 'success', 6000);
     closeModal('commission-modal');
     document.getElementById('suspended-modal').classList.remove('open');
     document.body.classList.remove('modal-open');
@@ -2341,8 +2341,8 @@ async function loadSettings() {
   document.getElementById('s-notif-email').value = p.notif_email||p.email||'';
   // Withdrawal panel
   document.getElementById('wd-bank-name').textContent = p.bank_name||'Not set';
-  document.getElementById('wd-acct-num').textContent = p.account_number||'—';
-  document.getElementById('wd-acct-name').textContent = p.account_name||'—';
+  document.getElementById('wd-acct-num').textContent = p.account_number||'â€”';
+  document.getElementById('wd-acct-name').textContent = p.account_name||'â€”';
 }
 
 async function saveSettings(e) {
@@ -2360,7 +2360,7 @@ async function saveSettings(e) {
   };
   await callEdge('update-profile', updates);
   if (currentUser.profile) Object.assign(currentUser.profile, updates);
-  toast('Settings Saved! ✅', '', 'success');
+  toast('Settings Saved! âœ…', '', 'success');
   loadWithdrawalData();
 }
 
@@ -2379,7 +2379,7 @@ async function loadWithdrawalData() {
 
 async function requestWithdrawal() {
   const amount = parseFloat(document.getElementById('wd-amount').value);
-  if (!amount || amount < 5000) { toast('Minimum withdrawal is ₦5,000','','warn'); return; }
+  if (!amount || amount < 5000) { toast('Minimum withdrawal is â‚¦5,000','','warn'); return; }
   try {
     await callEdge('request-withdrawal', {
       amount,
@@ -2388,7 +2388,7 @@ async function requestWithdrawal() {
       account_name:   currentUser.profile?.account_name   || ''
     });
   } catch(e) { toast('Error', e.message, 'error'); return; }
-  toast('Withdrawal Requested!', `₦${fmtNum(amount)} – processed within 24hrs`, 'success');
+  toast('Withdrawal Requested!', `â‚¦${fmtNum(amount)} â€“ processed within 24hrs`, 'success');
   document.getElementById('wd-amount').value = '';
   document.getElementById('wd-pending').textContent = fmtN(amount);
 }
@@ -2427,18 +2427,18 @@ async function importDropship(name, cost, price, emoji) {
 // ====================================================
 //  AFFILIATE
 // ====================================================
-const REFERRAL_REWARD = 500; // ₦500 per referral
+const REFERRAL_REWARD = 500; // â‚¦500 per referral
 
 function copyReferralLink() {
   const linkInput = document.getElementById('referral-link');
   if (!linkInput || !linkInput.value) return;
   navigator.clipboard.writeText(linkInput.value).then(() => {
-    toast('Referral Link Copied! 📎', 'Share to earn ₦500 per referral', 'success');
+    toast('Referral Link Copied! ðŸ“Ž', 'Share to earn â‚¦500 per referral', 'success');
   }).catch(() => {
     // Fallback for non-HTTPS
     linkInput.select();
     document.execCommand('copy');
-    toast('Referral Link Copied! 📎', 'Share to earn ₦500 per referral', 'success');
+    toast('Referral Link Copied! ðŸ“Ž', 'Share to earn â‚¦500 per referral', 'success');
   });
 }
 // Alias for old onclick references
@@ -2499,7 +2499,7 @@ async function loadAffiliateData() {
   }
 }
 
-// Track a referral signup — called when a new user signs up via ?ref= link
+// Track a referral signup â€” called when a new user signs up via ?ref= link
 async function trackReferralSignup(newUserId, referrerCode) {
   try {
     // Find the referrer by referral_code or by user ID
@@ -2558,7 +2558,7 @@ async function loadWithdrawalHistory() {
   const pendingAmt = wds.filter(w=>w.status==='pending').reduce((s,w)=>s+w.amount,0);
   document.getElementById('wd-pending').textContent = fmtN(pendingAmt);
   document.getElementById('wd-total').textContent = fmtN(totalPaid);
-  tbody.innerHTML = wds.map(w=>`<tr><td>${fmtDate(w.created_at)}</td><td class="font-bold">${fmtN(w.amount)}</td><td><span class="badge ${w.status==='paid'?'badge-green':w.status==='rejected'?'badge-red':'badge-gold'}">${w.status}</span></td><td class="text-xs color-text3">${w.id?.substr(0,8)||'—'}</td></tr>`).join('');
+  tbody.innerHTML = wds.map(w=>`<tr><td>${fmtDate(w.created_at)}</td><td class="font-bold">${fmtN(w.amount)}</td><td><span class="badge ${w.status==='paid'?'badge-green':w.status==='rejected'?'badge-red':'badge-gold'}">${w.status}</span></td><td class="text-xs color-text3">${w.id?.substr(0,8)||'â€”'}</td></tr>`).join('');
 }
 
 // ====================================================
@@ -2589,13 +2589,13 @@ async function submitDispute() {
 }
 
 // ====================================================
-//  SUPER ADMIN — full gated panel
+//  SUPER ADMIN â€” full gated panel
 // ====================================================
 let _adminSellersCache = [];
 let _adminRevenueChart = null;
 
 function isAdmin() {
-  // Both email AND database role must match — prevents email spoofing
+  // Both email AND database role must match â€” prevents email spoofing
   return currentUser?.email === ADMIN_EMAIL &&
          currentUser?.profile?.role === 'admin';
 }
@@ -2659,7 +2659,7 @@ async function saveAdminLogo() {
     // 4. Apply globally to the DOM right now
     applySiteLogo(logoUrl);
     
-    toast('Logo Updated! 🎨', 'Your new branding is live', 'success');
+    toast('Logo Updated! ðŸŽ¨', 'Your new branding is live', 'success');
   } catch(e) {
     console.error("Logo upload error:", e);
     toast('Upload Failed', 'Check your Supabase storage permissions', 'error');
@@ -2750,7 +2750,7 @@ function ensureAdminKycPanel() {
   }
 }
 
-/* ── OVERVIEW ── */
+/* â”€â”€ OVERVIEW â”€â”€ */
 async function loadAdminOverview() {
   if (!guardAdminPanel()) return;
   const [{ data: sellers }, { data: buyers }, { data: orders }] = await Promise.all([
@@ -2781,7 +2781,7 @@ async function loadAdminOverview() {
   _renderAdminOrdersChart(orders || []);
 }
 
-/* ── ORDERS STATUS CHART ── */
+/* â”€â”€ ORDERS STATUS CHART â”€â”€ */
 function _renderAdminOrdersChart(orders) {
   // Orders status breakdown (pie/doughnut)
   if (!orders?.length) return;
@@ -2815,11 +2815,11 @@ async function askAdminBot(preset) {
   const typingDiv = document.createElement('div');
   typingDiv.id = 'admin-typing';
   typingDiv.style.cssText = 'display:flex;gap:.42rem;align-items:center';
-  typingDiv.innerHTML = `<div style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-robot"></i></div><div style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;color:var(--text3)">Thinking… (reading database)</div>`;
+  typingDiv.innerHTML = `<div style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-robot"></i></div><div style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;color:var(--text3)">Thinkingâ€¦ (reading database)</div>`;
   container.appendChild(typingDiv);
   container.scrollTop = container.scrollHeight;
 
-  // ── LIVE DATABASE CONTEXT INJECTION ──
+  // â”€â”€ LIVE DATABASE CONTEXT INJECTION â”€â”€
   let dbContext = '';
   try {
     const now = new Date();
@@ -2870,57 +2870,57 @@ ALL REGISTERED USERS (for lookup):
 ${allSellers.slice(0, 30).map(s => `  - ${s.role?.toUpperCase()}: ${s.name} (${s.email}) ID:${s.id.substring(0,8)}${s.commission_paid ? ' [PAID]' : ''}${s.is_suspended ? ' [SUSPENDED]' : ''}`).join('\n')}
 === END SNAPSHOT ===`;
   } catch(e) {
-    dbContext = '\n[Database read failed – using cached stats only]';
+    dbContext = '\n[Database read failed â€“ using cached stats only]';
   }
 
-  const systemPrompt = `You are BUYSELL AI — the elite Chief Operating Officer for Nigeria's leading marketplace platform.
+  const systemPrompt = `You are BUYSELL AI â€” the elite Chief Operating Officer for Nigeria's leading marketplace platform.
 
-🎯 YOUR ROLE:
+ðŸŽ¯ YOUR ROLE:
 You are a proactive, data-driven admin assistant. Analyze platform health, suggest optimizations, and execute actions when needed.
 
-📊 AVAILABLE DATA:
+ðŸ“Š AVAILABLE DATA:
 You have live access to: disputes, sellers, service providers, orders, revenue, products, reviews, KYC, withdrawals, receipts.
 
-⚡ POWERFUL ACTIONS (include EXACT token in response):
-1. [ACTION: SUSPEND_UNPAID_SELLERS] — Suspend sellers with expired unpaid trials
-2. [ACTION: SUSPEND_UNPAID_PROVIDERS] — Suspend service providers with expired trials
-3. [ACTION: DEACTIVATE_USER:uuid] — Suspend any user by ID
-4. [ACTION: RESOLVE_DISPUTE:dispute_id] — Close dispute with resolution
-5. [ACTION: APPROVE_RECEIPT:receipt_id] — Approve commission payment
-6. [ACTION: REJECT_RECEIPT:receipt_id:reason] — Reject receipt with reason
-7. [ACTION: APPROVE_WITHDRAWAL:withdrawal_id] — Approve payout request
-8. [ACTION: APPROVE_KYC:kyc_id] — Approve identity verification
-9. [ACTION: REJECT_KYC:kyc_id:reason] — Reject KYC with reason
-10. [ACTION: BROADCAST:title:message] — Send platform-wide notification
-11. [ACTION: EXPORT_REPORT:type] — Generate report (sellers/orders/revenue)
-12. [ACTION: CREATE_COUPON:code:percent:days] — Create promo coupon
-13. [ACTION: REFRESH_DATA] — Reload dashboard stats
-14. [ACTION: REACTIVATE_USER:uuid] — Reactivate a suspended user, restore their seller access, re-enable products
-15. [ACTION: CHANGE_ROLE:uuid:role] — Change a user's role (buyer/seller/admin)
-16. [ACTION: EXTEND_TRIAL:uuid:days] — Extend a user's trial period by X days
-17. [ACTION: GRANT_COMMISSION:uuid] — Mark a user's commission as paid (activate seller access)
+âš¡ POWERFUL ACTIONS (include EXACT token in response):
+1. [ACTION: SUSPEND_UNPAID_SELLERS] â€” Suspend sellers with expired unpaid trials
+2. [ACTION: SUSPEND_UNPAID_PROVIDERS] â€” Suspend service providers with expired trials
+3. [ACTION: DEACTIVATE_USER:uuid] â€” Suspend any user by ID
+4. [ACTION: RESOLVE_DISPUTE:dispute_id] â€” Close dispute with resolution
+5. [ACTION: APPROVE_RECEIPT:receipt_id] â€” Approve commission payment
+6. [ACTION: REJECT_RECEIPT:receipt_id:reason] â€” Reject receipt with reason
+7. [ACTION: APPROVE_WITHDRAWAL:withdrawal_id] â€” Approve payout request
+8. [ACTION: APPROVE_KYC:kyc_id] â€” Approve identity verification
+9. [ACTION: REJECT_KYC:kyc_id:reason] â€” Reject KYC with reason
+10. [ACTION: BROADCAST:title:message] â€” Send platform-wide notification
+11. [ACTION: EXPORT_REPORT:type] â€” Generate report (sellers/orders/revenue)
+12. [ACTION: CREATE_COUPON:code:percent:days] â€” Create promo coupon
+13. [ACTION: REFRESH_DATA] â€” Reload dashboard stats
+14. [ACTION: REACTIVATE_USER:uuid] â€” Reactivate a suspended user, restore their seller access, re-enable products
+15. [ACTION: CHANGE_ROLE:uuid:role] â€” Change a user's role (buyer/seller/admin)
+16. [ACTION: EXTEND_TRIAL:uuid:days] â€” Extend a user's trial period by X days
+17. [ACTION: GRANT_COMMISSION:uuid] â€” Mark a user's commission as paid (activate seller access)
 
-📈 INSIGHTS TO PROVIDE:
-• Revenue trends & forecasts
-• Top performing sellers/products
-• At-risk accounts (expiring trials, low ratings)
-• Dispute patterns & resolution times
-• User growth metrics
-• Conversion funnel analysis
+ðŸ“ˆ INSIGHTS TO PROVIDE:
+â€¢ Revenue trends & forecasts
+â€¢ Top performing sellers/products
+â€¢ At-risk accounts (expiring trials, low ratings)
+â€¢ Dispute patterns & resolution times
+â€¢ User growth metrics
+â€¢ Conversion funnel analysis
 
-🎨 RESPONSE STYLE:
-• Use emoji liberally for visual hierarchy
-• Present stats in clean bullet format
-• Include specific names & numbers
-• Be proactive — suggest actions, don't just answer
-• For suspensions: cite specific reasons (days overdue, unresolved disputes, etc.)
-• End with clear recommendation or question
-• Use tables for comparisons
+ðŸŽ¨ RESPONSE STYLE:
+â€¢ Use emoji liberally for visual hierarchy
+â€¢ Present stats in clean bullet format
+â€¢ Include specific names & numbers
+â€¢ Be proactive â€” suggest actions, don't just answer
+â€¢ For suspensions: cite specific reasons (days overdue, unresolved disputes, etc.)
+â€¢ End with clear recommendation or question
+â€¢ Use tables for comparisons
 
-⚖️ DECISION FRAMEWORK:
-• For disputes: Summarize issue → Review evidence → Suggest resolution
-• For sellers: Tier + sales + rating → Keep/Pause/Remove
-• For revenue: Current vs previous period → Trend → Recommendation
+âš–ï¸ DECISION FRAMEWORK:
+â€¢ For disputes: Summarize issue â†’ Review evidence â†’ Suggest resolution
+â€¢ For sellers: Tier + sales + rating â†’ Keep/Pause/Remove
+â€¢ For revenue: Current vs previous period â†’ Trend â†’ Recommendation
 
 ${dbContext}
 
@@ -2930,132 +2930,132 @@ REMEMBER: You're the expert. Proactively identify issues, suggest fixes, and act
     const reply = await callGroq(adminAiHistory, systemPrompt);
     let finalReply = reply;
 
-    // ── ADVANCED ACTION PARSER ──
-// ── ADVANCED ACTION PARSER (Batch Processing) ──
+    // â”€â”€ ADVANCED ACTION PARSER â”€â”€
+// â”€â”€ ADVANCED ACTION PARSER (Batch Processing) â”€â”€
     let actionLog = [];
     
     // 1. Suspend unpaid sellers
     if (finalReply.includes('[ACTION: SUSPEND_UNPAID_SELLERS]')) {
-      finalReply = finalReply.replace(/\[ACTION: SUSPEND_UNPAID_SELLERS\]/g, '⚡ Executing seller suspension...');
+      finalReply = finalReply.replace(/\[ACTION: SUSPEND_UNPAID_SELLERS\]/g, 'âš¡ Executing seller suspension...');
       executeMassSuspension();
       actionLog.push('Suspended unpaid sellers');
     }
     
     // 2. Suspend unpaid service providers
     if (finalReply.includes('[ACTION: SUSPEND_UNPAID_PROVIDERS]')) {
-      finalReply = finalReply.replace(/\[ACTION: SUSPEND_UNPAID_PROVIDERS\]/g, '⚡ Executing provider suspension...');
+      finalReply = finalReply.replace(/\[ACTION: SUSPEND_UNPAID_PROVIDERS\]/g, 'âš¡ Executing provider suspension...');
       executeMassProviderSuspension();
       actionLog.push('Suspended unpaid providers');
     }
 
     // 3. Deactivate specific user
     for (const match of finalReply.matchAll(/\[ACTION: DEACTIVATE_USER:([a-f0-9-]+)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `⚡ Deactivating user ${match[1].substring(0,8)}...`);
+      finalReply = finalReply.replace(match[0], `âš¡ Deactivating user ${match[1].substring(0,8)}...`);
       await adminAiDeactivateUser(match[1]);
       actionLog.push(`Deactivated user ${match[1].substring(0,8)}`);
     }
 
     // 4. Resolve dispute
     for (const match of finalReply.matchAll(/\[ACTION: RESOLVE_DISPUTE:([a-f0-9-]+)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `✅ Resolving dispute ${match[1].substring(0,8)}...`);
+      finalReply = finalReply.replace(match[0], `âœ… Resolving dispute ${match[1].substring(0,8)}...`);
       await adminAiResolveDispute(match[1]);
       actionLog.push(`Resolved dispute ${match[1].substring(0,8)}`);
     }
 
     // 5. Approve receipt
     for (const match of finalReply.matchAll(/\[ACTION: APPROVE_RECEIPT:([a-f0-9-]+)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `✅ Approving receipt ${match[1].substring(0,8)}...`);
+      finalReply = finalReply.replace(match[0], `âœ… Approving receipt ${match[1].substring(0,8)}...`);
       await adminAiApproveReceipt(match[1]);
       actionLog.push(`Approved receipt ${match[1].substring(0,8)}`);
     }
 
     // 6. Reject receipt (Using .*? to prevent greedy matching)
     for (const match of finalReply.matchAll(/\[ACTION: REJECT_RECEIPT:([a-f0-9-]+):(.*?)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `❌ Rejecting receipt ${match[1].substring(0,8)}...`);
+      finalReply = finalReply.replace(match[0], `âŒ Rejecting receipt ${match[1].substring(0,8)}...`);
       await adminAiRejectReceipt(match[1], match[2]);
       actionLog.push(`Rejected receipt ${match[1].substring(0,8)}`);
     }
 
     // 7. Approve withdrawal
     for (const match of finalReply.matchAll(/\[ACTION: APPROVE_WITHDRAWAL:([a-f0-9-]+)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `✅ Approving withdrawal ${match[1].substring(0,8)}...`);
+      finalReply = finalReply.replace(match[0], `âœ… Approving withdrawal ${match[1].substring(0,8)}...`);
       await adminAiApproveWithdrawal(match[1]);
       actionLog.push(`Approved withdrawal ${match[1].substring(0,8)}`);
     }
 
     // 8. Approve KYC
     for (const match of finalReply.matchAll(/\[ACTION: APPROVE_KYC:([a-f0-9-]+)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `✅ Approving KYC ${match[1].substring(0,8)}...`);
+      finalReply = finalReply.replace(match[0], `âœ… Approving KYC ${match[1].substring(0,8)}...`);
       await adminAiApproveKyc(match[1]);
       actionLog.push(`Approved KYC ${match[1].substring(0,8)}`);
     }
 
     // 9. Reject KYC
     for (const match of finalReply.matchAll(/\[ACTION: REJECT_KYC:([a-f0-9-]+):(.*?)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `❌ Rejecting KYC ${match[1].substring(0,8)}...`);
+      finalReply = finalReply.replace(match[0], `âŒ Rejecting KYC ${match[1].substring(0,8)}...`);
       await adminAiRejectKyc(match[1], match[2]);
       actionLog.push(`Rejected KYC ${match[1].substring(0,8)}`);
     }
 
     // 10. Broadcast
     for (const match of finalReply.matchAll(/\[ACTION: BROADCAST:(.*?):(.*?)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `📣 Sending broadcast: ${match[1]}...`);
+      finalReply = finalReply.replace(match[0], `ðŸ“£ Sending broadcast: ${match[1]}...`);
       await sendBroadcastMessage(match[1], match[2]);
       actionLog.push(`Broadcast: ${match[1]}`);
     }
 
     // 11. Create coupon
     for (const match of finalReply.matchAll(/\[ACTION: CREATE_COUPON:([A-Z0-9]+):(\d+):(\d+)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `🎟️ Creating coupon ${match[1]}...`);
+      finalReply = finalReply.replace(match[0], `ðŸŽŸï¸ Creating coupon ${match[1]}...`);
       await adminAiCreateCoupon(match[1], parseInt(match[2]), parseInt(match[3]));
       actionLog.push(`Created coupon ${match[1]}`);
     }
 
     // 12. Export report
     for (const match of finalReply.matchAll(/\[ACTION: EXPORT_REPORT:(sellers|orders|revenue|disputes)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `📊 Generating ${match[1]} report...`);
+      finalReply = finalReply.replace(match[0], `ðŸ“Š Generating ${match[1]} report...`);
       exportAdminReport(match[1]);
       actionLog.push(`Generated ${match[1]} report`);
     }
 
     // 13. Refresh data
     if (finalReply.includes('[ACTION: REFRESH_DATA]')) {
-      finalReply = finalReply.replace(/\[ACTION: REFRESH_DATA\]/g, '🔄 Refreshing dashboard...');
+      finalReply = finalReply.replace(/\[ACTION: REFRESH_DATA\]/g, 'ðŸ”„ Refreshing dashboard...');
       loadAdminOverview();
       actionLog.push('Refreshed dashboard');
     }
 
     // 14. Reactivate user
     for (const match of finalReply.matchAll(/\[ACTION: REACTIVATE_USER:([a-f0-9-]+)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `✅ Reactivating user ${match[1].substring(0,8)}...`);
+      finalReply = finalReply.replace(match[0], `âœ… Reactivating user ${match[1].substring(0,8)}...`);
       await adminAiReactivateUser(match[1]);
       actionLog.push(`Reactivated user ${match[1].substring(0,8)}`);
     }
 
     // 15. Change role
     for (const match of finalReply.matchAll(/\[ACTION: CHANGE_ROLE:([a-f0-9-]+):(buyer|seller|admin|both)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `✅ Changing user ${match[1].substring(0,8)} role to ${match[2]}...`);
+      finalReply = finalReply.replace(match[0], `âœ… Changing user ${match[1].substring(0,8)} role to ${match[2]}...`);
       await adminAiChangeRole(match[1], match[2]);
       actionLog.push(`Changed user ${match[1].substring(0,8)} to ${match[2]}`);
     }
 
     // 16. Extend trial
     for (const match of finalReply.matchAll(/\[ACTION: EXTEND_TRIAL:([a-f0-9-]+):(\d+)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `✅ Extending trial for ${match[1].substring(0,8)} by ${match[2]} days...`);
+      finalReply = finalReply.replace(match[0], `âœ… Extending trial for ${match[1].substring(0,8)} by ${match[2]} days...`);
       await adminAiExtendTrial(match[1], parseInt(match[2]));
       actionLog.push(`Extended trial for ${match[1].substring(0,8)} by ${match[2]} days`);
     }
 
     // 17. Grant commission (activate seller)
     for (const match of finalReply.matchAll(/\[ACTION: GRANT_COMMISSION:([a-f0-9-]+)\]/gi)) {
-      finalReply = finalReply.replace(match[0], `✅ Activating seller ${match[1].substring(0,8)}...`);
+      finalReply = finalReply.replace(match[0], `âœ… Activating seller ${match[1].substring(0,8)}...`);
       await adminAiGrantCommission(match[1]);
       actionLog.push(`Granted commission to ${match[1].substring(0,8)}`);
     }
     
     // Add action summary if any actions taken
     if (actionLog.length > 0) {
-      finalReply += '<br><br><em style="color:var(--green)">✓ Actions completed: ' + actionLog.join(', ') + '</em>';
+      finalReply += '<br><br><em style="color:var(--green)">âœ“ Actions completed: ' + actionLog.join(', ') + '</em>';
     }
 
     adminAiHistory.push({ role: 'assistant', content: finalReply });
@@ -3157,7 +3157,7 @@ async function adminAiReactivateUser(userId) {
       action: 'reactivate_user', 
       target_id: userId
     });
-    toast('User Reactivated ✅', `User ${userId.substring(0,8)} has been restored with 30-day access`, 'success', 5000);
+    toast('User Reactivated âœ…', `User ${userId.substring(0,8)} has been restored with 30-day access`, 'success', 5000);
     loadAdminSellers();
   } catch(e) {
     toast('Reactivation Failed', e.message, 'error');
@@ -3171,7 +3171,7 @@ async function adminAiChangeRole(userId, newRole) {
       target_id: userId, 
       data: { role: newRole, accounts: newRole } 
     });
-    toast('Role Changed ✅', `User ${userId.substring(0,8)} is now a ${newRole}`, 'success', 5000);
+    toast('Role Changed âœ…', `User ${userId.substring(0,8)} is now a ${newRole}`, 'success', 5000);
     loadAdminSellers();
   } catch(e) {
     toast('Role Change Failed', e.message, 'error');
@@ -3192,7 +3192,7 @@ async function adminAiExtendTrial(userId, days) {
       data: { trial_end: baseDate.toISOString(), is_suspended: false } 
     });
 
-    toast('Trial Extended ✅', `User ${userId.substring(0,8)} trial extended by ${days} days`, 'success', 5000);
+    toast('Trial Extended âœ…', `User ${userId.substring(0,8)} trial extended by ${days} days`, 'success', 5000);
     loadAdminSellers();
   } catch(e) {
     toast('Trial Extension Failed', e.message, 'error');
@@ -3205,7 +3205,7 @@ async function adminAiGrantCommission(userId) {
       action: 'grant_commission', 
       target_id: userId
     });
-    toast('Commission Granted ✅', `User ${userId.substring(0,8)} seller access activated`, 'success', 5000);
+    toast('Commission Granted âœ…', `User ${userId.substring(0,8)} seller access activated`, 'success', 5000);
     loadAdminSellers();
   } catch(e) {
     toast('Grant Failed', e.message, 'error');
@@ -3324,7 +3324,7 @@ async function adminAiCreateCoupon(code, percent, daysValid) {
 }
 
 // NOTE: sendBroadcast() is defined below in the admin section (line ~3065)
-// Duplicate AI action handlers removed — kept single definitions above (lines 2606–2738)
+// Duplicate AI action handlers removed â€” kept single definitions above (lines 2606â€“2738)
    
 async function loadAdminSellers() {
   if (!guardAdminPanel()) return;
@@ -3372,10 +3372,10 @@ function _renderAdminSellerList(sellers) {
     const trialEnd = s.trial_end ? new Date(s.trial_end) : null;
     const daysLeft = trialEnd ? Math.ceil((trialEnd - now) / 86400000) : 0;
     const badge = s.commission_paid
-      ? `<span class="badge badge-green">✓ Active</span>`
+      ? `<span class="badge badge-green">âœ“ Active</span>`
       : daysLeft > 0
         ? `<span class="badge badge-gold">Trial: ${daysLeft}d</span>`
-        : `<span class="badge badge-red">⚠ Overdue</span>`;
+        : `<span class="badge badge-red">âš  Overdue</span>`;
     const approveBtn = s.commission_paid
       ? `<button onclick="adminToggleCommission('${s.id}',false)" class="btn btn-sm btn-outline"><i class="fa-solid fa-ban"></i> Revoke</button>`
       : `<button onclick="adminToggleCommission('${s.id}',true)"  class="btn btn-sm btn-primary"><i class="fa-solid fa-check"></i> Approve</button>`;
@@ -3389,7 +3389,7 @@ function _renderAdminSellerList(sellers) {
         <div style="min-width:0">
           <div class="font-600" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(s.name||'Unknown')}</div>
           <div class="text-xs color-text3">${escHtml(s.email||'')}</div>
-          ${s.store_name ? `<div class="text-xs color-text3">🏪 ${escHtml(s.store_name)}</div>` : ''}
+          ${s.store_name ? `<div class="text-xs color-text3">ðŸª ${escHtml(s.store_name)}</div>` : ''}
           ${s.accounts ? `<div class="text-xs color-text3">Accounts: ${escHtml(s.accounts)}</div>` : ''}
           <div class="text-xs color-text3">Joined: ${fmtDate(s.created_at)}</div>
           <div class="flex gap-1 mt-1 flex-wrap">${badge}</div>
@@ -3412,9 +3412,9 @@ async function adminToggleCommission(id, paid) {
   const card = document.getElementById('asc-' + id);
   if (card) {
     const badge = card.querySelector('.badge');
-    if (badge) { badge.className = 'badge ' + (paid ? 'badge-green' : 'badge-red'); badge.textContent = paid ? '✓ Active' : '⚠ Overdue'; }
+    if (badge) { badge.className = 'badge ' + (paid ? 'badge-green' : 'badge-red'); badge.textContent = paid ? 'âœ“ Active' : 'âš  Overdue'; }
   }
-  toast(paid ? '✅ Seller Activated' : '⛔ Access Revoked', '', paid ? 'success' : 'warn');
+  toast(paid ? 'âœ… Seller Activated' : 'â›” Access Revoked', '', paid ? 'success' : 'warn');
   loadAdminSellers();
 }
 
@@ -3428,7 +3428,7 @@ async function adminDeleteSeller(id) {
   loadAdminSellers();
 }
 
-/* ── ORDERS ── */
+/* â”€â”€ ORDERS â”€â”€ */
 async function loadAdminOrders() {
   if (!isAdmin()) return;
   document.getElementById('adm-orders-skeleton').classList.remove('hidden');
@@ -3449,15 +3449,15 @@ async function loadAdminOrders() {
       <div class="flex justify-between items-start flex-wrap gap-2 mb-2">
         <div>
           <div class="font-bold text-sm">${o.id}</div>
-          <div class="text-xs color-text3">${fmtDate(o.created_at)} · ${o.payment_method||''}</div>
-          <div class="text-xs mt-1">${(o.items||[]).map(i=>`${escHtml(i.name)} ×${i.qty}`).join(', ')}</div>
+          <div class="text-xs color-text3">${fmtDate(o.created_at)} Â· ${o.payment_method||''}</div>
+          <div class="text-xs mt-1">${(o.items||[]).map(i=>`${escHtml(i.name)} Ã—${i.qty}`).join(', ')}</div>
         </div>
         <div class="text-right">
           <div class="font-bold color-green">${fmtN(o.total_amount)}</div>
           <span class="badge ${sc[o.status]||'badge-gray'}">${o.status}</span>
         </div>
       </div>
-      <div class="text-xs color-text3 mb-2"><i class="fa-solid fa-user"></i> ${escHtml(o.delivery_name||'—')} &nbsp;|&nbsp; <i class="fa-solid fa-map-marker-alt"></i> ${escHtml((o.delivery_address||'').substr(0,50))}</div>
+      <div class="text-xs color-text3 mb-2"><i class="fa-solid fa-user"></i> ${escHtml(o.delivery_name||'â€”')} &nbsp;|&nbsp; <i class="fa-solid fa-map-marker-alt"></i> ${escHtml((o.delivery_address||'').substr(0,50))}</div>
       <div class="flex gap-2 flex-wrap">
         ${o.status==='pending'   ? `<button onclick="adminUpdateOrder('${o.id}','confirmed')"  class="btn btn-primary btn-sm">Confirm</button>` : ''}
         ${o.status==='confirmed' ? `<button onclick="adminUpdateOrder('${o.id}','shipped')"    class="btn btn-sm" style="background:#ede9fe;color:var(--purple)">Mark Shipped</button>` : ''}
@@ -3476,7 +3476,7 @@ async function adminUpdateOrder(id, status) {
   } catch(e) { toast('Error', e.message, 'error'); }
 }
 
-/* ── DISPUTES ── */
+/* â”€â”€ DISPUTES â”€â”€ */
 async function loadAdminDisputes() {
   if (!isAdmin()) return;
   const { data: disputes } = await db.from('disputes').select('*').order('created_at',{ascending:false}).limit(60);
@@ -3491,7 +3491,7 @@ async function loadAdminDisputes() {
           <div class="font-600 text-sm">Order: ${d.order_id}</div>
           <div class="text-xs color-text3">${fmtDate(d.created_at)}</div>
           <div class="text-sm mt-1"><strong>${(d.dispute_type||'').replace(/-/g,' ')}</strong></div>
-          <div class="text-xs color-text3 mt-1">${escHtml((d.description||'').substr(0,200))}${(d.description?.length||0)>200?'…':''}</div>
+          <div class="text-xs color-text3 mt-1">${escHtml((d.description||'').substr(0,200))}${(d.description?.length||0)>200?'â€¦':''}</div>
         </div>
         <span class="badge ${d.status==='open'?'badge-red':d.status==='resolved'?'badge-green':'badge-orange'}">${d.status}</span>
       </div>
@@ -3507,7 +3507,7 @@ async function loadAdminDisputes() {
 async function resolveDispute(id) {
   try { await callEdge('admin-action', { action: 'resolve_dispute', target_id: id }); }
   catch(e) { toast('Error', e.message, 'error'); return; }
-  toast('Dispute Resolved ✅', '', 'success');
+  toast('Dispute Resolved âœ…', '', 'success');
   loadAdminDisputes();
 }
 
@@ -3518,7 +3518,7 @@ async function refundDispute(disputeId, orderId) {
   loadAdminDisputes();
 }
 
-/* ── WITHDRAWALS ── */
+/* â”€â”€ WITHDRAWALS â”€â”€ */
 async function loadAdminWithdrawals() {
   if (!isAdmin()) return;
   document.getElementById('adm-wd-skeleton').classList.remove('hidden');
@@ -3538,7 +3538,7 @@ async function loadAdminWithdrawals() {
           <div class="font-bold" style="font-size:1.05rem;color:var(--green)">${fmtN(w.amount)}</div>
           <div class="font-600 text-sm">${escHtml(w.profiles?.name||'Seller')}</div>
           <div class="text-xs color-text3">${escHtml(w.profiles?.email||'')}</div>
-          <div class="text-xs mt-1"><b>${escHtml(w.bank_name||'')}</b> · ${escHtml(w.account_number||'')} · ${escHtml(w.account_name||'')}</div>
+          <div class="text-xs mt-1"><b>${escHtml(w.bank_name||'')}</b> Â· ${escHtml(w.account_number||'')} Â· ${escHtml(w.account_name||'')}</div>
           <div class="text-xs color-text3">${fmtDate(w.created_at)}</div>
         </div>
         <div class="flex flex-col items-end gap-2">
@@ -3559,7 +3559,7 @@ async function loadAdminWithdrawals() {
 async function adminPayWithdrawal(id) {
   try { await callEdge('admin-action', { action: 'pay_withdrawal', target_id: id }); }
   catch(e) { toast('Error', e.message, 'error'); return; }
-  toast('Withdrawal Marked Paid ✅', '', 'success');
+  toast('Withdrawal Marked Paid âœ…', '', 'success');
   loadAdminWithdrawals();
 }
 
@@ -3571,7 +3571,7 @@ async function adminRejectWithdrawal(id) {
   loadAdminWithdrawals();
 }
 
-/* ── BROADCAST ── */
+/* â”€â”€ BROADCAST â”€â”€ */
 async function sendBroadcast() {
   if (!isAdmin()) return;
   const title  = document.getElementById('bc-title').value.trim();
@@ -3581,7 +3581,7 @@ async function sendBroadcast() {
   if (!title || !body) { toast('Fill in title and message', '', 'warn'); return; }
   try { await callEdge('send-broadcast', { title, body, target, type }); }
   catch(e) { toast('Error', e.message, 'error'); return; }
-  toast('📣 Broadcast Sent!', 'To: ' + target, 'success');
+  toast('ðŸ“£ Broadcast Sent!', 'To: ' + target, 'success');
   document.getElementById('bc-title').value = '';
   document.getElementById('bc-body').value  = '';
   loadBroadcastHistory();
@@ -3591,11 +3591,11 @@ async function loadBroadcastHistory() {
   const { data: bcs } = await db.from('broadcasts').select('*').order('created_at',{ascending:false}).limit(10);
   const el = document.getElementById('bc-history');
   if (!el) return;
-  const icons = { info:'ℹ️', success:'✅', warn:'⚠️', error:'🚨' };
+  const icons = { info:'â„¹ï¸', success:'âœ…', warn:'âš ï¸', error:'ðŸš¨' };
   el.innerHTML = (bcs||[]).length
     ? bcs.map(b => `<div class="card card-pad mb-2" style="border-left:3px solid var(--green)">
         <div class="flex justify-between items-center mb-1">
-          <span class="font-600 text-sm">${icons[b.type]||'📢'} ${escHtml(b.title)}</span>
+          <span class="font-600 text-sm">${icons[b.type]||'ðŸ“¢'} ${escHtml(b.title)}</span>
           <span class="text-xs color-text3">${fmtDate(b.created_at)}</span>
         </div>
         <div class="text-xs color-text3 mb-1">To: <b>${b.target}</b></div>
@@ -3784,7 +3784,7 @@ async function adminRejectKyc(kycId, userId) {
 }
 
 // ====================================================
-//  ADMIN — RECEIPTS MANAGEMENT
+//  ADMIN â€” RECEIPTS MANAGEMENT
 // ====================================================
 async function loadAdminReceipts() {
   if (!guardAdminPanel()) return;
@@ -3837,7 +3837,7 @@ async function approveReceipt(receiptId, sellerId) {
       target_id: receiptId,
       data: { seller_id: sellerId }
     });
-    toast('Receipt Approved ✅', 'Seller store is now active.', 'success');
+    toast('Receipt Approved âœ…', 'Seller store is now active.', 'success');
     loadAdminReceipts();
   } catch(e) {
     toast('Error', e.message, 'error');
@@ -3867,7 +3867,7 @@ async function checkBroadcastForUser() {
   (bcs||[]).forEach((b, i) => setTimeout(() => toast(b.title, b.body, b.type||'info', 7000), i * 2200));
 }
 
-/* ── REVENUE CHART ── */
+/* â”€â”€ REVENUE CHART â”€â”€ */
 function _renderAdminRevenueChart(orders) {
   const ctx = document.getElementById('admin-revenue-chart');
   if (!ctx) return;
@@ -3883,8 +3883,8 @@ function _renderAdminRevenueChart(orders) {
   if (_adminRevenueChart) _adminRevenueChart.destroy();
   _adminRevenueChart = new Chart(ctx, {
     type: 'bar',
-    data: { labels, datasets:[{ label:'Revenue (₦)', data, backgroundColor:'rgba(25,168,71,.2)', borderColor:'#19a847', borderWidth:1.5, borderRadius:4 }] },
-    options: { responsive:true, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>'₦'+fmtNum(c.raw)}} }, scales:{ y:{ beginAtZero:true, ticks:{callback:v=>'₦'+fmtNum(v)} }, x:{ ticks:{maxTicksLimit:8} } } }
+    data: { labels, datasets:[{ label:'Revenue (â‚¦)', data, backgroundColor:'rgba(25,168,71,.2)', borderColor:'#19a847', borderWidth:1.5, borderRadius:4 }] },
+    options: { responsive:true, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>'â‚¦'+fmtNum(c.raw)}} }, scales:{ y:{ beginAtZero:true, ticks:{callback:v=>'â‚¦'+fmtNum(v)} }, x:{ ticks:{maxTicksLimit:8} } } }
   });
 }
 
@@ -3913,10 +3913,10 @@ async function sendChat() {
       : null,
   };
 
-  const systemPrompt = `You are the authentic BUYSELL Nigeria Assistant — friendly, helpful, and concise.
+  const systemPrompt = `You are the authentic BUYSELL Nigeria Assistant â€” friendly, helpful, and concise.
 Current page: ${context.current_page}. User role: ${context.user_role}.
-Cart: ${context.cart_item_count} item(s), total ₦${context.cart_total}.
-${context.current_product ? `Viewing: "${context.current_product.name}" at ₦${context.current_product.price} (${context.current_product.category}).` : ''}
+Cart: ${context.cart_item_count} item(s), total â‚¦${context.cart_total}.
+${context.current_product ? `Viewing: "${context.current_product.name}" at â‚¦${context.current_product.price} (${context.current_product.category}).` : ''}
 Help users shop, track orders, find products, and navigate the platform. Keep replies short and friendly.`;
 
   try {
@@ -3941,7 +3941,7 @@ function getCurrentPage() {
   return 'buyer-marketplace';
 }
 
-// Updated addChatMsg — accepts optional id for typing indicator replacement
+// Updated addChatMsg â€” accepts optional id for typing indicator replacement
 function addChatMsg(text, sender, id = null) {
   const container = document.getElementById('chat-messages');
   const div       = document.createElement('div');
@@ -3959,7 +3959,7 @@ function addChatMsg(text, sender, id = null) {
   container.scrollTop = container.scrollHeight;
 }
 
-// Clear history when chat is closed (optional — remove to keep memory)
+// Clear history when chat is closed (optional â€” remove to keep memory)
 function toggleChat() {
   const win = document.getElementById('chatbot-window');
   const wasOpen = win.classList.contains('open');
@@ -4015,7 +4015,7 @@ function handleCsvUpload(input) {
         </div>
         <div style="max-height:130px;overflow-y:auto">
           ${csvRows.slice(0,5).map(r => `<div class="flex justify-between text-xs py-1 border-b border-border"><span>${escHtml(r.name)}</span><span class="font-bold color-green">${fmtN(parseFloat(r.price)||0)}</span></div>`).join('')}
-          ${csvRows.length>5 ? `<div class="text-xs color-text3 mt-1 text-center">+${csvRows.length-5} more…</div>` : ''}
+          ${csvRows.length>5 ? `<div class="text-xs color-text3 mt-1 text-center">+${csvRows.length-5} moreâ€¦</div>` : ''}
         </div>
       </div>`;
     document.getElementById('csv-import-btn').classList.remove('hidden');
@@ -4026,7 +4026,7 @@ function handleCsvUpload(input) {
 async function importCsvProducts() {
   if (!csvRows.length || !currentUser) return;
   const btn = document.getElementById('csv-import-btn');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Importing…';
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Importingâ€¦';
   
   // Format the raw data
   const toInsert = csvRows.map(r => ({
@@ -4049,7 +4049,7 @@ async function importCsvProducts() {
       products: toInsert 
     });
 
-    toast(`${toInsert.length} Products Imported! 🎉`, 'All products are now live', 'success');
+    toast(`${toInsert.length} Products Imported! ðŸŽ‰`, 'All products are now live', 'success');
     
     // Reset UI
     csvRows = [];
@@ -4103,6 +4103,7 @@ async function payWithPaystack() {
       try {
         const verification = await callEdge('verify-payment', {
           reference: response.reference,
+          cart: cart.map(c => ({ id: c.id, qty: c.qty || 1 })),
           delivery_address: document.getElementById('co-address').value,
           delivery_name: document.getElementById('co-name').value,
           delivery_phone: document.getElementById('co-phone').value,
@@ -4168,9 +4169,9 @@ async function handleDeepLink() {
 function sendWhatsAppOrderNotification(order, sellerWa) {
   if (!sellerWa) return;
   const phone = sellerWa.replace(/\D/g,'');
-  const items = (order.items||[]).map(i=>`${i.name} ×${i.qty}`).join(', ');
+  const items = (order.items||[]).map(i=>`${i.name} Ã—${i.qty}`).join(', ');
   const msg = encodeURIComponent(
-    `🛍️ NEW ORDER on BUYSELL!\n\n` +
+    `ðŸ›ï¸ NEW ORDER on BUYSELL!\n\n` +
     `Order ID: ${order.id}\n` +
     `Items: ${items}\n` +
     `Total: ${fmtN(order.total_amount)}\n` +
@@ -4219,7 +4220,7 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
     document.getElementById('co-order-id').textContent = orderId;
     document.getElementById('co-order-total').textContent = fmtN(total);
     goCheckoutStep(3);
-    toast('Order Placed! 🎉', `Order ${orderId} confirmed`, 'success', 5000);
+    toast('Order Placed! ðŸŽ‰', `Order ${orderId} confirmed`, 'success', 5000);
 
   } catch(err) {
     toast('Order Failed', err.message, 'error');
@@ -4229,7 +4230,7 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
 // ====================================================
 //  STOREFRONT SALES COUNT
 // ====================================================
-// viewStorefront — full implementation with order count + reviews
+// viewStorefront â€” full implementation with order count + reviews
 async function viewStorefront(sellerId) {
   if (!sellerId) return;
   closeModal('product-modal');
@@ -4253,7 +4254,7 @@ async function viewStorefront(sellerId) {
   const avgRating = allRevs.length ? (allRevs.reduce((s,r)=>s+r.rating,0)/allRevs.length).toFixed(1) : '5.0';
   document.getElementById('sf-rating').textContent = avgRating;
   document.getElementById('sf-review-count').textContent = `${allRevs.length} reviews`;
-  document.getElementById('sf-stars').textContent = '★'.repeat(Math.round(+avgRating))+'☆'.repeat(5-Math.round(+avgRating));
+  document.getElementById('sf-stars').textContent = 'â˜…'.repeat(Math.round(+avgRating))+'â˜†'.repeat(5-Math.round(+avgRating));
   // Share button URL
   const sfUrl = `${window.location.origin}${window.location.pathname}?store=${sellerId}`;
   document.getElementById('sf-wa-link').parentElement.querySelectorAll('button').forEach(b => {
@@ -4264,14 +4265,14 @@ async function viewStorefront(sellerId) {
   if (!sfProds.length) { grid.innerHTML=''; empty.classList.remove('hidden'); }
   else { empty.classList.add('hidden'); grid.innerHTML = sfProds.map(p=>prodCard(p)).join(''); }
   // Update page title
-  document.title = `${seller.name} — BUYSELL Nigeria`;
+  document.title = `${seller.name} â€” BUYSELL Nigeria`;
   history.pushState(null,'',`?store=${sellerId}`);
 }
 
 // ====================================================
 //  UTIL
 // ====================================================
-function fmtN(n) { return '₦' + fmtNum(n); }
+function fmtN(n) { return 'â‚¦' + fmtNum(n); }
 function fmtNum(n) { if (!n && n!==0) return '0'; return Math.round(n).toLocaleString('en-NG'); }
 function fmtDate(d) { if (!d) return ''; return new Date(d).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'}); }
 function escHtml(s) {
@@ -4329,7 +4330,7 @@ function initLeaflet() {
       // Initialize map centered on Nigeria
       pickupMap = L.map('map').setView([9.0820, 8.6753], 6); 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap'
+        attribution: 'Â© OpenStreetMap'
       }).addTo(pickupMap);
     }
     
@@ -4408,7 +4409,7 @@ function shareCurrentProduct() {
   // Real-time order updates for sellers
   db.channel('orders-rt').on('postgres_changes',{event:'INSERT',schema:'public',table:'orders'},payload=>{
     if (currentRole==='seller' && payload.new?.seller_id===currentUser?.id) {
-      toast('New Order! 🛍️', 'Check your orders panel', 'success', 6000);
+      toast('New Order! ðŸ›ï¸', 'Check your orders panel', 'success', 6000);
       loadSellerOrders();
       loadSellerStats();
     }
@@ -4417,7 +4418,7 @@ function shareCurrentProduct() {
   db.channel('stock-rt').on('postgres_changes',{event:'UPDATE',schema:'public',table:'products'},payload=>{
     const p = payload.new;
     if (currentRole==='seller' && p?.seller_id===currentUser?.id && p?.stock_quantity !== undefined && p?.low_stock_alert && p.stock_quantity <= p.low_stock_alert && p.stock_quantity > 0) {
-      toast(`⚠️ Low Stock: ${p.name}`, `Only ${p.stock_quantity} left`, 'warn', 7000);
+      toast(`âš ï¸ Low Stock: ${p.name}`, `Only ${p.stock_quantity} left`, 'warn', 7000);
     }
   }).subscribe();
 })();
@@ -4445,7 +4446,7 @@ function showAdminPortal() {
       const dash = document.getElementById('dash-user-name');
       if (dash) dash.textContent = currentUser.profile?.name || 'Admin';
     }
-    toast('🔐 Admin Portal', 'Welcome back, Commander', 'info', 4000);
+    toast('ðŸ” Admin Portal', 'Welcome back, Commander', 'info', 4000);
   }, 80);
 }
 
@@ -4512,7 +4513,7 @@ function showSpdDash(section) {
 }
 
 // ====================================================
-//  SERVICE ECONOMY — Browse & Filter (Buyer Side)
+//  SERVICE ECONOMY â€” Browse & Filter (Buyer Side)
 // ====================================================
 let _allServiceGigs = [];
 
@@ -4589,14 +4590,14 @@ function renderServiceCards(gigs) {
           </div>
           <div>
             <div style="font-weight:700;font-size:.88rem;line-height:1.3">${escHtml(g.title)}</div>
-            <div style="font-size:.7rem;color:var(--text3)">${escHtml(g.category)} · ${escHtml(g.location || '—')}</div>
+            <div style="font-size:.7rem;color:var(--text3)">${escHtml(g.category)} Â· ${escHtml(g.location || 'â€”')}</div>
           </div>
         </div>
         <p style="font-size:.78rem;color:var(--text2);line-height:1.55;margin-bottom:.65rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escHtml(g.description || 'No description provided.')}</p>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
           <div>
             <div style="font-size:.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Starting from</div>
-            <div style="font-size:1.1rem;font-weight:800;color:var(--green)">₦${(g.starting_rate || g.price || 0).toLocaleString()}</div>
+            <div style="font-size:1.1rem;font-weight:800;color:var(--green)">â‚¦${(g.starting_rate || g.price || 0).toLocaleString()}</div>
           </div>
           <div style="display:flex;align-items:center;gap:.35rem">
             <div style="width:24px;height:24px;border-radius:50%;background:var(--green-xlt);display:flex;align-items:center;justify-content:center">
@@ -4624,7 +4625,7 @@ function renderServiceCards(gigs) {
 }
 
 // ====================================================
-//  SERVICE PROVIDER — Overview Stats
+//  SERVICE PROVIDER â€” Overview Stats
 // ====================================================
 async function loadSpdOverview() {
   if (!currentUser) return;
@@ -4651,7 +4652,7 @@ async function loadSpdOverview() {
             ${thumb ? `<img src="${thumb}" style="width:48px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0">` : `<div style="width:48px;height:48px;border-radius:8px;background:var(--green-xlt);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="fa-solid fa-tools" style="color:var(--green)"></i></div>`}
             <div style="flex:1;min-width:0">
               <div style="font-weight:700;font-size:.85rem">${escHtml(g.title)}</div>
-              <div style="font-size:.72rem;color:var(--text3)">${escHtml(g.category)} · ₦${(g.starting_rate||0).toLocaleString()}</div>
+              <div style="font-size:.72rem;color:var(--text3)">${escHtml(g.category)} Â· â‚¦${(g.starting_rate||0).toLocaleString()}</div>
             </div>
             <span class="badge ${g.status==='active'?'badge-green':'badge-red'}">${g.status}</span>
           </div>`;
@@ -4661,7 +4662,7 @@ async function loadSpdOverview() {
 }
 
 // ====================================================
-//  SERVICE PROVIDER — Settings
+//  SERVICE PROVIDER â€” Settings
 // ====================================================
 async function loadSpdSettings() {
   if (!currentUser?.profile) return;
@@ -4700,14 +4701,14 @@ async function saveServiceProfile() {
     // Update sidebar display
     document.getElementById('spd-user-name').textContent = name;
     
-    toast('Profile Saved! ✅', 'Your changes are now live.', 'success');
+    toast('Profile Saved! âœ…', 'Your changes are now live.', 'success');
   } catch(e) {
     toast('Save Failed', e.message, 'error');
   }
 }
 
 // ====================================================
-//  SERVICE PROVIDER — Load My Gigs (Portfolio)
+//  SERVICE PROVIDER â€” Load My Gigs (Portfolio)
 // ====================================================
 async function loadMyGigs() {
   if (!currentUser) return;
@@ -4739,14 +4740,14 @@ async function loadMyGigs() {
             <div style="display:flex;justify-content:space-between;align-items:start;gap:.5rem">
               <div>
                 <div style="font-weight:700;font-size:.92rem">${escHtml(g.title)}</div>
-                <div style="font-size:.72rem;color:var(--text3);margin-top:.15rem">${escHtml(g.category)} · ${escHtml(g.location || '—')}</div>
+                <div style="font-size:.72rem;color:var(--text3);margin-top:.15rem">${escHtml(g.category)} Â· ${escHtml(g.location || 'â€”')}</div>
               </div>
               <span class="badge ${g.status==='active'?'badge-green':'badge-red'}">${g.status}</span>
             </div>
             <p style="font-size:.78rem;color:var(--text2);margin-top:.4rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45">${escHtml(g.description || 'No description')}</p>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:.6rem">
               <div style="display:flex;align-items:center;gap:.75rem">
-                <span style="font-weight:800;color:var(--green);font-size:.95rem">₦${(g.starting_rate||0).toLocaleString()}</span>
+                <span style="font-weight:800;color:var(--green);font-size:.95rem">â‚¦${(g.starting_rate||0).toLocaleString()}</span>
                 ${imgCount > 0 ? `<span style="font-size:.7rem;color:var(--text3)"><i class="fa-solid fa-images"></i> ${imgCount} photo${imgCount>1?'s':''}</span>` : ''}
               </div>
               <button class="btn btn-ghost btn-sm" style="color:var(--red);font-size:.72rem" onclick="deleteGig('${g.id}')">
@@ -4786,7 +4787,7 @@ async function deleteGig(gigId) {
 }
 
 // ====================================================
-//  SERVICE PROVIDER — Publish Gig (with Image Upload)
+//  SERVICE PROVIDER â€” Publish Gig (with Image Upload)
 // ====================================================
 async function publishServiceGig() {
   if (!currentUser) { showModal('auth-modal'); return; }
@@ -4832,7 +4833,7 @@ async function publishServiceGig() {
     });
     if (error) throw error;
 
-    toast('Service Published! 🎉', 'Your gig is now live on BUYSELL', 'success');
+    toast('Service Published! ðŸŽ‰', 'Your gig is now live on BUYSELL', 'success');
     ['spd-title','spd-rate','spd-location','spd-desc','spd-wa'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
@@ -4847,7 +4848,7 @@ async function publishServiceGig() {
 }
 
 // ====================================================
-//  SERVICE PROVIDER — Image Preview
+//  SERVICE PROVIDER â€” Image Preview
 // ====================================================
 document.addEventListener('DOMContentLoaded', () => {
   const imgInput = document.getElementById('spd-images');
@@ -4915,7 +4916,7 @@ async function viewProviderProfile(providerId) {
     // Book button
     const bookBtnContainer = document.getElementById('sp-p-book-btn');
     if (bookBtnContainer && mainGig) {
-      bookBtnContainer.innerHTML = `<button class="btn btn-primary btn-full mt-3" onclick="bookService('${mainGig.id}','${providerId}')"><i class="fa-solid fa-calendar-check"></i> Book This Provider – from ₦${(mainGig.starting_rate||0).toLocaleString()}</button>`;
+      bookBtnContainer.innerHTML = `<button class="btn btn-primary btn-full mt-3" onclick="bookService('${mainGig.id}','${providerId}')"><i class="fa-solid fa-calendar-check"></i> Book This Provider â€“ from â‚¦${(mainGig.starting_rate||0).toLocaleString()}</button>`;
     }
   } catch(e) {
     console.error('Profile load error:', e);
@@ -4923,7 +4924,7 @@ async function viewProviderProfile(providerId) {
 }
 
 // ====================================================
-//  SERVICE PROVIDER — COMMISSION CHECK (same rules as sellers)
+//  SERVICE PROVIDER â€” COMMISSION CHECK (same rules as sellers)
 // ====================================================
 async function checkServiceProviderCommission() {
   if (!currentUser?.profile) return;
@@ -4937,8 +4938,8 @@ async function checkServiceProviderCommission() {
   // Update SPD commission badge if it exists
   const badge = document.getElementById('spd-comm-badge');
   if (badge) {
-    if (commPaid) { badge.className='badge badge-green'; badge.textContent='✓ Active'; }
-    else if (trialEnd && trialEnd > new Date()) { badge.className='badge badge-gold'; badge.textContent=`Trial – ${Math.ceil((trialEnd-new Date())/86400000)}d left`; }
+    if (commPaid) { badge.className='badge badge-green'; badge.textContent='âœ“ Active'; }
+    else if (trialEnd && trialEnd > new Date()) { badge.className='badge badge-gold'; badge.textContent=`Trial â€“ ${Math.ceil((trialEnd-new Date())/86400000)}d left`; }
     else { badge.className='badge badge-red'; badge.textContent='Suspended'; }
   }
 
@@ -4949,7 +4950,7 @@ async function checkServiceProviderCommission() {
 }
 
 // ====================================================
-//  SERVICE PROVIDER — BOOKINGS (Provider Side)
+//  SERVICE PROVIDER â€” BOOKINGS (Provider Side)
 // ====================================================
 async function loadProviderBookings() {
   if (!currentUser) return;
@@ -4978,7 +4979,7 @@ async function loadProviderBookings() {
         <div class="flex justify-between items-start flex-wrap gap-2 mb-2">
           <div>
             <div class="font-bold text-sm">${escHtml(gigTitle)}</div>
-            <div class="text-xs color-text3"><i class="fa-solid fa-user"></i> ${escHtml(buyerName)} · ${fmtDate(b.created_at)}</div>
+            <div class="text-xs color-text3"><i class="fa-solid fa-user"></i> ${escHtml(buyerName)} Â· ${fmtDate(b.created_at)}</div>
             ${b.message ? `<div class="text-sm mt-1" style="color:var(--text2)">"${escHtml(b.message.substring(0,150))}"</div>` : ''}
           </div>
           <div class="text-right">
@@ -5022,7 +5023,7 @@ async function updateBookingStatus(bookingId, status) {
 }
 
 // ====================================================
-//  SERVICE PROVIDER — EARNINGS
+//  SERVICE PROVIDER â€” EARNINGS
 // ====================================================
 async function loadProviderEarnings() {
   if (!currentUser) return;
@@ -5074,7 +5075,7 @@ async function loadProviderEarnings() {
 async function bookService(gigId, providerId) {
   if (!currentUser) { showModal('auth-modal'); return; }
   const message = prompt('Describe what you need (optional):') || '';
-  const budget = prompt('Your budget (₦):');
+  const budget = prompt('Your budget (â‚¦):');
   if (!budget || isNaN(parseFloat(budget))) { toast('Please enter a valid budget', '', 'warn'); return; }
 
   try {
@@ -5089,7 +5090,7 @@ async function bookService(gigId, providerId) {
       created_at:   new Date().toISOString()
     });
     if (error) throw error;
-    toast('Booking Sent! 📩', 'The service provider will review your request', 'success', 5000);
+    toast('Booking Sent! ðŸ“©', 'The service provider will review your request', 'success', 5000);
     closeModal('sp-profile-modal');
   } catch(e) {
     toast('Booking Failed', e.message, 'error');
@@ -5100,7 +5101,7 @@ async function bookService(gigId, providerId) {
 // Duplicate removed to prevent redeclaration issues
 
 // ====================================================
-//  SERVICE PROVIDER — BOOKINGS (Provider Side)
+//  SERVICE PROVIDER â€” BOOKINGS (Provider Side)
 // ====================================================
 async function loadProviderBookings() {
   if (!currentUser) return;
@@ -5129,7 +5130,7 @@ async function loadProviderBookings() {
         <div class="flex justify-between items-start flex-wrap gap-2 mb-2">
           <div>
             <div class="font-bold text-sm">${escHtml(gigTitle)}</div>
-            <div class="text-xs color-text3"><i class="fa-solid fa-user"></i> ${escHtml(buyerName)} · ${fmtDate(b.created_at)}</div>
+            <div class="text-xs color-text3"><i class="fa-solid fa-user"></i> ${escHtml(buyerName)} Â· ${fmtDate(b.created_at)}</div>
             ${b.message ? `<div class="text-sm mt-1" style="color:var(--text2)">"${escHtml(b.message.substring(0,150))}"</div>` : ''}
           </div>
           <div class="text-right">
@@ -5173,7 +5174,7 @@ async function updateBookingStatus(bookingId, status) {
 }
 
 // ====================================================
-//  SERVICE PROVIDER — EARNINGS
+//  SERVICE PROVIDER â€” EARNINGS
 // ====================================================
 async function loadProviderEarnings() {
   if (!currentUser) return;
@@ -5225,7 +5226,7 @@ async function loadProviderEarnings() {
 async function bookService(gigId, providerId) {
   if (!currentUser) { showModal('auth-modal'); return; }
   const message = prompt('Describe what you need (optional):') || '';
-  const budget = prompt('Your budget (₦):');
+  const budget = prompt('Your budget (â‚¦):');
   if (!budget || isNaN(parseFloat(budget))) { toast('Please enter a valid budget', '', 'warn'); return; }
 
   try {
@@ -5240,7 +5241,7 @@ async function bookService(gigId, providerId) {
       created_at:   new Date().toISOString()
     });
     if (error) throw error;
-    toast('Booking Sent! 📩', 'The service provider will review your request', 'success', 5000);
+    toast('Booking Sent! ðŸ“©', 'The service provider will review your request', 'success', 5000);
     closeModal('sp-profile-modal');
   } catch(e) {
     toast('Booking Failed', e.message, 'error');
@@ -5599,9 +5600,9 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  FEATURE 1: WISHLIST / SAVE FOR LATER
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 let wishlist = JSON.parse(localStorage.getItem('bs_wishlist') || '[]');
 
 function toggleWishlist(productId) {
@@ -5614,7 +5615,7 @@ function toggleWishlist(productId) {
   } else {
     wishlist.push(productId);
     db.from('wishlists').insert({ user_id: currentUser.id, product_id: productId }).catch(()=>{});
-    toast('Added to Wishlist ❤️', 'You\'ll see it in your saved items', 'success');
+    toast('Added to Wishlist â¤ï¸', 'You\'ll see it in your saved items', 'success');
   }
   localStorage.setItem('bs_wishlist', JSON.stringify(wishlist));
   updateWishlistBadge();
@@ -5653,7 +5654,7 @@ async function showWishlistModal() {
   const container = document.getElementById('wishlist-items');
   if (!container) return;
   if (!wishlist.length) {
-    container.innerHTML = '<div class="empty-state"><i class="fa-solid fa-heart" style="font-size:2rem;color:var(--border2);display:block;margin-bottom:.65rem"></i><p class="color-text3 text-sm">Your wishlist is empty. Browse products and tap ❤️ to save!</p></div>';
+    container.innerHTML = '<div class="empty-state"><i class="fa-solid fa-heart" style="font-size:2rem;color:var(--border2);display:block;margin-bottom:.65rem"></i><p class="color-text3 text-sm">Your wishlist is empty. Browse products and tap â¤ï¸ to save!</p></div>';
     return;
   }
   container.innerHTML = '<div class="skeleton" style="height:80px"></div>'.repeat(3);
@@ -5674,9 +5675,9 @@ async function showWishlistModal() {
   `).join('');
 }
 
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  FEATURE 2: PRODUCT COMPARISON
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 let compareList = [];
 
 function toggleCompare(productId) {
@@ -5721,11 +5722,11 @@ async function showCompareModal() {
         <tr><td style="padding:.5rem;border:1px solid var(--border);font-weight:600">Price</td>
           ${prods.map(p => `<td style="padding:.5rem;border:1px solid var(--border);text-align:center;font-weight:700;color:var(--green)">${fmtN(p.price)}</td>`).join('')}</tr>
         <tr><td style="padding:.5rem;border:1px solid var(--border);font-weight:600">Category</td>
-          ${prods.map(p => `<td style="padding:.5rem;border:1px solid var(--border);text-align:center">${escHtml(p.category||'—')}</td>`).join('')}</tr>
+          ${prods.map(p => `<td style="padding:.5rem;border:1px solid var(--border);text-align:center">${escHtml(p.category||'â€”')}</td>`).join('')}</tr>
         <tr><td style="padding:.5rem;border:1px solid var(--border);font-weight:600">Condition</td>
-          ${prods.map(p => `<td style="padding:.5rem;border:1px solid var(--border);text-align:center">${escHtml(p.condition||'—')}</td>`).join('')}</tr>
+          ${prods.map(p => `<td style="padding:.5rem;border:1px solid var(--border);text-align:center">${escHtml(p.condition||'â€”')}</td>`).join('')}</tr>
         <tr><td style="padding:.5rem;border:1px solid var(--border);font-weight:600">Rating</td>
-          ${prods.map(p => `<td style="padding:.5rem;border:1px solid var(--border);text-align:center">⭐ ${(p.avg_rating||0).toFixed(1)}</td>`).join('')}</tr>
+          ${prods.map(p => `<td style="padding:.5rem;border:1px solid var(--border);text-align:center">â­ ${(p.avg_rating||0).toFixed(1)}</td>`).join('')}</tr>
         <tr><td style="padding:.5rem;border:1px solid var(--border);font-weight:600">Description</td>
           ${prods.map(p => `<td style="padding:.5rem;border:1px solid var(--border);font-size:.75rem;line-height:1.4">${escHtml((p.description||'').substring(0,120))}...</td>`).join('')}</tr>
         <tr><td style="padding:.5rem;border:1px solid var(--border)"></td>
@@ -5736,14 +5737,14 @@ async function showCompareModal() {
 
 function clearCompare() { compareList = []; updateCompareBadge(); toast('Comparison cleared', '', 'info'); }
 
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  FEATURE 3: SELLER TIERS & BADGES
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function getSellerTier(salesCount, avgRating) {
-  if (salesCount >= 100 && avgRating >= 4.5) return { tier: 'verified', label: '✅ Verified Seller', color: '#16a34a', bg: '#dcfce7' };
-  if (salesCount >= 50 && avgRating >= 4.0)  return { tier: 'gold', label: '🥇 Gold Seller', color: '#ca8a04', bg: '#fef9c3' };
-  if (salesCount >= 20 && avgRating >= 3.5)  return { tier: 'silver', label: '🥈 Silver Seller', color: '#64748b', bg: '#f1f5f9' };
-  return { tier: 'bronze', label: '🥉 New Seller', color: '#a16207', bg: '#fefce8' };
+  if (salesCount >= 100 && avgRating >= 4.5) return { tier: 'verified', label: 'âœ… Verified Seller', color: '#16a34a', bg: '#dcfce7' };
+  if (salesCount >= 50 && avgRating >= 4.0)  return { tier: 'gold', label: 'ðŸ¥‡ Gold Seller', color: '#ca8a04', bg: '#fef9c3' };
+  if (salesCount >= 20 && avgRating >= 3.5)  return { tier: 'silver', label: 'ðŸ¥ˆ Silver Seller', color: '#64748b', bg: '#f1f5f9' };
+  return { tier: 'bronze', label: 'ðŸ¥‰ New Seller', color: '#a16207', bg: '#fefce8' };
 }
 
 function renderSellerBadge(salesCount, avgRating) {
@@ -5751,9 +5752,9 @@ function renderSellerBadge(salesCount, avgRating) {
   return `<span style="display:inline-flex;align-items:center;gap:.25rem;font-size:.65rem;font-weight:700;padding:.2rem .5rem;border-radius:6px;background:${t.bg};color:${t.color}">${t.label}</span>`;
 }
 
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  FEATURE 4: COUPON / DISCOUNT SYSTEM
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 let appliedCoupon = null;
 
 async function applyCoupon() {
@@ -5775,7 +5776,7 @@ async function applyCoupon() {
 
     const cartTotal = cart.reduce((s, c) => s + c.price * (c.qty || 1), 0);
     if (cartTotal < (coupon.min_order || 0)) {
-      toast(`Min order ₦${(coupon.min_order||0).toLocaleString()}`, 'Add more items', 'warn');
+      toast(`Min order â‚¦${(coupon.min_order||0).toLocaleString()}`, 'Add more items', 'warn');
       return;
     }
 
@@ -5797,7 +5798,7 @@ async function applyCoupon() {
     const totalEl = document.getElementById('co-total');
     if (totalEl) totalEl.textContent = fmtN(checkoutTotal);
 
-    toast(`Coupon Applied! 🎉`, `${coupon.discount_type === 'percent' ? coupon.discount_value + '%' : fmtN(coupon.discount_value)} off`, 'success');
+    toast(`Coupon Applied! ðŸŽ‰`, `${coupon.discount_type === 'percent' ? coupon.discount_value + '%' : fmtN(coupon.discount_value)} off`, 'success');
     codeInput.value = '';
     codeInput.disabled = true;
   } catch(e) {
@@ -5843,7 +5844,7 @@ async function createCoupon() {
       is_active: true
     });
     if (error) throw error;
-    toast('Coupon Created! 🎫', `Code: ${code}`, 'success');
+    toast('Coupon Created! ðŸŽ«', `Code: ${code}`, 'success');
     loadSellerCoupons();
     ['coupon-new-code','coupon-value','coupon-min','coupon-max','coupon-days'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
@@ -5869,14 +5870,14 @@ async function loadSellerCoupons() {
         </div>
         <span class="font-bold color-green">${c.discount_type==='percent'?c.discount_value+'%':fmtN(c.discount_value)} off</span>
       </div>
-      <div class="text-xs color-text3 mt-1">Used ${c.used_count}/${c.max_uses} · Min order ${fmtN(c.min_order)} · Expires ${fmtDate(c.expires_at)}</div>
+      <div class="text-xs color-text3 mt-1">Used ${c.used_count}/${c.max_uses} Â· Min order ${fmtN(c.min_order)} Â· Expires ${fmtDate(c.expires_at)}</div>
     </div>`;
   }).join('');
 }
 
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  FEATURE 5: FLASH SALES / DEAL OF THE DAY
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 let activeFlashSales = [];
 
 async function loadFlashSales() {
@@ -5934,7 +5935,7 @@ function updateFlashTimers() {
     const h = Math.floor(diff / 3600000);
     const m = Math.floor((diff % 3600000) / 60000);
     const s = Math.floor((diff % 60000) / 1000);
-    el.textContent = `⏰ ${h}h ${m}m ${s}s left`;
+    el.textContent = `â° ${h}h ${m}m ${s}s left`;
   });
 }
 setInterval(updateFlashTimers, 1000);
@@ -5962,15 +5963,15 @@ async function createFlashSale() {
       is_active: true
     });
     if (error) throw error;
-    toast('Flash Sale Live! ⚡', `Ends in ${hours} hours`, 'success');
+    toast('Flash Sale Live! âš¡', `Ends in ${hours} hours`, 'success');
   } catch(e) {
     toast('Failed', e.message, 'error');
   }
 }
 
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  FEATURE 6: IN-APP MESSAGING
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 let currentChatPartner = null;
 let msgInterval = null;
 
@@ -6099,9 +6100,9 @@ async function showInbox() {
   }).join('');
 }
 
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  FEATURE 7: SERVICE PROVIDER REVIEWS
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 let svcReviewRating = 0;
 
 function openServiceReview(bookingId, providerName) {
@@ -6138,16 +6139,16 @@ async function submitServiceReview() {
       comment: validateInput(comment)
     });
     if (error) throw error;
-    toast('Review Submitted! ⭐', 'Thank you for your feedback', 'success');
+    toast('Review Submitted! â­', 'Thank you for your feedback', 'success');
     closeModal('service-review-modal');
   } catch(e) {
     toast('Failed', e.message, 'error');
   }
 }
 
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  FEATURE 8: ORDER TRACKING
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function showOrderTracking(orderId) {
   showModal('tracking-modal');
   const container = document.getElementById('tracking-timeline');
@@ -6187,7 +6188,7 @@ async function showOrderTracking(orderId) {
       </div>
       <div>
         <div class="font-bold text-sm" style="${done?'':'color:var(--text3)'}">${statusLabels[status]||status}</div>
-        ${event ? `<div class="text-xs color-text3">${fmtDate(event.created_at)}${event.note?' · '+escHtml(event.note):''}</div>` : ''}
+        ${event ? `<div class="text-xs color-text3">${fmtDate(event.created_at)}${event.note?' Â· '+escHtml(event.note):''}</div>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -6207,9 +6208,9 @@ async function addTrackingUpdate(orderId) {
   } catch(e) { toast('Failed', e.message, 'error'); }
 }
 
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  FEATURE 9: ADMIN REPORT EXPORT (CSV / PDF)
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // (exportAdminReport is defined in admin section above)
 
 // ====================================================
@@ -6242,7 +6243,7 @@ async function toggleVoiceInput() {
       voiceRecognition.onstart = () => {
         rec.classList.remove('hidden');
         btn.style.background = 'var(--red)';
-        if (chatInput) chatInput.placeholder = '🎤 Listening...';
+        if (chatInput) chatInput.placeholder = 'ðŸŽ¤ Listening...';
       };
 
       voiceRecognition.onresult = (event) => {
@@ -6348,10 +6349,10 @@ async function loadPredictiveAnalytics() {
     
     // Risk factors
     const riskFactors = [];
-    if (parseFloat(revenueGrowth) < 0) riskFactors.push('📉 Revenue declining');
-    if (recentData.filter(o => o.status === 'pending').length > 5) riskFactors.push('⏳ Many pending orders');
-    if (slowSellers.length > 0) riskFactors.push('📦 Slow-moving inventory');
-    if ((disputes.data||[]).length > 3) riskFactors.push('⚠️ Open disputes');
+    if (parseFloat(revenueGrowth) < 0) riskFactors.push('ðŸ“‰ Revenue declining');
+    if (recentData.filter(o => o.status === 'pending').length > 5) riskFactors.push('â³ Many pending orders');
+    if (slowSellers.length > 0) riskFactors.push('ðŸ“¦ Slow-moving inventory');
+    if ((disputes.data||[]).length > 3) riskFactors.push('âš ï¸ Open disputes');
     
     // Store predictions
     _predictionData = {
@@ -6362,22 +6363,22 @@ async function loadPredictiveAnalytics() {
     container.innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:1.5rem">
         <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">📈 Revenue Growth</div>
+          <div class="text-xs color-text3 mb-1">ðŸ“ˆ Revenue Growth</div>
           <div style="font-size:1.5rem;font-weight:800;color:${parseFloat(revenueGrowth) >= 0 ? 'var(--green)' : 'var(--red)'}">${revenueGrowth}%</div>
           <div class="text-xs color-text3">vs last 30 days</div>
         </div>
         <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">🛒 Orders Growth</div>
+          <div class="text-xs color-text3 mb-1">ðŸ›’ Orders Growth</div>
           <div style="font-size:1.5rem;font-weight:800;color:${parseFloat(ordersGrowth) >= 0 ? 'var(--green)' : 'var(--red)'}">${ordersGrowth}%</div>
           <div class="text-xs color-text3">vs last 30 days</div>
         </div>
         <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">💰 Avg Order Value</div>
+          <div class="text-xs color-text3 mb-1">ðŸ’° Avg Order Value</div>
           <div style="font-size:1.5rem;font-weight:800" id="p-avg-order">${fmtN(avgOrderValue)}</div>
-          <div class="text-xs color-text3">${avgOrderValueChange >= 0 ? '↑' : '↓'} ${Math.abs(avgOrderValueChange).toFixed(1)}%</div>
+          <div class="text-xs color-text3">${avgOrderValueChange >= 0 ? 'â†‘' : 'â†“'} ${Math.abs(avgOrderValueChange).toFixed(1)}%</div>
         </div>
         <div class="card card-pad" style="text-align:center">
-          <div class="text-xs color-text3 mb-1">🔮 Next 30 Days</div>
+          <div class="text-xs color-text3 mb-1">ðŸ”® Next 30 Days</div>
           <div style="font-size:1.5rem;font-weight:800;color:var(--purple)">${fmtN(projectedRevenue)}</div>
           <div class="text-xs color-text3">Projected revenue</div>
         </div>
@@ -6525,7 +6526,7 @@ async function loadCustomerSegmentation() {
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem">
         <div class="card card-pad" style="text-align:center">
           <div style="font-size:1.5rem;font-weight:800;color:var(--purple)">${vip.length}</div>
-          <div class="text-xs color-text3">VIP (₦100k+)</div>
+          <div class="text-xs color-text3">VIP (â‚¦100k+)</div>
         </div>
         <div class="card card-pad" style="text-align:center">
           <div style="font-size:1.5rem;font-weight:800;color:var(--green)">${regular.length}</div>
@@ -6620,7 +6621,7 @@ async function loadAIRecommendations() {
               <img src="${(p.images&&p.images[0])||''}" style="width:48px;height:48px;border-radius:6px;object-fit:cover" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1 1%22><rect fill=%22%23f0f0f0%22 width=%221%22 height=%221%22/></svg>'">
               <div style="flex:1;min-width:0">
                 <div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(p.name)}</div>
-                <div class="text-xs color-text3">${fmtN(p.price)} · ⭐ ${(p.avg_rating||0).toFixed(1)} · ${p.sold_count||0} sold</div>
+                <div class="text-xs color-text3">${fmtN(p.price)} Â· â­ ${(p.avg_rating||0).toFixed(1)} Â· ${p.sold_count||0} sold</div>
               </div>
             </div>
           `).join('')}
@@ -6647,7 +6648,7 @@ async function loadAIRecommendations() {
             <div class="flex justify-between items-center py-2" style="padding:.5rem;background:var(--green-xlt);border-radius:6px">
               <div>
                 <div class="text-sm font-600">${escHtml(p.name?.substring(0,25))}</div>
-                <div class="text-xs color-text3">⭐ ${(p.avg_rating||0).toFixed(1)} (${p.sold_count||0} sales)</div>
+                <div class="text-xs color-text3">â­ ${(p.avg_rating||0).toFixed(1)} (${p.sold_count||0} sales)</div>
               </div>
               <div class="font-bold" style="color:var(--green)">${fmtN(p.price)}</div>
             </div>
@@ -6930,17 +6931,17 @@ async function loadPriceIntelligence() {
                 <div class="font-bold color-green">${fmtN(data.compAvg)}</div>
               </div>
             </div>
-            <div class="text-xs color-text3 mt-2">You: ${data.myCount} products · Competitors: ${data.compCount} products</div>
+            <div class="text-xs color-text3 mt-2">You: ${data.myCount} products Â· Competitors: ${data.compCount} products</div>
           </div>`;
         }).join('')}
       </div>
       
       <div class="card card-pad mt-3">
-        <h4 class="mb-2">💡 Pricing Insights</h4>
+        <h4 class="mb-2">ðŸ’¡ Pricing Insights</h4>
         <div style="font-size:.85rem;color:var(--text2);line-height:1.6">
           ${Object.entries(analysis).some(([_,d]) => d.myAvg > d.compAvg) ? 
-            '<p>⚠️ Some of your prices are <strong>above</strong> market average. Consider adjusting to stay competitive.</p>' : 
-            '<p>✅ Your prices are <strong>competitive</strong> or below market average!</p>'}
+            '<p>âš ï¸ Some of your prices are <strong>above</strong> market average. Consider adjusting to stay competitive.</p>' : 
+            '<p>âœ… Your prices are <strong>competitive</strong> or below market average!</p>'}
         </div>
       </div>`;
   } catch(e) {
@@ -7006,12 +7007,12 @@ async function exportAdminReport(type) {
   const a = document.createElement('a');
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
-  toast('Report Downloaded! 📊', filename, 'success');
+  toast('Report Downloaded! ðŸ“Š', filename, 'success');
 }
 
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  FEATURE 10: PWA INSTALL PROMPT
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
@@ -7025,7 +7026,7 @@ function installPWA() {
   deferredInstallPrompt.prompt();
   deferredInstallPrompt.userChoice.then(choice => {
     if (choice.outcome === 'accepted') {
-      toast('App Installed! 📱', 'BUYSELL is now on your home screen', 'success');
+      toast('App Installed! ðŸ“±', 'BUYSELL is now on your home screen', 'success');
     }
     deferredInstallPrompt = null;
     const installBar = document.getElementById('pwa-install-bar');
@@ -7039,9 +7040,9 @@ function dismissInstallBar() {
   sessionStorage.setItem('pwa_dismissed', '1');
 }
 
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  FEATURE 11: SELLER ANALYTICS DASHBOARD
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function loadSellerAnalytics() {
   const container = document.getElementById('seller-analytics-content');
   if (!container || !currentUser) return;
@@ -7075,7 +7076,7 @@ async function loadSellerAnalytics() {
         </div>
         <div class="card card-pad" style="text-align:center">
           <div class="text-xs color-text3 mb-1">Avg Rating</div>
-          <div style="font-size:1.4rem;font-weight:800;color:var(--gold)">⭐ ${avgRating}</div>
+          <div style="font-size:1.4rem;font-weight:800;color:var(--gold)">â­ ${avgRating}</div>
         </div>
         <div class="card card-pad" style="text-align:center">
           <div class="text-xs color-text3 mb-1">Revenue</div>
@@ -7095,9 +7096,9 @@ async function loadSellerAnalytics() {
   } catch(e) { console.error('Analytics error:', e); }
 }
 
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  FEATURE 12: MULTI-LANGUAGE SUPPORT (Pidgin, Hausa, Yoruba, Igbo)
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const TRANSLATIONS = {
   en: { shop:'Shop', cart:'Cart', orders:'My Orders', services:'Hire Services', search:'Search products...',
         welcome:'Welcome to', tagline:'Nigeria\'s Marketplace', addToCart:'Add to Cart', buyNow:'Buy Now',
@@ -7108,12 +7109,12 @@ const TRANSLATIONS = {
   ha: { shop:'Saya', cart:'Kayan Siye', orders:'Oda na', services:'Dauka Ma\'aikaci', search:'Nemo kaya...',
         welcome:'Barka da zuwa', tagline:'Kasuwar Nigeria', addToCart:'Saka cikin jaka', buyNow:'Saya yanzu',
         checkout:'Checkout', wishlist:'Abubuwan da nake so', compare:'Kwatanta', messages:'Sakonni', hello:'Sannu' },
-  yo: { shop:'Ra', cart:'Apó Rírà', orders:'Àṣẹ mi', services:'Gbé Oníṣẹ', search:'Wá ohun tí o fẹ...',
-        welcome:'Ẹ káàbọ̀ sí', tagline:'Ọjà Nigeria', addToCart:'Fi sí apó', buyNow:'Ra báyìí',
-        checkout:'Sanwó', wishlist:'Ohun tí mo fẹ́ràn', compare:'Fi wéra', messages:'Ifiranṣẹ́', hello:'Pẹ̀lẹ́' },
-  ig: { shop:'Zụta', cart:'Ngwá Ọzụzụ', orders:'Usoro m', services:'Goo Onye ọrụ', search:'Chọọ ngwa...',
-        welcome:'Nnọọ na', tagline:'Ahịa Nigeria', addToCart:'Tinye n\'ime ngwá', buyNow:'Zụta ugbu a',
-        checkout:'Kwụọ ụgwọ', wishlist:'Ihe ndị m chọrọ', compare:'Tụnyere', messages:'Ozi', hello:'Nnọọ' }
+  yo: { shop:'Ra', cart:'ApÃ³ RÃ­rÃ ', orders:'Ã€á¹£áº¹ mi', services:'GbÃ© OnÃ­á¹£áº¹', search:'WÃ¡ ohun tÃ­ o fáº¹...',
+        welcome:'áº¸ kÃ¡Ã bá»Ì€ sÃ­', tagline:'á»ŒjÃ  Nigeria', addToCart:'Fi sÃ­ apÃ³', buyNow:'Ra bÃ¡yÃ¬Ã­',
+        checkout:'SanwÃ³', wishlist:'Ohun tÃ­ mo fáº¹ÌrÃ n', compare:'Fi wÃ©ra', messages:'Ifiraná¹£áº¹Ì', hello:'Páº¹Ì€láº¹Ì' },
+  ig: { shop:'Zá»¥ta', cart:'NgwÃ¡ á»Œzá»¥zá»¥', orders:'Usoro m', services:'Goo Onye á»rá»¥', search:'Chá»á» ngwa...',
+        welcome:'Nná»á» na', tagline:'Ahá»‹a Nigeria', addToCart:'Tinye n\'ime ngwÃ¡', buyNow:'Zá»¥ta ugbu a',
+        checkout:'Kwá»¥á» á»¥gwá»', wishlist:'Ihe ndá»‹ m chá»rá»', compare:'Tá»¥nyere', messages:'Ozi', hello:'Nná»á»' }
 };
 
 let currentLang = localStorage.getItem('bs_lang') || 'en';
@@ -7134,9 +7135,9 @@ function applyTranslations() {
   });
 }
 
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  INIT: Load new features on page ready
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 document.addEventListener('DOMContentLoaded', () => {
   loadFlashSales();
   updateWishlistBadge();
