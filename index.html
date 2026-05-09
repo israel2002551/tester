@@ -1771,6 +1771,7 @@
         <a href="#" class="dash-nav-item" id="ap-nav-notifications" onclick="switchAdminTab('notifications');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-bell"></i> Alerts</a>
         <a href="#" class="dash-nav-item" id="ap-nav-ai" onclick="switchAdminTab('ai');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-robot"></i> AI Assistant</a>
         <a href="#" class="dash-nav-item" id="ap-nav-branding" onclick="switchAdminTab('branding');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-paint-brush"></i> Branding</a>
+        <a href="#" class="dash-nav-item" id="ap-nav-accounts" onclick="switchAdminTab('accounts');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-user-check"></i> Account Mgmt</a>
       </nav>
       <a href="#" class="dash-nav-item" style="color:var(--danger);display:flex" onclick="logoutUser();event.preventDefault()"><i class="fa-solid fa-sign-out-alt"></i> Exit Portal</a>
     </div>
@@ -1793,6 +1794,7 @@
           <button class="buyer-tab" onclick="switchAdminTab('broadcast')">📣 Broadcast</button>
           <button class="buyer-tab" onclick="switchAdminTab('ai')">🤖 AI</button>
           <button class="buyer-tab" onclick="switchAdminTab('branding')">🎨 Branding</button>
+          <button class="buyer-tab" onclick="switchAdminTab('accounts')">👤 Accounts</button>
         </div>
 
         <!-- ═══ OVERVIEW TAB ═══ -->
@@ -2035,6 +2037,53 @@
             <h3 class="mb-1"><i class="fa-solid fa-tag color-green"></i> Price Intelligence</h3>
             <p class="text-xs color-text3 mb-3">Compare your prices with competitors.</p>
             <div id="price-intelligence"></div>
+          </div>
+        </div>
+
+        <!-- ═══ ACCOUNTS TAB ═══ -->
+        <div id="adm-tab-accounts" class="adm-tab hidden">
+          <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
+            <h3 style="margin:0">Account Management</h3>
+            <button class="btn btn-outline btn-sm" onclick="loadAdminAccounts()"><i class="fa-solid fa-sync"></i> Refresh All</button>
+          </div>
+          
+          <!-- Section 1: Commission Activations -->
+          <div class="card card-pad mb-4">
+            <h3 class="mb-3"><i class="fa-solid fa-dollar-sign color-green"></i> Commission Activations (Pending Receipts)</h3>
+            <p class="text-xs color-text3 mb-3">Sellers who uploaded a receipt and are waiting for account activation.</p>
+            <div class="overflow-x">
+              <table class="data-table">
+                <thead><tr><th>Seller</th><th>Date</th><th>Reference</th><th>Receipt</th><th>Action</th></tr></thead>
+                <tbody id="acct-comm-list"><tr><td colspan="5" class="text-center text-sm color-text3 p-3">Loading...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Section 2: Ad Approvals -->
+          <div class="card card-pad mb-4">
+            <h3 class="mb-3"><i class="fa-solid fa-bullseye color-blue"></i> Ad Payment Approvals</h3>
+            <p class="text-xs color-text3 mb-3">Pending advertisements waiting for payment verification and approval.</p>
+            <div class="overflow-x">
+              <table class="data-table">
+                <thead><tr><th>Advertiser</th><th>Ad Title</th><th>Reference</th><th>Receipt / Media</th><th>Action</th></tr></thead>
+                <tbody id="acct-ads-list"><tr><td colspan="5" class="text-center text-sm color-text3 p-3">Loading...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Section 3: Trial Extensions -->
+          <div class="card card-pad mb-4">
+            <h3 class="mb-3"><i class="fa-solid fa-clock color-gold"></i> Seller Trial Extensions</h3>
+            <p class="text-xs color-text3 mb-3">Active and expired seller trials. You can extend their free trial by 30 days.</p>
+            <div class="flex gap-2 mb-3">
+              <input type="text" id="acct-trial-search" class="form-input" placeholder="Search seller..." style="width:200px" oninput="filterTrialExtensions()">
+            </div>
+            <div class="overflow-x" style="max-height:400px;overflow-y:auto">
+              <table class="data-table" style="position:relative">
+                <thead style="position:sticky;top:0;background:#fff;z-index:10;box-shadow:0 1px 2px rgba(0,0,0,0.05)"><tr><th>Seller</th><th>Email</th><th>Trial Ends</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody id="acct-trials-list"><tr><td colspan="5" class="text-center text-sm color-text3 p-3">Loading...</td></tr></tbody>
+              </table>
+            </div>
           </div>
         </div>
 
