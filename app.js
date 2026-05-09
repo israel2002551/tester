@@ -866,7 +866,7 @@ async function openProduct(id) {
 }
 
 async function loadProductReviews(productId) {
-  const { data } = await db.from('reviews').select('*,profiles(name)').eq('product_id', productId).order('created_at', { ascending: false }).limit(10);
+  const { data } = await db.from('reviews').select('*,profiles!buyer_id(name)').eq('product_id', productId).order('created_at', { ascending: false }).limit(10);
   const reviews = data || [];
   const count = reviews.length;
   document.getElementById('modal-review-count').textContent = `${count} review${count!==1?'s':''}`;
@@ -1162,8 +1162,9 @@ function openReviewModal() {
 
 function setRating(val) {
   selectedRating = val;
-  document.querySelectorAll('.star-btn').forEach((b,i)=>{
+  document.querySelectorAll('#star-row .star-btn').forEach((b,i)=>{
     b.classList.toggle('active', i < val);
+    b.style.color = i < val ? '#f59e0b' : '#d1d5db';
   });
 }
 
@@ -1172,17 +1173,69 @@ async function submitReview() {
   if (!selectedRating) { toast('Please select a rating','','warn'); return; }
   const text = document.getElementById('review-text').value.trim();
   if (!text) { toast('Please write a review','','warn'); return; }
+  const btn = document.getElementById('review-submit-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting…';
+
   try {
+    // Upload review images if any
+    let imageUrls = [];
+    const imgInput = document.getElementById('review-images-input');
+    if (imgInput?.files?.length) {
+      for (let i = 0; i < Math.min(imgInput.files.length, 3); i++) {
+        const file = imgInput.files[i];
+        const ext = file.name.split('.').pop();
+        const path = `reviews/${currentUser.id}/${Date.now()}_${i}.${ext}`;
+        const { error } = await db.storage.from('uploads').upload(path, file);
+        if (!error) {
+          const { data } = db.storage.from('uploads').getPublicUrl(path);
+          imageUrls.push(data.publicUrl);
+        }
+      }
+    }
+
     await callEdge('submit-review', {
       product_id:  reviewProductId,
       rating:      selectedRating,
-      review_text: text
+      review_text: text,
+      image_urls:  imageUrls
     });
-  } catch(e) { toast('Error', e.message, 'error'); return; }
-  toast('Review Submitted! ⭐', 'Thanks for your feedback!', 'success');
-  closeModal('review-modal');
-  loadProductReviews(reviewProductId);
-  loadProducts();
+    toast('Review Submitted! ⭐', 'Thanks for your feedback!', 'success');
+    closeModal('review-modal');
+    loadProductReviews(reviewProductId);
+    loadProducts();
+  } catch(e) { toast('Error', e.message || 'Could not submit review', 'error'); }
+  btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-star"></i> Submit Review';
+}
+
+function previewReviewImages(input) {
+  const container = document.getElementById('review-img-previews');
+  if (!container) return;
+  container.innerHTML = '';
+  const files = Array.from(input.files || []).slice(0, 3);
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      container.innerHTML += `<img src="${e.target.result}" style="width:60px;height:60px;object-fit:cover;border-radius:8px;border:2px solid var(--border)">`;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function previewAdMedia(input) {
+  const file = input.files?.[0];
+  const container = document.getElementById('ad-media-preview-container');
+  const el = document.getElementById('ad-preview-el');
+  if (!file || !container || !el) return;
+  container.classList.remove('hidden');
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    if (file.type.startsWith('video/')) {
+      el.innerHTML = `<video src="${e.target.result}" controls style="max-width:100%;max-height:200px;border-radius:8px"></video>`;
+    } else {
+      el.innerHTML = `<img src="${e.target.result}" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:contain">`;
+    }
+  };
+  reader.readAsDataURL(file);
 }
 
 // ====================================================
@@ -1550,7 +1603,7 @@ async function updateOrderStatus(id, status) {
 async function loadSellerReviews() {
   if (!currentUser) return;
   const { data: prods } = await db.from('products').select('id').eq('seller_id', currentUser.id);
-  const { data: revs } = await db.from('reviews').select('*,profiles(name)').in('product_id', (prods||[]).map(p=>p.id)).order('created_at',{ascending:false});
+  const { data: revs } = await db.from('reviews').select('*,profiles!buyer_id(name)').in('product_id', (prods||[]).map(p=>p.id)).order('created_at',{ascending:false});
   document.getElementById('ds-reviews-skeleton').classList.add('hidden');
   const list = document.getElementById('ds-reviews-list');
   if (!revs?.length) { document.getElementById('ds-reviews-empty').classList.remove('hidden'); return; }
@@ -1935,6 +1988,7 @@ function switchAdminTab(tab) {
   if (tab === 'broadcast')    loadBroadcastHistory();
   if (tab === 'ai')           adminAiHistory = [];
   if (tab === 'accounts')     loadAdminAccounts();
+  if (tab === 'kyc')          loadAdminKyc();
 }
 
 /* ── OVERVIEW ── */
@@ -3585,3 +3639,595 @@ async function viewProviderProfile(providerId) {
 // ====================================================
 function openHelpModal() { showModal('help-modal'); }
 
+// ====================================================
+//  ADMIN KYC MANAGEMENT
+// ====================================================
+async function loadAdminKyc() {
+  if (!guardAdminPanel()) return;
+  const skeleton = document.getElementById('adm-kyc-skeleton');
+  const list = document.getElementById('adm-kyc-list');
+  const empty = document.getElementById('adm-kyc-empty');
+  skeleton?.classList.remove('hidden'); list?.classList.add('hidden'); empty?.classList.add('hidden');
+
+  try {
+    const filter = document.getElementById('adm-kyc-filter')?.value || 'pending';
+    let query = db.from('kyc_verifications').select('*, profiles(name, email, whatsapp)').order('created_at', { ascending: false });
+    if (filter !== 'all') query = query.eq('status', filter);
+    const { data: rows } = await query;
+
+    skeleton?.classList.add('hidden');
+    if (!rows || !rows.length) { empty?.classList.remove('hidden'); return; }
+    list?.classList.remove('hidden');
+    list.style.display = 'flex';
+
+    list.innerHTML = rows.map(k => {
+      const isPending = k.status === 'pending';
+      const statusBadge = k.status === 'approved' ? '<span class="badge badge-green">Approved</span>'
+        : k.status === 'rejected' ? '<span class="badge badge-red">Rejected</span>'
+        : '<span class="badge badge-gold">Pending</span>';
+      return `
+        <div class="card card-pad">
+          <div class="flex justify-between items-start gap-2 flex-wrap mb-2">
+            <div>
+              <div class="font-bold">${escHtml(k.profiles?.name || 'Unknown')}</div>
+              <div class="text-xs color-text3">${escHtml(k.profiles?.email || '')}</div>
+            </div>
+            <div class="flex items-center gap-2">${statusBadge}<span class="text-xs color-text3">${fmtDate(k.created_at)}</span></div>
+          </div>
+          <div class="flex gap-2 flex-wrap mb-2 text-xs">
+            <span class="badge badge-outline">${escHtml(k.doc_type || 'N/A')}</span>
+            <span class="color-text3">Doc #: <b>${escHtml(k.doc_number || 'N/A')}</b></span>
+            <span class="color-text3">Name on ID: <b>${escHtml(k.full_name || 'N/A')}</b></span>
+          </div>
+          <div class="flex gap-2 flex-wrap mb-3">
+            ${k.front_url ? `<a href="${k.front_url}" target="_blank" class="btn btn-ghost btn-sm" style="color:var(--blue)"><i class="fa-solid fa-image"></i> Front</a>` : ''}
+            ${k.back_url ? `<a href="${k.back_url}" target="_blank" class="btn btn-ghost btn-sm" style="color:var(--blue)"><i class="fa-solid fa-image"></i> Back</a>` : ''}
+            ${k.selfie_url ? `<a href="${k.selfie_url}" target="_blank" class="btn btn-ghost btn-sm" style="color:var(--blue)"><i class="fa-solid fa-user"></i> Selfie</a>` : ''}
+          </div>
+          ${isPending ? `<div class="flex gap-2">
+            <button class="btn btn-primary btn-sm" onclick="adminApproveKyc('${k.id}','${k.user_id}')"><i class="fa-solid fa-check"></i> Approve</button>
+            <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="adminRejectKyc('${k.id}','${k.user_id}')"><i class="fa-solid fa-times"></i> Reject</button>
+          </div>` : (k.admin_note ? `<div class="text-xs color-text3"><b>Note:</b> ${escHtml(k.admin_note)}</div>` : '')}
+        </div>`;
+    }).join('');
+  } catch(e) {
+    skeleton?.classList.add('hidden');
+    list.innerHTML = `<div class="text-center color-danger p-3">Error: ${e.message}</div>`;
+    list?.classList.remove('hidden');
+  }
+}
+
+async function adminApproveKyc(kycId, userId) {
+  if (!confirm('Approve this KYC submission?')) return;
+  try {
+    await callEdge('admin-action', { action: 'approve_kyc', target_id: kycId, data: { user_id: userId } });
+    toast('KYC Approved ✅', 'Seller is now verified.', 'success');
+    loadAdminKyc();
+  } catch(e) { toast('Error', e.message, 'error'); }
+}
+
+async function adminRejectKyc(kycId, userId) {
+  const reason = prompt('Reason for rejection (optional):') || '';
+  try {
+    await callEdge('admin-action', { action: 'reject_kyc', target_id: kycId, data: { user_id: userId, reason } });
+    toast('KYC Rejected', 'Seller has been notified.', 'info');
+    loadAdminKyc();
+  } catch(e) { toast('Error', e.message, 'error'); }
+}
+
+// ====================================================
+//  SELLER KYC SUBMISSION
+// ====================================================
+async function submitKyc(event) {
+  event.preventDefault();
+  if (!currentUser) { showModal('auth-modal'); return; }
+  const btn = document.getElementById('kyc-submit-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting…';
+
+  try {
+    const docType = document.getElementById('kyc-doc-type').value;
+    const docNum = document.getElementById('kyc-doc-number').value.trim();
+    const fullName = document.getElementById('kyc-full-name').value.trim();
+    const frontFile = document.getElementById('kyc-front').files[0];
+    const backFile = document.getElementById('kyc-back').files?.[0];
+    const selfieFile = document.getElementById('kyc-selfie').files[0];
+
+    if (!docType || !docNum || !fullName || !frontFile || !selfieFile) {
+      toast('Missing fields', 'Please fill all required fields', 'warn');
+      btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-shield-check"></i> Submit Verification';
+      return;
+    }
+
+    async function uploadKycFile(file, label) {
+      const ext = file.name.split('.').pop();
+      const path = `kyc/${currentUser.id}/${label}_${Date.now()}.${ext}`;
+      const { error } = await db.storage.from('uploads').upload(path, file);
+      if (error) throw new Error(`Upload ${label} failed`);
+      const { data } = db.storage.from('uploads').getPublicUrl(path);
+      return data.publicUrl;
+    }
+
+    const frontUrl = await uploadKycFile(frontFile, 'front');
+    const backUrl = backFile ? await uploadKycFile(backFile, 'back') : null;
+    const selfieUrl = await uploadKycFile(selfieFile, 'selfie');
+
+    await db.from('kyc_verifications').insert({
+      user_id: currentUser.id,
+      doc_type: docType,
+      doc_number: docNum,
+      full_name: fullName,
+      front_url: frontUrl,
+      back_url: backUrl,
+      selfie_url: selfieUrl,
+      status: 'pending'
+    });
+
+    toast('KYC Submitted! 🎉', 'Your documents are under review.', 'success');
+    closeModal('kyc-modal');
+  } catch(e) {
+    toast('Submission Error', e.message, 'error');
+  }
+  btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-shield-check"></i> Submit Verification';
+}
+
+// ====================================================
+//  ADMIN REPORT EXPORT
+// ====================================================
+async function exportAdminReport() {
+  if (!guardAdminPanel()) return;
+  toast('Generating…', 'Preparing your CSV report', 'info');
+  try {
+    const [{ data: sellers }, { data: orders }] = await Promise.all([
+      db.from('profiles').select('*').eq('role', 'seller'),
+      db.from('orders').select('*').order('created_at', { ascending: false }).limit(500)
+    ]);
+
+    let csv = 'Section,ID,Name,Email,Role,Commission Paid,Trial End,Created\n';
+    (sellers || []).forEach(s => {
+      csv += `Seller,${s.id},${escHtml(s.name||'')},${s.email||''},${s.role},${s.commission_paid},${s.trial_end||''},${s.created_at}\n`;
+    });
+    csv += '\nSection,Order ID,Buyer,Status,Total,Payment Method,Created\n';
+    (orders || []).forEach(o => {
+      csv += `Order,${o.id},${o.buyer_id},${o.status},${o.total||0},${o.payment_method||''},${o.created_at}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `buysell_report_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+    toast('Report Downloaded ✅', '', 'success');
+  } catch(e) { toast('Export Error', e.message, 'error'); }
+}
+
+// ====================================================
+//  PWA INSTALL BAR
+// ====================================================
+function dismissInstallBar() {
+  document.getElementById('pwa-banner')?.classList.remove('show');
+}
+
+// ====================================================
+//  WISHLIST
+// ====================================================
+let wishlist = JSON.parse(localStorage.getItem('bs_wishlist') || '[]');
+function saveWishlist() { localStorage.setItem('bs_wishlist', JSON.stringify(wishlist)); }
+
+function toggleWishlist(productId) {
+  const idx = wishlist.indexOf(productId);
+  if (idx > -1) { wishlist.splice(idx, 1); toast('Removed', 'Removed from wishlist', 'info'); }
+  else { wishlist.push(productId); toast('Added ❤️', 'Added to wishlist', 'success'); }
+  saveWishlist();
+  document.querySelectorAll(`[data-wish="${productId}"]`).forEach(btn => {
+    btn.innerHTML = wishlist.includes(productId) ? '<i class="fa-solid fa-heart" style="color:#ef4444"></i>' : '<i class="fa-regular fa-heart"></i>';
+  });
+}
+
+async function showWishlistModal() {
+  showModal('wishlist-modal');
+  const container = document.getElementById('wishlist-items');
+  if (!wishlist.length) { container.innerHTML = '<p class="text-center color-text3 p-3">Your wishlist is empty.</p>'; return; }
+  container.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
+  try {
+    const { data: items } = await db.from('products').select('*').in('id', wishlist);
+    if (!items || !items.length) { container.innerHTML = '<p class="text-center color-text3 p-3">Products no longer available.</p>'; return; }
+    container.innerHTML = items.map(p => `
+      <div class="flex gap-3 items-center p-2" style="border-bottom:1px solid var(--border)">
+        <img src="${p.image_urls?.[0] || ''}" style="width:50px;height:50px;border-radius:8px;object-fit:cover">
+        <div style="flex:1">
+          <div class="font-bold text-sm">${escHtml(p.name)}</div>
+          <div class="color-green font-bold">₦${fmtN(p.price)}</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="toggleWishlist('${p.id}');showWishlistModal()"><i class="fa-solid fa-trash" style="color:var(--red)"></i></button>
+      </div>`).join('');
+  } catch(e) { container.innerHTML = '<p class="text-center color-danger">Error loading wishlist</p>'; }
+}
+
+// ====================================================
+//  COMPARE
+// ====================================================
+let compareList = JSON.parse(localStorage.getItem('bs_compare') || '[]');
+function saveCompare() {
+  localStorage.setItem('bs_compare', JSON.stringify(compareList));
+  const bar = document.getElementById('compare-bar');
+  const countEl = document.getElementById('compare-count');
+  if (bar) bar.classList.toggle('hidden', compareList.length === 0);
+  if (countEl) countEl.textContent = compareList.length;
+}
+
+function clearCompare() { compareList = []; saveCompare(); }
+
+async function showCompareModal() {
+  if (compareList.length < 2) { toast('Add more', 'Select at least 2 products to compare', 'warn'); return; }
+  showModal('compare-modal');
+  const container = document.getElementById('compare-content');
+  container.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
+  try {
+    const { data: items } = await db.from('products').select('*').in('id', compareList.slice(0, 4));
+    if (!items || items.length < 2) { container.innerHTML = '<p class="text-center color-text3">Could not load products.</p>'; return; }
+    const fields = ['name','price','category','condition','location'];
+    let html = '<table class="data-table" style="width:100%"><thead><tr><th>Feature</th>';
+    items.forEach(p => { html += `<th style="min-width:140px">${escHtml(p.name)}</th>`; });
+    html += '</tr></thead><tbody>';
+    fields.forEach(f => {
+      html += `<tr><td class="font-bold text-xs">${f.charAt(0).toUpperCase()+f.slice(1)}</td>`;
+      items.forEach(p => { html += `<td class="text-sm">${f==='price' ? '₦'+fmtN(p[f]) : escHtml(String(p[f]||'N/A'))}</td>`; });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  } catch(e) { container.innerHTML = '<p class="text-center color-danger">Error</p>'; }
+}
+
+// ====================================================
+//  MESSAGING
+// ====================================================
+let currentChatPartner = null;
+
+async function showInbox() {
+  showModal('inbox-modal');
+  const container = document.getElementById('inbox-list');
+  container.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
+  if (!currentUser) { container.innerHTML = '<p class="text-center color-text3 p-3">Sign in to view messages.</p>'; return; }
+  try {
+    const { data: msgs } = await db.from('messages')
+      .select('*, sender:sender_id(name), receiver:receiver_id(name)')
+      .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
+      .order('created_at', { ascending: false }).limit(50);
+    if (!msgs || !msgs.length) { container.innerHTML = '<p class="text-center color-text3 p-3">No messages yet.</p>'; return; }
+    const partners = {};
+    msgs.forEach(m => {
+      const pid = m.sender_id === currentUser.id ? m.receiver_id : m.sender_id;
+      const pname = m.sender_id === currentUser.id ? m.receiver?.name : m.sender?.name;
+      if (!partners[pid]) partners[pid] = { name: pname || 'User', lastMsg: m.content, time: m.created_at };
+    });
+    container.innerHTML = Object.entries(partners).map(([id, p]) => `
+      <div class="flex gap-3 items-center p-3" style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openConversation('${id}','${escAttr(p.name)}')">
+        <div style="width:40px;height:40px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700">${(p.name||'U')[0]}</div>
+        <div style="flex:1"><div class="font-bold text-sm">${escHtml(p.name)}</div><div class="text-xs color-text3" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(p.lastMsg||'')}</div></div>
+        <div class="text-xs color-text3">${fmtDate(p.time)}</div>
+      </div>`).join('');
+  } catch(e) { container.innerHTML = '<p class="text-center color-text3 p-3">Messages not available.</p>'; }
+}
+
+async function openConversation(partnerId, partnerName) {
+  currentChatPartner = partnerId;
+  closeModal('inbox-modal');
+  document.getElementById('msg-partner-name').textContent = partnerName;
+  showModal('message-modal');
+  const conv = document.getElementById('msg-conversation');
+  conv.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
+  try {
+    const { data: msgs } = await db.from('messages').select('*')
+      .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${currentUser.id})`)
+      .order('created_at', { ascending: true }).limit(100);
+    conv.innerHTML = (msgs||[]).map(m => {
+      const isMine = m.sender_id === currentUser.id;
+      return `<div style="align-self:${isMine?'flex-end':'flex-start'};background:${isMine?'var(--green)':'#fff'};color:${isMine?'#fff':'var(--text1)'};padding:.5rem .75rem;border-radius:12px;max-width:75%;font-size:.85rem;box-shadow:0 1px 3px rgba(0,0,0,.08)">${escHtml(m.content)}<div style="font-size:.65rem;opacity:.6;margin-top:.2rem">${fmtDate(m.created_at)}</div></div>`;
+    }).join('') || '<p class="text-center color-text3 p-3 text-sm">No messages yet. Say hello!</p>';
+    conv.scrollTop = conv.scrollHeight;
+  } catch(e) { conv.innerHTML = '<p class="text-center color-text3 p-3">Could not load conversation.</p>'; }
+}
+
+async function sendMessage() {
+  if (!currentUser || !currentChatPartner) return;
+  const input = document.getElementById('msg-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  try {
+    await db.from('messages').insert({ sender_id: currentUser.id, receiver_id: currentChatPartner, content: text });
+    openConversation(currentChatPartner, document.getElementById('msg-partner-name').textContent);
+  } catch(e) { toast('Error', 'Could not send message', 'error'); }
+}
+
+// ====================================================
+//  COUPONS
+// ====================================================
+async function createCoupon() {
+  if (!currentUser) return;
+  const code = document.getElementById('coupon-new-code')?.value.trim().toUpperCase();
+  const type = document.getElementById('coupon-type')?.value || 'percent';
+  const value = parseFloat(document.getElementById('coupon-value')?.value) || 0;
+  const minOrder = parseFloat(document.getElementById('coupon-min')?.value) || 0;
+  const maxUses = parseInt(document.getElementById('coupon-max')?.value) || 100;
+  const days = parseInt(document.getElementById('coupon-days')?.value) || 30;
+  if (!code || !value) { toast('Missing info', 'Enter a code and discount value', 'warn'); return; }
+  try {
+    const expires = new Date(Date.now() + days * 86400000).toISOString();
+    const coupons = JSON.parse(localStorage.getItem('bs_coupons_' + currentUser.id) || '[]');
+    coupons.push({ code, type, value, minOrder, maxUses, uses: 0, expires, seller_id: currentUser.id });
+    localStorage.setItem('bs_coupons_' + currentUser.id, JSON.stringify(coupons));
+    toast('Coupon Created! 🎫', `Code: ${code}`, 'success');
+    loadSellerCoupons();
+    document.getElementById('coupon-new-code').value = '';
+    document.getElementById('coupon-value').value = '';
+  } catch(e) { toast('Error', e.message, 'error'); }
+}
+
+function loadSellerCoupons() {
+  if (!currentUser) return;
+  const list = document.getElementById('seller-coupons-list');
+  if (!list) return;
+  const coupons = JSON.parse(localStorage.getItem('bs_coupons_' + currentUser.id) || '[]');
+  if (!coupons.length) { list.innerHTML = '<p class="color-text3 text-sm">No coupons yet.</p>'; return; }
+  list.innerHTML = coupons.map((c, i) => `
+    <div class="flex justify-between items-center p-2" style="border-bottom:1px solid var(--border)">
+      <div><span class="font-bold">${c.code}</span> — ${c.type==='percent'?c.value+'%':'₦'+fmtN(c.value)} off${c.minOrder?', min ₦'+fmtN(c.minOrder):''}</div>
+      <button class="btn btn-ghost btn-sm" onclick="deleteCoupon(${i})" style="color:var(--red)"><i class="fa-solid fa-trash"></i></button>
+    </div>`).join('');
+}
+
+function deleteCoupon(idx) {
+  const coupons = JSON.parse(localStorage.getItem('bs_coupons_' + currentUser.id) || '[]');
+  coupons.splice(idx, 1);
+  localStorage.setItem('bs_coupons_' + currentUser.id, JSON.stringify(coupons));
+  loadSellerCoupons();
+}
+
+function applyCoupon() {
+  const code = document.getElementById('co-coupon-code')?.value.trim().toUpperCase();
+  if (!code) return;
+  toast('Coupon Applied', `Code "${code}" will be validated at checkout`, 'success');
+}
+
+function removeCoupon() {
+  const el = document.getElementById('co-coupon-code');
+  if (el) el.value = '';
+  toast('Coupon Removed', '', 'info');
+}
+
+// ====================================================
+//  FLASH SALES
+// ====================================================
+async function createFlashSale() {
+  if (!currentUser) return;
+  const productId = document.getElementById('flash-product')?.value;
+  const flashPrice = parseFloat(document.getElementById('flash-price')?.value) || 0;
+  const hours = parseInt(document.getElementById('flash-hours')?.value) || 24;
+  if (!productId || !flashPrice) { toast('Missing info', 'Select a product and set a sale price', 'warn'); return; }
+  try {
+    const flashEnd = new Date(Date.now() + hours * 3600000).toISOString();
+    await db.from('products').update({ flash_price: flashPrice, flash_end: flashEnd }).eq('id', productId).eq('seller_id', currentUser.id);
+    toast('Flash Sale Live! ⚡', `Sale ends in ${hours} hours`, 'success');
+  } catch(e) { toast('Error', e.message, 'error'); }
+}
+
+// ====================================================
+//  AD SYSTEM
+// ====================================================
+let adPopupAds = [], adPopupIndex = 0, adSkipTimer = null;
+
+async function initiateAdPayment() {
+  if (!currentUser) { showModal('auth-modal'); return; }
+  const title = document.getElementById('ad-title')?.value.trim();
+  const link = document.getElementById('ad-link')?.value.trim();
+  const file = document.getElementById('ad-media-file')?.files?.[0];
+  if (!title) { toast('Missing title', 'Enter an ad title', 'warn'); return; }
+
+  const btn = document.getElementById('ad-pay-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processing…';
+
+  try {
+    let mediaUrl = '';
+    if (file) {
+      const ext = file.name.split('.').pop();
+      const path = `ads/${currentUser.id}/${Date.now()}.${ext}`;
+      const { error: upErr } = await db.storage.from('uploads').upload(path, file);
+      if (!upErr) { const { data } = db.storage.from('uploads').getPublicUrl(path); mediaUrl = data.publicUrl; }
+    }
+
+    await db.from('advertisements').insert({
+      user_id: currentUser.id,
+      title,
+      link_url: link || null,
+      media_url: mediaUrl,
+      status: 'pending',
+      payment_verified: false
+    });
+
+    try {
+      const payRes = await callEdge('init-ad-payment', { amount: 10000 });
+      if (payRes.access_code && typeof PaystackPop !== 'undefined') {
+        const handler = PaystackPop.setup({
+          key: PAYSTACK_PUBLIC_KEY,
+          email: currentUser.email,
+          amount: payRes.amount_kobo || 1000000,
+          ref: 'ad_' + Date.now(),
+          callback: () => { toast('Ad Submitted! 🎉', 'It will go live after admin approval.', 'success'); },
+          onClose: () => { toast('Payment Cancelled', 'Your ad is saved as pending.', 'info'); }
+        });
+        handler.openIframe();
+      } else {
+        toast('Ad Submitted', 'Pending admin approval and payment verification.', 'success');
+      }
+    } catch(pe) {
+      toast('Ad Saved', 'Payment could not be initiated. Admin will review manually.', 'info');
+    }
+  } catch(e) { toast('Error', e.message, 'error'); }
+  btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Publish Ad';
+}
+
+function closeAdPopup() {
+  document.getElementById('ad-popup-overlay')?.classList.add('hidden');
+  if (adSkipTimer) { clearInterval(adSkipTimer); adSkipTimer = null; }
+}
+
+function skipAd() {
+  if (adPopupIndex < adPopupAds.length - 1) {
+    adPopupIndex++;
+    renderAdPopup();
+  } else {
+    closeAdPopup();
+  }
+}
+
+function renderAdPopup() {
+  if (!adPopupAds.length) return;
+  const ad = adPopupAds[adPopupIndex];
+  const content = document.getElementById('ad-popup-content');
+  const counter = document.getElementById('ad-counter');
+  const ctaBtn = document.getElementById('ad-cta-btn');
+  const ctaText = document.getElementById('ad-cta-text');
+
+  if (content) content.innerHTML = ad.media_url
+    ? `<img src="${ad.media_url}" alt="${escHtml(ad.title)}" style="width:100%;max-height:300px;object-fit:contain;border-radius:8px">`
+    : `<div style="padding:2rem;text-align:center"><h3>${escHtml(ad.title)}</h3></div>`;
+  if (counter) counter.textContent = `${adPopupIndex+1}/${adPopupAds.length}`;
+  if (ctaBtn) ctaBtn.href = ad.link_url || '#';
+  if (ctaText) ctaText.textContent = ad.link_url ? 'Visit' : 'Close';
+
+  let secs = 5;
+  const skipBtn = document.getElementById('ad-skip-btn');
+  const timerEl = document.getElementById('ad-skip-timer');
+  if (skipBtn) skipBtn.disabled = true;
+  if (timerEl) timerEl.textContent = secs;
+  if (adSkipTimer) clearInterval(adSkipTimer);
+  adSkipTimer = setInterval(() => {
+    secs--;
+    if (timerEl) timerEl.textContent = secs;
+    if (secs <= 0) { clearInterval(adSkipTimer); if (skipBtn) { skipBtn.disabled = false; } }
+  }, 1000);
+}
+
+// ====================================================
+//  NOTIFICATIONS
+// ====================================================
+function requestNotificationPermission() {
+  if (!('Notification' in window)) { toast('Not Supported', 'Your browser doesn\'t support notifications', 'warn'); return; }
+  Notification.requestPermission().then(perm => {
+    if (perm === 'granted') toast('Notifications Enabled 🔔', 'You will receive alerts', 'success');
+    else toast('Denied', 'Notifications were blocked', 'warn');
+  });
+}
+
+function testNotification() {
+  if (Notification.permission === 'granted') {
+    new Notification('BUYSELL Nigeria', { body: 'This is a test notification!', icon: '/favicon.ico' });
+    toast('Sent!', 'Check your notification area', 'success');
+  } else {
+    requestNotificationPermission();
+  }
+}
+
+// ====================================================
+//  SERVICE REVIEWS
+// ====================================================
+let svcRating = 0;
+function setSvcRating(n) {
+  svcRating = n;
+  document.querySelectorAll('#svc-star-row .star-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', i < n);
+    btn.style.color = i < n ? '#f59e0b' : '#d1d5db';
+  });
+}
+
+async function submitServiceReview() {
+  if (!currentUser) { showModal('auth-modal'); return; }
+  const bookingId = document.getElementById('svc-review-booking-id')?.value;
+  const text = document.getElementById('svc-review-text')?.value.trim();
+  if (!svcRating) { toast('Rate the service', 'Please select a star rating', 'warn'); return; }
+  try {
+    await db.from('reviews').insert({
+      reviewer_id: currentUser.id,
+      booking_id: bookingId || null,
+      rating: svcRating,
+      comment: text,
+      type: 'service'
+    });
+    toast('Review Submitted! ⭐', 'Thank you for your feedback', 'success');
+    closeModal('service-review-modal');
+    svcRating = 0;
+  } catch(e) { toast('Error', e.message, 'error'); }
+}
+
+// ====================================================
+//  PROVIDER BOOKINGS
+// ====================================================
+async function loadProviderBookings() {
+  if (!currentUser) return;
+  const container = document.getElementById('sp-bookings-list');
+  if (!container) return;
+  container.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
+  try {
+    const { data: bookings } = await db.from('service_bookings')
+      .select('*, client:client_id(name, email)')
+      .eq('provider_id', currentUser.id)
+      .order('created_at', { ascending: false });
+    if (!bookings || !bookings.length) {
+      container.innerHTML = '<p class="text-center color-text3 p-3">No bookings yet.</p>';
+      return;
+    }
+    container.innerHTML = bookings.map(b => `
+      <div class="card card-pad mb-2">
+        <div class="flex justify-between items-center">
+          <div><div class="font-bold text-sm">${escHtml(b.client?.name || 'Client')}</div><div class="text-xs color-text3">${fmtDate(b.created_at)}</div></div>
+          <span class="badge badge-${b.status==='completed'?'green':b.status==='cancelled'?'red':'gold'}">${b.status}</span>
+        </div>
+        ${b.notes ? `<div class="text-xs color-text3 mt-1">${escHtml(b.notes)}</div>` : ''}
+      </div>`).join('');
+  } catch(e) { container.innerHTML = '<p class="text-center color-text3 p-3">Could not load bookings.</p>'; }
+}
+
+// ====================================================
+//  VOICE INPUT
+// ====================================================
+let voiceRecognition = null;
+function toggleVoiceInput() {
+  const btn = document.getElementById('voice-btn');
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    toast('Not Supported', 'Voice input is not available in your browser', 'warn');
+    return;
+  }
+  if (voiceRecognition) {
+    voiceRecognition.stop();
+    voiceRecognition = null;
+    if (btn) btn.style.background = 'var(--purple)';
+    return;
+  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  voiceRecognition = new SR();
+  voiceRecognition.lang = 'en-NG';
+  voiceRecognition.continuous = false;
+  voiceRecognition.interimResults = false;
+  if (btn) btn.style.background = '#ef4444';
+
+  voiceRecognition.onresult = (e) => {
+    const transcript = e.results[0][0].transcript;
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) { searchInput.value = transcript; doSearch(); }
+    else { toast('You said', transcript, 'info'); }
+  };
+  voiceRecognition.onerror = () => { toast('Voice Error', 'Could not understand. Try again.', 'warn'); };
+  voiceRecognition.onend = () => { voiceRecognition = null; if (btn) btn.style.background = 'var(--purple)'; };
+  voiceRecognition.start();
+  toast('Listening…', 'Speak now to search', 'info');
+}
+
+// ====================================================
+//  LANGUAGE
+// ====================================================
+function setLanguage(lang) {
+  localStorage.setItem('bs_lang', lang);
+  toast('Language', `Switched to ${lang === 'en' ? 'English' : lang === 'pcm' ? 'Pidgin' : lang === 'ha' ? 'Hausa' : lang === 'yo' ? 'Yoruba' : lang === 'ig' ? 'Igbo' : lang}`, 'info');
+}
