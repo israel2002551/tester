@@ -4,18 +4,42 @@
 // ====================================================
 
 // ── AI Helper (routes through secure Edge Function) ──
+async function callPublicAI(messages, context = {}) {
+  const res = await fetch(CLAUDE_EDGE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SB_KEY}`,
+      'apikey': SB_KEY
+    },
+    body: JSON.stringify({ messages, context })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `AI failed (${res.status})`);
+  if (!data.reply) throw new Error('Invalid AI response');
+  return data.reply;
+}
+
 async function callGroq(messages, systemPrompt = null) {
   try {
-    const data = await callEdge('chat-bot-handler', {
-      messages: messages,
-      systemPrompt: systemPrompt
-    });
+    let data;
+    if (currentUser) {
+      data = await callEdge('chat-bot-handler', {
+        messages: messages,
+        systemPrompt: systemPrompt
+      });
+    } else {
+      const publicMessages = systemPrompt
+        ? [{ role: 'system', content: systemPrompt }, ...messages]
+        : messages;
+      data = { reply: await callPublicAI(publicMessages, { task: 'chatbot' }) };
+    }
     
     if (!data || !data.reply) throw new Error('Invalid AI response');
     return data.reply;
   } catch (error) {
     console.error("AI Error:", error);
-    throw new Error('AI processing failed. Please try again.');
+    throw new Error(error.message || 'AI processing failed. Please try again.');
   }
 }
 
@@ -27,8 +51,9 @@ async function callEdge(fnName, body) {
   const session = (await db.auth.getSession()).data.session;
   const token   = session?.access_token;
   if (!token) throw new Error('Not authenticated');
+  const functionName = String(fnName || '').replace(/^\/+/, '');
 
-  const res = await fetch(`${EDGE_URL}/${fnName}`, {
+  const res = await fetch(`${EDGE_URL}/${functionName}`, {
     method:  'POST',
     headers: {
       'Content-Type':  'application/json',
@@ -39,7 +64,23 @@ async function callEdge(fnName, body) {
   });
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || `${fnName} failed (${res.status})`);
+  if (!res.ok) throw new Error(data.error || `${functionName} failed (${res.status})`);
+  return data;
+}
+
+async function callPublicEdge(fnName, body) {
+  const functionName = String(fnName || '').replace(/^\/+/, '');
+  const res = await fetch(`${EDGE_URL}/${functionName}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SB_KEY}`,
+      'apikey': SB_KEY
+    },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${functionName} failed (${res.status})`);
   return data;
 }
 
@@ -525,7 +566,7 @@ async function generateDescription() {
   try {
     const res  = await fetch(CLAUDE_EDGE_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SB_KEY}`, 'apikey': SB_KEY },
       body: JSON.stringify({
         messages: [{
           role: 'user',
@@ -685,7 +726,7 @@ function showDash(section) {
   if (section === 'products') loadSellerProds();
   if (section === 'orders') loadSellerOrders();
   if (section === 'reviews') loadSellerReviews();
-  if (section === 'admin') { if (!guardAdminPanel()) return; loadAdminOverview(); }
+  if (section === 'admin') { if (!guardAdminPanel()) return; ensureAdminKycPanel(); loadAdminOverview(); }
   if (section === 'settings') loadSettings();
   if (section === 'withdrawals') { loadWithdrawalData(); loadWithdrawalHistory(); }
   if (section === 'affiliate') loadAffiliateData();
@@ -825,7 +866,7 @@ async function doSearch() {
     try {
       const res  = await fetch(CLAUDE_EDGE_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SB_KEY}`, 'apikey': SB_KEY },
         body: JSON.stringify({
           messages: [{
             role: 'user',
@@ -1205,49 +1246,6 @@ function selectPM(method) {
   document.getElementById('pm-transfer-panel').classList.toggle('hidden', method!=='transfer');
 }
 
-function payWithPaystack() {
-  if (typeof PaystackPop === 'undefined') {
-    toast('Payment Error', 'Paystack not loaded. Please refresh and try again.', 'error');
-    return;
-  }
-  const handler = PaystackPop.setup({
-    key: PAYSTACK_PUBLIC_KEY,
-    email: currentUser.email,
-    amount: checkoutTotal * 100, 
-    callback: async function(response) {
-      // 1. Show a loader
-      toast('Verifying Payment...', 'Please do not close the window', 'info');
-
-      // 2. Call your Edge Function instead of local saveOrderToDb
-      try {
-        const verification = await fetch(`${EDGE_URL}/verify-payment`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            reference: response.reference,
-            order_details: {
-              buyer_id: currentUser.id,
-              items: cart,
-              delivery_address: document.getElementById('co-address').value,
-              // ... other fields
-            }
-          })
-        });
-
-        const result = await verification.json();
-        if (result.success) {
-          cart = []; saveCart();
-          goCheckoutStep(3);
-          toast('Payment Verified!', 'Your order is confirmed', 'success');
-        }
-      } catch (err) {
-        toast('Verification Error', 'Contact support with ref: ' + response.reference, 'error');
-      }
-    }
-  });
-  handler.openIframe();
-}
-
 function handleProofUpload(input) {
   if (input.files?.[0]) {
     const zone = document.getElementById('proof-upload-zone');
@@ -1415,6 +1413,14 @@ async function submitReview() {
 // ====================================================
 //  BUYER TABS & ORDERS
 // ====================================================
+function getOrderItems(order) {
+  if (Array.isArray(order?.items)) return order.items;
+  if (typeof order?.items === 'string') {
+    try { return JSON.parse(order.items) || []; } catch(e) { return []; }
+  }
+  return [];
+}
+
 function switchBuyerTab(tab) {
   document.getElementById('tab-shop').classList.toggle('active', tab==='shop');
   document.getElementById('tab-orders').classList.toggle('active', tab==='orders');
@@ -1433,13 +1439,15 @@ async function loadBuyerOrders() {
   if (!currentUser) { document.getElementById('buyer-orders-empty').classList.remove('hidden'); document.getElementById('buyer-orders-skeleton').classList.add('hidden'); return; }
   document.getElementById('buyer-orders-skeleton').classList.remove('hidden');
   document.getElementById('buyer-orders-list').classList.add('hidden');
-  const { data: orders } = await db.from('orders').select('*').eq('buyer_id', currentUser.id).order('created_at',{ascending:false});
+  const { data: orders, error } = await db.from('orders').select('*').eq('buyer_id', currentUser.id).order('created_at',{ascending:false});
   document.getElementById('buyer-orders-skeleton').classList.add('hidden');
   const list = document.getElementById('buyer-orders-list');
+  if (error) { list.innerHTML = `<div class="card card-pad text-sm color-text3">Could not load orders: ${escHtml(error.message)}</div>`; list.classList.remove('hidden'); return; }
   if (!orders?.length) { document.getElementById('buyer-orders-empty').classList.remove('hidden'); return; }
   document.getElementById('buyer-orders-empty').classList.add('hidden');
   list.classList.remove('hidden');
   const statusColors = {pending:'badge-gold',confirmed:'badge-blue',shipped:'badge-purple',delivered:'badge-green',cancelled:'badge-red'};
+  orders.forEach(o => { o.items = getOrderItems(o); });
   list.innerHTML = (orders||[]).map(o=>`
     <div class="order-history-item">
       <div class="flex justify-between items-center flex-wrap gap-2 mb-2">
@@ -2033,6 +2041,7 @@ async function loadSellerOrders() {
   document.getElementById('orders-empty').classList.add('hidden');
   list.classList.remove('hidden');
   const statusColors = {pending:'badge-gold',confirmed:'badge-blue',shipped:'badge-purple',delivered:'badge-green',cancelled:'badge-red'};
+  orders.forEach(o => { o.items = getOrderItems(o); });
   list.innerHTML = orders.map(o=>`
     <div class="card card-pad mb-3">
       <div class="flex justify-between items-start flex-wrap gap-2 mb-2">
@@ -2056,6 +2065,7 @@ async function loadSellerOrders() {
         ${o.status==='confirmed'?`<button onclick="updateOrderStatus('${o.id}','shipped')" class="btn btn-sm" style="background:#ede9fe;color:#6d28d9">Mark Shipped</button>`:''}
         ${o.status==='shipped'?`<button onclick="updateOrderStatus('${o.id}','delivered')" class="btn btn-sm" style="background:#dcfce7;color:#15803d">Mark Delivered</button>`:''}
         <button class="btn btn-outline btn-sm" onclick="showOrderTracking('${o.id}')"><i class="fa-solid fa-truck"></i> Track</button>
+        <button class="btn btn-outline btn-sm" onclick="addTrackingUpdate('${o.id}')"><i class="fa-solid fa-location-dot"></i> Add Update</button>
         ${o.buyer_id ? `<button class="btn btn-outline btn-sm" onclick="openMessageModal('${o.buyer_id}', '${escAttr(o.delivery_name||'Buyer')}')" style="color:var(--green);border-color:var(--green)"><i class="fa-solid fa-comment-dots"></i> Message Buyer</button>` : `<a href="https://wa.me/${(o.delivery_phone||'').replace(/\D/g,'')}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Contact</a>`}
       </div>
     </div>`).join('');
@@ -2063,7 +2073,7 @@ async function loadSellerOrders() {
 
 async function updateOrderStatus(id, status) {
   try {
-    await callEdge('admin-action', { action: 'update_order', target_id: id, data: { status } });
+    await callEdge('order-action', { action: 'update_status', order_id: id, status });
     toast(`Order ${status}!`, '', 'success');
     loadSellerOrders();
   } catch(e) { toast('Error', e.message, 'error'); }
@@ -2251,7 +2261,11 @@ function payCommissionPaystack() {
     ref: 'comm_' + Date.now(),
     callback: async (response) => {
       // Commission confirmed via Paystack — direct update for immediate UI response
-      await callEdge('admin-action', { action: 'toggle_commission', target_id: currentUser.id, data: { commission_paid: true } }).catch(() => db.from('profiles').update({ commission_paid: true }).eq('id', currentUser.id));
+      await callEdge('admin-action', {
+        action: 'toggle_commission',
+        target_id: currentUser.id,
+        data: { payment_reference: response.reference }
+      });
       currentUser.profile.commission_paid = true;
       document.getElementById('suspended-modal').classList.remove('open');
       document.body.classList.remove('modal-open');
@@ -2668,6 +2682,7 @@ function applySiteLogo(url) {
 }
    
 function switchAdminTab(tab) {
+  ensureAdminKycPanel();
   // Hide all tab panels
   document.querySelectorAll('.adm-tab').forEach(p => p.classList.add('hidden'));
   // Deactivate all sidebar nav items
@@ -2683,8 +2698,56 @@ function switchAdminTab(tab) {
   if (tab === 'disputes')     loadAdminDisputes();
   if (tab === 'withdrawals')  loadAdminWithdrawals();
   if (tab === 'receipts')     loadAdminReceipts();
+  if (tab === 'kyc')          loadAdminKyc();
   if (tab === 'broadcast')    loadBroadcastHistory();
+  if (tab === 'predictive')   loadAllAnalytics();
+  if (tab === 'competitors')  { loadCompetitorAnalysis(); loadPriceIntelligence(); }
+  if (tab === 'notifications') loadNotificationSettings();
   if (tab === 'ai')           adminAiHistory = [];
+}
+
+function ensureAdminKycPanel() {
+  const adminContent = document.getElementById('admin-content');
+  if (!adminContent) return;
+
+  if (!document.getElementById('atab-kyc')) {
+    const tabWrap = adminContent.querySelector('.buyer-tabs-wrap');
+    const aiTab = document.getElementById('atab-ai');
+    if (tabWrap) {
+      const btn = document.createElement('button');
+      btn.className = 'buyer-tab';
+      btn.id = 'atab-kyc';
+      btn.type = 'button';
+      btn.textContent = 'KYC';
+      btn.onclick = () => switchAdminTab('kyc');
+      tabWrap.insertBefore(btn, aiTab || null);
+    }
+  }
+
+  if (!adminContent.querySelector('#adm-tab-kyc')) {
+    const panel = document.createElement('div');
+    panel.id = 'adm-tab-kyc';
+    panel.className = 'adm-tab hidden';
+    panel.innerHTML = `
+      <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
+        <div class="flex gap-2 flex-wrap">
+          <select id="adm-kyc-filter" class="form-select" style="width:auto;padding:.4rem .7rem;font-size:.78rem" onchange="loadAdminKyc()">
+            <option value="pending">Pending Review</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="all">All Submissions</option>
+          </select>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="loadAdminKyc()"><i class="fa-solid fa-sync"></i> Refresh</button>
+      </div>
+      <div id="adm-kyc-skeleton"><div class="skeleton mb-3" style="height:150px"></div></div>
+      <div id="adm-kyc-list" class="hidden" style="display:flex;flex-direction:column;gap:1rem"></div>
+      <div id="adm-kyc-empty" class="hidden text-center" style="padding:3rem">
+        <i class="fa-solid fa-shield-check" style="font-size:2.5rem;color:var(--green);display:block;margin-bottom:.75rem"></i>
+        <p class="color-text3">No pending KYC verifications</p>
+      </div>`;
+    adminContent.appendChild(panel);
+  }
 }
 
 /* ── OVERVIEW ── */
@@ -3203,7 +3266,7 @@ async function adminAiApproveKyc(kycId, userId) {
     await callEdge('admin-action', {
       action: 'approve_kyc',
       target_id: kycId,
-      data: { user_id: userId || kycId }
+      data: userId ? { user_id: userId } : {}
     });
     toast('KYC Approved', 'User verified', 'success');
     loadAdminKyc();
@@ -3217,7 +3280,7 @@ async function adminAiRejectKyc(kycId, reason, userId) {
     await callEdge('admin-action', {
       action: 'reject_kyc',
       target_id: kycId,
-      data: { reason: reason, user_id: userId || kycId }
+      data: userId ? { reason: reason, user_id: userId } : { reason: reason }
     });
     toast('KYC Rejected', reason, 'warn');
     loadAdminKyc();
@@ -3656,10 +3719,15 @@ async function loadAdminKyc() {
         </div>
         <span class="badge ${k.status==='approved'?'badge-green':k.status==='rejected'?'badge-red':'badge-gold'}">${k.status.toUpperCase()}</span>
       </div>
+      <div class="kyc-doc-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem;margin:.85rem 0">
+        ${renderKycDocPreview('Front ID', k.document_front_url)}
+        ${k.document_back_url ? renderKycDocPreview('Back ID', k.document_back_url) : ''}
+        ${renderKycDocPreview('Selfie', k.selfie_url)}
+      </div>
       <div class="flex gap-2 flex-wrap mb-3 mt-2">
-        <a href="${k.document_front_url}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-id-card"></i> Front</a>
-        ${k.document_back_url ? `<a href="${k.document_back_url}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-id-card"></i> Back</a>` : ''}
-        <a href="${k.selfie_url}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-user"></i> Selfie</a>
+        <a href="${sanitizeUrl(k.document_front_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm"><i class="fa-solid fa-up-right-from-square"></i> Open Front</a>
+        ${k.document_back_url ? `<a href="${sanitizeUrl(k.document_back_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm"><i class="fa-solid fa-up-right-from-square"></i> Open Back</a>` : ''}
+        <a href="${sanitizeUrl(k.selfie_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm"><i class="fa-solid fa-up-right-from-square"></i> Open Selfie</a>
       </div>
       ${k.status === 'pending' ? `
         <div class="flex gap-2 border-t pt-3 mt-2">
@@ -3669,6 +3737,23 @@ async function loadAdminKyc() {
       ` : ''}
     </div>
   `).join('');
+}
+
+function renderKycDocPreview(label, url) {
+  const safeUrl = sanitizeUrl(url || '');
+  if (!safeUrl) return '';
+  return `<button type="button" onclick="openKycDocument('${escAttr(safeUrl)}','${escAttr(label)}')" style="text-align:left;background:#fff;border:1px solid var(--border);border-radius:8px;padding:.45rem;cursor:pointer">
+    <img src="${safeUrl}" alt="${escAttr(label)}" style="width:100%;height:120px;object-fit:cover;border-radius:6px;background:var(--cream);display:block;margin-bottom:.4rem">
+    <span class="text-xs font-bold"><i class="fa-solid fa-magnifying-glass"></i> ${escHtml(label)}</span>
+  </button>`;
+}
+
+function openKycDocument(url, label) {
+  const safeUrl = sanitizeUrl(url || '');
+  document.getElementById('kyc-doc-title').textContent = label || 'KYC Document';
+  document.getElementById('kyc-doc-img').src = safeUrl;
+  document.getElementById('kyc-doc-open-link').href = safeUrl;
+  showModal('kyc-doc-modal');
 }
 
 async function adminApproveKyc(kycId, userId) {
@@ -5386,7 +5471,7 @@ function renderCurrentAd() {
   document.getElementById('ad-cta-text').textContent = ad.cta_text || 'Learn More';
   
   // Register View
-  callEdge('/update-ad-stats', { adId: ad.id, type: 'view' }).catch(e=>console.error(e));
+  callPublicEdge('update-ad-stats', { adId: ad.id, type: 'view' }).catch(e=>console.error(e));
   
   // setup dots
   const dotsContainer = document.getElementById('ad-popup-dots');
@@ -5425,7 +5510,7 @@ function renderCurrentAd() {
   
   // Track clicks
   document.getElementById('ad-cta-btn').onclick = () => {
-    callEdge('/update-ad-stats', { adId: ad.id, type: 'click' }).catch(e=>console.error(e));
+    callPublicEdge('update-ad-stats', { adId: ad.id, type: 'click' }).catch(e=>console.error(e));
   };
 }
 
@@ -5905,11 +5990,15 @@ async function loadConversation(partnerId, silent=false) {
   if (!container) return;
   if (!silent) container.innerHTML = '<div class="skeleton" style="height:40px"></div>'.repeat(3);
 
-  const { data: msgs } = await db.from('messages')
+  const { data: msgs, error } = await db.from('messages')
     .select('*')
     .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${currentUser.id})`)
     .order('created_at', { ascending: true })
     .limit(100);
+  if (error) {
+    if (!silent) container.innerHTML = '<p class="color-text3 text-sm text-center" style="padding:2rem">Could not load messages. Please try again.</p>';
+    return;
+  }
 
   if (!msgs?.length && !silent) {
     container.innerHTML = '<p class="color-text3 text-sm text-center" style="padding:2rem">No messages yet. Start the conversation!</p>';
@@ -5940,13 +6029,19 @@ async function sendMessage() {
   if (!text) return;
   input.value = '';
 
-  await db.from('messages').insert({
+  const { error } = await db.from('messages').insert({
     sender_id: currentUser.id,
     receiver_id: currentChatPartner.id,
     product_id: currentChatPartner.productId || null,
     content: validateInput(text)
   });
+  if (error) {
+    toast('Message Failed', error.message, 'error');
+    input.value = text;
+    return;
+  }
   loadConversation(currentChatPartner.id);
+  loadInboxCount();
 }
 
 async function loadInboxCount() {
@@ -6059,14 +6154,25 @@ async function showOrderTracking(orderId) {
   if (!container) return;
   container.innerHTML = '<div class="skeleton" style="height:30px"></div>'.repeat(4);
 
-  const { data: events } = await db.from('order_tracking')
+  let { data: events, error } = await db.from('order_tracking')
     .select('*')
     .eq('order_id', orderId)
     .order('created_at', { ascending: true });
+  if (error) {
+    container.innerHTML = `<p class="color-text3 text-sm">Could not load tracking: ${escHtml(error.message)}</p>`;
+    return;
+  }
+  if (!events?.length) {
+    const { data: order } = await db.from('orders').select('status,created_at,buyer_id,seller_id').eq('id', orderId).single();
+    if (order) {
+      events = [{ status: 'pending', note: 'Order placed', created_at: order.created_at }];
+      if (order.status && order.status !== 'pending') events.push({ status: order.status, note: `Current status: ${order.status}`, created_at: order.created_at });
+    }
+  }
 
-  const allStatuses = ['pending','confirmed','picked_up','in_transit','out_for_delivery','delivered'];
-  const statusLabels = {pending:'Order Placed',confirmed:'Confirmed',picked_up:'Picked Up',in_transit:'In Transit',out_for_delivery:'Out for Delivery',delivered:'Delivered'};
-  const statusIcons = {pending:'fa-receipt',confirmed:'fa-check',picked_up:'fa-box',in_transit:'fa-truck',out_for_delivery:'fa-motorcycle',delivered:'fa-house-circle-check'};
+  const allStatuses = ['pending','confirmed','shipped','picked_up','in_transit','out_for_delivery','delivered'];
+  const statusLabels = {pending:'Order Placed',confirmed:'Confirmed',shipped:'Shipped',picked_up:'Picked Up',in_transit:'In Transit',out_for_delivery:'Out for Delivery',delivered:'Delivered'};
+  const statusIcons = {pending:'fa-receipt',confirmed:'fa-check',shipped:'fa-box-open',picked_up:'fa-box',in_transit:'fa-truck',out_for_delivery:'fa-motorcycle',delivered:'fa-house-circle-check'};
 
   const completedStatuses = (events||[]).map(e => e.status);
 
@@ -6095,8 +6201,9 @@ async function addTrackingUpdate(orderId) {
   if (!status) return;
   const note = prompt('Add a note (optional):') || '';
   try {
-    await db.from('order_tracking').insert({ order_id: orderId, status, note: validateInput(note), updated_by: currentUser.id });
+    await callEdge('order-action', { action: 'add_tracking', order_id: orderId, status, note: validateInput(note) });
     toast('Tracking Updated', `Status: ${status}`, 'success');
+    showOrderTracking(orderId);
   } catch(e) { toast('Failed', e.message, 'error'); }
 }
 
