@@ -335,6 +335,11 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .role-card-sub{font-size:.68rem;color:var(--text3);margin-top:.1rem}
 .auth-tab{flex:1;padding:.58rem;text-align:center;font-size:.83rem;font-weight:600;cursor:pointer;color:var(--text3);background:transparent;border:none;transition:all .2s;font-family:'DM Sans',sans-serif}
 .auth-tab.active{background:var(--green);color:#fff}
+.auth-divider{display:flex;align-items:center;gap:.75rem;margin:1rem 0 .85rem;color:var(--text3);font-size:.76rem;font-weight:700;text-transform:uppercase}
+.auth-divider::before,.auth-divider::after{content:"";height:1px;background:var(--border);flex:1}
+.auth-google-btn{justify-content:center;gap:.55rem;background:#fff;color:var(--text);border-color:var(--border)}
+.auth-google-btn:hover{background:var(--cream);border-color:var(--green-lt)}
+.auth-google-btn .fa-google{color:#ea4335}
 
 /* Product detail */
 #product-modal .modal-box{max-width:840px;padding:0;overflow:hidden}
