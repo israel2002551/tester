@@ -1,4 +1,4 @@
-# Secrets — never commit
+# Secrets - never commit
 config.js
 
 # Python cache
@@ -10,3 +10,11 @@ __pycache__/
 auth_hits.txt
 role_hits.txt
 signup_hits.txt
+
+# Local/generated upgrade helpers
+add_features.py
+dump_features.py
+update_app_groq.py
+upgrade_*.py
+features_dump.txt
+refactor.py
