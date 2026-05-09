@@ -10,11 +10,6 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const EDGE_URL = SB_URL + '/functions/v1';
 const CLAUDE_EDGE_URL = `${EDGE_URL}/smooth-handler`;
 
-// ── Groq AI ───────────────────────────────────────────
-const GROQ_API_KEY = "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";
-const GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL   = "llama-3.3-70b-versatile";
-
 // ── Admin ─────────────────────────────────────────────
 const ADMIN_EMAIL = 'israelefe093@gmail.com';
 
