@@ -134,6 +134,14 @@ function selectRole(role) {
   document.getElementById('role-sp-note')?.classList.toggle('hidden', role !== 'service_provider');
 }
 
+function togglePasswordVisibility(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const isPassword = input.type === 'password';
+  input.type = isPassword ? 'text' : 'password';
+  btn.innerHTML = isPassword ? '<i class="fa-solid fa-eye-slash"></i>' : '<i class="fa-solid fa-eye"></i>';
+}
+
 async function handleAuth(e) {
   e.preventDefault();
   const isLogin = document.getElementById('auth-tab-login').classList.contains('active');
@@ -1049,6 +1057,10 @@ function selectPM(method) {
 }
 
 function payWithPaystack() {
+  if (cart.length === 0) { toast('Cart is empty', '', 'warn'); return; }
+  const total = cart.reduce((s, c) => s + (c.price * (c.qty || 1)), 0);
+  if (total <= 0) { toast('Invalid total amount', '', 'error'); return; }
+
   const handler = PaystackPop.setup({
     key: PAYSTACK_PUBLIC_KEY,
     email: currentUser.email,
