@@ -233,6 +233,8 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .buyer-tabs{display:flex;border-bottom:2px solid var(--border);margin-bottom:1.1rem}
 .buyer-tab{padding:.65rem 1.25rem;font-size:.88rem;font-weight:600;color:var(--text3);cursor:pointer;border:none;background:none;border-bottom:2.5px solid transparent;margin-bottom:-2px;transition:all .2s;font-family:'DM Sans',sans-serif}
 .buyer-tab.active{color:var(--green);border-bottom-color:var(--green)}
+.admin-tab-bar{display:flex;flex-wrap:wrap;gap:.25rem .6rem}
+.admin-tab-bar .buyer-tab{white-space:nowrap}
 
 /* Categories strip */
 .cats-section{padding:.65rem 0 .85rem}
