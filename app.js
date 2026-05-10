@@ -510,7 +510,7 @@ function enterSite(mode) {
   document.getElementById('landing').style.opacity = '0';
   setTimeout(() => {
     document.getElementById('landing').style.display = 'none';
-    document.getElementById('topbar').style.display = 'block';
+    document.getElementById('topbar')?.style.setProperty('display', 'none');
     document.getElementById('main-nav').style.display = 'block';
     document.getElementById('chatbot-fab').style.display = 'flex';
     document.getElementById('wa-fab').style.display = 'flex';
@@ -2163,7 +2163,7 @@ async function executeMassSuspension() {
   }
   
   // 3. Mass update
-  const { error } = await db.from('profiles').update({ updated_at: new Date().toISOString() }).in('id', targetIds);
+  const { error } = await db.from('profiles').update({ is_suspended: true }).in('id', targetIds);
   
   if (error) {
     toast('Execution Error', error.message, 'error');
@@ -3496,8 +3496,7 @@ async function saveServiceProfile() {
     const { error } = await db.from('profiles').update({
       name:              validateInput(name),
       whatsapp:          wa,
-      store_description: validateInput(bio),
-      updated_at:        new Date().toISOString()
+      store_description: validateInput(bio)
     }).eq('id', currentUser.id);
     
     if (error) throw error;
