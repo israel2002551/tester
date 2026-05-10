@@ -108,7 +108,7 @@
 <!-- ==================== TOPBAR ==================== -->
 <div id="topbar">
   <div class="topbar-inner">
-    <div style="display:flex;align-items:center;gap:.4rem;color:rgba(255,255,255,.6)"><i class="fa-solid fa-truck" style="color:var(--green-lt)"></i><span>Free delivery on orders over ₦15,000</span></div>
+    <div style="display:flex;align-items:center;gap:.4rem;color:rgba(255,255,255,.6)"><i class="fa-solid fa-shield-check" style="color:var(--green-lt)"></i><span>Secure payments and verified sellers</span></div>
     <div class="topbar-links">
       <a href="#" onclick="showModal('help-modal')"><i class="fa-solid fa-question-circle"></i> Help</a>
       <a href="https://wa.me/2349061484256" target="_blank"><i class="fa-brands fa-whatsapp"></i> WhatsApp</a>
@@ -842,15 +842,18 @@
           <p class="dash-page-sub mb-3">Full platform control — israelefe093@gmail.com</p>
 
           <!-- Admin Tab Bar -->
-          <div class="buyer-tabs-wrap" style="margin-bottom:1.5rem;overflow-x:auto;-webkit-overflow-scrolling:touch">
-    <button class="buyer-tab active" id="atab-overview"     onclick="switchAdminTab('overview')">📊 Overview</button>
-    <button class="buyer-tab"         id="atab-sellers"     onclick="switchAdminTab('sellers')">🏪 Sellers</button>
-    <button class="buyer-tab"         id="atab-orders"      onclick="switchAdminTab('orders')">📦 Orders</button>
-    <button class="buyer-tab"         id="atab-disputes"    onclick="switchAdminTab('disputes')">⚖️ Disputes</button>
-    <button class="buyer-tab"         id="atab-withdrawals" onclick="switchAdminTab('withdrawals')">💸 Payouts</button>
-    <button class="buyer-tab"         id="atab-broadcast"   onclick="switchAdminTab('broadcast')">📣 Broadcast</button>
-    <button class="buyer-tab"         id="atab-ai"          onclick="switchAdminTab('ai')">🤖 AI Assistant</button>
-    <button class="buyer-tab"         id="atab-branding" onclick="switchAdminTab('branding')">🎨 Branding</button>
+          <div class="buyer-tabs-wrap admin-tab-bar" style="margin-bottom:1.5rem;overflow-x:auto;-webkit-overflow-scrolling:touch">
+    <button class="buyer-tab active" id="atab-overview" data-admin-tab="overview" onclick="switchAdminTab('overview')">📊 Overview</button>
+    <button class="buyer-tab"         id="atab-kyc"         data-admin-tab="kyc" onclick="switchAdminTab('kyc')">🪪 KYC Verify</button>
+    <button class="buyer-tab"         id="atab-accounts"    data-admin-tab="accounts" onclick="switchAdminTab('accounts')">👤 Account Management</button>
+    <button class="buyer-tab"         id="atab-sellers"     data-admin-tab="sellers" onclick="switchAdminTab('sellers')">🏪 Sellers</button>
+    <button class="buyer-tab"         id="atab-orders"      data-admin-tab="orders" onclick="switchAdminTab('orders')">📦 Orders</button>
+    <button class="buyer-tab"         id="atab-disputes"    data-admin-tab="disputes" onclick="switchAdminTab('disputes')">⚖️ Disputes</button>
+    <button class="buyer-tab"         id="atab-withdrawals" data-admin-tab="withdrawals" onclick="switchAdminTab('withdrawals')">💸 Payouts</button>
+    <button class="buyer-tab"         id="atab-receipts"    data-admin-tab="receipts" onclick="switchAdminTab('receipts')">🧾 Receipts</button>
+    <button class="buyer-tab"         id="atab-broadcast"   data-admin-tab="broadcast" onclick="switchAdminTab('broadcast')">📣 Broadcast</button>
+    <button class="buyer-tab"         id="atab-ai"          data-admin-tab="ai" onclick="switchAdminTab('ai')">🤖 AI Assistant</button>
+    <button class="buyer-tab"         id="atab-branding" data-admin-tab="branding" onclick="switchAdminTab('branding')">🎨 Branding</button>
 </div>
 
 <div id="adm-tab-branding" class="adm-tab hidden">
@@ -984,6 +987,64 @@
           </div>
 
           <!-- ═══ BROADCAST TAB ═══ -->
+          <div id="adm-tab-receipts" class="adm-tab hidden">
+            <h2 class="mb-1"><i class="fa-solid fa-file-invoice color-green"></i> Commission Receipts</h2>
+            <p class="color-text3 text-sm mb-3">Review seller commission payment proofs, approve valid receipts, or reject bad uploads.</p>
+            <div class="stats-grid mb-4" style="grid-template-columns:repeat(3,1fr)">
+              <div class="stat-card"><div class="stat-value color-gold" id="rcpt-pending">0</div><div class="stat-label">Pending</div></div>
+              <div class="stat-card"><div class="stat-value color-green" id="rcpt-approved">0</div><div class="stat-label">Approved</div></div>
+              <div class="stat-card"><div class="stat-value color-red" id="rcpt-rejected">0</div><div class="stat-label">Rejected</div></div>
+            </div>
+            <div class="card overflow-hidden">
+              <div class="overflow-x">
+                <table class="data-table">
+                  <thead><tr><th>Seller</th><th>Date</th><th>Reference</th><th>Receipt</th><th>Status</th><th>Actions</th></tr></thead>
+                  <tbody id="rcpt-table-body"><tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3)">No receipts submitted yet</td></tr></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div id="adm-tab-kyc" class="adm-tab hidden">
+            <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
+              <select id="adm-kyc-filter" class="form-select" style="width:auto;padding:.4rem .7rem;font-size:.78rem" onchange="loadAdminKyc()">
+                <option value="pending">Pending Review</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+                <option value="all">All Submissions</option>
+              </select>
+              <button class="btn btn-outline btn-sm" onclick="loadAdminKyc()"><i class="fa-solid fa-sync"></i> Refresh</button>
+            </div>
+            <div id="adm-kyc-skeleton"><div class="skeleton mb-3" style="height:150px"></div></div>
+            <div id="adm-kyc-list" class="hidden" style="display:flex;flex-direction:column;gap:1rem"></div>
+            <div id="adm-kyc-empty" class="hidden text-center" style="padding:3rem">
+              <i class="fa-solid fa-shield-check" style="font-size:2.5rem;color:var(--green);display:block;margin-bottom:.75rem"></i>
+              <p class="color-text3">No KYC verifications found</p>
+            </div>
+          </div>
+
+          <div id="adm-tab-accounts" class="adm-tab hidden">
+            <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
+              <h3 style="margin:0">Account Management</h3>
+              <button class="btn btn-outline btn-sm" onclick="loadAdminAccounts()"><i class="fa-solid fa-sync"></i> Refresh All</button>
+            </div>
+            <div class="card card-pad mb-4">
+              <h3 class="mb-3"><i class="fa-solid fa-dollar-sign color-green"></i> Commission Activations</h3>
+              <p class="text-xs color-text3 mb-3">Open each receipt, then activate or reject the seller commission payment.</p>
+              <div class="overflow-x"><table class="data-table"><thead><tr><th>Seller</th><th>Date</th><th>Reference</th><th>Receipt</th><th>Action</th></tr></thead><tbody id="acct-comm-list"><tr><td colspan="5" class="text-center text-sm color-text3 p-3">Loading...</td></tr></tbody></table></div>
+            </div>
+            <div class="card card-pad mb-4">
+              <h3 class="mb-3"><i class="fa-solid fa-bullseye color-blue"></i> Ad Payment Approvals</h3>
+              <p class="text-xs color-text3 mb-3">Review pending ads and payment/media proof before publishing.</p>
+              <div class="overflow-x"><table class="data-table"><thead><tr><th>Advertiser</th><th>Ad Title</th><th>Reference</th><th>Receipt / Media</th><th>Action</th></tr></thead><tbody id="acct-ads-list"><tr><td colspan="5" class="text-center text-sm color-text3 p-3">Loading...</td></tr></tbody></table></div>
+            </div>
+            <div class="card card-pad mb-4">
+              <h3 class="mb-3"><i class="fa-solid fa-user-check color-gold"></i> Seller Access Control</h3>
+              <p class="text-xs color-text3 mb-3">Extend trials, activate paid sellers, deactivate overdue sellers, or reactivate accounts.</p>
+              <div class="flex gap-2 mb-3 flex-wrap"><input type="text" id="acct-trial-search" class="form-input" placeholder="Search seller..." style="width:220px" oninput="filterTrialExtensions()"></div>
+              <div class="overflow-x" style="max-height:430px;overflow-y:auto"><table class="data-table"><thead><tr><th>Seller</th><th>Email</th><th>Trial Ends</th><th>Status</th><th>Actions</th></tr></thead><tbody id="acct-trials-list"><tr><td colspan="5" class="text-center text-sm color-text3 p-3">Loading...</td></tr></tbody></table></div>
+            </div>
+          </div>
           <div id="adm-tab-broadcast" class="adm-tab hidden">
             <div class="card card-pad-lg" style="max-width:600px">
               <h3 class="mb-1"><i class="fa-solid fa-bullhorn color-green"></i> Send Platform Broadcast</h3>
@@ -1793,17 +1854,17 @@
 
         <!-- Admin Tab Bar (mobile fallback) -->
         <div class="buyer-tabs-wrap admin-mobile-tabs" style="margin-bottom:1.5rem;overflow-x:auto;-webkit-overflow-scrolling:touch;display:none" id="ap-mobile-tabs">
-          <button class="buyer-tab active" onclick="switchAdminTab('overview')">📊 Overview</button>
-          <button class="buyer-tab" onclick="switchAdminTab('sellers')">🏪 Sellers</button>
-          <button class="buyer-tab" onclick="switchAdminTab('orders')">📦 Orders</button>
-          <button class="buyer-tab" onclick="switchAdminTab('disputes')">⚖️ Disputes</button>
-          <button class="buyer-tab" onclick="switchAdminTab('withdrawals')">💸 Payouts</button>
-          <button class="buyer-tab" onclick="switchAdminTab('receipts')">🧾 Receipts</button>
-          <button class="buyer-tab" onclick="switchAdminTab('kyc')">🪪 KYC</button>
-          <button class="buyer-tab" onclick="switchAdminTab('broadcast')">📣 Broadcast</button>
-          <button class="buyer-tab" onclick="switchAdminTab('ai')">🤖 AI</button>
-          <button class="buyer-tab" onclick="switchAdminTab('branding')">🎨 Branding</button>
-          <button class="buyer-tab" onclick="switchAdminTab('accounts')">👤 Accounts</button>
+          <button class="buyer-tab active" data-admin-tab="overview" onclick="switchAdminTab('overview')">📊 Overview</button>
+          <button class="buyer-tab" data-admin-tab="kyc" onclick="switchAdminTab('kyc')">🪪 KYC</button>
+          <button class="buyer-tab" data-admin-tab="accounts" onclick="switchAdminTab('accounts')">👤 Accounts</button>
+          <button class="buyer-tab" data-admin-tab="sellers" onclick="switchAdminTab('sellers')">🏪 Sellers</button>
+          <button class="buyer-tab" data-admin-tab="orders" onclick="switchAdminTab('orders')">📦 Orders</button>
+          <button class="buyer-tab" data-admin-tab="disputes" onclick="switchAdminTab('disputes')">⚖️ Disputes</button>
+          <button class="buyer-tab" data-admin-tab="withdrawals" onclick="switchAdminTab('withdrawals')">💸 Payouts</button>
+          <button class="buyer-tab" data-admin-tab="receipts" onclick="switchAdminTab('receipts')">🧾 Receipts</button>
+          <button class="buyer-tab" data-admin-tab="broadcast" onclick="switchAdminTab('broadcast')">📣 Broadcast</button>
+          <button class="buyer-tab" data-admin-tab="ai" onclick="switchAdminTab('ai')">🤖 AI</button>
+          <button class="buyer-tab" data-admin-tab="branding" onclick="switchAdminTab('branding')">🎨 Branding</button>
         </div>
 
         <!-- ═══ OVERVIEW TAB ═══ -->
