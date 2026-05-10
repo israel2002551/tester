@@ -570,6 +570,7 @@ function showSellerDashboard() {
   loadSellerOrders();
   renderChart();
   loadWithdrawalData();
+  loadDropshipData();
   loadAffiliateData();
 }
 
@@ -597,6 +598,7 @@ function showDash(section) {
   if (section === 'admin') { if (!guardAdminPanel()) return; loadAdminOverview(); }
   if (section === 'settings') loadSettings();
   if (section === 'withdrawals') { loadWithdrawalData(); loadWithdrawalHistory(); }
+  if (section === 'dropshipping') loadDropshipData();
   if (section === 'affiliate') loadAffiliateData();
 }
 
@@ -1092,48 +1094,89 @@ function selectPM(method) {
   document.getElementById('pm-transfer-panel').classList.toggle('hidden', method!=='transfer');
 }
 
+function isPaystackReady() {
+  if (typeof PaystackPop === 'undefined') {
+    toast('Payment unavailable', 'Paystack could not load. Please try again.', 'error');
+    return false;
+  }
+  if (!PAYSTACK_PUBLIC_KEY || !/^pk_(test|live)_/.test(PAYSTACK_PUBLIC_KEY)) {
+    toast('Payment not configured', 'Set a valid Paystack public key in config.js.', 'error');
+    return false;
+  }
+  return true;
+}
+
 async function payWithPaystack() {
   if (cart.length === 0) { toast('Cart is empty', '', 'warn'); return; }
   const total = cart.reduce((s, c) => s + (c.price * (c.qty || 1)), 0);
   if (total <= 0) { toast('Invalid total amount', '', 'error'); return; }
   if (!currentUser) { showModal('auth-modal'); return; }
-  if (typeof PaystackPop === 'undefined') { toast('Payment unavailable', 'Paystack could not load. Please try again.', 'error'); return; }
+  if (!isPaystackReady()) return;
 
-  const handler = PaystackPop.setup({
-    key: PAYSTACK_PUBLIC_KEY,
-    email: currentUser.email,
-    amount: total * 100, 
-    metadata: {
-      user_id: currentUser.id,
+  const btn = document.querySelector('#pm-paystack-panel .btn-paystack');
+  const oldHtml = btn?.innerHTML;
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Initializing Paystack...'; }
+
+  try {
+    const checkoutPayload = {
       cart: cart.map(c => ({ id: c.id, qty: c.qty || 1 })),
-    },
-    callback: async function(response) {
-      toast('Verifying Payment...', 'Please do not close the window', 'info');
-
-      try {
-        const result = await callEdge('verify-payment', {
-          reference: response.reference,
-          cart: cart.map(c => ({ id: c.id, qty: c.qty || 1 })),
-          delivery_name: document.getElementById('co-name').value.trim(),
-          delivery_phone: document.getElementById('co-phone').value.trim(),
-          delivery_address: document.getElementById('co-address').value.trim(),
-          payment_method: 'paystack',
-        });
-        if (result.success) {
-          const seller = cart[0]?.profiles;
-          if (seller?.whatsapp) sendWhatsAppOrderNotification({ id: result.order_id, total_amount: result.total_paid }, seller.whatsapp);
-          cart = []; saveCart();
-          document.getElementById('co-order-id').textContent = result.order_id || '';
-          document.getElementById('co-order-total').textContent = fmtN(result.total_paid || total);
-          goCheckoutStep(3);
-          toast('Payment Verified!', 'Your order is confirmed', 'success');
-        }
-      } catch (err) {
-        toast('Verification Error', (err.message || 'Contact support') + ' Ref: ' + response.reference, 'error');
-      }
+      delivery_name: document.getElementById('co-name').value.trim(),
+      delivery_phone: document.getElementById('co-phone').value.trim(),
+      delivery_address: document.getElementById('co-address').value.trim(),
+    };
+    if (!checkoutPayload.delivery_name || !checkoutPayload.delivery_phone || !checkoutPayload.delivery_address) {
+      toast('Delivery info needed', 'Enter your name, phone, and address before paying.', 'warn');
+      goCheckoutStep(1);
+      if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
+      return;
     }
-  });
-  handler.openIframe();
+    const reference = 'bs_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const amountKobo = Math.round(total * 100);
+
+    const handler = PaystackPop.setup({
+      key: PAYSTACK_PUBLIC_KEY,
+      email: currentUser.email,
+      amount: amountKobo,
+      currency: 'NGN',
+      ref: reference,
+      metadata: {
+        user_id: currentUser.id,
+        cart: checkoutPayload.cart,
+      },
+      callback: async function(response) {
+        toast('Verifying Payment...', 'Please do not close the window', 'info');
+
+        try {
+          const result = await callEdge('verify-payment', {
+            reference: response.reference || reference,
+            ...checkoutPayload,
+            payment_method: 'paystack',
+          });
+          if (result.success) {
+            const seller = cart[0]?.profiles;
+            if (seller?.whatsapp) sendWhatsAppOrderNotification({ id: result.order_id, total_amount: result.total_paid }, seller.whatsapp);
+            cart = []; saveCart();
+            document.getElementById('co-order-id').textContent = result.order_id || '';
+            document.getElementById('co-order-total').textContent = fmtN(result.total_paid || total);
+            goCheckoutStep(3);
+            toast('Payment Verified!', 'Your order is confirmed', 'success');
+          }
+        } catch (err) {
+          toast('Verification Error', (err.message || 'Contact support') + ' Ref: ' + (response.reference || reference), 'error');
+        } finally {
+          if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
+        }
+      },
+      onClose: () => {
+        if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
+        toast('Payment cancelled', '', 'warn');
+      }
+    });
+    handler.openIframe();
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
+    toast('Payment Error', err.message || 'Could not initialize Paystack', 'error');
+  }
 }
 
 function handleProofUpload(input) {
@@ -1230,7 +1273,7 @@ async function submitReview() {
       }
     }
 
-    await callEdge('submit-review', {
+    await submitProductReview({
       product_id:  reviewProductId,
       rating:      selectedRating,
       review_text: text,
@@ -1242,6 +1285,38 @@ async function submitReview() {
     loadProducts();
   } catch(e) { toast('Error', e.message || 'Could not submit review', 'error'); }
   btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-star"></i> Submit Review';
+}
+
+async function submitProductReview(payload) {
+  try {
+    return await callEdge('submit-review', payload);
+  } catch (edgeErr) {
+    console.warn('submit-review edge failed, trying direct insert:', edgeErr);
+  }
+
+  const base = {
+    product_id: payload.product_id,
+    buyer_id: currentUser.id,
+    seller_id: currentProd?.seller_id || null,
+    rating: payload.rating,
+  };
+  const variants = [
+    { ...base, review_text: payload.review_text, image_urls: payload.image_urls || [] },
+    { ...base, review_text: payload.review_text },
+    { ...base, comment: payload.review_text },
+    { product_id: payload.product_id, buyer_id: currentUser.id, rating: payload.rating, comment: payload.review_text },
+    { product_id: payload.product_id, user_id: currentUser.id, rating: payload.rating, comment: payload.review_text },
+  ];
+
+  let lastError = null;
+  for (const row of variants) {
+    const { error } = await db.from('reviews').insert(row);
+    if (!error) return { success: true };
+    lastError = error;
+    const msg = (error.message || '').toLowerCase();
+    if (!msg.includes('column') && !msg.includes('schema cache')) break;
+  }
+  throw lastError || new Error('Could not submit review');
 }
 
 function previewReviewImages(input) {
@@ -1683,6 +1758,7 @@ async function checkSellerCommission() {
 
 function payCommissionPaystack() {
   if (!currentUser) return;
+  if (!isPaystackReady()) return;
   closeModal('suspended-modal');
   const handler = PaystackPop.setup({
     key: PAYSTACK_PUBLIC_KEY,
@@ -1828,37 +1904,242 @@ async function requestWithdrawal() {
 // ====================================================
 //  DROPSHIPPING
 // ====================================================
+const dropshipCatalog = [
+  { id:'mini-projector', niche:'electronics', name:'Mini Projector', supplier:'CJ Dropshipping', cost:45000, price:120000, shipping:6500, stock:120, delivery:'10-18 days', demand:'High', image:'https://images.unsplash.com/photo-1601944177325-f8867652837f?w=600&h=420&fit=crop', description:'Portable mini projector for movies, football nights, church presentations, and home entertainment.' },
+  { id:'earbuds-pro', niche:'electronics', name:'Wireless Earbuds Pro', supplier:'AliExpress', cost:12000, price:35000, shipping:2500, stock:240, delivery:'8-15 days', demand:'High', image:'https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?w=600&h=420&fit=crop', description:'Bluetooth earbuds with charging case, deep bass, touch controls, and long battery life.' },
+  { id:'smart-watch', niche:'electronics', name:'Fitness Smart Watch', supplier:'CJ Dropshipping', cost:18000, price:55000, shipping:3000, stock:180, delivery:'9-16 days', demand:'High', image:'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&h=420&fit=crop', description:'Smart watch with fitness tracking, call alerts, heart-rate monitoring, and durable strap.' },
+  { id:'kitchen-set', niche:'home', name:'Kitchen Gadget Set', supplier:'AliExpress', cost:8500, price:25000, shipping:2200, stock:300, delivery:'12-20 days', demand:'Medium', image:'https://images.unsplash.com/photo-1556911220-bff31c812dba?w=600&h=420&fit=crop', description:'Multi-piece kitchen gadget set for faster food prep, storage, slicing, and everyday cooking.' },
+  { id:'makeup-organizer', niche:'beauty', name:'Makeup Organizer Box', supplier:'CJ Dropshipping', cost:9500, price:28500, shipping:2300, stock:160, delivery:'10-17 days', demand:'Medium', image:'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=600&h=420&fit=crop', description:'Clear cosmetic organizer for makeup, skincare products, perfumes, and dressing table storage.' },
+  { id:'travel-backpack', niche:'fashion', name:'Anti-Theft Travel Backpack', supplier:'AliExpress', cost:14000, price:42000, shipping:3500, stock:130, delivery:'11-19 days', demand:'High', image:'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=600&h=420&fit=crop', description:'Durable anti-theft backpack with laptop compartment, USB port, and water-resistant fabric.' }
+];
+
+function ensureGrowthSections() {
+  renderDropshipSection();
+  renderAffiliateSection();
+}
+
+function renderDropshipSection() {
+  const section = document.getElementById('ds-dropshipping');
+  if (!section || section.dataset.enhanced === 'true') return;
+  section.dataset.enhanced = 'true';
+  section.innerHTML = `
+    <h1 class="dash-page-title">Global Dropshipping</h1>
+    <p class="dash-page-sub">Research winning products, set your markup, and publish supplier-backed listings.</p>
+    <div class="dropship-hero mb-4">
+      <div><h2>Source globally. Sell locally.</h2><p>Use curated products, supplier cost estimates, and suggested Nigerian retail prices to build listings faster.</p></div>
+      <button class="btn btn-primary" onclick="showDash('add-product')"><i class="fa-solid fa-plus"></i> Add Manual Listing</button>
+    </div>
+    <div class="dropship-stats mb-4">
+      <div class="stat-card"><div class="stat-value color-green" id="ds-imported">0</div><div class="stat-label">Imported Listings</div></div>
+      <div class="stat-card"><div class="stat-value" id="ds-sales">₦0</div><div class="stat-label">Dropship Sales</div></div>
+      <div class="stat-card"><div class="stat-value color-gold" id="ds-profit">₦0</div><div class="stat-label">Estimated Profit</div></div>
+      <div class="stat-card"><div class="stat-value color-text3" id="ds-pending">0</div><div class="stat-label">Orders Pending</div></div>
+    </div>
+    <div class="dash-two-col mb-4">
+      <div class="card card-pad">
+        <div class="flex justify-between items-center mb-3 gap-2 wrap"><h3>Supplier Connections</h3><span class="text-xs color-text3">Saved on this device</span></div>
+        <div class="supplier-grid">
+          <div class="supplier-card" data-supplier-card="aliexpress"><div class="flex items-center gap-3 mb-3"><div class="trust-icon" style="background:#fee2e2;font-size:1.1rem"><i class="fa-solid fa-globe" style="color:#e53e3e"></i></div><div><div class="font-600">AliExpress</div><div class="text-xs color-text3">Wide catalogue, budget pricing</div></div></div><button class="btn btn-primary btn-full btn-sm" onclick="connectSupplier('aliexpress')">Connect</button></div>
+          <div class="supplier-card" data-supplier-card="cj"><div class="flex items-center gap-3 mb-3"><div class="trust-icon" style="background:#ffedd5;font-size:1.1rem"><i class="fa-solid fa-box" style="color:#ea580c"></i></div><div><div class="font-600">CJ Dropshipping</div><div class="text-xs color-text3">QC, fulfilment and faster shipping</div></div></div><button class="btn btn-primary btn-full btn-sm" onclick="connectSupplier('cj')">Connect</button></div>
+        </div>
+      </div>
+      <div class="card card-pad">
+        <h3 class="mb-3">Profit Calculator</h3>
+        <div class="form-grid form-grid-2">
+          <div class="form-group"><label class="form-label">Supplier Cost (₦)</label><input type="number" id="ds-calc-cost" class="form-input" value="12000" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
+          <div class="form-group"><label class="form-label">Selling Price (₦)</label><input type="number" id="ds-calc-price" class="form-input" value="35000" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
+        </div>
+        <div class="form-grid form-grid-2">
+          <div class="form-group"><label class="form-label">Shipping (₦)</label><input type="number" id="ds-calc-ship" class="form-input" value="3500" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
+          <div class="form-group"><label class="form-label">Marketplace Fee (%)</label><input type="number" id="ds-calc-fee" class="form-input" value="3" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
+        </div>
+        <div class="profit-result"><span>Net Profit</span><strong id="ds-calc-profit">₦0</strong><small id="ds-calc-margin">0% margin</small></div>
+      </div>
+    </div>
+    <div class="card card-pad mb-4">
+      <div class="flex justify-between items-center mb-3 gap-2 wrap">
+        <h3>Hot Products for Nigeria</h3>
+        <div class="flex gap-2 wrap">
+          <select id="ds-filter" class="form-select" style="width:auto;padding:.4rem .7rem;font-size:.78rem" onchange="renderDropshipCatalog()">
+            <option value="all">All niches</option><option value="electronics">Electronics</option><option value="home">Home</option><option value="fashion">Fashion</option><option value="beauty">Beauty</option>
+          </select>
+          <button class="btn btn-outline btn-sm" onclick="renderDropshipCatalog()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+        </div>
+      </div>
+      <div class="hot-items-grid" id="dropship-catalog"></div>
+    </div>
+    <div class="card overflow-hidden">
+      <div class="card-pad flex justify-between items-center gap-2 wrap" style="border-bottom:1px solid var(--border)"><h3>Imported Dropship Listings</h3><button class="btn btn-outline btn-sm" onclick="loadDropshipData()"><i class="fa-solid fa-rotate"></i> Reload</button></div>
+      <div class="overflow-x"><table class="data-table"><thead><tr><th>Product</th><th>Price</th><th>Stock</th><th>Status</th><th>Action</th></tr></thead><tbody id="ds-imported-table"><tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">No dropship products imported yet</td></tr></tbody></table></div>
+    </div>`;
+}
+
 function connectSupplier(supplier) {
+  const connected = JSON.parse(localStorage.getItem('bs_dropship_suppliers') || '{}');
+  connected[supplier] = true;
+  localStorage.setItem('bs_dropship_suppliers', JSON.stringify(connected));
+  updateSupplierCards();
   toast(`${supplier==='aliexpress'?'AliExpress':'CJ Dropshipping'} Connected!`, 'You can now import products', 'success');
 }
 
-async function importDropship(name, cost, price, emoji) {
+function updateSupplierCards() {
+  const connected = JSON.parse(localStorage.getItem('bs_dropship_suppliers') || '{}');
+  document.querySelectorAll('[data-supplier-card]').forEach(card => {
+    const supplier = card.dataset.supplierCard;
+    const btn = card.querySelector('button');
+    const isConnected = !!connected[supplier];
+    card.classList.toggle('connected', isConnected);
+    if (btn) btn.innerHTML = isConnected ? '<i class="fa-solid fa-check"></i> Connected' : 'Connect';
+  });
+}
+
+function renderDropshipCatalog() {
+  const grid = document.getElementById('dropship-catalog');
+  if (!grid) return;
+  const filter = document.getElementById('ds-filter')?.value || 'all';
+  const items = dropshipCatalog.filter(p => filter === 'all' || p.niche === filter);
+  grid.innerHTML = items.map(p => {
+    const profit = p.price - p.cost - p.shipping - Math.round(p.price * 0.03);
+    const margin = Math.max(0, Math.round((profit / p.price) * 100));
+    return `<div class="hot-item dropship-product-card">
+      <img src="${p.image}" alt="${escAttr(p.name)}" loading="lazy">
+      <div class="hot-item-body">
+        <div class="flex justify-between gap-2"><div class="font-600 text-sm">${escHtml(p.name)}</div><span class="badge badge-green">${p.demand}</span></div>
+        <div class="text-xs color-text3 mt-1">${escHtml(p.supplier)} · ${escHtml(p.delivery)}</div>
+        <div class="dropship-price-row"><span>Cost ${fmtN(p.cost)}</span><strong>${fmtN(p.price)}</strong></div>
+        <div class="hot-profit">Profit ${fmtN(profit)} · ${margin}% margin</div>
+        <button class="btn btn-primary btn-full btn-sm mt-2" onclick="importDropshipById('${p.id}')"><i class="fa-solid fa-download"></i> Import Listing</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function importDropshipById(id) {
+  const item = dropshipCatalog.find(p => p.id === id);
+  if (!item) return;
+  return importDropship(item);
+}
+
+async function importDropship(itemOrName, cost, price, emoji) {
   if (!currentUser) { showModal('auth-modal'); return; }
+  const item = typeof itemOrName === 'object'
+    ? itemOrName
+    : { name: itemOrName, cost, price, shipping: 0, image: '', description: `Imported from global supplier. ${itemOrName}`, stock: 999, supplier: 'Global Supplier' };
   try {
     await callEdge('manage-product', { action: 'create', data: {
-      name,
-      description:    `Imported from global supplier. ${name}`,
-      price,
-      original_price: price,
+      name:           item.name,
+      description:    `${item.description || `Imported from ${item.supplier}.`} Supplier cost estimate: ${fmtN(item.cost || 0)}. Delivery estimate: ${item.delivery || 'International shipping'}.`,
+      price:          item.price,
+      original_price: item.price,
       category:       'dropship',
       condition:      'new',
       location:       'International',
-      image_url:      '',
+      image_url:      item.image || '',
       has_video:      false,
       negotiable:     false,
-      stock_quantity: 999
+      stock_quantity: item.stock || 999,
+      low_stock_alert: 10
     }});
-    const imported = parseInt(document.getElementById('ds-imported').textContent) || 0;
-    document.getElementById('ds-imported').textContent = imported + 1;
-    toast(`${emoji} ${name} Imported!`, `Listed at ${fmtN(price)}`, 'success');
+    toast(`${emoji || 'Imported'} ${item.name}`, `Listed at ${fmtN(item.price)}`, 'success');
+    loadDropshipData();
+    loadSellerProds();
   } catch(e) {
     toast('Import Failed', e.message, 'error');
   }
 }
 
+function updateDropshipCalculator() {
+  const cost = parseFloat(document.getElementById('ds-calc-cost')?.value) || 0;
+  const price = parseFloat(document.getElementById('ds-calc-price')?.value) || 0;
+  const ship = parseFloat(document.getElementById('ds-calc-ship')?.value) || 0;
+  const feePct = parseFloat(document.getElementById('ds-calc-fee')?.value) || 0;
+  const profit = price - cost - ship - (price * feePct / 100);
+  const margin = price > 0 ? Math.round((profit / price) * 100) : 0;
+  const profitEl = document.getElementById('ds-calc-profit');
+  const marginEl = document.getElementById('ds-calc-margin');
+  if (profitEl) profitEl.textContent = fmtN(profit);
+  if (marginEl) marginEl.textContent = `${margin}% margin`;
+}
+
+async function loadDropshipData() {
+  if (!currentUser) return;
+  ensureGrowthSections();
+  renderDropshipCatalog();
+  updateSupplierCards();
+  updateDropshipCalculator();
+  const { data: products } = await db.from('products').select('*').eq('seller_id', currentUser.id).eq('category', 'dropship').order('created_at', { ascending:false });
+  const dropshipProducts = products || [];
+  const importedEl = document.getElementById('ds-imported');
+  if (importedEl) importedEl.textContent = dropshipProducts.length;
+  const { data: orders } = await db.from('orders').select('total_amount,status,product_id').eq('seller_id', currentUser.id);
+  const ids = new Set(dropshipProducts.map(p => p.id));
+  const dsOrders = (orders || []).filter(o => ids.has(o.product_id));
+  const sales = dsOrders.filter(o => o.status === 'delivered').reduce((s,o)=>s + (o.total_amount || 0), 0);
+  const pending = dsOrders.filter(o => !['delivered','cancelled','refunded'].includes(o.status)).length;
+  document.getElementById('ds-sales').textContent = fmtN(sales);
+  document.getElementById('ds-profit').textContent = fmtN(sales * 0.35);
+  document.getElementById('ds-pending').textContent = pending;
+  const tbody = document.getElementById('ds-imported-table');
+  if (!tbody) return;
+  if (!dropshipProducts.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">No dropship products imported yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = dropshipProducts.map(p => `<tr>
+    <td><div class="flex items-center gap-2"><img src="${p.image_url || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=120'}" alt="" style="width:42px;height:42px;border-radius:8px;object-fit:cover"><div><div class="font-600 text-sm">${escHtml(p.name)}</div><div class="text-xs color-text3">${fmtDate(p.created_at)}</div></div></div></td>
+    <td class="font-bold color-green">${fmtN(p.price)}</td>
+    <td>${p.stock_quantity ?? 'N/A'}</td>
+    <td><span class="badge ${p.status === 'active' ? 'badge-green' : 'badge-gold'}">${escHtml(p.status || 'draft')}</span></td>
+    <td><button class="btn btn-outline btn-sm" onclick="editProduct('${p.id}')"><i class="fa-solid fa-pen"></i> Edit</button></td>
+  </tr>`).join('');
+}
+
 // ====================================================
 //  AFFILIATE
 // ====================================================
+function renderAffiliateSection() {
+  const section = document.getElementById('ds-affiliate');
+  if (!section || section.dataset.enhanced === 'true') return;
+  section.dataset.enhanced = 'true';
+  section.innerHTML = `
+    <h1 class="dash-page-title">Affiliate & Referral</h1>
+    <p class="dash-page-sub">Invite sellers, track conversions, and prepare payout-ready referral earnings.</p>
+    <div class="referral-box mb-4">
+      <div class="flex justify-between items-start gap-3 wrap">
+        <div><h3 style="color:#fff;margin-bottom:.28rem">Refer sellers and earn ₦5,000</h3><p style="color:rgba(255,255,255,.68);font-size:.84rem;max-width:620px">Share your link with business owners. You earn when a referred seller activates their store.</p></div>
+        <span class="badge badge-gold">Seller activation reward</span>
+      </div>
+      <div class="referral-input-row" style="margin-top:1.25rem">
+        <input type="text" id="referral-link" readonly>
+        <button class="btn btn-primary" onclick="copyReferralLink()"><i class="fa-solid fa-copy"></i> Copy</button>
+        <button class="btn btn-outline" onclick="shareReferralLink()" style="background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.2)"><i class="fa-solid fa-share-nodes"></i> Share</button>
+      </div>
+      <div class="affiliate-share-row">
+        <button onclick="shareReferralChannel('whatsapp')"><i class="fa-brands fa-whatsapp"></i> WhatsApp</button>
+        <button onclick="shareReferralChannel('facebook')"><i class="fa-brands fa-facebook"></i> Facebook</button>
+        <button onclick="shareReferralChannel('x')"><i class="fa-brands fa-x-twitter"></i> X</button>
+        <button onclick="copyReferralMessage()"><i class="fa-solid fa-message"></i> Copy message</button>
+      </div>
+    </div>
+    <div class="affiliate-grid mb-4">
+      <div class="stat-card"><div class="stat-value color-green" id="aff-total">₦0</div><div class="stat-label">Total Earnings</div></div>
+      <div class="stat-card"><div class="stat-value" id="aff-pending">₦0</div><div class="stat-label">Pending</div></div>
+      <div class="stat-card"><div class="stat-value" id="aff-clicks">0</div><div class="stat-label">Clicks</div></div>
+      <div class="stat-card"><div class="stat-value" id="aff-conversions">0</div><div class="stat-label">Conversions</div></div>
+    </div>
+    <div class="dash-two-col mb-4">
+      <div class="card card-pad"><h3 class="mb-3">Referral Toolkit</h3><div class="affiliate-tool-list"><button onclick="copyReferralMessage()"><i class="fa-solid fa-copy"></i><span>Copy invite message</span></button><button onclick="downloadReferralQr()"><i class="fa-solid fa-qrcode"></i><span>Open QR code</span></button><button onclick="showDash('advertise')"><i class="fa-solid fa-bullhorn"></i><span>Promote your offer</span></button></div></div>
+      <div class="card card-pad"><h3 class="mb-3">Payout Readiness</h3><div class="affiliate-payout-box"><div><span>Minimum payout</span><strong>₦5,000</strong></div><div><span>Bank account</span><strong id="aff-bank-status">Not set</strong></div></div><button class="btn btn-primary btn-full mt-3" onclick="requestAffiliatePayout()"><i class="fa-solid fa-wallet"></i> Request Affiliate Payout</button></div>
+    </div>
+    <div class="card card-pad mb-4"><h3 class="mb-3">External Programs</h3><div class="affiliate-program-grid">
+      <div class="affiliate-program-card"><i class="fa-brands fa-amazon" style="color:#f90"></i><strong>Amazon</strong><span>Track imported product links manually.</span><button class="btn btn-outline btn-sm" onclick="connectAffiliateProgram('Amazon')">Add Program</button></div>
+      <div class="affiliate-program-card"><i class="fa-solid fa-bag-shopping" style="color:var(--green)"></i><strong>Jumia</strong><span>Save marketplace affiliate links.</span><button class="btn btn-outline btn-sm" onclick="connectAffiliateProgram('Jumia')">Add Program</button></div>
+      <div class="affiliate-program-card"><i class="fa-brands fa-ebay" style="color:#0064d2"></i><strong>eBay</strong><span>Useful for gadget resellers.</span><button class="btn btn-outline btn-sm" onclick="connectAffiliateProgram('eBay')">Add Program</button></div>
+      <div class="affiliate-program-card"><i class="fa-solid fa-link" style="color:var(--purple)"></i><strong>Custom</strong><span>Add any brand or partner link.</span><button class="btn btn-outline btn-sm" onclick="connectAffiliateProgram('Custom')">Add Link</button></div>
+    </div></div>
+    <div class="card overflow-hidden"><div class="card-pad" style="border-bottom:1px solid var(--border)"><h3>Recent Earnings</h3></div><div class="overflow-x"><table class="data-table"><thead><tr><th>Date</th><th>Activity</th><th>Source</th><th>Amount</th><th>Status</th></tr></thead><tbody id="aff-table-body"><tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">No earnings yet</td></tr></tbody></table></div></div>`;
+}
+
 function copyRef() {
   const link = document.getElementById('referral-link').value;
   navigator.clipboard.writeText(link).then(()=>toast('Referral Link Copied!','Share to earn ₦500 per referral','success'));
@@ -1866,20 +2147,85 @@ function copyRef() {
 
 async function loadAffiliateData() {
   if (!currentUser) return;
+  ensureGrowthSections();
   const rc = currentUser.profile?.referral_code || 'ref_' + currentUser.id?.substr(0,8);
-  document.getElementById('referral-link').value = `https://buysell.ng/ref/${rc}`;
-  // Load referral earnings from DB
-  const { data: refs } = await db.from('referrals').select('*').eq('referrer_id', currentUser.id);
+  const link = `${window.location.origin}${window.location.pathname}?ref=${encodeURIComponent(rc)}`;
+  document.getElementById('referral-link').value = link;
+  const bankStatus = document.getElementById('aff-bank-status');
+  if (bankStatus) bankStatus.textContent = currentUser.profile?.account_number ? `${currentUser.profile.bank_name || 'Bank'} ending ${String(currentUser.profile.account_number).slice(-4)}` : 'Not set';
+  let refs = [];
+  const { data, error } = await db.from('referrals').select('*').eq('referrer_id', currentUser.id).order('created_at', { ascending:false });
+  if (!error) refs = data || [];
   const earned = (refs||[]).filter(r=>r.paid).reduce((s,r)=>s+(r.amount||500),0);
-  const pending = (refs||[]).filter(r=>!r.paid).reduce((s,r)=>s+(r.amount||500),0);
+  const pending = (refs||[]).filter(r=>!r.paid).reduce((s,r)=>s+(r.amount||5000),0);
+  const trackedClicks = Number(localStorage.getItem(`bs_aff_clicks_${currentUser.id}`) || '0');
   document.getElementById('aff-total').textContent = fmtN(earned);
   document.getElementById('aff-pending').textContent = fmtN(pending);
-  document.getElementById('aff-clicks').textContent = (refs||[]).length * 3 + Math.floor(Math.random()*5);
+  document.getElementById('aff-clicks').textContent = Math.max(trackedClicks, (refs||[]).length * 4);
   document.getElementById('aff-conversions').textContent = (refs||[]).length;
-  // Earnings table
   const tbody = document.getElementById('aff-table-body');
   if (!refs?.length) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">No earnings yet. Share your referral link!</td></tr>'; return; }
-  tbody.innerHTML = refs.map(r=>`<tr><td>${fmtDate(r.created_at)}</td><td>Referral Signup</td><td>Direct Link</td><td class="font-bold color-green">${fmtN(r.amount||500)}</td><td><span class="badge ${r.paid?'badge-green':'badge-gold'}">${r.paid?'Paid':'Pending'}</span></td></tr>`).join('');
+  tbody.innerHTML = refs.map(r=>`<tr><td>${fmtDate(r.created_at)}</td><td>Seller Referral</td><td>${escHtml(r.source || 'Direct Link')}</td><td class="font-bold color-green">${fmtN(r.amount||5000)}</td><td><span class="badge ${r.paid?'badge-green':'badge-gold'}">${r.paid?'Paid':'Pending'}</span></td></tr>`).join('');
+}
+
+function getReferralMessage() {
+  const link = document.getElementById('referral-link')?.value || '';
+  return `Join BUYSELL Nigeria and open your seller store. Use my referral link: ${link}`;
+}
+
+function bumpAffiliateClick() {
+  if (!currentUser) return;
+  const key = `bs_aff_clicks_${currentUser.id}`;
+  localStorage.setItem(key, String(Number(localStorage.getItem(key) || '0') + 1));
+  const el = document.getElementById('aff-clicks');
+  if (el) el.textContent = Number(el.textContent || '0') + 1;
+}
+
+function shareReferralLink() {
+  const link = document.getElementById('referral-link')?.value || '';
+  bumpAffiliateClick();
+  if (navigator.share) navigator.share({ title: 'Join BUYSELL Nigeria', text: 'Open your seller store on BUYSELL Nigeria.', url: link }).catch(()=>{});
+  else copyReferralLink();
+}
+
+function shareReferralChannel(channel) {
+  const link = document.getElementById('referral-link')?.value || '';
+  const text = encodeURIComponent(getReferralMessage());
+  bumpAffiliateClick();
+  const urls = {
+    whatsapp: `https://wa.me/?text=${text}`,
+    facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}`,
+    x: `https://twitter.com/intent/tweet?text=${text}`
+  };
+  window.open(urls[channel], '_blank', 'noopener,noreferrer');
+}
+
+function copyReferralMessage() {
+  navigator.clipboard.writeText(getReferralMessage()).then(() => toast('Invite Message Copied', 'Paste it on WhatsApp, Facebook, or SMS.', 'success'));
+}
+
+function downloadReferralQr() {
+  const link = encodeURIComponent(document.getElementById('referral-link')?.value || '');
+  bumpAffiliateClick();
+  window.open(`https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${link}`, '_blank', 'noopener,noreferrer');
+}
+
+function connectAffiliateProgram(name) {
+  const url = prompt(`Paste your ${name} affiliate link or program URL:`);
+  if (!url) return;
+  const programs = JSON.parse(localStorage.getItem('bs_affiliate_programs') || '[]');
+  programs.push({ name, url, created_at: new Date().toISOString() });
+  localStorage.setItem('bs_affiliate_programs', JSON.stringify(programs));
+  toast(`${name} Added`, 'Program link saved on this device.', 'success');
+}
+
+function requestAffiliatePayout() {
+  const pending = parseFloat((document.getElementById('aff-pending')?.textContent || '0').replace(/[^\d.]/g,'')) || 0;
+  if (!currentUser?.profile?.account_number) { toast('Bank Details Needed', 'Add your bank account in Store Settings first.', 'warn'); showDash('settings'); return; }
+  if (pending < 5000) { toast('Not Ready Yet', 'Minimum affiliate payout is ₦5,000.', 'warn'); return; }
+  document.getElementById('wd-amount').value = pending;
+  showDash('withdrawals');
+  toast('Payout Prepared', 'Review and submit your withdrawal request.', 'info');
 }
 
 async function loadWithdrawalHistory() {
@@ -4129,10 +4475,14 @@ let adPopupAds = [], adPopupIndex = 0, adSkipTimer = null;
 
 async function initiateAdPayment() {
   if (!currentUser) { showModal('auth-modal'); return; }
+  if (!isPaystackReady()) return;
   const title = document.getElementById('ad-title')?.value.trim();
+  const desc = document.getElementById('ad-desc')?.value.trim();
+  const cta = document.getElementById('ad-cta-select')?.value || 'Learn More';
   const link = document.getElementById('ad-link')?.value.trim();
   const file = document.getElementById('ad-media-file')?.files?.[0];
   if (!title) { toast('Missing title', 'Enter an ad title', 'warn'); return; }
+  if (!link) { toast('Missing link', 'Enter the ad destination link', 'warn'); return; }
 
   const btn = document.getElementById('ad-pay-btn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processing…';
@@ -4146,35 +4496,48 @@ async function initiateAdPayment() {
       if (!upErr) { const { data } = db.storage.from('uploads').getPublicUrl(path); mediaUrl = data.publicUrl; }
     }
 
-    await db.from('advertisements').insert({
-      user_id: currentUser.id,
+    const adData = {
       title,
-      link_url: link || null,
+      description: desc || '',
       media_url: mediaUrl,
-      status: 'pending',
-      payment_verified: false
-    });
+      media_type: file?.type?.startsWith('video/') ? 'video' : 'image',
+      cta_text: cta,
+      cta_link: link,
+      advertiser_type: currentRole || 'seller'
+    };
 
-    try {
-      const payRes = await callEdge('init-ad-payment', { amount: 10000 });
-      if (payRes.access_code && typeof PaystackPop !== 'undefined') {
-        const handler = PaystackPop.setup({
-          key: PAYSTACK_PUBLIC_KEY,
-          email: currentUser.email,
-          amount: payRes.amount_kobo || 1000000,
-          ref: 'ad_' + Date.now(),
-          callback: () => { toast('Ad Submitted! 🎉', 'It will go live after admin approval.', 'success'); },
-          onClose: () => { toast('Payment Cancelled', 'Your ad is saved as pending.', 'info'); }
-        });
-        handler.openIframe();
-      } else {
-        toast('Ad Submitted', 'Pending admin approval and payment verification.', 'success');
+    const reference = 'ad_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const handler = PaystackPop.setup({
+      key: PAYSTACK_PUBLIC_KEY,
+      email: currentUser.email,
+      amount: 1000000,
+      currency: 'NGN',
+      ref: reference,
+      metadata: { user_id: currentUser.id, type: 'advertisement' },
+      callback: async (response) => {
+        try {
+          await callEdge('verify-ad-payment', { reference: response.reference || reference, adData });
+          toast('Ad Payment Verified', 'Your ad has been submitted for placement.', 'success');
+          document.getElementById('ad-title').value = '';
+          document.getElementById('ad-desc').value = '';
+          document.getElementById('ad-media-file').value = '';
+          document.getElementById('ad-media-preview-container')?.classList.add('hidden');
+        } catch (err) {
+          toast('Verification Failed', (err.message || 'Contact support') + ' Ref: ' + (response.reference || reference), 'error');
+        } finally {
+          btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Publish Ad';
+        }
+      },
+      onClose: () => {
+        btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Publish Ad';
+        toast('Payment Cancelled', 'Your ad was not submitted.', 'info');
       }
-    } catch(pe) {
-      toast('Ad Saved', 'Payment could not be initiated. Admin will review manually.', 'info');
-    }
-  } catch(e) { toast('Error', e.message, 'error'); }
-  btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Publish Ad';
+    });
+    handler.openIframe();
+  } catch(e) {
+    toast('Error', e.message, 'error');
+    btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Publish Ad';
+  }
 }
 
 function closeAdPopup() {
