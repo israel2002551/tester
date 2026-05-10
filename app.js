@@ -13,6 +13,46 @@ let selectedRating = 0, checkoutPaymentMethod = 'paystack';
 let deferredInstallPrompt = null, salesChart = null;
 let carouselStartX = 0;
 
+async function postAiRequest(body, endpoints = []) {
+  const session = (await db.auth.getSession()).data.session;
+  const token = session?.access_token || SB_KEY;
+  const headers = {
+    'Content-Type': 'application/json',
+    apikey: SB_KEY,
+    Authorization: `Bearer ${token}`,
+  };
+
+  const uniqueEndpoints = [...new Set(endpoints.filter(Boolean))];
+  let lastError = null;
+  for (const endpoint of uniqueEndpoints) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `AI endpoint failed (${res.status})`);
+      if (data.reply) return data;
+      lastError = new Error('AI endpoint returned an empty reply');
+    } catch (error) {
+      lastError = error;
+      console.warn('AI endpoint failed:', endpoint, error);
+    }
+  }
+  throw lastError || new Error('AI endpoint unavailable');
+}
+
+function getAiEndpoints(primaryName = 'smooth-handler') {
+  const configured = typeof CLAUDE_EDGE_URL !== 'undefined' ? CLAUDE_EDGE_URL : '';
+  return [
+    configured,
+    `${EDGE_URL}/${primaryName}`,
+    `${EDGE_URL}/smooth-handler`,
+    `${EDGE_URL}/chat-bot-handler`,
+  ];
+}
+
 /** Call a deployed Edge Function securely with the user's JWT */
 async function callEdge(fnName, body) {
   const session = (await db.auth.getSession()).data.session;
@@ -456,7 +496,7 @@ async function generateDescription() {
   try {
     const res  = await fetch(CLAUDE_EDGE_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
       body: JSON.stringify({
         messages: [{
           role: 'user',
@@ -733,7 +773,7 @@ async function doSearch() {
     try {
       const res  = await fetch(CLAUDE_EDGE_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
         body: JSON.stringify({
           messages: [{
             role: 'user',
@@ -2503,25 +2543,20 @@ async function askAdminBot(preset) {
   container.scrollTop = container.scrollHeight;
 
   try {
-    const res  = await fetch(CLAUDE_EDGE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: adminAiHistory,
-        context: {
-          task:             'admin_assistant',
-          platform:         'BUYSELL Nigeria',
-          admin_email:      ADMIN_EMAIL,
-          total_sellers:    document.getElementById('adm-total-sellers')?.textContent || '?',
-          total_buyers:     document.getElementById('adm-total-buyers')?.textContent  || '?',
-          total_revenue:    document.getElementById('adm-revenue')?.textContent       || '?',
-          open_disputes:    document.getElementById('adm-disputes')?.textContent      || '?',
-        }
-      }),
-    });
+    const data = await postAiRequest({
+      messages: adminAiHistory,
+      context: {
+        task:             'admin_assistant',
+        platform:         'BUYSELL Nigeria',
+        admin_email:      ADMIN_EMAIL,
+        total_sellers:    document.getElementById('adm-total-sellers')?.textContent || '?',
+        total_buyers:     document.getElementById('adm-total-buyers')?.textContent  || '?',
+        total_revenue:    document.getElementById('adm-revenue')?.textContent       || '?',
+        open_disputes:    document.getElementById('adm-disputes')?.textContent      || '?',
+      }
+    }, getAiEndpoints('smooth-handler'));
 
-    const data  = await res.json();
-    let reply = data.reply || 'Sorry, I could not process that.';
+    let reply = data.reply || getAdminAiFallback(msg);
     
     // Check for mass suspension trigger
     if (reply.includes('[ACTION: SUSPEND_UNPAID_SELLERS]')) {
@@ -2540,10 +2575,32 @@ async function askAdminBot(preset) {
     container.appendChild(replyDiv);
 
   } catch(e) {
+    const reply = getAdminAiFallback(msg);
+    adminAiHistory.push({ role: 'assistant', content: reply });
     document.getElementById('admin-typing')?.remove();
-    toast('AI unavailable', 'Try again shortly', 'warn');
+    const replyDiv = document.createElement('div');
+    replyDiv.style.cssText = 'display:flex;gap:.42rem';
+    replyDiv.innerHTML = `<div style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-robot"></i></div><div style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;max-width:82%;line-height:1.5">${escHtml(reply)}</div>`;
+    container.appendChild(replyDiv);
+    toast('AI in basic mode', e.message || 'Using offline admin help', 'warn');
   }
   container.scrollTop = container.scrollHeight;
+}
+function getAdminAiFallback(message) {
+  const text = String(message || '').toLowerCase();
+  if (text.includes('unpaid') || text.includes('expired') || text.includes('suspend')) {
+    return 'I can help with that. Open Accounts to review expired trials and unpaid users, then use the Activate or Suspend actions. For bulk enforcement, use the unpaid sellers/providers quick actions after confirming the list.';
+  }
+  if (text.includes('receipt') || text.includes('commission')) {
+    return 'Check Account Management for pending commission receipts. Open the receipt image, confirm the payment reference, then approve to activate the seller or reject with a reason.';
+  }
+  if (text.includes('kyc')) {
+    return 'Use the KYC Verify tab to open submitted documents. Approve only when the document matches the profile details; reject with a clear reason when it does not.';
+  }
+  if (text.includes('dispute')) {
+    return 'Review open disputes from the Disputes tab. Compare the order status, uploaded proof, and buyer/seller notes before resolving or escalating.';
+  }
+  return 'I am in basic admin mode right now. I can still guide you through sellers, receipts, KYC, disputes, ads, and account enforcement from the admin tabs.';
 }
 
 async function executeMassSuspension() {
@@ -3201,16 +3258,13 @@ async function sendChat() {
   };
 
   try {
-    const res = await fetch(CLAUDE_EDGE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: chatHistory, context }),
-    });
+    const data = await postAiRequest({
+      messages: chatHistory,
+      context,
+      systemPrompt: getChatSystemPrompt(context),
+    }, getAiEndpoints('chat-bot-handler'));
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Agent error');
-
-    const reply = data.reply;
+    const reply = data.reply || getChatFallback(msg, context);
     chatHistory.push({ role: 'assistant', content: reply });
 
     // Replace typing indicator with real reply
@@ -3219,13 +3273,43 @@ async function sendChat() {
 
   } catch (err) {
     const typingEl = document.getElementById(typingId);
-    const fallback = "Sorry, I'm having trouble right now. WhatsApp us at 09061484256 for instant help!";
+    const fallback = getChatFallback(msg, context);
     if (typingEl) typingEl.querySelector('.cb-bubble').textContent = fallback;
     chatHistory.push({ role: 'assistant', content: fallback });
   }
 }
 
 // Helper — detect which "page" user is on
+function getChatSystemPrompt(context) {
+  return `You are BUYSELL Nigeria's marketplace assistant. Help buyers, sellers, and service providers with shopping, payments, delivery, orders, reviews, ads, KYC, and dashboard steps. Be concise, friendly, and practical. Current page: ${context.current_page}. User role: ${context.user_role}.`;
+}
+
+function getChatFallback(message, context = {}) {
+  const text = String(message || '').toLowerCase();
+  if (text.includes('pay') || text.includes('payment') || text.includes('paystack')) {
+    return 'You can pay with Paystack at checkout for card, bank, USSD, and other supported options. Bank transfer is also available when the seller has added bank details.';
+  }
+  if (text.includes('order') || text.includes('track')) {
+    return 'Open My Orders to view your order status. If you just paid with Paystack, wait for verification to finish, then your confirmed order will appear there.';
+  }
+  if (text.includes('review')) {
+    return 'Open the product, choose a star rating, write your experience, and submit the review. Reviews help other buyers know which sellers are reliable.';
+  }
+  if (text.includes('sell') || text.includes('seller')) {
+    return 'To sell, sign up as a seller, complete your profile, add products from the dashboard, and keep your WhatsApp and payment details updated.';
+  }
+  if (text.includes('kyc') || text.includes('verify')) {
+    return 'KYC is reviewed by the admin. Upload clear documents from your dashboard and wait for approval before relying on verified-seller features.';
+  }
+  if (text.includes('ad') || text.includes('advert')) {
+    return 'Create an ad from the Advertise section, upload your media, add a link, and pay the placement fee. The ad becomes active after payment verification.';
+  }
+  if (context.cart_item_count) {
+    return `You have ${context.cart_item_count} item${context.cart_item_count === 1 ? '' : 's'} in your cart. You can continue shopping or go to checkout when ready.`;
+  }
+  return 'I am in basic help mode right now, but I can still guide you with products, payments, orders, reviews, seller setup, ads, and KYC.';
+}
+
 function getCurrentPage() {
   if (document.getElementById('seller-dashboard')?.style.display !== 'none') return 'seller-dashboard';
   if (document.getElementById('storefront-view')?.style.display !== 'none')  return 'storefront';
