@@ -904,7 +904,10 @@ async function openProduct(id) {
 }
 
 async function loadProductReviews(productId) {
-  const { data } = await db.from('reviews').select('*,profiles!buyer_id(name)').eq('product_id', productId).order('created_at', { ascending: false }).limit(10);
+  let { data, error } = await db.from('reviews').select('*,profiles!reviewer_id(name)').eq('product_id', productId).order('created_at', { ascending: false }).limit(10);
+  if (error) {
+    ({ data } = await db.from('reviews').select('*,profiles!buyer_id(name)').eq('product_id', productId).order('created_at', { ascending: false }).limit(10));
+  }
   const reviews = data || [];
   const count = reviews.length;
   document.getElementById('modal-review-count').textContent = `${count} review${count!==1?'s':''}`;
@@ -1095,7 +1098,7 @@ function selectPM(method) {
 }
 
 function isPaystackReady() {
-  if (typeof PaystackPop === 'undefined') {
+  if (typeof PaystackPop === 'undefined' && typeof Paystack === 'undefined') {
     toast('Payment unavailable', 'Paystack could not load. Please try again.', 'error');
     return false;
   }
@@ -1104,6 +1107,60 @@ function isPaystackReady() {
     return false;
   }
   return true;
+}
+
+function openPaystackTransaction(options) {
+  const reference = options.reference || options.ref;
+  const onSuccess = options.onSuccess || options.callback;
+  const onCancel = options.onCancel || options.onClose;
+  const onError = options.onError || ((error) => {
+    toast('Payment Error', error?.message || 'Could not initialize Paystack', 'error');
+  });
+  const commonOptions = { ...options, reference, onSuccess, onCancel, onError };
+  delete commonOptions.ref;
+  delete commonOptions.callback;
+  delete commonOptions.onClose;
+
+  if (typeof Paystack !== 'undefined') {
+    const popup = new Paystack();
+    if (typeof popup.newTransaction === 'function') {
+      popup.newTransaction(commonOptions);
+      return;
+    }
+    if (typeof popup.checkout === 'function') {
+      popup.checkout(commonOptions);
+      return;
+    }
+  }
+
+  if (typeof PaystackPop !== 'undefined') {
+    try {
+      const popup = new PaystackPop();
+      if (typeof popup.newTransaction === 'function') {
+        popup.newTransaction(commonOptions);
+        return;
+      }
+      if (typeof popup.checkout === 'function') {
+        popup.checkout(commonOptions);
+        return;
+      }
+    } catch (_) {
+      // Older InlineJS exposes PaystackPop.setup as a static method.
+    }
+
+    if (typeof PaystackPop.setup === 'function') {
+      const handler = PaystackPop.setup({
+        ...options,
+        ref: reference,
+        callback: onSuccess,
+        onClose: onCancel,
+      });
+      handler.openIframe();
+      return;
+    }
+  }
+
+  throw new Error('Paystack could not be initialized');
 }
 
 async function payWithPaystack() {
@@ -1133,22 +1190,22 @@ async function payWithPaystack() {
     const reference = 'bs_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
     const amountKobo = Math.round(total * 100);
 
-    const handler = PaystackPop.setup({
+    openPaystackTransaction({
       key: PAYSTACK_PUBLIC_KEY,
       email: currentUser.email,
       amount: amountKobo,
       currency: 'NGN',
-      ref: reference,
+      reference,
       metadata: {
         user_id: currentUser.id,
         cart: checkoutPayload.cart,
       },
-      callback: async function(response) {
+      onSuccess: async function(response) {
         toast('Verifying Payment...', 'Please do not close the window', 'info');
 
         try {
           const result = await callEdge('verify-payment', {
-            reference: response.reference || reference,
+            reference: response.reference || response.trxref || reference,
             ...checkoutPayload,
             payment_method: 'paystack',
           });
@@ -1162,17 +1219,16 @@ async function payWithPaystack() {
             toast('Payment Verified!', 'Your order is confirmed', 'success');
           }
         } catch (err) {
-          toast('Verification Error', (err.message || 'Contact support') + ' Ref: ' + (response.reference || reference), 'error');
+          toast('Verification Error', (err.message || 'Contact support') + ' Ref: ' + (response.reference || response.trxref || reference), 'error');
         } finally {
           if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
         }
       },
-      onClose: () => {
+      onCancel: () => {
         if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
         toast('Payment cancelled', '', 'warn');
       }
     });
-    handler.openIframe();
   } catch (err) {
     if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
     toast('Payment Error', err.message || 'Could not initialize Paystack', 'error');
@@ -1296,6 +1352,7 @@ async function submitProductReview(payload) {
 
   const base = {
     product_id: payload.product_id,
+    reviewer_id: currentUser.id,
     buyer_id: currentUser.id,
     seller_id: currentProd?.seller_id || null,
     rating: payload.rating,
@@ -1304,6 +1361,7 @@ async function submitProductReview(payload) {
     { ...base, review_text: payload.review_text, image_urls: payload.image_urls || [] },
     { ...base, review_text: payload.review_text },
     { ...base, comment: payload.review_text },
+    { product_id: payload.product_id, reviewer_id: currentUser.id, rating: payload.rating, comment: payload.review_text },
     { product_id: payload.product_id, buyer_id: currentUser.id, rating: payload.rating, comment: payload.review_text },
     { product_id: payload.product_id, user_id: currentUser.id, rating: payload.rating, comment: payload.review_text },
   ];
@@ -1715,7 +1773,10 @@ async function updateOrderStatus(id, status) {
 async function loadSellerReviews() {
   if (!currentUser) return;
   const { data: prods } = await db.from('products').select('id').eq('seller_id', currentUser.id);
-  const { data: revs } = await db.from('reviews').select('*,profiles!buyer_id(name)').in('product_id', (prods||[]).map(p=>p.id)).order('created_at',{ascending:false});
+  let { data: revs, error } = await db.from('reviews').select('*,profiles!reviewer_id(name)').in('product_id', (prods||[]).map(p=>p.id)).order('created_at',{ascending:false});
+  if (error) {
+    ({ data: revs } = await db.from('reviews').select('*,profiles!buyer_id(name)').in('product_id', (prods||[]).map(p=>p.id)).order('created_at',{ascending:false}));
+  }
   document.getElementById('ds-reviews-skeleton').classList.add('hidden');
   const list = document.getElementById('ds-reviews-list');
   if (!revs?.length) { document.getElementById('ds-reviews-empty').classList.remove('hidden'); return; }
@@ -1732,7 +1793,7 @@ async function loadSellerReviews() {
         <span class="reviewer-name">${escHtml(r.profiles?.name||'Buyer')}</span>
         <div class="stars sm">${'★'.repeat(r.rating)+'☆'.repeat(5-r.rating)}</div>
       </div>
-      <p class="review-text">${escHtml(r.review_text)}</p>
+      <p class="review-text">${escHtml(r.review_text || r.comment || '')}</p>
       <span class="text-xs color-text3">${fmtDate(r.created_at)}</span>
     </div>`).join('');
 }
@@ -1760,19 +1821,19 @@ function payCommissionPaystack() {
   if (!currentUser) return;
   if (!isPaystackReady()) return;
   closeModal('suspended-modal');
-  const handler = PaystackPop.setup({
+  openPaystackTransaction({
     key: PAYSTACK_PUBLIC_KEY,
     email: currentUser.email,
     amount: COMMISSION_AMOUNT,
     currency: 'NGN',
-    ref: 'comm_' + Date.now(),
-    callback: async (response) => {
+    reference: 'comm_' + Date.now(),
+    onSuccess: async (response) => {
       // Commission confirmed via Paystack — direct update for immediate UI response
       try {
       await callEdge('admin-action', {
         action: 'toggle_commission',
         target_id: currentUser.id,
-        data: { commission_paid: true, payment_reference: response.reference }
+        data: { commission_paid: true, payment_reference: response.reference || response.trxref }
       });
       currentUser.profile.commission_paid = true;
       document.getElementById('suspended-modal').classList.remove('open');
@@ -1783,9 +1844,8 @@ function payCommissionPaystack() {
         toast('Verification Failed', err.message || 'Please contact support with your payment reference.', 'error');
       }
     },
-    onClose: () => toast('Payment cancelled','','warn')
+    onCancel: () => toast('Payment cancelled','','warn')
   });
-  handler.openIframe();
 }
 
 async function submitCommissionReceipt() {
@@ -4507,33 +4567,32 @@ async function initiateAdPayment() {
     };
 
     const reference = 'ad_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-    const handler = PaystackPop.setup({
+    openPaystackTransaction({
       key: PAYSTACK_PUBLIC_KEY,
       email: currentUser.email,
       amount: 1000000,
       currency: 'NGN',
-      ref: reference,
+      reference,
       metadata: { user_id: currentUser.id, type: 'advertisement' },
-      callback: async (response) => {
+      onSuccess: async (response) => {
         try {
-          await callEdge('verify-ad-payment', { reference: response.reference || reference, adData });
+          await callEdge('verify-ad-payment', { reference: response.reference || response.trxref || reference, adData });
           toast('Ad Payment Verified', 'Your ad has been submitted for placement.', 'success');
           document.getElementById('ad-title').value = '';
           document.getElementById('ad-desc').value = '';
           document.getElementById('ad-media-file').value = '';
           document.getElementById('ad-media-preview-container')?.classList.add('hidden');
         } catch (err) {
-          toast('Verification Failed', (err.message || 'Contact support') + ' Ref: ' + (response.reference || reference), 'error');
+          toast('Verification Failed', (err.message || 'Contact support') + ' Ref: ' + (response.reference || response.trxref || reference), 'error');
         } finally {
           btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Publish Ad';
         }
       },
-      onClose: () => {
+      onCancel: () => {
         btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Publish Ad';
         toast('Payment Cancelled', 'Your ad was not submitted.', 'info');
       }
     });
-    handler.openIframe();
   } catch(e) {
     toast('Error', e.message, 'error');
     btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Publish Ad';
