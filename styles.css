@@ -553,6 +553,42 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .referral-box{background:linear-gradient(135deg,var(--forest),var(--forest3));border-radius:var(--radius);padding:1.2rem}
 .referral-input-row{display:flex;gap:.48rem;margin-top:.8rem;flex-wrap:wrap}
 .referral-input-row input{flex:1;min-width:150px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:var(--radius-sm);padding:.52rem .82rem;color:#fff;font-size:.78rem;outline:none}
+.dash-two-col{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1rem}
+@media(max-width:780px){.dash-two-col{grid-template-columns:1fr}}
+.dropship-hero{background:linear-gradient(135deg,#0b1f14,#12351f);color:#fff;border-radius:var(--radius);padding:1.25rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.dropship-hero h2{font-size:1.25rem;margin-bottom:.25rem}
+.dropship-hero p{color:rgba(255,255,255,.68);font-size:.86rem;max-width:620px}
+.dropship-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.82rem}
+@media(max-width:860px){.dropship-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:420px){.dropship-stats{grid-template-columns:1fr}}
+.supplier-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.75rem}
+.supplier-card{background:#fff;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:.9rem;transition:border-color .2s,box-shadow .2s,transform .2s}
+.supplier-card:hover{border-color:var(--green);box-shadow:0 4px 16px rgba(25,168,71,.1);transform:translateY(-1px)}
+.supplier-card.connected{border-color:var(--green);background:var(--green-xlt)}
+.hot-items-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:.85rem}
+.dropship-product-card{padding:0;overflow:hidden;text-align:left}
+.dropship-product-card img{width:100%;height:128px;object-fit:cover;display:block;background:var(--cream)}
+.hot-item-body{padding:.8rem}
+.dropship-price-row{display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-top:.65rem;font-size:.78rem}
+.dropship-price-row span{color:var(--text3)}
+.dropship-price-row strong{color:var(--green);font-size:.92rem}
+.hot-profit{margin-top:.35rem;color:var(--green);font-size:.72rem;font-weight:700}
+.profit-result{border:1px solid var(--border);background:var(--cream);border-radius:var(--radius-sm);padding:1rem;display:flex;align-items:baseline;gap:.65rem;flex-wrap:wrap}
+.profit-result span{font-size:.78rem;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.profit-result strong{font-size:1.45rem;color:var(--green);font-family:'Syne',sans-serif}
+.profit-result small{color:var(--text3);font-weight:700}
+.affiliate-share-row{display:flex;gap:.45rem;flex-wrap:wrap;margin-top:.85rem}
+.affiliate-share-row button,.affiliate-tool-list button{border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:#fff;border-radius:var(--radius-sm);padding:.48rem .7rem;font-size:.78rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:.4rem}
+.affiliate-tool-list{display:grid;gap:.55rem}
+.affiliate-tool-list button{background:#fff;color:var(--text);border-color:var(--border);justify-content:flex-start}
+.affiliate-tool-list button i{color:var(--green);width:18px}
+.affiliate-payout-box{display:grid;gap:.55rem}
+.affiliate-payout-box div{display:flex;justify-content:space-between;gap:.75rem;border-bottom:1px solid var(--border);padding-bottom:.55rem}
+.affiliate-payout-box span{color:var(--text3);font-size:.78rem}
+.affiliate-program-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem}
+.affiliate-program-card{border:1px solid var(--border);border-radius:var(--radius-sm);padding:.9rem;display:flex;flex-direction:column;gap:.45rem;background:#fff}
+.affiliate-program-card i{font-size:1.15rem}
+.affiliate-program-card span{font-size:.74rem;color:var(--text3);line-height:1.35}
 
 /* Tables */
 .data-table{width:100%;border-collapse:collapse}
