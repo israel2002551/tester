@@ -2020,11 +2020,12 @@ function switchAdminTab(tab) {
   // Deactivate all sidebar nav items
   document.querySelectorAll('#admin-portal-view .dash-nav-item').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('[id^="atab-"]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('[data-admin-tab]').forEach(b => b.classList.remove('active'));
   // Show selected panel
-  document.getElementById('adm-tab-' + tab)?.classList.remove('hidden');
+  document.querySelectorAll('#adm-tab-' + tab).forEach(p => p.classList.remove('hidden'));
   // Highlight sidebar item
   document.getElementById('ap-nav-' + tab)?.classList.add('active');
-  document.getElementById('atab-' + tab)?.classList.add('active');
+  document.querySelectorAll('#atab-' + tab + ', [data-admin-tab="' + tab + '"]').forEach(b => b.classList.add('active'));
   // Load data
   if (tab === 'overview')     loadAdminOverview();
   if (tab === 'sellers')      loadAdminSellers();
