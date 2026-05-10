@@ -624,7 +624,7 @@
             <div class="upload-zone" id="ad-media-zone" onclick="document.getElementById('ad-media-file').click()">
               <i class="fa-solid fa-cloud-upload-alt"></i>
               <div class="upload-label">Click to upload Media (Image or Video)</div>
-              <div class="upload-sub">MP4, JPG, PNG (Max 50MB)</div>
+              <div class="upload-sub">JPG, PNG, WebP up to 8MB or MP4 up to 50MB</div>
             </div>
             <input type="file" id="ad-media-file" accept="image/*,video/mp4" class="hidden" onchange="previewAdMedia(this)">
             <div id="ad-media-preview-container" class="hidden mt-2 text-center" style="position:relative">
@@ -636,14 +636,14 @@
           <div class="flex items-center gap-3 mt-4 pt-3" style="border-top:1px solid var(--border)">
             <div style="flex:1">
               <div class="font-600">Total Price: <span class="color-green font-bold text-lg">₦10,000</span></div>
-              <div class="text-xs color-text3">For 30 Days Dashboard Placement</div>
+              <div class="text-xs color-text3">30 days placement after admin approval</div>
             </div>
-            <button class="btn btn-primary" onclick="initiateAdPayment()" id="ad-pay-btn"><i class="fa-solid fa-credit-card"></i> Pay & Publish Ad</button>
+            <button class="btn btn-primary" onclick="initiateAdPayment()" id="ad-pay-btn"><i class="fa-solid fa-credit-card"></i> Pay & Submit Ad</button>
           </div>
         </div>
 
         <div class="card overflow-hidden">
-          <div class="card-pad" style="border-bottom:1px solid var(--border)"><h3>Your Active Advertisements</h3></div>
+          <div class="card-pad" style="border-bottom:1px solid var(--border)"><h3>Your Advertisements</h3></div>
           <div class="overflow-x">
             <table class="data-table">
               <thead><tr><th>Media</th><th>Title</th><th>Views</th><th>Clicks</th><th>Status</th><th>Expires</th></tr></thead>
