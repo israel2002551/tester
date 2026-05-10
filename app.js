@@ -584,6 +584,7 @@ function showBuyerView() {
   currentRole = 'buyer';
   startCarousel();
   loadProducts();
+  loadActiveAds();
   updateCartCount();
 }
 
@@ -612,6 +613,7 @@ function showSellerDashboard() {
   loadWithdrawalData();
   loadDropshipData();
   loadAffiliateData();
+  loadSellerAds();
 }
 
 function toggleView() {
@@ -640,6 +642,7 @@ function showDash(section) {
   if (section === 'withdrawals') { loadWithdrawalData(); loadWithdrawalHistory(); }
   if (section === 'dropshipping') loadDropshipData();
   if (section === 'affiliate') loadAffiliateData();
+  if (section === 'advertise') loadSellerAds();
 }
 
 function setMobActive(btn) {
@@ -1436,7 +1439,21 @@ function previewAdMedia(input) {
   const container = document.getElementById('ad-media-preview-container');
   const el = document.getElementById('ad-preview-el');
   if (!file || !container || !el) return;
+  const maxBytes = file.type.startsWith('video/') ? 50 * 1024 * 1024 : 8 * 1024 * 1024;
+  if (!file.type.startsWith('image/') && file.type !== 'video/mp4') {
+    input.value = '';
+    toast('Unsupported file', 'Upload a JPG, PNG, WebP, or MP4 file.', 'warn');
+    return;
+  }
+  if (file.size > maxBytes) {
+    input.value = '';
+    toast('File too large', file.type.startsWith('video/') ? 'Videos must be 50MB or less.' : 'Images must be 8MB or less.', 'warn');
+    return;
+  }
   container.classList.remove('hidden');
+  document.getElementById('ad-media-zone')?.classList.add('has-file');
+  const label = document.querySelector('#ad-media-zone .upload-label');
+  if (label) label.textContent = file.name;
   const reader = new FileReader();
   reader.onload = (e) => {
     if (file.type.startsWith('video/')) {
@@ -3028,10 +3045,16 @@ async function loadCommissionActivations() {
 async function loadAdPayments() {
   const tbody = document.getElementById('acct-ads-list');
   try {
-    const { data: ads } = await db.from('advertisements')
-      .select('*, profiles(name, email)')
+    let { data: ads, error } = await db.from('advertisements')
+      .select('*, profiles!advertiser_id(name, email)')
       .in('status', ['pending', 'pending_payment'])
       .order('created_at', { ascending: false });
+    if (error) {
+      ({ data: ads } = await db.from('advertisements')
+        .select('*, profiles!user_id(name, email)')
+        .in('status', ['pending', 'pending_payment'])
+        .order('created_at', { ascending: false }));
+    }
 
     if (!ads || !ads.length) {
       tbody.innerHTML = '<tr><td colspan="5" class="text-center text-sm color-text3 p-3">No pending ad approvals</td></tr>';
@@ -4616,6 +4639,117 @@ async function createFlashSale() {
 //  AD SYSTEM
 // ====================================================
 let adPopupAds = [], adPopupIndex = 0, adSkipTimer = null;
+const AD_PRICE_KOBO = 1000000;
+
+function normalizeAdUrl(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const parsed = new URL(withProtocol);
+    return parsed.href;
+  } catch {
+    return '';
+  }
+}
+
+function getAdLink(ad) {
+  return ad.cta_link || ad.link_url || '#';
+}
+
+async function loadSellerAds() {
+  if (!currentUser) return;
+  const tbody = document.getElementById('ad-table-body');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3)">Loading ads...</td></tr>';
+  try {
+    let { data, error } = await db.from('advertisements')
+      .select('*')
+      .eq('advertiser_id', currentUser.id)
+      .order('created_at', { ascending: false });
+    if (error) {
+      ({ data, error } = await db.from('advertisements')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .order('created_at', { ascending: false }));
+    }
+    if (error) throw error;
+    const ads = data || [];
+    const activeAds = ads.filter(a => a.status === 'active' && (!a.expires_at || new Date(a.expires_at) > new Date()));
+    const totalViews = ads.reduce((sum, a) => sum + Number(a.views || 0), 0);
+    const totalClicks = ads.reduce((sum, a) => sum + Number(a.clicks || 0), 0);
+    document.getElementById('ad-active-count').textContent = activeAds.length;
+    document.getElementById('ad-total-views').textContent = fmtNum(totalViews);
+    document.getElementById('ad-total-clicks').textContent = fmtNum(totalClicks);
+    renderSellerAdsTable(ads);
+  } catch (e) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--red)">Could not load ads: ${escHtml(e.message || 'Unknown error')}</td></tr>`;
+  }
+}
+
+function renderSellerAdsTable(ads) {
+  const tbody = document.getElementById('ad-table-body');
+  if (!tbody) return;
+  if (!ads.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3)">No ads yet. Create one above to start promoting.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = ads.map(ad => {
+    const status = ad.status || 'pending';
+    const badge = status === 'active' ? 'badge-green' : status === 'rejected' ? 'badge-red' : status === 'expired' ? 'badge-red' : 'badge-gold';
+    const expires = ad.expires_at ? fmtDate(ad.expires_at) : 'After approval';
+    const media = ad.media_url
+      ? (ad.media_type === 'video'
+        ? `<video src="${escAttr(ad.media_url)}" muted style="width:58px;height:44px;object-fit:cover;border-radius:6px"></video>`
+        : `<img src="${escAttr(ad.media_url)}" alt="" style="width:58px;height:44px;object-fit:cover;border-radius:6px">`)
+      : '<span class="text-xs color-text3">No media</span>';
+    return `<tr>
+      <td>${media}</td>
+      <td><div class="font-600 text-sm">${escHtml(ad.title || 'Untitled ad')}</div><div class="text-xs color-text3">${escHtml(ad.cta_text || 'Learn More')}</div></td>
+      <td>${fmtNum(ad.views || 0)}</td>
+      <td>${fmtNum(ad.clicks || 0)}</td>
+      <td><span class="badge ${badge}">${escHtml(status)}</span></td>
+      <td class="text-xs">${expires}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadActiveAds() {
+  try {
+    const dismissedUntil = Number(sessionStorage.getItem('bs_ads_dismissed_until') || 0);
+    if (Date.now() < dismissedUntil) return;
+    const { data, error } = await db.from('advertisements')
+      .select('*')
+      .eq('status', 'active')
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(5);
+    if (error) throw error;
+    adPopupAds = (data || []).filter(ad => ad.media_url || ad.title);
+    if (!adPopupAds.length) return;
+    adPopupIndex = 0;
+    setTimeout(() => {
+      if (currentRole === 'buyer' && !document.querySelector('.modal-overlay.open')) {
+        document.getElementById('ad-popup-overlay')?.classList.remove('hidden');
+        renderAdPopup();
+      }
+    }, 2500);
+  } catch (e) {
+    console.warn('Could not load active ads:', e);
+  }
+}
+
+async function trackAdStat(adId, type) {
+  if (!adId) return;
+  try {
+    await fetch(`${EDGE_URL}/update-ad-stats`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
+      body: JSON.stringify({ adId, type }),
+    });
+  } catch (e) {
+    console.warn('Ad tracking failed:', e);
+  }
+}
 
 async function initiateAdPayment() {
   if (!currentUser) { showModal('auth-modal'); return; }
@@ -4623,10 +4757,14 @@ async function initiateAdPayment() {
   const title = document.getElementById('ad-title')?.value.trim();
   const desc = document.getElementById('ad-desc')?.value.trim();
   const cta = document.getElementById('ad-cta-select')?.value || 'Learn More';
-  const link = document.getElementById('ad-link')?.value.trim();
+  const link = normalizeAdUrl(document.getElementById('ad-link')?.value);
   const file = document.getElementById('ad-media-file')?.files?.[0];
   if (!title) { toast('Missing title', 'Enter an ad title', 'warn'); return; }
-  if (!link) { toast('Missing link', 'Enter the ad destination link', 'warn'); return; }
+  if (title.length > 80) { toast('Title too long', 'Keep the title under 80 characters.', 'warn'); return; }
+  if (!desc) { toast('Missing description', 'Add a short description for your ad.', 'warn'); return; }
+  if (desc.length > 180) { toast('Description too long', 'Keep the description under 180 characters.', 'warn'); return; }
+  if (!link) { toast('Invalid link', 'Enter a valid destination link.', 'warn'); return; }
+  if (!file) { toast('Media needed', 'Upload an image or MP4 video for the ad.', 'warn'); return; }
 
   const btn = document.getElementById('ad-pay-btn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processing…';
@@ -4636,8 +4774,10 @@ async function initiateAdPayment() {
     if (file) {
       const ext = file.name.split('.').pop();
       const path = `ads/${currentUser.id}/${Date.now()}.${ext}`;
-      const { error: upErr } = await db.storage.from('uploads').upload(path, file);
-      if (!upErr) { const { data } = db.storage.from('uploads').getPublicUrl(path); mediaUrl = data.publicUrl; }
+      const { error: upErr } = await db.storage.from('uploads').upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) throw upErr;
+      const { data } = db.storage.from('uploads').getPublicUrl(path);
+      mediaUrl = data.publicUrl;
     }
 
     const adData = {
@@ -4654,37 +4794,43 @@ async function initiateAdPayment() {
     openPaystackTransaction({
       key: PAYSTACK_PUBLIC_KEY,
       email: currentUser.email,
-      amount: 1000000,
+      amount: AD_PRICE_KOBO,
       currency: 'NGN',
       reference,
       metadata: { user_id: currentUser.id, type: 'advertisement' },
       onSuccess: async (response) => {
         try {
           await callEdge('verify-ad-payment', { reference: response.reference || response.trxref || reference, adData });
-          toast('Ad Payment Verified', 'Your ad has been submitted for placement.', 'success');
+          toast('Ad Submitted', 'Payment verified. Your ad is now waiting for admin approval.', 'success');
           document.getElementById('ad-title').value = '';
           document.getElementById('ad-desc').value = '';
+          document.getElementById('ad-link').value = 'https://buysell.ng/';
           document.getElementById('ad-media-file').value = '';
           document.getElementById('ad-media-preview-container')?.classList.add('hidden');
+          document.getElementById('ad-media-zone')?.classList.remove('has-file');
+          const label = document.querySelector('#ad-media-zone .upload-label');
+          if (label) label.textContent = 'Click to upload Media (Image or Video)';
+          loadSellerAds();
         } catch (err) {
           toast('Verification Failed', (err.message || 'Contact support') + ' Ref: ' + (response.reference || response.trxref || reference), 'error');
         } finally {
-          btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Publish Ad';
+          btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Submit Ad';
         }
       },
       onCancel: () => {
-        btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Publish Ad';
+        btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Submit Ad';
         toast('Payment Cancelled', 'Your ad was not submitted.', 'info');
       }
     });
   } catch(e) {
     toast('Error', e.message, 'error');
-    btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Publish Ad';
+    btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Submit Ad';
   }
 }
 
 function closeAdPopup() {
   document.getElementById('ad-popup-overlay')?.classList.add('hidden');
+  sessionStorage.setItem('bs_ads_dismissed_until', String(Date.now() + 30 * 60 * 1000));
   if (adSkipTimer) { clearInterval(adSkipTimer); adSkipTimer = null; }
 }
 
@@ -4704,13 +4850,30 @@ function renderAdPopup() {
   const counter = document.getElementById('ad-counter');
   const ctaBtn = document.getElementById('ad-cta-btn');
   const ctaText = document.getElementById('ad-cta-text');
+  const desc = escHtml(ad.description || '');
 
-  if (content) content.innerHTML = ad.media_url
-    ? `<img src="${ad.media_url}" alt="${escHtml(ad.title)}" style="width:100%;max-height:300px;object-fit:contain;border-radius:8px">`
-    : `<div style="padding:2rem;text-align:center"><h3>${escHtml(ad.title)}</h3></div>`;
+  trackAdStat(ad.id, 'view');
+
+  if (content) content.innerHTML = `
+    ${ad.media_url
+      ? (ad.media_type === 'video'
+        ? `<video src="${escAttr(ad.media_url)}" autoplay muted playsinline loop></video>`
+        : `<img src="${escAttr(ad.media_url)}" alt="${escAttr(ad.title || 'Sponsored ad')}">`)
+      : `<div style="padding:2rem;text-align:center;color:#fff"><h3>${escHtml(ad.title || 'Sponsored offer')}</h3></div>`}
+    <div class="ad-popup-info">
+      <h2>${escHtml(ad.title || 'Sponsored offer')}</h2>
+      ${desc ? `<p>${desc}</p>` : ''}
+    </div>`;
   if (counter) counter.textContent = `${adPopupIndex+1}/${adPopupAds.length}`;
-  if (ctaBtn) ctaBtn.href = ad.link_url || '#';
-  if (ctaText) ctaText.textContent = ad.link_url ? 'Visit' : 'Close';
+  if (ctaBtn) {
+    ctaBtn.href = getAdLink(ad);
+    ctaBtn.onclick = () => trackAdStat(ad.id, 'click');
+  }
+  if (ctaText) ctaText.textContent = ad.cta_text || (getAdLink(ad) !== '#' ? 'Visit' : 'Close');
+  const dots = document.getElementById('ad-popup-dots');
+  if (dots) dots.innerHTML = adPopupAds.map((_, i) => `<span class="ad-popup-dot ${i === adPopupIndex ? 'active' : ''}"></span>`).join('');
+  const progress = document.getElementById('ad-progress');
+  if (progress) progress.style.width = '0%';
 
   let secs = 5;
   const skipBtn = document.getElementById('ad-skip-btn');
@@ -4721,6 +4884,7 @@ function renderAdPopup() {
   adSkipTimer = setInterval(() => {
     secs--;
     if (timerEl) timerEl.textContent = secs;
+    if (progress) progress.style.width = `${((5 - secs) / 5) * 100}%`;
     if (secs <= 0) { clearInterval(adSkipTimer); if (skipBtn) { skipBtn.disabled = false; } }
   }, 1000);
 }
