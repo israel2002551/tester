@@ -2019,10 +2019,12 @@ function switchAdminTab(tab) {
   document.querySelectorAll('.adm-tab').forEach(p => p.classList.add('hidden'));
   // Deactivate all sidebar nav items
   document.querySelectorAll('#admin-portal-view .dash-nav-item').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('[id^="atab-"]').forEach(b => b.classList.remove('active'));
   // Show selected panel
   document.getElementById('adm-tab-' + tab)?.classList.remove('hidden');
   // Highlight sidebar item
   document.getElementById('ap-nav-' + tab)?.classList.add('active');
+  document.getElementById('atab-' + tab)?.classList.add('active');
   // Load data
   if (tab === 'overview')     loadAdminOverview();
   if (tab === 'sellers')      loadAdminSellers();
@@ -2224,6 +2226,9 @@ function _renderAdminSellerList(sellers) {
     const approveBtn = s.commission_paid
       ? `<button onclick="adminToggleCommission('${s.id}',false)" class="btn btn-sm btn-outline"><i class="fa-solid fa-ban"></i> Revoke</button>`
       : `<button onclick="adminToggleCommission('${s.id}',true)"  class="btn btn-sm btn-primary"><i class="fa-solid fa-check"></i> Approve</button>`;
+    const accessBtn = s.is_suspended
+      ? `<button onclick="adminReactivateUser('${s.id}')" class="btn btn-primary btn-sm"><i class="fa-solid fa-rotate-left"></i> Reactivate</button>`
+      : `<button onclick="adminDeactivateUser('${s.id}')" class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)"><i class="fa-solid fa-ban"></i> Deactivate</button>`;
     const waBtn = s.whatsapp
       ? `<a href="https://wa.me/${s.whatsapp.replace(/\D/g,'')}" target="_blank" class="btn btn-sm" style="background:#dcfce7;color:#15803d"><i class="fa-brands fa-whatsapp"></i></a>`
       : '';
@@ -2242,6 +2247,7 @@ function _renderAdminSellerList(sellers) {
       </div>
       <div class="flex gap-2 flex-wrap" style="flex-shrink:0">
         ${approveBtn}
+        ${accessBtn}
         ${waBtn}
         <button onclick="adminViewStorefront('${s.id}')" class="btn btn-outline btn-sm" title="View store"><i class="fa-solid fa-store"></i></button>
         <button onclick="adminDeleteSeller('${s.id}')"  class="btn btn-danger btn-sm"  title="Delete"><i class="fa-solid fa-trash"></i></button>
@@ -2498,20 +2504,10 @@ async function loadAdminReceipts() {
 async function approveReceipt(receiptId, sellerId) {
   if (!confirm('Approve this receipt and activate the seller?')) return;
   try {
-    // 1. Update receipt status
-    await db.from('commission_receipts').update({
-      status: 'approved',
-      reviewed_at: new Date().toISOString()
-    }).eq('id', receiptId);
-
-    // 2. Activate the seller's commission_paid flag
-    await db.from('profiles').update({
-      commission_paid: true,
-      updated_at: new Date().toISOString()
-    }).eq('id', sellerId);
-
-    toast('Receipt Approved ✅', 'Seller store is now active.', 'success');
+    await callEdge('admin-action', { action: 'approve_receipt', target_id: receiptId, data: { seller_id: sellerId } });
+    toast('Receipt Approved', 'Seller store is now active.', 'success');
     loadAdminReceipts();
+    loadAdminAccounts();
   } catch(e) {
     toast('Error', e.message, 'error');
   }
@@ -2520,19 +2516,14 @@ async function approveReceipt(receiptId, sellerId) {
 async function rejectReceipt(receiptId) {
   const note = prompt('Reason for rejection (optional):') || '';
   try {
-    await db.from('commission_receipts').update({
-      status: 'rejected',
-      admin_note: note,
-      reviewed_at: new Date().toISOString()
-    }).eq('id', receiptId);
-
+    await callEdge('admin-action', { action: 'reject_receipt', target_id: receiptId, data: { reason: note } });
     toast('Receipt Rejected', 'Seller has been notified.', 'warn');
     loadAdminReceipts();
+    loadAdminAccounts();
   } catch(e) {
     toast('Error', e.message, 'error');
   }
 }
-
 /* ── ACCOUNT MANAGEMENT ── */
 async function loadAdminAccounts() {
   if (!guardAdminPanel()) return;
@@ -2607,7 +2598,6 @@ async function loadTrialExtensions() {
     const { data: sellers } = await db.from('profiles')
       .select('*')
       .eq('role', 'seller')
-      .eq('commission_paid', false)
       .order('trial_end', { ascending: true });
 
     _trialExtensionsCache = sellers || [];
@@ -2637,9 +2627,19 @@ function _renderTrialExtensions(sellers) {
   tbody.innerHTML = sellers.map(s => {
     const trialEnd = s.trial_end ? new Date(s.trial_end) : null;
     const daysLeft = trialEnd ? Math.ceil((trialEnd - now) / 86400000) : 0;
-    const status = daysLeft > 0 
-      ? `<span class="badge badge-gold">${daysLeft} days left</span>`
-      : `<span class="badge badge-red">Expired</span>`;
+    const status = s.is_suspended
+      ? '<span class="badge badge-red">Deactivated</span>'
+      : s.commission_paid
+        ? '<span class="badge badge-green">Active</span>'
+        : daysLeft > 0
+          ? `<span class="badge badge-gold">${daysLeft} days left</span>`
+          : '<span class="badge badge-red">Expired</span>';
+    const accessBtn = s.is_suspended
+      ? `<button class="btn btn-primary btn-sm" onclick="adminReactivateUser('${s.id}')"><i class="fa-solid fa-rotate-left"></i> Reactivate</button>`
+      : `<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="adminDeactivateUser('${s.id}')"><i class="fa-solid fa-ban"></i> Deactivate</button>`;
+    const activateBtn = s.commission_paid
+      ? ''
+      : `<button class="btn btn-primary btn-sm" onclick="adminGrantCommission('${s.id}')"><i class="fa-solid fa-check"></i> Activate</button>`;
     
     return `
       <tr>
@@ -2647,7 +2647,7 @@ function _renderTrialExtensions(sellers) {
         <td class="text-xs color-text3">${escHtml(s.email || '')}</td>
         <td class="text-xs">${trialEnd ? fmtDate(s.trial_end) : 'N/A'}</td>
         <td>${status}</td>
-        <td><button class="btn btn-outline btn-sm" onclick="adminExtendTrial('${s.id}', '${s.trial_end || new Date().toISOString()}')"><i class="fa-solid fa-plus"></i> 30 Days</button></td>
+        <td><div class="flex gap-1 flex-wrap"><button class="btn btn-outline btn-sm" onclick="adminExtendTrial('${s.id}', '${s.trial_end || new Date().toISOString()}')"><i class="fa-solid fa-plus"></i> 30 Days</button>${activateBtn}${accessBtn}</div></td>
       </tr>
     `;
   }).join('');
@@ -2656,12 +2656,10 @@ function _renderTrialExtensions(sellers) {
 async function adminActivateSeller(sellerId, receiptId) {
   if (!confirm('Approve this receipt and activate the seller?')) return;
   try {
-    // Reusing the existing approveReceipt logic to activate via direct db updates
-    // In a fully locked down system, we'd use admin-action edge function. 
-    await db.from('commission_receipts').update({ status: 'approved', reviewed_at: new Date().toISOString() }).eq('id', receiptId);
-    await db.from('profiles').update({ commission_paid: true, updated_at: new Date().toISOString() }).eq('id', sellerId);
-    toast('Seller Activated ✅', 'Commission payment approved.', 'success');
+    await callEdge('admin-action', { action: 'approve_receipt', target_id: receiptId, data: { seller_id: sellerId } });
+    toast('Seller Activated', 'Commission payment approved.', 'success');
     loadAdminAccounts();
+    loadAdminReceipts();
   } catch(e) {
     toast('Error', e.message, 'error');
   }
@@ -2671,7 +2669,7 @@ async function adminApproveAd(adId) {
   if (!confirm('Approve this advertisement?')) return;
   try {
     await callEdge('admin-action', { action: 'approve_ad', target_id: adId });
-    toast('Ad Approved ✅', 'It is now active on the dashboard.', 'success');
+    toast('Ad Approved', 'It is now active on the dashboard.', 'success');
     loadAdminAccounts();
   } catch(e) {
     toast('Error', e.message, 'error');
@@ -2681,7 +2679,7 @@ async function adminApproveAd(adId) {
 async function adminRejectAd(adId) {
   if (!confirm('Reject this advertisement?')) return;
   try {
-    await db.from('advertisements').update({ status: 'rejected' }).eq('id', adId);
+    await callEdge('admin-action', { action: 'reject_ad', target_id: adId });
     toast('Ad Rejected', 'Advertiser has been updated.', 'info');
     loadAdminAccounts();
   } catch(e) {
@@ -2700,6 +2698,41 @@ async function adminExtendTrial(sellerId, currentEnd) {
   }
 }
 
+async function adminGrantCommission(sellerId) {
+  if (!confirm('Activate this seller as paid?')) return;
+  try {
+    await callEdge('admin-action', { action: 'grant_commission', target_id: sellerId });
+    toast('Seller Activated', 'Seller access is now active.', 'success');
+    loadAdminAccounts();
+    loadAdminSellers();
+  } catch(e) {
+    toast('Error', e.message, 'error');
+  }
+}
+
+async function adminDeactivateUser(userId) {
+  if (!confirm('Deactivate this account and pause their listings?')) return;
+  try {
+    await callEdge('admin-action', { action: 'deactivate_user', target_id: userId });
+    toast('Account Deactivated', 'Listings were paused.', 'warn');
+    loadAdminAccounts();
+    loadAdminSellers();
+  } catch(e) {
+    toast('Error', e.message, 'error');
+  }
+}
+
+async function adminReactivateUser(userId) {
+  if (!confirm('Reactivate this account and listings?')) return;
+  try {
+    await callEdge('admin-action', { action: 'reactivate_user', target_id: userId });
+    toast('Account Reactivated', 'Listings were restored.', 'success');
+    loadAdminAccounts();
+    loadAdminSellers();
+  } catch(e) {
+    toast('Error', e.message, 'error');
+  }
+}
 async function checkBroadcastForUser() {
   if (!currentUser) return;
   const role = currentUser.profile?.role || 'buyer';
