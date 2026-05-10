@@ -5,6 +5,13 @@
 
 let chatHistory = []; 
 let adminAiHistory = [];
+let currentUser = null, currentRole = 'buyer', currentProd = null;
+let cart = JSON.parse(localStorage.getItem('bs_cart') || '[]');
+let products = [], filteredProducts = [], activeFilters = {};
+let carouselIndex = 0, carouselTimer = null;
+let selectedRating = 0, checkoutPaymentMethod = 'paystack';
+let deferredInstallPrompt = null, salesChart = null;
+let carouselStartX = 0;
 
 /** Call a deployed Edge Function securely with the user's JWT */
 async function callEdge(fnName, body) {
@@ -40,13 +47,6 @@ const db = window.supabase.createClient(SB_URL, SB_KEY, {
 // ====================================================
 //  STATE
 // ====================================================
-let currentUser = null, currentRole = 'buyer', currentProd = null;
-let cart = JSON.parse(localStorage.getItem('bs_cart') || '[]');
-let products = [], filteredProducts = [], activeFilters = {};
-let carouselIndex = 0, carouselTimer = null;
-let selectedRating = 0, checkoutPaymentMethod = 'paystack';
-let deferredInstallPrompt = null, salesChart = null;
-let carouselStartX = 0;
 
 // ====================================================
 //  PWA
