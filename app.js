@@ -1494,12 +1494,12 @@ function previewAdMedia(input) {
 //  BUYER TABS & ORDERS
 // ====================================================
 function switchBuyerTab(tab) {
-  document.getElementById('tab-shop').classList.toggle('active', tab==='shop');
-  document.getElementById('tab-orders').classList.toggle('active', tab==='orders');
-  document.getElementById('tab-services').classList.toggle('active', tab==='services');
-  document.getElementById('buyer-shop-tab').classList.toggle('hidden', tab!=='shop');
-  document.getElementById('buyer-orders-tab').classList.toggle('hidden', tab!=='orders');
-  document.getElementById('buyer-services-tab').classList.toggle('hidden', tab!=='services');
+  document.getElementById('tab-shop')?.classList.toggle('active', tab==='shop');
+  document.getElementById('tab-orders')?.classList.toggle('active', tab==='orders');
+  document.getElementById('tab-services')?.classList.toggle('active', tab==='services');
+  document.getElementById('buyer-shop-tab')?.classList.toggle('hidden', tab!=='shop');
+  document.getElementById('buyer-orders-tab')?.classList.toggle('hidden', tab!=='orders');
+  document.getElementById('buyer-services-tab')?.classList.toggle('hidden', tab!=='services');
   if (tab==='orders') loadBuyerOrders();
   if (tab==='services') loadServiceGigs();
 }
@@ -1530,6 +1530,52 @@ async function loadBuyerOrders() {
         <a href="https://wa.me/2349061484256?text=Order ${o.id}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Track</a>
       </div>
     </div>`).join('');
+}
+
+async function loadBuyerOrders() {
+  const skeleton = document.getElementById('buyer-orders-skeleton');
+  const list = document.getElementById('buyer-orders-list');
+  const empty = document.getElementById('buyer-orders-empty');
+  if (!currentUser) { empty?.classList.remove('hidden'); skeleton?.classList.add('hidden'); list?.classList.add('hidden'); return; }
+  skeleton?.classList.remove('hidden');
+  list?.classList.add('hidden');
+  empty?.classList.add('hidden');
+  try {
+    const { data: orders, error } = await db.from('orders').select('*').eq('buyer_id', currentUser.id).order('created_at',{ascending:false});
+    if (error) throw error;
+    skeleton?.classList.add('hidden');
+    if (!orders?.length) { empty?.classList.remove('hidden'); return; }
+    list.classList.remove('hidden');
+    const statusColors = {pending:'badge-gold',confirmed:'badge-blue',shipped:'badge-purple',delivered:'badge-green',cancelled:'badge-red',refunded:'badge-gray'};
+    list.innerHTML = (orders || []).map(o => {
+      const orderItems = Array.isArray(o.items) ? o.items : [];
+      const itemHtml = orderItems.length
+        ? orderItems.map(i => `<span class="text-xs badge badge-gray">${escHtml(i.name || 'Item')} ×${i.qty || 1}</span>`).join('')
+        : '<span class="text-xs color-text3">Order item history is still saved for newer orders; this older order may not include item details.</span>';
+      const proofUrl = o.proof_url || o.payment_proof_url || '';
+      const paymentMethod = o.payment_method ? ` · ${escHtml(o.payment_method)}` : '';
+      return `
+    <div class="order-history-item">
+      <div class="flex justify-between items-center flex-wrap gap-2 mb-2">
+        <div><div class="font-bold">${escHtml(o.id)}</div><div class="text-xs color-text3">${fmtDate(o.created_at)}${paymentMethod}</div></div>
+        <div class="flex items-center gap-2">
+          <span class="badge ${statusColors[o.status]||'badge-gray'}">${escHtml(o.status || 'pending')}</span>
+          <span class="font-bold color-green">${fmtN(o.total_amount)}</span>
+        </div>
+      </div>
+      <div class="flex gap-1 flex-wrap mb-2">${itemHtml}</div>
+      <div class="flex gap-2 flex-wrap">
+        ${o.status==='delivered'?`<button class="btn btn-outline btn-sm" onclick="openDisputeModal('${escAttr(o.id)}')"><i class="fa-solid fa-exclamation-triangle"></i> Dispute</button>`:''}
+        ${proofUrl ? `<a href="${escAttr(proofUrl)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm"><i class="fa-solid fa-receipt"></i> Proof</a>` : ''}
+        <a href="https://wa.me/2349061484256?text=Order%20${encodeURIComponent(o.id)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Track</a>
+      </div>
+    </div>`;
+    }).join('');
+  } catch (e) {
+    skeleton?.classList.add('hidden');
+    list?.classList.remove('hidden');
+    if (list) list.innerHTML = `<div class="order-history-item text-center color-text3">Could not load your orders right now. ${escHtml(e.message || '')}</div>`;
+  }
 }
 
 // ====================================================
