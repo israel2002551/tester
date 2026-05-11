@@ -377,6 +377,8 @@ async function onAuthSuccess(user) {
 
   currentRole = currentUser.profile?.role || 'buyer';
   updateNavForUser();
+  updateInboxCount();
+  setupMessageRealtime();
 }
 
 async function checkSession() {
@@ -393,8 +395,15 @@ async function checkSession() {
       }
     }
     if (event === 'SIGNED_OUT') {
+      if (messageChannel) {
+        db.removeChannel(messageChannel);
+        messageChannel = null;
+      }
       currentUser = null;
       currentRole = 'buyer';
+      currentChatPartner = null;
+      currentChatProductId = null;
+      updateInboxCount();
     }
     if (event === 'TOKEN_REFRESHED' && session?.user) {
       currentUser = session.user;
@@ -473,9 +482,16 @@ async function sendPasswordReset() {
 
 async function logoutUser() {
   await db.auth.signOut();
+  if (messageChannel) {
+    db.removeChannel(messageChannel);
+    messageChannel = null;
+  }
   currentUser = null;
+  currentChatPartner = null;
+  currentChatProductId = null;
   document.getElementById('nav-auth-btns').classList.remove('hidden');
   document.getElementById('nav-user-btns').classList.add('hidden');
+  updateInboxCount();
   enterSite('buyer');
   toast('Signed Out', '', 'info');
 }
@@ -1206,6 +1222,15 @@ function openPaystackTransaction(options) {
   throw new Error('Paystack could not be initialized');
 }
 
+async function resolvePaystackReference(response, fallback = '') {
+  return response?.reference ||
+    response?.trxref ||
+    response?.transaction_reference ||
+    response?.data?.reference ||
+    response?.data?.trxref ||
+    fallback;
+}
+
 async function payWithPaystack() {
   if (cart.length === 0) { toast('Cart is empty', '', 'warn'); return; }
   const total = cart.reduce((s, c) => s + (c.price * (c.qty || 1)), 0);
@@ -1686,10 +1711,19 @@ async function submitProduct(e) {
 
     if (editingProductId) {
       // UPDATE mode
+      const updateData = { ...prodData };
+      if (imgUrl) updateData.image_url = imgUrl;
+      if (vidUrl) {
+        updateData.video_url = vidUrl;
+        updateData.has_video = true;
+      } else {
+        delete updateData.video_url;
+        delete updateData.has_video;
+      }
       await callEdge('manage-product', {
         action: 'update',
         product_id: editingProductId,
-        data: { ...prodData, image_url: imgUrl || undefined, video_url: vidUrl || undefined }
+        data: updateData
       });
       editingProductId = null;
       toast('Product Updated! ✅', 'Changes saved successfully', 'success');
@@ -1709,7 +1743,7 @@ async function submitProduct(e) {
     showDash('products');
   } catch(err) { toast('Error', err.message, 'error'); }
   btn.disabled = false;
-  document.getElementById('pub-btn-text').textContent = 'Publish Product';
+  document.getElementById('pub-btn-text').textContent = editingProductId ? 'Update Product' : 'Publish Product';
   document.getElementById('pub-spinner').classList.add('hidden');
 }
 
@@ -4495,60 +4529,177 @@ async function showCompareModal() {
 //  MESSAGING
 // ====================================================
 let currentChatPartner = null;
+let currentChatProductId = null;
+let messageChannel = null;
 
 function openMessageModal(partnerId, partnerName = 'Seller', productId = null) {
   if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
   if (!partnerId) { toast('Seller unavailable', 'This product seller could not be found.', 'error'); return; }
   if (partnerId === currentUser.id) { toast('This is your listing', 'You cannot message yourself about this product.', 'info'); return; }
   const label = partnerName || 'Seller';
-  openConversation(partnerId, label);
+  openConversation(partnerId, label, productId);
   const input = document.getElementById('msg-input');
   if (input && productId && !input.value) input.placeholder = `Ask ${label} about this product...`;
+}
+
+function getMsgMissingColumn(error) {
+  const text = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`;
+  const quoted = text.match(/'([^']+)' column/i) || text.match(/column "([^"]+)"/i);
+  return quoted?.[1] || '';
+}
+
+async function getProfilesByIds(ids) {
+  const unique = [...new Set((ids || []).filter(Boolean))];
+  if (!unique.length) return {};
+  let { data, error } = await db.from('profiles').select('id,name,email,whatsapp,store_name').in('id', unique);
+  if (error && getMsgMissingColumn(error) === 'store_name') {
+    ({ data } = await db.from('profiles').select('id,name,email,whatsapp').in('id', unique));
+  }
+  return Object.fromEntries((data || []).map(p => [p.id, p]));
+}
+
+function formatMsgTime(date) {
+  if (!date) return '';
+  return new Date(date).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatMsgDay(date) {
+  if (!date) return '';
+  const d = new Date(date);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return 'Today';
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString('en-NG', { day: 'numeric', month: 'short' });
+}
+
+function normalizeMessageRows(rows) {
+  return (rows || []).map(m => ({
+    ...m,
+    content: String(m.content || '').trim(),
+    created_at: m.created_at || new Date().toISOString(),
+    is_read: !!m.is_read,
+  })).filter(m => m.sender_id && m.receiver_id);
+}
+
+function partnerNameFromProfile(profile, fallback = 'User') {
+  return profile?.store_name || profile?.name || profile?.email || fallback;
+}
+
+function renderInboxEmpty(container, text = 'No messages yet.') {
+  container.innerHTML = `<div class="msg-empty" style="padding:2rem 1rem"><i class="fa-solid fa-envelope-open" style="font-size:1.6rem;color:var(--border2);display:block;margin-bottom:.55rem"></i>${escHtml(text)}</div>`;
 }
 
 async function showInbox() {
   showModal('inbox-modal');
   const container = document.getElementById('inbox-list');
   container.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
-  if (!currentUser) { container.innerHTML = '<p class="text-center color-text3 p-3">Sign in to view messages.</p>'; return; }
+  if (!currentUser) { renderInboxEmpty(container, 'Sign in to view messages.'); return; }
   try {
-    const { data: msgs } = await db.from('messages')
-      .select('*, sender:sender_id(name), receiver:receiver_id(name)')
+    const { data, error } = await db.from('messages')
+      .select('*')
       .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
-      .order('created_at', { ascending: false }).limit(50);
-    if (!msgs || !msgs.length) { container.innerHTML = '<p class="text-center color-text3 p-3">No messages yet.</p>'; return; }
+      .order('created_at', { ascending: false })
+      .limit(120);
+    if (error) throw error;
+    const msgs = normalizeMessageRows(data);
+    if (!msgs.length) { renderInboxEmpty(container); return; }
+    const profiles = await getProfilesByIds(msgs.flatMap(m => [m.sender_id, m.receiver_id]));
     const partners = {};
     msgs.forEach(m => {
       const pid = m.sender_id === currentUser.id ? m.receiver_id : m.sender_id;
-      const pname = m.sender_id === currentUser.id ? m.receiver?.name : m.sender?.name;
-      if (!partners[pid]) partners[pid] = { name: pname || 'User', lastMsg: m.content, time: m.created_at };
+      const profile = profiles[pid] || {};
+      if (!partners[pid]) {
+        partners[pid] = {
+          id: pid,
+          name: partnerNameFromProfile(profile),
+          lastMsg: m.content,
+          time: m.created_at,
+          productId: m.product_id || '',
+          unread: 0,
+        };
+      }
+      if (m.receiver_id === currentUser.id && !m.is_read) partners[pid].unread += 1;
     });
-    container.innerHTML = Object.entries(partners).map(([id, p]) => `
-      <div class="flex gap-3 items-center p-3" style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openConversation('${id}','${escAttr(p.name)}')">
-        <div style="width:40px;height:40px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700">${(p.name||'U')[0]}</div>
-        <div style="flex:1"><div class="font-bold text-sm">${escHtml(p.name)}</div><div class="text-xs color-text3" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(p.lastMsg||'')}</div></div>
-        <div class="text-xs color-text3">${fmtDate(p.time)}</div>
+    container.innerHTML = Object.values(partners).map(p => `
+      <div class="inbox-thread ${p.unread ? 'unread' : ''}" onclick="openConversation('${escAttr(p.id)}','${escAttr(p.name)}','${escAttr(p.productId)}')">
+        <div class="inbox-avatar">${escHtml((p.name || 'U')[0].toUpperCase())}</div>
+        <div style="min-width:0">
+          <div class="inbox-thread-title">${escHtml(p.name)}</div>
+          <div class="inbox-thread-preview">${escHtml(p.lastMsg || '')}</div>
+          ${p.productId ? '<div class="inbox-thread-product"><i class="fa-solid fa-box"></i> Product conversation</div>' : ''}
+        </div>
+        <div class="inbox-thread-side">
+          <div class="text-xs color-text3">${formatMsgDay(p.time)}</div>
+          ${p.unread ? `<div class="inbox-unread-dot">${p.unread}</div>` : ''}
+        </div>
       </div>`).join('');
-  } catch(e) { container.innerHTML = '<p class="text-center color-text3 p-3">Messages not available.</p>'; }
+  } catch(e) { renderInboxEmpty(container, 'Messages are not available right now.'); }
 }
 
-async function openConversation(partnerId, partnerName) {
+async function openConversation(partnerId, partnerName, productId = null) {
+  if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
   currentChatPartner = partnerId;
+  currentChatProductId = productId || null;
   closeModal('inbox-modal');
-  document.getElementById('msg-partner-name').textContent = partnerName;
+  document.getElementById('msg-partner-name').textContent = partnerName || 'User';
+  document.getElementById('msg-partner-avatar').textContent = (partnerName || 'U')[0].toUpperCase();
+  document.getElementById('msg-partner-meta').textContent = 'Loading conversation...';
   showModal('message-modal');
   const conv = document.getElementById('msg-conversation');
   conv.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
+  await renderMessageProductCard(currentChatProductId);
   try {
-    const { data: msgs } = await db.from('messages').select('*')
+    const { data, error } = await db.from('messages').select('*')
       .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${currentUser.id})`)
       .order('created_at', { ascending: true }).limit(100);
-    conv.innerHTML = (msgs||[]).map(m => {
+    if (error) throw error;
+    const msgs = normalizeMessageRows(data);
+    const unreadIds = msgs.filter(m => m.receiver_id === currentUser.id && !m.is_read).map(m => m.id);
+    if (unreadIds.length) {
+      await db.from('messages').update({ is_read: true }).in('id', unreadIds).then(() => {}).catch(() => {});
+      updateInboxCount();
+    }
+    document.getElementById('msg-partner-meta').textContent = msgs.length ? `${msgs.length} message${msgs.length === 1 ? '' : 's'}` : 'New conversation';
+    let lastDay = '';
+    conv.innerHTML = msgs.map(m => {
       const isMine = m.sender_id === currentUser.id;
-      return `<div style="align-self:${isMine?'flex-end':'flex-start'};background:${isMine?'var(--green)':'#fff'};color:${isMine?'#fff':'var(--text1)'};padding:.5rem .75rem;border-radius:12px;max-width:75%;font-size:.85rem;box-shadow:0 1px 3px rgba(0,0,0,.08)">${escHtml(m.content)}<div style="font-size:.65rem;opacity:.6;margin-top:.2rem">${fmtDate(m.created_at)}</div></div>`;
-    }).join('') || '<p class="text-center color-text3 p-3 text-sm">No messages yet. Say hello!</p>';
+      const day = formatMsgDay(m.created_at);
+      const divider = day !== lastDay ? `<div class="msg-day-divider">${escHtml(day)}</div>` : '';
+      lastDay = day;
+      return `${divider}<div class="msg-bubble ${isMine ? 'mine' : 'theirs'}">${escHtml(m.content)}<div class="msg-time">${formatMsgTime(m.created_at)}${isMine ? ` <span>${m.is_read ? 'Read' : 'Sent'}</span>` : ''}</div></div>`;
+    }).join('') || '<div class="msg-empty">No messages yet. Start with a quick question below.</div>';
     conv.scrollTop = conv.scrollHeight;
   } catch(e) { conv.innerHTML = '<p class="text-center color-text3 p-3">Could not load conversation.</p>'; }
+}
+
+async function renderMessageProductCard(productId) {
+  const card = document.getElementById('msg-product-card');
+  if (!card) return;
+  card.classList.add('hidden');
+  card.innerHTML = '';
+  if (!productId) return;
+  try {
+    const { data: product } = await db.from('products').select('id,name,price').eq('id', productId).maybeSingle();
+    if (!product) return;
+    card.innerHTML = `<div style="min-width:0"><strong>${escHtml(product.name || 'Product')}</strong><span>${fmtN(product.price || 0)}</span></div><button class="btn btn-outline btn-sm" onclick="openProduct('${escAttr(product.id)}')">View</button>`;
+    card.classList.remove('hidden');
+  } catch (_) {}
+}
+
+function insertQuickMessage(text) {
+  const input = document.getElementById('msg-input');
+  if (!input) return;
+  input.value = text;
+  input.focus();
+}
+
+function handleMessageKey(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    sendMessage();
+  }
 }
 
 async function sendMessage() {
@@ -4556,11 +4707,65 @@ async function sendMessage() {
   const input = document.getElementById('msg-input');
   const text = input.value.trim();
   if (!text) return;
+  const sendBtn = document.getElementById('msg-send-btn');
   input.value = '';
+  if (sendBtn) sendBtn.disabled = true;
   try {
-    await db.from('messages').insert({ sender_id: currentUser.id, receiver_id: currentChatPartner, content: text });
-    openConversation(currentChatPartner, document.getElementById('msg-partner-name').textContent);
-  } catch(e) { toast('Error', 'Could not send message', 'error'); }
+    const payload = { sender_id: currentUser.id, receiver_id: currentChatPartner, content: text, is_read: false };
+    if (currentChatProductId) payload.product_id = currentChatProductId;
+    let { error } = await db.from('messages').insert(payload);
+    if (error && getMsgMissingColumn(error) === 'product_id') {
+      delete payload.product_id;
+      ({ error } = await db.from('messages').insert(payload));
+    }
+    if (error) throw error;
+    openConversation(currentChatPartner, document.getElementById('msg-partner-name').textContent, currentChatProductId);
+  } catch(e) {
+    input.value = text;
+    toast('Message Failed', e.message || 'Could not send message', 'error');
+  } finally {
+    if (sendBtn) sendBtn.disabled = false;
+  }
+}
+
+async function updateInboxCount() {
+  const badge = document.getElementById('inbox-count');
+  if (!badge) return;
+  if (!currentUser) {
+    badge.textContent = '0';
+    badge.classList.add('hidden');
+    return;
+  }
+  try {
+    const { count, error } = await db.from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('receiver_id', currentUser.id)
+      .eq('is_read', false);
+    if (error) throw error;
+    const unread = count || 0;
+    badge.textContent = unread > 99 ? '99+' : String(unread);
+    badge.classList.toggle('hidden', unread === 0);
+  } catch (_) {
+    badge.classList.add('hidden');
+  }
+}
+
+function setupMessageRealtime() {
+  if (!currentUser || messageChannel) return;
+  messageChannel = db.channel(`messages-${currentUser.id}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, payload => {
+      const row = payload.new || payload.old || {};
+      if (row.sender_id !== currentUser.id && row.receiver_id !== currentUser.id) return;
+      updateInboxCount();
+      if (document.getElementById('inbox-modal')?.classList.contains('open')) showInbox();
+      if (document.getElementById('message-modal')?.classList.contains('open') && currentChatPartner) {
+        const involved = row.sender_id === currentChatPartner || row.receiver_id === currentChatPartner;
+        if (involved) openConversation(currentChatPartner, document.getElementById('msg-partner-name').textContent, currentChatProductId);
+      } else if (row.receiver_id === currentUser.id) {
+        toast('New Message', row.content || 'You have a new message', 'info', 5000);
+      }
+    })
+    .subscribe();
 }
 
 // ====================================================
@@ -4790,17 +4995,21 @@ async function initiateAdPayment() {
       advertiser_type: currentRole || 'seller'
     };
 
-    const reference = 'ad_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const init = await callEdge('init-ad-payment', { amount: AD_PRICE_KOBO / 100 });
+    if (!init?.access_code && !init?.reference) throw new Error('Could not initialize ad payment');
+    const reference = init.reference;
     openPaystackTransaction({
       key: PAYSTACK_PUBLIC_KEY,
       email: currentUser.email,
       amount: AD_PRICE_KOBO,
       currency: 'NGN',
       reference,
+      access_code: init.access_code,
       metadata: { user_id: currentUser.id, type: 'advertisement' },
       onSuccess: async (response) => {
         try {
-          await callEdge('verify-ad-payment', { reference: response.reference || response.trxref || reference, adData });
+          const paidReference = await resolvePaystackReference(response, reference);
+          await callEdge('verify-ad-payment', { reference: paidReference, adData });
           toast('Ad Submitted', 'Payment verified. Your ad is now waiting for admin approval.', 'success');
           document.getElementById('ad-title').value = '';
           document.getElementById('ad-desc').value = '';
@@ -4812,7 +5021,8 @@ async function initiateAdPayment() {
           if (label) label.textContent = 'Click to upload Media (Image or Video)';
           loadSellerAds();
         } catch (err) {
-          toast('Verification Failed', (err.message || 'Contact support') + ' Ref: ' + (response.reference || response.trxref || reference), 'error');
+          const paidReference = await resolvePaystackReference(response, reference);
+          toast('Verification Failed', (err.message || 'Contact support') + ' Ref: ' + paidReference, 'error');
         } finally {
           btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Submit Ad';
         }
