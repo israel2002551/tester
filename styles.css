@@ -1078,6 +1078,28 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
   box-shadow: 0 12px 60px rgba(0,0,0,.5);
 }
 
+/* Order tracking */
+.tracking-box{max-width:520px}
+.tracking-status-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:.4rem;margin:.7rem 0 1rem}
+.tracking-step-chip{border:1px solid var(--border);background:var(--cream);border-radius:10px;padding:.48rem .35rem;text-align:center;font-size:.68rem;color:var(--text3);font-weight:700}
+.tracking-step-chip.done{background:var(--green-xlt);border-color:rgba(25,168,71,.22);color:var(--green)}
+#tracking-timeline{display:flex;flex-direction:column;gap:.65rem;margin-bottom:1rem}
+.tracking-event{display:grid;grid-template-columns:28px minmax(0,1fr);gap:.65rem;position:relative}
+.tracking-event:not(:last-child)::before{content:"";position:absolute;left:13px;top:28px;bottom:-.65rem;width:2px;background:var(--border)}
+.tracking-dot{width:28px;height:28px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.72rem;z-index:1}
+.tracking-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:.65rem .78rem}
+.tracking-card strong{display:block;font-size:.84rem;margin-bottom:.12rem}
+.tracking-card p{font-size:.76rem;color:var(--text2);line-height:1.4;margin:.15rem 0}
+.tracking-card span{font-size:.68rem;color:var(--text3)}
+.tracking-update-panel{border-top:1px solid var(--border);padding-top:.9rem;margin-top:.4rem}
+.tracking-update-panel.hidden{display:none!important}
+
+/* Review upgrades */
+.review-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:.78rem;margin-bottom:.65rem}
+.review-star-row{display:flex;gap:.25rem;margin-bottom:.85rem}
+.star-btn{border:none;background:transparent;font-size:1.55rem;color:#d1d5db;cursor:pointer;line-height:1}
+.star-btn.active{color:#f59e0b}
+
 /* ─── Admin Portal Responsive ─── */
 @media(max-width:900px){
   .admin-sidebar{display:none !important}
