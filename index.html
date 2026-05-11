@@ -806,7 +806,7 @@
               <p style="font-size:.78rem;color:var(--text3);margin-bottom:.85rem">Your public Paystack key to receive card payments from buyers.</p>
               <div class="form-group"><label class="form-label">Paystack Public Key</label><input type="text" id="s-paystack-key" class="form-input" placeholder="pk_live_xxxxxxxxxxxx"></div>
             </div>
-            <button type="submit" class="btn btn-primary btn-full">Save All Settings</button>
+            <button type="submit" class="btn btn-primary btn-full" id="settings-save-btn"><i class="fa-solid fa-floppy-disk"></i> Save All Settings</button>
           </form>
         </div>
       </div>
@@ -2443,10 +2443,24 @@
 
 <!-- ORDER TRACKING MODAL -->
 <div id="tracking-modal" class="modal-overlay">
-  <div class="modal-box" style="max-width:450px"><button class="modal-close" onclick="closeModal('tracking-modal')"><i class="fa-solid fa-times"></i></button>
+  <div class="modal-box tracking-box"><button class="modal-close" onclick="closeModal('tracking-modal')"><i class="fa-solid fa-times"></i></button>
     <h2 class="mb-1"><i class="fa-solid fa-truck color-green"></i> Order Tracking</h2>
     <p class="color-text3 text-sm mb-3">Order: <span class="font-bold" id="tracking-order-id"></span></p>
-    <div id="tracking-timeline" style="padding-left:.5rem"></div>
+    <div class="tracking-status-strip" id="tracking-status-strip"></div>
+    <div id="tracking-timeline"></div>
+    <div id="tracking-update-panel" class="tracking-update-panel hidden">
+      <div class="form-grid form-grid-2">
+        <select id="tracking-status-input" class="form-select">
+          <option value="confirmed">Confirmed</option>
+          <option value="picked_up">Picked Up</option>
+          <option value="in_transit">In Transit</option>
+          <option value="out_for_delivery">Out for Delivery</option>
+          <option value="delivered">Delivered</option>
+        </select>
+        <input id="tracking-note-input" class="form-input" placeholder="Short update note">
+      </div>
+      <button class="btn btn-primary btn-full mt-2" onclick="submitTrackingUpdate()"><i class="fa-solid fa-plus"></i> Add Tracking Update</button>
+    </div>
   </div>
 </div>
 
