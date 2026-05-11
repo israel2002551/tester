@@ -347,8 +347,65 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .gallery-main img,.gallery-main video{width:100%;height:100%;object-fit:contain}
 .product-modal-info{padding:1.4rem}
 @media(max-width:600px){.product-modal-info{padding:1rem}}
-.product-seller-card{background:var(--cream);border-radius:var(--radius-sm);border:1px solid var(--border);padding:.82rem;display:flex;align-items:center;gap:.7rem;margin:.6rem 0 .95rem}
+.product-seller-card{background:var(--cream);border-radius:var(--radius-sm);border:1px solid var(--border);padding:.82rem;display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:.7rem;margin:.6rem 0 .95rem}
+.product-seller-main{min-width:0}
+.product-seller-main #modal-seller-name{overflow-wrap:anywhere;line-height:1.25}
+.product-seller-main #modal-seller-email{overflow-wrap:anywhere;line-height:1.35;margin-top:.12rem}
+.product-seller-actions{display:flex;gap:.42rem;flex-wrap:wrap;justify-content:flex-end}
+.seller-action-btn{min-height:34px;white-space:nowrap}
+.seller-message-btn{color:var(--green);border-color:var(--green)}
 .seller-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--forest2),var(--forest3));display:flex;align-items:center;justify-content:center;color:#fff;font-size:.78rem;flex-shrink:0}
+@media(max-width:600px){
+  .product-seller-card{grid-template-columns:42px minmax(0,1fr);align-items:start;padding:.78rem;gap:.65rem}
+  .product-seller-card .seller-avatar{width:42px;height:42px}
+  .product-seller-actions{grid-column:1 / -1;display:grid;grid-template-columns:1fr 1fr;width:100%;justify-content:stretch;gap:.5rem;margin-top:.12rem}
+  .seller-action-btn{width:100%;justify-content:center;padding:.48rem .55rem;font-size:.78rem}
+}
+
+/* In-app messaging */
+.inbox-box{max-width:520px;padding:1.1rem}
+.inbox-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:.9rem}
+.inbox-head h2{font-size:1.2rem;margin:0;display:flex;align-items:center;gap:.45rem}
+.inbox-head p{font-size:.78rem;color:var(--text3);margin-top:.18rem}
+.inbox-thread{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:.7rem;align-items:center;padding:.78rem;border:1px solid transparent;border-bottom-color:var(--border);border-radius:10px;cursor:pointer;transition:background .18s,border-color .18s}
+.inbox-thread:hover{background:var(--cream);border-color:var(--border)}
+.inbox-thread.unread{background:var(--green-xlt);border-color:rgba(25,168,71,.18)}
+.inbox-avatar,.message-avatar{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--forest2),var(--forest3));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0}
+.inbox-thread-title{font-size:.88rem;font-weight:800;display:flex;gap:.35rem;align-items:center}
+.inbox-thread-preview{font-size:.76rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:.18rem}
+.inbox-thread-product{font-size:.68rem;color:var(--green);margin-top:.16rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inbox-thread-side{text-align:right;display:grid;gap:.35rem;justify-items:end}
+.inbox-unread-dot{min-width:20px;height:20px;border-radius:99px;background:var(--green);color:#fff;font-size:.68rem;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 .35rem}
+.message-box{max-width:540px;padding:0;display:flex;flex-direction:column;height:76vh;overflow:hidden}
+.message-head{padding:.78rem .95rem;background:var(--forest);color:#fff;display:grid;grid-template-columns:auto 42px minmax(0,1fr) auto;align-items:center;gap:.65rem}
+.message-head .message-avatar{background:rgba(255,255,255,.16)}
+.message-title-wrap{min-width:0}
+.message-title-wrap #msg-partner-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#msg-partner-meta{font-size:.72rem;color:rgba(255,255,255,.66);margin-top:.1rem}
+.message-back-btn,.message-close-btn{width:32px;height:32px;border:none;border-radius:50%;background:rgba(255,255,255,.1);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.msg-product-card{margin:.7rem .85rem 0;padding:.65rem .75rem;border:1px solid var(--border);border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:space-between;gap:.75rem}
+.msg-product-card.hidden{display:none!important}
+.msg-product-card strong{font-size:.82rem;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msg-product-card span{font-size:.72rem;color:var(--text3)}
+.msg-conversation{flex:1;overflow-y:auto;padding:.85rem;background:var(--cream);display:flex;flex-direction:column;gap:.42rem}
+.msg-day-divider{align-self:center;font-size:.68rem;color:var(--text3);background:#fff;border:1px solid var(--border);border-radius:99px;padding:.2rem .55rem;margin:.25rem 0}
+.msg-bubble{max-width:78%;padding:.56rem .72rem;border-radius:14px;font-size:.86rem;line-height:1.35;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow-wrap:anywhere}
+.msg-bubble.mine{align-self:flex-end;background:var(--green);color:#fff;border-bottom-right-radius:4px}
+.msg-bubble.theirs{align-self:flex-start;background:#fff;color:var(--text);border-bottom-left-radius:4px}
+.msg-time{font-size:.64rem;opacity:.62;margin-top:.22rem;display:flex;justify-content:flex-end;gap:.25rem}
+.msg-empty{margin:auto;text-align:center;color:var(--text3);font-size:.82rem;max-width:260px;line-height:1.45}
+.msg-quick-row{display:flex;gap:.4rem;overflow-x:auto;padding:.55rem .75rem;border-top:1px solid var(--border);background:#fff}
+.msg-quick-row button{white-space:nowrap;border:1px solid var(--border);background:var(--cream);border-radius:99px;padding:.36rem .62rem;font-size:.72rem;color:var(--text2);cursor:pointer}
+.msg-input-row{padding:.62rem .75rem;display:flex;gap:.45rem;border-top:1px solid var(--border);background:#fff;align-items:flex-end}
+.msg-input-row textarea{flex:1;resize:none;max-height:96px;line-height:1.35}
+.msg-input-row button{width:42px;height:42px;justify-content:center;flex-shrink:0}
+@media(max-width:600px){
+  .inbox-box{max-width:calc(100vw - 1.5rem)}
+  .message-box{height:88vh;max-width:calc(100vw - 1rem);border-radius:16px}
+  .message-head{grid-template-columns:32px 38px minmax(0,1fr) 32px;padding:.72rem}
+  .message-avatar,.inbox-avatar{width:38px;height:38px}
+  .msg-bubble{max-width:86%}
+}
 .product-actions{display:flex;gap:.6rem;flex-wrap:wrap}
 .product-actions .btn-primary{flex:1;min-width:110px}
 
