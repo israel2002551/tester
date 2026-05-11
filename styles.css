@@ -347,11 +347,11 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .gallery-main img,.gallery-main video{width:100%;height:100%;object-fit:contain}
 .product-modal-info{padding:1.4rem}
 @media(max-width:600px){.product-modal-info{padding:1rem}}
-.product-seller-card{background:var(--cream);border-radius:var(--radius-sm);border:1px solid var(--border);padding:.82rem;display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:.7rem;margin:.6rem 0 .95rem}
+.product-seller-card{background:var(--cream);border-radius:var(--radius-sm);border:1px solid var(--border);padding:.82rem;display:grid;grid-template-columns:42px minmax(0,1fr);align-items:center;gap:.65rem .75rem;margin:.6rem 0 .95rem}
 .product-seller-main{min-width:0}
-.product-seller-main #modal-seller-name{overflow-wrap:anywhere;line-height:1.25}
+.product-seller-main #modal-seller-name{line-height:1.25;word-break:normal;overflow-wrap:break-word}
 .product-seller-main #modal-seller-email{overflow-wrap:anywhere;line-height:1.35;margin-top:.12rem}
-.product-seller-actions{display:flex;gap:.42rem;flex-wrap:wrap;justify-content:flex-end}
+.product-seller-actions{grid-column:2;display:flex;gap:.42rem;flex-wrap:wrap;justify-content:flex-start}
 .seller-action-btn{min-height:34px;white-space:nowrap}
 .seller-message-btn{color:var(--green);border-color:var(--green)}
 .seller-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--forest2),var(--forest3));display:flex;align-items:center;justify-content:center;color:#fff;font-size:.78rem;flex-shrink:0}
