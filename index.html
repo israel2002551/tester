@@ -1261,13 +1261,13 @@
         </div>
         <div class="product-seller-card">
           <div class="seller-avatar" id="modal-seller-avatar"></div>
-          <div style="flex:1;min-width:0">
+          <div class="product-seller-main">
             <div class="font-600 text-sm" id="modal-seller-name"></div>
             <div class="text-xs color-text3" id="modal-seller-email"></div>
           </div>
-          <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-            <button class="btn btn-outline btn-sm" onclick="viewStorefront(currentProd?.seller_id)"><i class="fa-solid fa-store"></i> View Store</button>
-            <button class="btn btn-outline btn-sm" onclick="closeModal('product-modal');openMessageModal(currentProd?.seller_id, currentProd?.profiles?.name, currentProd?.id)" style="color:var(--green);border-color:var(--green)"><i class="fa-solid fa-comment-dots"></i> Message Seller</button>
+          <div class="product-seller-actions">
+            <button class="btn btn-outline btn-sm seller-action-btn" onclick="viewStorefront(currentProd?.seller_id)"><i class="fa-solid fa-store"></i> View Store</button>
+            <button class="btn btn-outline btn-sm seller-action-btn seller-message-btn" onclick="closeModal('product-modal');openMessageModal(currentProd?.seller_id, currentProd?.profiles?.name, currentProd?.id)"><i class="fa-solid fa-comment-dots"></i> Message Seller</button>
           </div>
         </div>
         <div style="display:flex;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap">
@@ -2403,26 +2403,40 @@
 
 <!-- INBOX MODAL -->
 <div id="inbox-modal" class="modal-overlay">
-  <div class="modal-box" style="max-width:480px"><button class="modal-close" onclick="closeModal('inbox-modal')"><i class="fa-solid fa-times"></i></button>
-    <h2 class="mb-3"><i class="fa-solid fa-envelope color-green"></i> Messages</h2>
+  <div class="modal-box inbox-box"><button class="modal-close" onclick="closeModal('inbox-modal')"><i class="fa-solid fa-times"></i></button>
+    <div class="inbox-head">
+      <div>
+        <h2><i class="fa-solid fa-envelope color-green"></i> Messages</h2>
+        <p>Buyer and seller conversations</p>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="showInbox()"><i class="fa-solid fa-rotate"></i></button>
+    </div>
     <div id="inbox-list"></div>
   </div>
 </div>
 
 <!-- MESSAGE MODAL (Conversation) -->
 <div id="message-modal" class="modal-overlay">
-  <div class="modal-box" style="max-width:480px;padding:0;display:flex;flex-direction:column;height:70vh">
-    <div style="padding:.75rem 1rem;background:var(--forest);color:#fff;display:flex;align-items:center;justify-content:space-between;border-radius:var(--radius-md) var(--radius-md) 0 0">
-      <div style="display:flex;align-items:center;gap:.5rem">
-        <div style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-user"></i></div>
-        <span class="font-bold" id="msg-partner-name">User</span>
+  <div class="modal-box message-box">
+    <div class="message-head">
+      <button class="message-back-btn" onclick="closeModal('message-modal');showInbox()" title="Back to inbox"><i class="fa-solid fa-chevron-left"></i></button>
+      <div class="message-avatar" id="msg-partner-avatar">U</div>
+      <div class="message-title-wrap">
+        <div class="font-bold" id="msg-partner-name">User</div>
+        <div id="msg-partner-meta">Conversation</div>
       </div>
-      <button onclick="closeModal('message-modal')" style="background:none;border:none;color:#fff;cursor:pointer;font-size:1.1rem"><i class="fa-solid fa-times"></i></button>
+      <button onclick="closeModal('message-modal')" class="message-close-btn"><i class="fa-solid fa-times"></i></button>
     </div>
-    <div id="msg-conversation" style="flex:1;overflow-y:auto;padding:.75rem;background:var(--cream);display:flex;flex-direction:column;gap:.3rem"></div>
-    <div style="padding:.5rem;display:flex;gap:.4rem;border-top:1px solid var(--border)">
-      <input type="text" id="msg-input" class="form-input" placeholder="Type a message..." onkeypress="if(event.key==='Enter')sendMessage()" style="flex:1">
-      <button class="btn btn-primary" onclick="sendMessage()"><i class="fa-solid fa-paper-plane"></i></button>
+    <div id="msg-product-card" class="msg-product-card hidden"></div>
+    <div id="msg-conversation" class="msg-conversation"></div>
+    <div class="msg-quick-row">
+      <button type="button" onclick="insertQuickMessage('Is this still available?')">Available?</button>
+      <button type="button" onclick="insertQuickMessage('Can you send more details?')">More details</button>
+      <button type="button" onclick="insertQuickMessage('What is your best price?')">Best price</button>
+    </div>
+    <div class="msg-input-row">
+      <textarea id="msg-input" class="form-input" placeholder="Type a message..." rows="1" onkeydown="handleMessageKey(event)"></textarea>
+      <button class="btn btn-primary" onclick="sendMessage()" id="msg-send-btn"><i class="fa-solid fa-paper-plane"></i></button>
     </div>
   </div>
 </div>
