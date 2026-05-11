@@ -1008,6 +1008,32 @@ async function loadProductReviews(productId) {
     </div>`).join('');
 }
 
+async function loadProductReviews(productId) {
+  let { data, error } = await db.from('reviews').select('*,profiles!reviewer_id(name)').eq('product_id', productId).order('created_at', { ascending: false }).limit(20);
+  if (error) {
+    ({ data } = await db.from('reviews').select('*,profiles!buyer_id(name)').eq('product_id', productId).order('created_at', { ascending: false }).limit(20));
+  }
+  const reviews = data || [];
+  const count = reviews.length;
+  document.getElementById('modal-review-count').textContent = `${count} review${count!==1?'s':''}`;
+  document.getElementById('modal-verified-count').textContent = reviews.filter(r => r.verified_purchase !== false).length;
+  const avg = count ? (reviews.reduce((s,r)=>s+Number(r.rating || 0),0)/count) : 0;
+  document.getElementById('modal-avg-rating').textContent = avg.toFixed(1);
+  document.getElementById('modal-stars').textContent = '*'.repeat(Math.round(avg)) + '☆'.repeat(5-Math.round(avg));
+  const barsEl = document.getElementById('modal-rating-bars');
+  barsEl.innerHTML = [5,4,3,2,1].map(star => {
+    const starCount = reviews.filter(r => Number(r.rating) === star).length;
+    const pct = count ? Math.round((starCount / count) * 100) : 0;
+    return `<div style="display:flex;align-items:center;gap:.4rem"><span style="font-size:.62rem;color:var(--text3);width:12px;text-align:right">${star}</span><div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${star>=4?'var(--green)':star>=3?'var(--gold)':'var(--red)'};border-radius:3px"></div></div><span style="font-size:.58rem;color:var(--text3);width:18px">${starCount}</span></div>`;
+  }).join('');
+  const list = document.getElementById('modal-reviews-list');
+  if (!count) { list.innerHTML = '<p class="color-text3 text-sm" style="padding:.5rem 0">No reviews yet. Be the first to share your experience!</p>'; return; }
+  list.innerHTML = reviews.map(r => {
+    const imgs = Array.isArray(r.image_urls) ? r.image_urls : [];
+    return `<div class="review-card"><div class="flex justify-between items-center"><div style="display:flex;align-items:center;gap:.4rem"><div style="width:26px;height:26px;border-radius:50%;background:var(--green-xlt);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:var(--green)">${(r.profiles?.name||'B')[0].toUpperCase()}</div><span class="reviewer-name">${escHtml(r.profiles?.name||'Verified Buyer')}</span></div><div class="stars sm">${'*'.repeat(Number(r.rating)||0)}${'☆'.repeat(5-(Number(r.rating)||0))}</div></div><p class="review-text">${escHtml(r.review_text || r.comment || '')}</p>${imgs.length ? `<div class="review-images-gallery">${imgs.map(url => `<img src="${escAttr(url)}" alt="Review photo" onclick="openReviewImage('${escAttr(url)}')">`).join('')}</div>` : ''}<span class="text-xs color-text3"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i> ${r.verified_purchase === false ? 'Buyer Review' : 'Verified Purchase'} · ${fmtDate(r.created_at)}</span></div>`;
+  }).join('');
+}
+
 // ====================================================
 //  STOREFRONT
 // ====================================================
@@ -1361,6 +1387,8 @@ function openReviewModal() {
   selectedRating = 0;
   setRating(0);
   document.getElementById('review-text').value = '';
+  document.getElementById('review-images-input').value = '';
+  document.getElementById('review-img-previews').innerHTML = '';
   showModal('review-modal');
 }
 
@@ -1397,11 +1425,13 @@ async function submitReview() {
       }
     }
 
+    const verifiedPurchase = await hasDeliveredPurchase(reviewProductId);
     await submitProductReview({
       product_id:  reviewProductId,
       rating:      selectedRating,
       review_text: text,
-      image_urls:  imageUrls
+      image_urls:  imageUrls,
+      verified_purchase: verifiedPurchase
     });
     toast('Review Submitted! ⭐', 'Thanks for your feedback!', 'success');
     closeModal('review-modal');
@@ -1426,9 +1456,9 @@ async function submitProductReview(payload) {
     rating: payload.rating,
   };
   const variants = [
-    { ...base, review_text: payload.review_text, image_urls: payload.image_urls || [] },
-    { ...base, review_text: payload.review_text },
-    { ...base, comment: payload.review_text },
+    { ...base, review_text: payload.review_text, image_urls: payload.image_urls || [], verified_purchase: !!payload.verified_purchase },
+    { ...base, review_text: payload.review_text, verified_purchase: !!payload.verified_purchase },
+    { ...base, comment: payload.review_text, verified_purchase: !!payload.verified_purchase },
     { product_id: payload.product_id, reviewer_id: currentUser.id, rating: payload.rating, comment: payload.review_text },
     { product_id: payload.product_id, buyer_id: currentUser.id, rating: payload.rating, comment: payload.review_text },
     { product_id: payload.product_id, user_id: currentUser.id, rating: payload.rating, comment: payload.review_text },
@@ -1450,13 +1480,36 @@ function previewReviewImages(input) {
   if (!container) return;
   container.innerHTML = '';
   const files = Array.from(input.files || []).slice(0, 3);
+  const allowed = ['image/jpeg', 'image/png', 'image/webp'];
   files.forEach(file => {
+    if (!allowed.includes(file.type) || file.size > 5 * 1024 * 1024) {
+      toast('Invalid photo', 'Use JPG, PNG, or WebP under 5MB.', 'warn');
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (e) => {
-      container.innerHTML += `<img src="${e.target.result}" style="width:60px;height:60px;object-fit:cover;border-radius:8px;border:2px solid var(--border)">`;
+      container.innerHTML += `<div class="review-img-preview"><img src="${e.target.result}" alt="Review preview"></div>`;
     };
     reader.readAsDataURL(file);
   });
+}
+
+async function hasDeliveredPurchase(productId) {
+  if (!currentUser || !productId) return false;
+  try {
+    const { data: orders } = await db.from('orders').select('items,status').eq('buyer_id', currentUser.id).in('status', ['delivered', 'confirmed', 'shipped']);
+    return (orders || []).some(o => Array.isArray(o.items) && o.items.some(i => i.id === productId));
+  } catch (_) {
+    return false;
+  }
+}
+
+function openReviewImage(url) {
+  const box = document.createElement('div');
+  box.className = 'review-lightbox';
+  box.onclick = () => box.remove();
+  box.innerHTML = `<img src="${escAttr(url)}" alt="Review photo">`;
+  document.body.appendChild(box);
 }
 
 function previewAdMedia(input) {
@@ -1567,7 +1620,7 @@ async function loadBuyerOrders() {
       <div class="flex gap-2 flex-wrap">
         ${o.status==='delivered'?`<button class="btn btn-outline btn-sm" onclick="openDisputeModal('${escAttr(o.id)}')"><i class="fa-solid fa-exclamation-triangle"></i> Dispute</button>`:''}
         ${proofUrl ? `<a href="${escAttr(proofUrl)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm"><i class="fa-solid fa-receipt"></i> Proof</a>` : ''}
-        <a href="https://wa.me/2349061484256?text=Order%20${encodeURIComponent(o.id)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Track</a>
+        <button class="btn btn-outline btn-sm" onclick="openOrderTracking('${escAttr(o.id)}')"><i class="fa-solid fa-truck"></i> Track</button>
       </div>
     </div>`;
     }).join('');
@@ -1898,10 +1951,77 @@ async function loadSellerOrders() {
 
 async function updateOrderStatus(id, status) {
   try {
-    await callEdge('admin-action', { action: 'update_order', target_id: id, data: { status } });
+    await callEdge('order-action', { action: 'update_status', order_id: id, status });
     toast(`Order ${status}!`, '', 'success');
     loadSellerOrders();
   } catch(e) { toast('Error', e.message, 'error'); }
+}
+
+let activeTrackingOrderId = null;
+
+function trackingLabel(status) {
+  return String(status || 'pending').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+async function openOrderTracking(orderId) {
+  if (!currentUser) { showModal('auth-modal'); return; }
+  activeTrackingOrderId = orderId;
+  document.getElementById('tracking-order-id').textContent = orderId;
+  document.getElementById('tracking-timeline').innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
+  document.getElementById('tracking-status-strip').innerHTML = '';
+  const updatePanel = document.getElementById('tracking-update-panel');
+  updatePanel?.classList.toggle('hidden', currentRole !== 'seller' && currentRole !== 'admin');
+  showModal('tracking-modal');
+
+  try {
+    const { data: order } = await db.from('orders').select('id,status,seller_id,buyer_id,created_at').eq('id', orderId).maybeSingle();
+    const { data: events } = await db.from('order_tracking').select('*').eq('order_id', orderId).order('created_at', { ascending: true });
+    renderTrackingTimeline(order || { id: orderId, status: 'pending' }, events || []);
+  } catch (e) {
+    document.getElementById('tracking-timeline').innerHTML = `<p class="color-text3 text-sm">Could not load tracking updates. ${escHtml(e.message || '')}</p>`;
+  }
+}
+
+function renderTrackingTimeline(order, events) {
+  const steps = ['pending', 'confirmed', 'in_transit', 'delivered'];
+  const statusRank = {
+    pending: 0, confirmed: 1, picked_up: 2, shipped: 2, in_transit: 2, out_for_delivery: 2, delivered: 3
+  };
+  const currentRank = statusRank[order.status] ?? 0;
+  document.getElementById('tracking-status-strip').innerHTML = steps.map((s, i) =>
+    `<div class="tracking-step-chip ${i <= currentRank ? 'done' : ''}">${trackingLabel(s)}</div>`
+  ).join('');
+
+  const rows = events.length ? events : [{
+    status: order.status || 'pending',
+    note: 'Order placed',
+    created_at: order.created_at || new Date().toISOString()
+  }];
+  document.getElementById('tracking-timeline').innerHTML = rows.map(e => `
+    <div class="tracking-event">
+      <div class="tracking-dot"><i class="fa-solid fa-check"></i></div>
+      <div class="tracking-card">
+        <strong>${escHtml(trackingLabel(e.status))}</strong>
+        ${e.note ? `<p>${escHtml(e.note)}</p>` : ''}
+        <span>${fmtDate(e.created_at)} · ${formatMsgTime(e.created_at)}</span>
+      </div>
+    </div>`).join('');
+}
+
+async function submitTrackingUpdate() {
+  if (!activeTrackingOrderId) return;
+  const status = document.getElementById('tracking-status-input').value;
+  const note = document.getElementById('tracking-note-input').value.trim();
+  try {
+    await callEdge('order-action', { action: 'update_status', order_id: activeTrackingOrderId, status, note });
+    document.getElementById('tracking-note-input').value = '';
+    toast('Tracking Updated', trackingLabel(status), 'success');
+    openOrderTracking(activeTrackingOrderId);
+    if (currentRole === 'seller') loadSellerOrders();
+    if (document.getElementById('buyer-orders-tab') && !document.getElementById('buyer-orders-tab').classList.contains('hidden')) loadBuyerOrders();
+  } catch (e) {
+    toast('Tracking Failed', e.message || 'Could not update tracking', 'error');
+  }
 }
 
 // ====================================================
@@ -2037,6 +2157,7 @@ async function loadSettings() {
   if (!currentUser?.profile) return;
   const p = currentUser.profile;
   document.getElementById('s-store-name').value = p.store_name||'';
+  document.getElementById('s-store-cat').value = p.store_category || p.category || 'Electronics';
   document.getElementById('s-store-desc').value = p.store_description||'';
   document.getElementById('s-whatsapp').value = p.whatsapp||'';
   document.getElementById('s-bank-name').value = p.bank_name||'';
@@ -2067,6 +2188,39 @@ async function saveSettings(e) {
   if (currentUser.profile) Object.assign(currentUser.profile, updates);
   toast('Settings Saved! ✅', '', 'success');
   loadWithdrawalData();
+}
+
+async function saveSettings(e) {
+  e.preventDefault();
+  if (!currentUser) return;
+  const btn = document.getElementById('settings-save-btn');
+  const oldHtml = btn?.innerHTML;
+  const updates = {
+    store_name: document.getElementById('s-store-name').value.trim(),
+    store_category: document.getElementById('s-store-cat').value,
+    store_description: document.getElementById('s-store-desc').value.trim(),
+    whatsapp: document.getElementById('s-whatsapp').value.trim(),
+    bank_name: document.getElementById('s-bank-name').value.trim(),
+    account_number: document.getElementById('s-account-num').value.trim(),
+    account_name: document.getElementById('s-account-name').value.trim(),
+    paystack_key: document.getElementById('s-paystack-key').value.trim(),
+    notif_email: document.getElementById('s-notif-email').value.trim()
+  };
+  if (!updates.whatsapp || !updates.bank_name || !updates.account_number || !updates.account_name) {
+    toast('Missing details', 'WhatsApp and bank details are required.', 'warn');
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving...'; }
+  try {
+    await callEdge('update-profile', updates);
+    if (currentUser.profile) Object.assign(currentUser.profile, updates);
+    toast('Settings Saved!', 'Your store details are updated.', 'success');
+    loadWithdrawalData();
+  } catch (err) {
+    toast('Save Failed', err.message || 'Could not save settings', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = oldHtml || '<i class="fa-solid fa-floppy-disk"></i> Save All Settings'; }
+  }
 }
 
 // ====================================================
