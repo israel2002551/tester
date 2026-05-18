@@ -1363,33 +1363,19 @@ async function submitTransferOrder() {
   if (!fileInput.files?.[0]) { toast('Please upload payment proof','','warn'); return; }
   const proofFile = fileInput.files[0];
   const ALLOWED_PROOF = ['image/jpeg','image/png','image/webp','image/heic','image/heif'];
+  const ALLOWED_PROOF_EXT = ['jpg','jpeg','png','webp','heic','heif'];
   const MAX_PROOF_SIZE = 10 * 1024 * 1024; // 10MB
-  if (!ALLOWED_PROOF.includes(proofFile.type)) { toast('Invalid file','Please upload a JPG or PNG screenshot','warn'); return; }
+  const proofExt = proofFile.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+  if (!ALLOWED_PROOF.includes(proofFile.type) && !ALLOWED_PROOF_EXT.includes(proofExt)) { toast('Invalid file','Please upload a JPG, PNG, WebP, or HEIC screenshot','warn'); return; }
   if (proofFile.size > MAX_PROOF_SIZE)         { toast('File too large','Maximum proof image size is 10MB','warn'); return; }
   const btn = document.getElementById('co-transfer-btn');
-  const sellerId = cart[0]?.seller_id || cart[0]?.profiles?.id || null;
-  const total = cart.reduce((sum, c) => sum + (c.price * (c.qty || 1)), 0);
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting…';
   try {
     const file = fileInput.files[0];
-    const ext = file.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-    const path = `proofs/${currentUser.id}/${Date.now()}.${ext}`;
+    const path = `proofs/${currentUser.id}/${Date.now()}.${proofExt}`;
     const uploaded = await uploadToFirstAvailableBucket(['uploads', 'products'], path, file, { contentType: file.type, upsert: false });
     const proofUrl = uploaded.publicUrl;
-    const order = await saveOrderToDb(null, 'bank_transfer', null, proofUrl);
-
-    // Also save to payment_receipts for seller auditing
-    if (proofUrl) {
-      await db.from('payment_receipts').insert({
-        order_id:      order?.order_id || null,
-        buyer_id:     currentUser.id,
-        seller_id:    sellerId || null,
-        receipt_url:  proofUrl,
-        amount:       total,
-        payment_type: 'product',
-        status:       'pending'
-      }).then(() => {}).catch((error) => console.warn('payment_receipts insert failed:', error)); // non-blocking
-    }
+    await saveOrderToDb(null, 'bank_transfer', null, proofUrl);
   } catch(e) { toast('Order Failed', e.message || 'Could not submit order','error'); }
   btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Submit Order';
 }
@@ -3808,7 +3794,6 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
     return savedOrder;
 
   } catch(err) {
-    toast('Order Failed', err.message, 'error');
     throw err;
   }
 }
