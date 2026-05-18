@@ -163,6 +163,19 @@ function toggleAuth(mode) {
   if (isSignup) selectRole('buyer');
 }
 
+async function uploadToFirstAvailableBucket(buckets, path, file, options = {}) {
+  let lastError = null;
+  for (const bucket of buckets) {
+    const { data, error } = await db.storage.from(bucket).upload(path, file, options);
+    if (!error) {
+      const { data: urlData } = db.storage.from(bucket).getPublicUrl(data.path);
+      return { bucket, path: data.path, publicUrl: sanitizeUrl(urlData?.publicUrl || '') };
+    }
+    lastError = error;
+  }
+  throw lastError || new Error('Upload failed');
+}
+
 async function signInWithGoogle() {
   const rawRole = document.querySelector('input[name="auth-role-radio"]:checked')?.value || 'buyer';
   const role = rawRole === 'both' ? 'seller' : rawRole;
@@ -1339,6 +1352,14 @@ function handleProofUpload(input) {
 
 async function submitTransferOrder() {
   const fileInput = document.getElementById('co-proof');
+  const deliveryName = document.getElementById('co-name').value.trim();
+  const deliveryPhone = document.getElementById('co-phone').value.trim();
+  const deliveryAddress = document.getElementById('co-address').value.trim();
+  if (!deliveryName || !deliveryPhone || !deliveryAddress) {
+    toast('Delivery info needed', 'Enter your name, phone, and address before submitting.', 'warn');
+    goCheckoutStep(1);
+    return;
+  }
   if (!fileInput.files?.[0]) { toast('Please upload payment proof','','warn'); return; }
   const proofFile = fileInput.files[0];
   const ALLOWED_PROOF = ['image/jpeg','image/png','image/webp','image/heic','image/heif'];
@@ -1346,30 +1367,30 @@ async function submitTransferOrder() {
   if (!ALLOWED_PROOF.includes(proofFile.type)) { toast('Invalid file','Please upload a JPG or PNG screenshot','warn'); return; }
   if (proofFile.size > MAX_PROOF_SIZE)         { toast('File too large','Maximum proof image size is 10MB','warn'); return; }
   const btn = document.getElementById('co-transfer-btn');
+  const sellerId = cart[0]?.seller_id || cart[0]?.profiles?.id || null;
+  const total = cart.reduce((sum, c) => sum + (c.price * (c.qty || 1)), 0);
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting…';
   try {
-    let proofUrl = '';
     const file = fileInput.files[0];
-    const ext = file.name.split('.').pop();
+    const ext = file.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
     const path = `proofs/${currentUser.id}/${Date.now()}.${ext}`;
-    const { error: upErr } = await db.storage.from('uploads').upload(path, file);
-    if (!upErr) { const { data } = db.storage.from('uploads').getPublicUrl(path); proofUrl = data.publicUrl; }
-    await saveOrderToDb(null, 'transfer', null, proofUrl);
+    const uploaded = await uploadToFirstAvailableBucket(['uploads', 'products'], path, file, { contentType: file.type, upsert: false });
+    const proofUrl = uploaded.publicUrl;
+    const order = await saveOrderToDb(null, 'bank_transfer', null, proofUrl);
 
     // Also save to payment_receipts for seller auditing
-    if (proofUrl && cart.length > 0) {
-      const sellerId = cart[0]?.seller_id || cart[0]?.profiles?.id;
-      const total = cart.reduce((sum, c) => sum + (c.price * (c.qty || 1)), 0);
+    if (proofUrl) {
       await db.from('payment_receipts').insert({
+        order_id:      order?.order_id || null,
         buyer_id:     currentUser.id,
         seller_id:    sellerId || null,
         receipt_url:  proofUrl,
         amount:       total,
         payment_type: 'product',
         status:       'pending'
-      }).then(() => {}).catch(() => {}); // non-blocking
+      }).then(() => {}).catch((error) => console.warn('payment_receipts insert failed:', error)); // non-blocking
     }
-  } catch(e) { toast('Error','Could not submit order','error'); }
+  } catch(e) { toast('Order Failed', e.message || 'Could not submit order','error'); }
   btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Submit Order';
 }
 
@@ -1783,13 +1804,13 @@ async function submitProduct(e) {
     let imgUrl = '', vidUrl = '';
     if (imgFile) {
       const ext = imgFile.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g,'');
-      const { data, error } = await db.storage.from('products').upload(`imgs/${currentUser.id}/${Date.now()}.${ext}`, imgFile, { upsert: false });
-      if (!error) { const { data: ud } = db.storage.from('products').getPublicUrl(data.path); imgUrl = sanitizeUrl(ud.publicUrl); }
+      const uploaded = await uploadToFirstAvailableBucket(['products', 'uploads'], `imgs/${currentUser.id}/${Date.now()}.${ext}`, imgFile, { contentType: imgFile.type, upsert: false });
+      imgUrl = uploaded.publicUrl;
     }
     if (vidFile) {
       const ext = vidFile.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g,'');
-      const { data, error } = await db.storage.from('products').upload(`vids/${currentUser.id}/${Date.now()}.${ext}`, vidFile, { upsert: false });
-      if (!error) { const { data: ud } = db.storage.from('products').getPublicUrl(data.path); vidUrl = sanitizeUrl(ud.publicUrl); }
+      const uploaded = await uploadToFirstAvailableBucket(['products', 'uploads'], `vids/${currentUser.id}/${Date.now()}.${ext}`, vidFile, { contentType: vidFile.type, upsert: false });
+      vidUrl = uploaded.publicUrl;
     }
 
     const price    = priceVal;
@@ -3765,7 +3786,7 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
       referral_code:  localStorage.getItem('bs_ref') || ''
     });
 
-    if (!result.success) { toast('Order Error', result.error, 'error'); return; }
+    if (!result.success) throw new Error(result.error || 'Could not create order');
 
     const orderId = result.order_id;
     const total   = result.total;
@@ -3781,10 +3802,14 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
     document.getElementById('co-order-id').textContent = orderId;
     document.getElementById('co-order-total').textContent = fmtN(total);
     goCheckoutStep(3);
+    const savedOrder = result;
     toast('Order Placed! 🎉', `Order ${orderId} confirmed`, 'success', 5000);
+
+    return savedOrder;
 
   } catch(err) {
     toast('Order Failed', err.message, 'error');
+    throw err;
   }
 }
 
