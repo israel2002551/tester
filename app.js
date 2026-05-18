@@ -1362,11 +1362,16 @@ async function submitTransferOrder() {
   }
   if (!fileInput.files?.[0]) { toast('Please upload payment proof','','warn'); return; }
   const proofFile = fileInput.files[0];
-  const ALLOWED_PROOF = ['image/jpeg','image/png','image/webp','image/heic','image/heif'];
-  const ALLOWED_PROOF_EXT = ['jpg','jpeg','png','webp','heic','heif'];
+  const ALLOWED_PROOF = ['image/jpeg','image/jpg','image/pjpeg','image/png','image/webp','image/heic','image/heif','image/jfif','image/avif'];
+  const ALLOWED_PROOF_EXT = ['jpg','jpeg','png','webp','heic','heif','jfif','avif'];
   const MAX_PROOF_SIZE = 10 * 1024 * 1024; // 10MB
-  const proofExt = proofFile.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-  if (!ALLOWED_PROOF.includes(proofFile.type) && !ALLOWED_PROOF_EXT.includes(proofExt)) { toast('Invalid file','Please upload a JPG, PNG, WebP, or HEIC screenshot','warn'); return; }
+  const rawName = proofFile.name || '';
+  const hasExt = rawName.includes('.') && rawName.split('.').pop().length <= 5;
+  const rawExt = hasExt ? rawName.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+  const typeExt = proofFile.type?.startsWith('image/') ? proofFile.type.split('/').pop().replace('jpeg', 'jpg').replace('pjpeg', 'jpg') : '';
+  const proofExt = ALLOWED_PROOF_EXT.includes(rawExt) ? rawExt : (ALLOWED_PROOF_EXT.includes(typeExt) ? typeExt : 'jpg');
+  const looksLikeImage = proofFile.type?.startsWith('image/') || ALLOWED_PROOF.includes(proofFile.type) || ALLOWED_PROOF_EXT.includes(rawExt) || (!proofFile.type && !rawExt);
+  if (!looksLikeImage) { toast('Invalid file','Please upload an image receipt: JPG, PNG, WebP, HEIC, JFIF, or AVIF','warn'); return; }
   if (proofFile.size > MAX_PROOF_SIZE)         { toast('File too large','Maximum proof image size is 10MB','warn'); return; }
   const btn = document.getElementById('co-transfer-btn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting…';
