@@ -1386,7 +1386,7 @@ async function submitTransferOrder() {
     }
     const proofUrl = uploaded.publicUrl;
     try {
-      await saveOrderToDb(null, 'bank_transfer', null, proofUrl);
+      await saveOrderToDb(null, 'transfer', null, proofUrl);
     } catch (orderError) {
       throw new Error(`Order creation failed: ${orderError.message || 'check create-order function'}`);
     }
