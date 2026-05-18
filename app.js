@@ -1373,9 +1373,18 @@ async function submitTransferOrder() {
   try {
     const file = fileInput.files[0];
     const path = `proofs/${currentUser.id}/${Date.now()}.${proofExt}`;
-    const uploaded = await uploadToFirstAvailableBucket(['uploads', 'products'], path, file, { contentType: file.type, upsert: false });
+    let uploaded;
+    try {
+      uploaded = await uploadToFirstAvailableBucket(['uploads', 'products'], path, file, { contentType: file.type || undefined, upsert: false });
+    } catch (uploadError) {
+      throw new Error(`Receipt upload failed: ${uploadError.message || 'check Supabase storage policies'}`);
+    }
     const proofUrl = uploaded.publicUrl;
-    await saveOrderToDb(null, 'bank_transfer', null, proofUrl);
+    try {
+      await saveOrderToDb(null, 'bank_transfer', null, proofUrl);
+    } catch (orderError) {
+      throw new Error(`Order creation failed: ${orderError.message || 'check create-order function'}`);
+    }
   } catch(e) { toast('Order Failed', e.message || 'Could not submit order','error'); }
   btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Submit Order';
 }
