@@ -11,7 +11,10 @@ let products = [], filteredProducts = [], activeFilters = {};
 let carouselIndex = 0, carouselTimer = null;
 let selectedRating = 0, checkoutPaymentMethod = 'paystack';
 let deferredInstallPrompt = null, salesChart = null;
+let sellerAnalyticsChart = null;
 let carouselStartX = 0;
+const analyticsSessionId = localStorage.getItem('bs_analytics_session') || ('sess_' + Date.now() + '_' + Math.random().toString(36).slice(2));
+localStorage.setItem('bs_analytics_session', analyticsSessionId);
 
 async function postAiRequest(body, endpoints = []) {
   const session = (await db.auth.getSession()).data.session;
@@ -72,6 +75,23 @@ async function callEdge(fnName, body) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `${fnName} failed (${res.status})`);
   return data;
+}
+
+async function trackAnalytics(event) {
+  try {
+    const session = (await db.auth.getSession()).data.session;
+    await fetch(`${EDGE_URL}/track-analytics`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SB_KEY,
+        Authorization: `Bearer ${session?.access_token || SB_KEY}`,
+      },
+      body: JSON.stringify({ ...event, session_id: analyticsSessionId }),
+    });
+  } catch (error) {
+    console.warn('Analytics tracking failed:', error);
+  }
 }
 
 
@@ -347,6 +367,7 @@ async function handleAuth(e) {
 async function upsertProfile(user, meta) {
   if (!user?.id) return;
   const trialEnd = new Date(); trialEnd.setDate(trialEnd.getDate() + 30);
+  const referredBy = meta.referred_by || localStorage.getItem('bs_ref') || user.user_metadata?.referred_by || '';
   const { error } = await db.from('profiles').upsert({
     id:              user.id,
     name:            meta.name     || user.user_metadata?.name     || 'User',
@@ -356,7 +377,8 @@ async function upsertProfile(user, meta) {
     whatsapp:        meta.whatsapp || user.user_metadata?.whatsapp || '',
     trial_end:       trialEnd.toISOString(),
     commission_paid: false,
-    referral_code:   'ref_' + Math.random().toString(36).substr(2, 8)
+    referral_code:   user.user_metadata?.referral_code || 'ref_' + Math.random().toString(36).substr(2, 8),
+    referred_by:     referredBy
   }, { onConflict: 'id', ignoreDuplicates: false });
   if (error) console.warn('upsertProfile error:', error.message);
 }
@@ -617,8 +639,20 @@ function showBuyerView() {
   updateCartCount();
 }
 
+function isSellerAccessExpired(profile = currentUser?.profile) {
+  if (!currentUser || currentUser.email === ADMIN_EMAIL) return false;
+  const trialEnd = profile?.trial_end ? new Date(profile.trial_end) : null;
+  return !!profile?.is_suspended || !trialEnd || trialEnd <= new Date();
+}
+
+function showSellerAccessBlocked() {
+  showBuyerView();
+  document.getElementById('suspended-modal')?.classList.add('open');
+}
+
 function showSellerDashboard() {
   if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
+  if (isSellerAccessExpired()) { showSellerAccessBlocked(); return; }
   document.getElementById('buyer-view').style.display = 'none';
   document.getElementById('seller-dashboard').style.display = 'block';
   document.getElementById('storefront-view').style.display = 'none';
@@ -672,6 +706,8 @@ function showDash(section) {
   if (section === 'dropshipping') loadDropshipData();
   if (section === 'affiliate') loadAffiliateData();
   if (section === 'advertise') loadSellerAds();
+  if (section === 'coupons') loadSellerCoupons();
+  if (section === 'analytics') loadSellerAnalytics();
 }
 
 function setMobActive(btn) {
@@ -973,6 +1009,7 @@ async function openProduct(id) {
   updateModalWishBtn();
   // Reviews
   loadProductReviews(id);
+  trackAnalytics({ event_type: 'product_view', product_id: p.id, seller_id: p.seller_id });
 }
 
 async function loadProductReviews(productId) {
@@ -1078,6 +1115,7 @@ function addToCart(prod) {
   const existing = cart.find(c => c.id === prod.id);
   if (existing) { existing.qty = (existing.qty || 1) + 1; } else { cart.push({...prod, qty: 1}); }
   saveCart();
+  trackAnalytics({ event_type: 'add_to_cart', product_id: prod.id, seller_id: prod.seller_id, amount: prod.price || 0 });
   toast('Added to Cart!', prod.name, 'success', 2000);
 }
 
@@ -1143,6 +1181,13 @@ function buyNow(prod) {
 function startCheckout() {
   if (!currentUser) { showModal('auth-modal'); return; }
   if (!cart.length) { toast('Cart is empty','','warn'); return; }
+  trackAnalytics({
+    event_type: 'checkout_started',
+    seller_id: cart[0]?.seller_id,
+    quantity: cart.reduce((sum,c)=>sum+(c.qty||1),0),
+    amount: cart.reduce((sum,c)=>sum+(c.price*(c.qty||1)),0),
+    metadata: { item_count: cart.length },
+  });
   goCheckoutStep(1);
   showModal('checkout-modal');
   // Pre-fill
@@ -1319,6 +1364,14 @@ async function payWithPaystack() {
           if (result.success) {
             const seller = cart[0]?.profiles;
             if (seller?.whatsapp) sendWhatsAppOrderNotification({ id: result.order_id, total_amount: result.total_paid }, seller.whatsapp);
+            trackAnalytics({
+              event_type: 'order_created',
+              seller_id: cart[0]?.seller_id,
+              order_id: result.order_id,
+              quantity: cart.reduce((sum,c)=>sum+(c.qty||1),0),
+              amount: result.total_paid || total,
+              metadata: { payment_method: 'paystack' },
+            });
             cart = []; saveCart();
             document.getElementById('co-order-id').textContent = result.order_id || '';
             document.getElementById('co-order-total').textContent = fmtN(result.total_paid || total);
@@ -1717,6 +1770,64 @@ async function renderChart() {
   });
 }
 
+async function loadSellerAnalytics() {
+  if (!currentUser) return;
+  const container = document.getElementById('seller-analytics-content');
+  if (!container) return;
+  container.innerHTML = '<div class="skeleton" style="height:200px"></div>';
+  try {
+    const result = await callEdge('seller-analytics', { days: 30 });
+    const totals = result.totals || {};
+    const series = result.series || [];
+    const topProducts = result.top_products || [];
+    container.innerHTML = `
+      <div class="stats-grid mb-4">
+        <div class="stat-card"><div class="stat-value">${fmtNum(totals.views || 0)}</div><div class="stat-label">Product Views</div></div>
+        <div class="stat-card"><div class="stat-value">${fmtNum(totals.carts || 0)}</div><div class="stat-label">Add to Cart</div></div>
+        <div class="stat-card"><div class="stat-value color-green">${fmtN(totals.revenue || 0)}</div><div class="stat-label">Revenue</div></div>
+        <div class="stat-card"><div class="stat-value">${fmtNum(totals.orders || 0)}</div><div class="stat-label">Orders</div></div>
+        <div class="stat-card"><div class="stat-value color-gold">${fmtNum(totals.conversion_rate || 0)}%</div><div class="stat-label">View to Order</div></div>
+        <div class="stat-card"><div class="stat-value">${fmtNum(totals.cart_rate || 0)}%</div><div class="stat-label">View to Cart</div></div>
+      </div>
+      <div class="chart-card mb-4">
+        <div class="chart-head"><h3>30-Day Performance</h3><span class="text-xs color-text3">Views, carts, and revenue</span></div>
+        <canvas id="seller-analytics-chart"></canvas>
+      </div>
+      <div class="card overflow-hidden">
+        <div class="card-pad" style="border-bottom:1px solid var(--border)"><h3>Top Products</h3></div>
+        <div class="overflow-x"><table class="data-table"><thead><tr><th>Product</th><th>Views</th><th>Carts</th><th>Orders</th><th>Revenue</th></tr></thead><tbody>
+          ${topProducts.length ? topProducts.map(p => `<tr><td>${escHtml(p.name)}</td><td>${fmtNum(p.views || 0)}</td><td>${fmtNum(p.carts || 0)}</td><td>${fmtNum(p.orders || 0)}</td><td class="font-bold color-green">${fmtN(p.revenue || 0)}</td></tr>`).join('') : '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">No analytics events yet</td></tr>'}
+        </tbody></table></div>
+      </div>`;
+
+    const ctx = document.getElementById('seller-analytics-chart')?.getContext('2d');
+    if (ctx && typeof Chart !== 'undefined') {
+      if (sellerAnalyticsChart) sellerAnalyticsChart.destroy();
+      sellerAnalyticsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: series.map(row => new Date(row.date).toLocaleDateString('en-NG', { month:'short', day:'numeric' })),
+          datasets: [
+            { label: 'Views', data: series.map(row => row.views || 0), borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.08)', tension: .35, yAxisID: 'count' },
+            { label: 'Carts', data: series.map(row => row.carts || 0), borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,.08)', tension: .35, yAxisID: 'count' },
+            { label: 'Revenue', data: series.map(row => row.revenue || 0), borderColor: '#19a847', backgroundColor: 'rgba(25,168,71,.08)', tension: .35, yAxisID: 'money' },
+          ],
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            count: { type: 'linear', position: 'left', beginAtZero: true },
+            money: { type: 'linear', position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { callback: v => '₦' + fmtNum(v) } },
+          },
+        },
+      });
+    }
+  } catch(e) {
+    container.innerHTML = `<div class="card card-pad text-center color-text3">Could not load analytics. ${escHtml(e.message || '')}</div>`;
+  }
+}
+
 // ====================================================
 //  SELLER PRODUCTS
 // ====================================================
@@ -2083,14 +2194,13 @@ async function checkSellerCommission() {
   if (!currentUser?.profile) return;
   const p = currentUser.profile;
   const trialEnd = p.trial_end ? new Date(p.trial_end) : null;
-  const commPaid = p.commission_paid;
+  const expired = isSellerAccessExpired(p);
   document.getElementById('comm-trial-end').textContent = trialEnd ? fmtDate(trialEnd.toISOString()) : 'N/A';
   const badge = document.getElementById('comm-status-badge');
-  if (commPaid) { badge.className='badge badge-green'; badge.textContent='✓ Active'; }
-  else if (trialEnd && trialEnd > new Date()) { badge.className='badge badge-gold'; badge.textContent=`Trial – ${Math.ceil((trialEnd-new Date())/86400000)}d left`; }
+  if (!expired) { badge.className='badge badge-green'; badge.textContent=`Active - ${Math.ceil((trialEnd-new Date())/86400000)}d left`; }
   else { badge.className='badge badge-red'; badge.textContent='Suspended'; }
   // Show suspended modal if needed
-  if (!commPaid && trialEnd && trialEnd < new Date() && currentUser.email !== ADMIN_EMAIL) {
+  if (expired && currentUser.email !== ADMIN_EMAIL) {
     document.getElementById('suspended-modal').classList.add('open');
   }
 }
@@ -2114,6 +2224,8 @@ function payCommissionPaystack() {
         data: { commission_paid: true, payment_reference: response.reference || response.trxref }
       });
       currentUser.profile.commission_paid = true;
+      currentUser.profile.is_suspended = false;
+      currentUser.profile.trial_end = new Date(Date.now() + 30*86400000).toISOString();
       document.getElementById('suspended-modal').classList.remove('open');
       document.body.classList.remove('modal-open');
       toast('Commission Paid! ✅', 'Your store is now active', 'success');
@@ -2160,8 +2272,6 @@ async function submitCommissionReceipt() {
 
     toast('Receipt Submitted! ✅', 'Admin will verify within 24hrs.', 'success', 6000);
     closeModal('commission-modal');
-    document.getElementById('suspended-modal').classList.remove('open');
-    document.body.classList.remove('modal-open');
     
     // Clear form
     document.getElementById('commission-file').value = '';
@@ -2284,6 +2394,26 @@ const dropshipCatalog = [
   { id:'makeup-organizer', niche:'beauty', name:'Makeup Organizer Box', supplier:'CJ Dropshipping', cost:9500, price:28500, shipping:2300, stock:160, delivery:'10-17 days', demand:'Medium', image:'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=600&h=420&fit=crop', description:'Clear cosmetic organizer for makeup, skincare products, perfumes, and dressing table storage.' },
   { id:'travel-backpack', niche:'fashion', name:'Anti-Theft Travel Backpack', supplier:'AliExpress', cost:14000, price:42000, shipping:3500, stock:130, delivery:'11-19 days', demand:'High', image:'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=600&h=420&fit=crop', description:'Durable anti-theft backpack with laptop compartment, USB port, and water-resistant fabric.' }
 ];
+let dropshipConnections = {};
+let activeDropshipCatalog = dropshipCatalog;
+
+function normalizeDropshipItem(item) {
+  return {
+    id: item.id,
+    niche: item.niche || 'other',
+    name: item.name || 'Dropship Product',
+    supplier: item.supplier || item.supplier_name || 'Global Supplier',
+    supplier_key: item.supplier_key || 'global',
+    cost: Number(item.cost ?? item.supplier_cost ?? 0),
+    price: Number(item.price ?? item.suggested_price ?? 0),
+    shipping: Number(item.shipping ?? item.shipping_cost ?? 0),
+    stock: Number(item.stock ?? item.stock_quantity ?? 999),
+    delivery: item.delivery || item.delivery_estimate || 'International shipping',
+    demand: item.demand || 'Medium',
+    image: item.image || item.image_url || '',
+    description: item.description || '',
+  };
+}
 
 function ensureGrowthSections() {
   renderDropshipSection();
@@ -2346,30 +2476,48 @@ function renderDropshipSection() {
     </div>`;
 }
 
-function connectSupplier(supplier) {
-  const connected = JSON.parse(localStorage.getItem('bs_dropship_suppliers') || '{}');
-  connected[supplier] = true;
-  localStorage.setItem('bs_dropship_suppliers', JSON.stringify(connected));
-  updateSupplierCards();
-  toast(`${supplier==='aliexpress'?'AliExpress':'CJ Dropshipping'} Connected!`, 'You can now import products', 'success');
+async function connectSupplier(supplier) {
+  try {
+    const result = await callEdge('manage-dropship', { action: 'connect_supplier', supplier_key: supplier });
+    dropshipConnections[result.supplier_key || supplier] = true;
+    updateSupplierCards();
+    toast(`${result.supplier_name || (supplier==='aliexpress'?'AliExpress':'CJ Dropshipping')} Connected!`, 'You can now import products', 'success');
+  } catch(e) {
+    toast('Connection Failed', e.message, 'error');
+  }
+}
+
+async function loadSupplierConnections() {
+  try {
+    const result = await callEdge('manage-dropship', { action: 'list_connections' });
+    dropshipConnections = {};
+    (result.connections || []).forEach(conn => { dropshipConnections[conn.supplier_key] = true; });
+  } catch(e) {
+    dropshipConnections = {};
+  }
 }
 
 function updateSupplierCards() {
-  const connected = JSON.parse(localStorage.getItem('bs_dropship_suppliers') || '{}');
   document.querySelectorAll('[data-supplier-card]').forEach(card => {
     const supplier = card.dataset.supplierCard;
     const btn = card.querySelector('button');
-    const isConnected = !!connected[supplier];
+    const isConnected = !!dropshipConnections[supplier];
     card.classList.toggle('connected', isConnected);
     if (btn) btn.innerHTML = isConnected ? '<i class="fa-solid fa-check"></i> Connected' : 'Connect';
   });
 }
 
-function renderDropshipCatalog() {
+async function renderDropshipCatalog() {
   const grid = document.getElementById('dropship-catalog');
   if (!grid) return;
   const filter = document.getElementById('ds-filter')?.value || 'all';
-  const items = dropshipCatalog.filter(p => filter === 'all' || p.niche === filter);
+  try {
+    const result = await callEdge('manage-dropship', { action: 'list_catalog', niche: filter });
+    activeDropshipCatalog = (result.catalog || []).map(normalizeDropshipItem);
+  } catch(e) {
+    activeDropshipCatalog = dropshipCatalog;
+  }
+  const items = activeDropshipCatalog.filter(p => filter === 'all' || p.niche === filter);
   grid.innerHTML = items.map(p => {
     const profit = p.price - p.cost - p.shipping - Math.round(p.price * 0.03);
     const margin = Math.max(0, Math.round((profit / p.price) * 100));
@@ -2387,7 +2535,7 @@ function renderDropshipCatalog() {
 }
 
 async function importDropshipById(id) {
-  const item = dropshipCatalog.find(p => p.id === id);
+  const item = activeDropshipCatalog.find(p => p.id === id) || dropshipCatalog.find(p => p.id === id);
   if (!item) return;
   return importDropship(item);
 }
@@ -2398,20 +2546,22 @@ async function importDropship(itemOrName, cost, price, emoji) {
     ? itemOrName
     : { name: itemOrName, cost, price, shipping: 0, image: '', description: `Imported from global supplier. ${itemOrName}`, stock: 999, supplier: 'Global Supplier' };
   try {
-    await callEdge('manage-product', { action: 'create', data: {
-      name:           item.name,
-      description:    `${item.description || `Imported from ${item.supplier}.`} Supplier cost estimate: ${fmtN(item.cost || 0)}. Delivery estimate: ${item.delivery || 'International shipping'}.`,
-      price:          item.price,
-      original_price: item.price,
-      category:       'dropship',
-      condition:      'new',
-      location:       'International',
-      image_url:      item.image || '',
-      has_video:      false,
-      negotiable:     false,
-      stock_quantity: item.stock || 999,
-      low_stock_alert: 10
-    }});
+    await callEdge('manage-dropship', {
+      action: 'import_product',
+      catalog_id: item.id,
+      data: {
+        name: item.name,
+        description: item.description,
+        supplier_key: item.supplier_key || (item.supplier === 'AliExpress' ? 'aliexpress' : item.supplier === 'CJ Dropshipping' ? 'cj' : 'global'),
+        supplier_cost: item.cost || 0,
+        suggested_price: item.price || price || 0,
+        price: item.price || price || 0,
+        shipping_cost: item.shipping || 0,
+        stock_quantity: item.stock || 999,
+        delivery_estimate: item.delivery || 'International shipping',
+        image_url: item.image || '',
+      },
+    });
     toast(`${emoji || 'Imported'} ${item.name}`, `Listed at ${fmtN(item.price)}`, 'success');
     loadDropshipData();
     loadSellerProds();
@@ -2436,7 +2586,8 @@ function updateDropshipCalculator() {
 async function loadDropshipData() {
   if (!currentUser) return;
   ensureGrowthSections();
-  renderDropshipCatalog();
+  await renderDropshipCatalog();
+  await loadSupplierConnections();
   updateSupplierCards();
   updateDropshipCalculator();
   const { data: products } = await db.from('products').select('*').eq('seller_id', currentUser.id).eq('category', 'dropship').order('created_at', { ascending:false });
@@ -3798,6 +3949,15 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
     const seller = cart[0]?.profiles;
     if (seller?.whatsapp) sendWhatsAppOrderNotification({ id: orderId, total_amount: total }, seller.whatsapp);
 
+    trackAnalytics({
+      event_type: 'order_created',
+      seller_id: cart[0]?.seller_id,
+      order_id: orderId,
+      quantity: cart.reduce((sum,c)=>sum+(c.qty||1),0),
+      amount: total || 0,
+      metadata: { payment_method: method || 'transfer' },
+    });
+
     cart = []; saveCart();
     document.getElementById('co-order-id').textContent = orderId;
     document.getElementById('co-order-total').textContent = fmtN(total);
@@ -5006,9 +5166,17 @@ async function createCoupon() {
   if (!code || !value) { toast('Missing info', 'Enter a code and discount value', 'warn'); return; }
   try {
     const expires = new Date(Date.now() + days * 86400000).toISOString();
-    const coupons = JSON.parse(localStorage.getItem('bs_coupons_' + currentUser.id) || '[]');
-    coupons.push({ code, type, value, minOrder, maxUses, uses: 0, expires, seller_id: currentUser.id });
-    localStorage.setItem('bs_coupons_' + currentUser.id, JSON.stringify(coupons));
+    await callEdge('manage-coupon', {
+      action: 'create',
+      data: {
+        code,
+        discount_type: type,
+        discount_value: value,
+        min_order: minOrder,
+        max_uses: maxUses,
+        expires_at: expires,
+      },
+    });
     toast('Coupon Created! 🎫', `Code: ${code}`, 'success');
     loadSellerCoupons();
     document.getElementById('coupon-new-code').value = '';
@@ -5016,24 +5184,42 @@ async function createCoupon() {
   } catch(e) { toast('Error', e.message, 'error'); }
 }
 
-function loadSellerCoupons() {
+async function loadSellerCoupons() {
   if (!currentUser) return;
   const list = document.getElementById('seller-coupons-list');
   if (!list) return;
-  const coupons = JSON.parse(localStorage.getItem('bs_coupons_' + currentUser.id) || '[]');
-  if (!coupons.length) { list.innerHTML = '<p class="color-text3 text-sm">No coupons yet.</p>'; return; }
-  list.innerHTML = coupons.map((c, i) => `
-    <div class="flex justify-between items-center p-2" style="border-bottom:1px solid var(--border)">
-      <div><span class="font-bold">${c.code}</span> — ${c.type==='percent'?c.value+'%':'₦'+fmtN(c.value)} off${c.minOrder?', min ₦'+fmtN(c.minOrder):''}</div>
-      <button class="btn btn-ghost btn-sm" onclick="deleteCoupon(${i})" style="color:var(--red)"><i class="fa-solid fa-trash"></i></button>
-    </div>`).join('');
+  list.innerHTML = '<p class="color-text3 text-sm">Loading coupons...</p>';
+  try {
+    const result = await callEdge('manage-coupon', { action: 'list' });
+    const coupons = result.coupons || [];
+    if (!coupons.length) { list.innerHTML = '<p class="color-text3 text-sm">No coupons yet.</p>'; return; }
+    list.innerHTML = coupons.map(c => {
+      const discount = c.discount_type === 'percent' ? `${fmtNum(c.discount_value)}%` : fmtN(c.discount_value);
+      const min = Number(c.min_order || 0) > 0 ? `, min ${fmtN(c.min_order)}` : '';
+      const usage = `${fmtNum(c.used_count || 0)}/${fmtNum(c.max_uses || 0)} used`;
+      const expiry = c.expires_at ? `Expires ${fmtDate(c.expires_at)}` : 'No expiry';
+      return `
+        <div class="flex justify-between items-center p-2" style="border-bottom:1px solid var(--border);gap:12px">
+          <div style="min-width:0">
+            <div><span class="font-bold">${escHtml(c.code)}</span> - ${discount} off${min}</div>
+            <div class="text-xs color-text3">${usage} - ${expiry}</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="deleteCoupon('${escAttr(c.id)}')" style="color:var(--red)" title="Delete coupon"><i class="fa-solid fa-trash"></i></button>
+        </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = '<p class="color-red text-sm">Could not load coupons.</p>';
+    toast('Error', e.message, 'error');
+  }
 }
 
-function deleteCoupon(idx) {
-  const coupons = JSON.parse(localStorage.getItem('bs_coupons_' + currentUser.id) || '[]');
-  coupons.splice(idx, 1);
-  localStorage.setItem('bs_coupons_' + currentUser.id, JSON.stringify(coupons));
-  loadSellerCoupons();
+async function deleteCoupon(couponId) {
+  if (!couponId || !confirm('Delete this coupon?')) return;
+  try {
+    await callEdge('manage-coupon', { action: 'delete', coupon_id: couponId });
+    toast('Coupon Deleted', '', 'success');
+    loadSellerCoupons();
+  } catch(e) { toast('Error', e.message, 'error'); }
 }
 
 function applyCoupon() {
