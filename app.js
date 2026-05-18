@@ -2359,12 +2359,25 @@ async function saveSettings(e) {
 // ====================================================
 async function loadWithdrawalData() {
   if (!currentUser) return;
-  const { data: orders } = await db.from('orders').select('total_amount,status').eq('seller_id', currentUser.id);
-  const revenue = (orders||[]).filter(o=>o.status==='delivered').reduce((s,o)=>s+o.total_amount,0);
-  const available = Math.max(0, revenue * 0.92);
+  const [{ data: profile }, { data: orders }, { data: withdrawals }] = await Promise.all([
+    db.from('profiles').select('bank_name,account_number,account_name').eq('id', currentUser.id).maybeSingle(),
+    db.from('orders').select('total_amount,status').eq('seller_id', currentUser.id),
+    db.from('withdrawals').select('amount,status,created_at,id').eq('seller_id', currentUser.id).order('created_at',{ascending:false})
+  ]);
+  if (profile) {
+    currentUser.profile = { ...(currentUser.profile || {}), ...profile };
+    document.getElementById('wd-bank-name').textContent = profile.bank_name || 'Not set';
+    document.getElementById('wd-acct-num').textContent = profile.account_number || '—';
+    document.getElementById('wd-acct-name').textContent = profile.account_name || '—';
+  }
+  const revenue = (orders||[]).filter(o=>o.status==='delivered').reduce((s,o)=>s+Number(o.total_amount||0),0);
+  const pendingAmt = (withdrawals||[]).filter(w=>w.status==='pending').reduce((s,w)=>s+Number(w.amount||0),0);
+  const totalPaid = (withdrawals||[]).filter(w=>w.status==='paid').reduce((s,w)=>s+Number(w.amount||0),0);
+  const available = Math.max(0, revenue * 0.92 - pendingAmt - totalPaid);
   document.getElementById('wd-available').textContent = fmtN(available);
-  document.getElementById('wd-pending').textContent = fmtN(0);
-  document.getElementById('wd-total').textContent = fmtN(0);
+  document.getElementById('wd-pending').textContent = fmtN(pendingAmt);
+  document.getElementById('wd-total').textContent = fmtN(totalPaid);
+  renderWithdrawalHistory(withdrawals || []);
 }
 
 async function requestWithdrawal() {
