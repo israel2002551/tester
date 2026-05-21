@@ -2486,7 +2486,7 @@ function renderDropshipSection() {
     </button>
   </div>
   <p class="text-xs color-text3 mt-1">Copy a product link from the supplier and paste it here to automatically generate a listing.</p>
-</div>
+</div>`;
 }
 
 async function connectSupplier(supplier) {
