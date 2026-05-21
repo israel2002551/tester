@@ -2441,7 +2441,6 @@ function renderDropshipSection() {
   if (!section || section.dataset.enhanced === 'true') return;
   section.dataset.enhanced = 'true';
   section.innerHTML = `
-    // Inside renderDropshipSection()
 <div class="supplier-grid">
   <div class="supplier-card" data-supplier-card="aliexpress">
     <div class="flex items-center gap-3 mb-3">
@@ -2486,7 +2485,7 @@ function renderDropshipSection() {
     </button>
   </div>
   <p class="text-xs color-text3 mt-1">Copy a product link from the supplier and paste it here to automatically generate a listing.</p>
-</div>`;
+</div>`; // <--- THIS IS THE CRUCIAL FIX: The closing backtick and semicolon!
 }
 
 async function connectSupplier(supplier) {
