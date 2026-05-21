@@ -3969,6 +3969,7 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
       if (!sellerId) throw new Error("Seller information missing from cart.");
 
       const orderData = {
+        id: crypto.randomUUID(),
         buyer_id: currentUser.id,
         seller_id: sellerId,
         items: payload.cart,
