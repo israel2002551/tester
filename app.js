@@ -706,7 +706,10 @@ function showDash(section) {
   if (section === 'dropshipping') loadDropshipData();
   if (section === 'affiliate') loadAffiliateData();
   if (section === 'advertise') loadSellerAds();
-  if (section === 'coupons') loadSellerCoupons();
+  if (section === 'coupons') { 
+    loadSellerCoupons(); 
+    loadFlashSaleProducts(); 
+}
   if (section === 'analytics') loadSellerAnalytics();
 }
 
@@ -2438,55 +2441,52 @@ function renderDropshipSection() {
   if (!section || section.dataset.enhanced === 'true') return;
   section.dataset.enhanced = 'true';
   section.innerHTML = `
-    <h1 class="dash-page-title">Global Dropshipping</h1>
-    <p class="dash-page-sub">Research winning products, set your markup, and publish supplier-backed listings.</p>
-    <div class="dropship-hero mb-4">
-      <div><h2>Source globally. Sell locally.</h2><p>Use curated products, supplier cost estimates, and suggested Nigerian retail prices to build listings faster.</p></div>
-      <button class="btn btn-primary" onclick="showDash('add-product')"><i class="fa-solid fa-plus"></i> Add Manual Listing</button>
-    </div>
-    <div class="dropship-stats mb-4">
-      <div class="stat-card"><div class="stat-value color-green" id="ds-imported">0</div><div class="stat-label">Imported Listings</div></div>
-      <div class="stat-card"><div class="stat-value" id="ds-sales">₦0</div><div class="stat-label">Dropship Sales</div></div>
-      <div class="stat-card"><div class="stat-value color-gold" id="ds-profit">₦0</div><div class="stat-label">Estimated Profit</div></div>
-      <div class="stat-card"><div class="stat-value color-text3" id="ds-pending">0</div><div class="stat-label">Orders Pending</div></div>
-    </div>
-    <div class="dash-two-col mb-4">
-      <div class="card card-pad">
-        <div class="flex justify-between items-center mb-3 gap-2 wrap"><h3>Supplier Connections</h3><span class="text-xs color-text3">Saved on this device</span></div>
-        <div class="supplier-grid">
-          <div class="supplier-card" data-supplier-card="aliexpress"><div class="flex items-center gap-3 mb-3"><div class="trust-icon" style="background:#fee2e2;font-size:1.1rem"><i class="fa-solid fa-globe" style="color:#e53e3e"></i></div><div><div class="font-600">AliExpress</div><div class="text-xs color-text3">Wide catalogue, budget pricing</div></div></div><button class="btn btn-primary btn-full btn-sm" onclick="connectSupplier('aliexpress')">Connect</button></div>
-          <div class="supplier-card" data-supplier-card="cj"><div class="flex items-center gap-3 mb-3"><div class="trust-icon" style="background:#ffedd5;font-size:1.1rem"><i class="fa-solid fa-box" style="color:#ea580c"></i></div><div><div class="font-600">CJ Dropshipping</div><div class="text-xs color-text3">QC, fulfilment and faster shipping</div></div></div><button class="btn btn-primary btn-full btn-sm" onclick="connectSupplier('cj')">Connect</button></div>
-        </div>
+    // Inside renderDropshipSection()
+<div class="supplier-grid">
+  <div class="supplier-card" data-supplier-card="aliexpress">
+    <div class="flex items-center gap-3 mb-3">
+      <div class="trust-icon" style="background:#fee2e2;font-size:1.1rem">
+        <i class="fa-solid fa-globe" style="color:#e53e3e"></i>
       </div>
-      <div class="card card-pad">
-        <h3 class="mb-3">Profit Calculator</h3>
-        <div class="form-grid form-grid-2">
-          <div class="form-group"><label class="form-label">Supplier Cost (₦)</label><input type="number" id="ds-calc-cost" class="form-input" value="12000" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
-          <div class="form-group"><label class="form-label">Selling Price (₦)</label><input type="number" id="ds-calc-price" class="form-input" value="35000" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
-        </div>
-        <div class="form-grid form-grid-2">
-          <div class="form-group"><label class="form-label">Shipping (₦)</label><input type="number" id="ds-calc-ship" class="form-input" value="3500" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
-          <div class="form-group"><label class="form-label">Marketplace Fee (%)</label><input type="number" id="ds-calc-fee" class="form-input" value="3" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
-        </div>
-        <div class="profit-result"><span>Net Profit</span><strong id="ds-calc-profit">₦0</strong><small id="ds-calc-margin">0% margin</small></div>
+      <div>
+        <div class="font-600">AliExpress</div>
+        <div class="text-xs color-text3">Wide catalogue, budget pricing</div>
       </div>
     </div>
-    <div class="card card-pad mb-4">
-      <div class="flex justify-between items-center mb-3 gap-2 wrap">
-        <h3>Hot Products for Nigeria</h3>
-        <div class="flex gap-2 wrap">
-          <select id="ds-filter" class="form-select" style="width:auto;padding:.4rem .7rem;font-size:.78rem" onchange="renderDropshipCatalog()">
-            <option value="all">All niches</option><option value="electronics">Electronics</option><option value="home">Home</option><option value="fashion">Fashion</option><option value="beauty">Beauty</option>
-          </select>
-          <button class="btn btn-outline btn-sm" onclick="renderDropshipCatalog()"><i class="fa-solid fa-rotate"></i> Refresh</button>
-        </div>
+    <!-- Opens AliExpress in a new tab -->
+    <a href="https://best.aliexpress.com" target="_blank" class="btn btn-primary btn-full btn-sm" style="text-decoration:none; text-align:center;">
+      <i class="fa-solid fa-external-link-alt"></i> Browse AliExpress
+    </a>
+  </div>
+  
+  <div class="supplier-card" data-supplier-card="cj">
+    <div class="flex items-center gap-3 mb-3">
+      <div class="trust-icon" style="background:#ffedd5;font-size:1.1rem">
+        <i class="fa-solid fa-box" style="color:#ea580c"></i>
       </div>
-      <div class="hot-items-grid" id="dropship-catalog"></div>
+      <div>
+        <div class="font-600">CJ Dropshipping</div>
+        <div class="text-xs color-text3">QC, fast fulfilment</div>
+      </div>
     </div>
-    <div class="card overflow-hidden">
-      <div class="card-pad flex justify-between items-center gap-2 wrap" style="border-bottom:1px solid var(--border)"><h3>Imported Dropship Listings</h3><button class="btn btn-outline btn-sm" onclick="loadDropshipData()"><i class="fa-solid fa-rotate"></i> Reload</button></div>
-      <div class="overflow-x"><table class="data-table"><thead><tr><th>Product</th><th>Price</th><th>Stock</th><th>Status</th><th>Action</th></tr></thead><tbody id="ds-imported-table"><tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">No dropship products imported yet</td></tr></tbody></table></div>
-    </div>`;
+    <!-- Opens CJ Dropshipping in a new tab -->
+    <a href="https://cjdropshipping.com" target="_blank" class="btn btn-primary btn-full btn-sm" style="text-decoration:none; text-align:center;">
+      <i class="fa-solid fa-external-link-alt"></i> Browse CJ
+    </a>
+  </div>
+</div>
+
+<!-- NEW: The URL Import Bar -->
+<div class="mt-4 p-3" style="background:var(--cream); border-radius:8px; border:1px solid var(--border);">
+  <label class="form-label" style="font-size:.85rem;">Import Product by URL</label>
+  <div style="display:flex; gap:.5rem;">
+    <input type="url" id="ds-import-url" class="form-input" placeholder="Paste AliExpress or CJ product link here..." style="flex:1;">
+    <button class="btn btn-primary" onclick="importFromUrl(event)">
+      <i class="fa-solid fa-download"></i> Fetch & Import
+    </button>
+  </div>
+  <p class="text-xs color-text3 mt-1">Copy a product link from the supplier and paste it here to automatically generate a listing.</p>
+</div>
 }
 
 async function connectSupplier(supplier) {
@@ -2545,6 +2545,46 @@ async function renderDropshipCatalog() {
       </div>
     </div>`;
   }).join('');
+}
+
+async function importFromUrl(event) {
+  if (!currentUser) { showModal('auth-modal'); return; }
+  
+  const urlInput = document.getElementById('ds-import-url');
+  const productUrl = urlInput.value.trim();
+  
+  if (!productUrl) { 
+    toast('Missing Link', 'Please paste a product link first', 'warn'); 
+    return; 
+  }
+
+  const btn = event.currentTarget;
+  const oldHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-dark"></span> Fetching Data...';
+
+  try {
+    // Call the Edge Function to scrape the URL and create the product
+    const result = await callEdge('manage-dropship', {
+      action: 'import_from_url',
+      url: productUrl,
+      seller_id: currentUser.id
+    });
+
+    toast('Product Imported! 🎉', `${result.name || 'Item'} added to your store`, 'success');
+    urlInput.value = ''; // Clear the input
+    
+    // Refresh the dashboard tables to show the new product
+    loadDropshipData();
+    loadSellerProds();
+    
+  } catch (err) {
+    console.error("URL Import Error:", err);
+    toast('Import Failed', err.message || 'Could not fetch product details from that link.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = oldHtml;
+  }
 }
 
 async function importDropshipById(id) {
@@ -5325,6 +5365,39 @@ function normalizeAdUrl(url) {
 
 function getAdLink(ad) {
   return ad.cta_link || ad.link_url || '#';
+}
+
+async function loadFlashSaleProducts() {
+  if (!currentUser) return;
+  
+  const selectEl = document.getElementById('flash-product');
+  if (!selectEl) return;
+  
+  selectEl.innerHTML = '<option value="">Loading products...</option>';
+  
+  try {
+    const { data: products, error } = await db.from('products')
+      .select('id, name, price')
+      .eq('seller_id', currentUser.id)
+      .eq('status', 'active'); // Only load active products
+      
+    if (error) throw error;
+    
+    if (!products || products.length === 0) {
+      selectEl.innerHTML = '<option value="">No active products found</option>';
+      return;
+    }
+    
+    // Build the dropdown options
+    selectEl.innerHTML = '<option value="">Select a product...</option>' + 
+      products.map(p => 
+        `<option value="${p.id}">${escHtml(p.name)} (₦${fmtNum(p.price)})</option>`
+      ).join('');
+      
+  } catch(e) {
+    selectEl.innerHTML = '<option value="">Error loading products</option>';
+    toast('Error', 'Could not load products for flash sales', 'error');
+  }
 }
 
 async function loadSellerAds() {
