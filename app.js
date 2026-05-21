@@ -1032,6 +1032,18 @@ async function openProduct(id) {
   
   const origEl = document.getElementById('modal-orig-price');
   const discEl = document.getElementById('modal-discount');
+
+// Add this inside your openProduct(id) function
+function updateModalWishBtn() {
+  const btn = document.getElementById('modal-wishlist-btn');
+  if (!btn || !currentProd) return;
+  
+  const isSaved = wishlist.includes(currentProd.id);
+  btn.onclick = (e) => toggleWishlist(currentProd.id, e);
+  btn.innerHTML = isSaved 
+    ? '<i class="fa-solid fa-heart" style="color:var(--danger)"></i>' 
+    : '<i class="fa-regular fa-heart"></i>';
+}
   
   // Use displayPrice for discount calculation
   if (p.original_price > displayPrice) {
@@ -5073,7 +5085,11 @@ function dismissInstallBar() {
 //  WISHLIST
 // ====================================================
 let wishlist = JSON.parse(localStorage.getItem('bs_wishlist') || '[]');
-function saveWishlist() { localStorage.setItem('bs_wishlist', JSON.stringify(wishlist)); updateWishlistCount(); }
+
+function saveWishlist() {
+  localStorage.setItem('bs_wishlist', JSON.stringify(wishlist));
+  updateWishlistCount();
+}
 
 function updateWishlistCount() {
   const countEl = document.getElementById('wishlist-count');
@@ -5093,36 +5109,64 @@ function updateModalWishBtn() {
   btn.setAttribute('aria-label', saved ? 'Remove from wishlist' : 'Save to wishlist');
 }
 
-function toggleWishlist(productId) {
-  if (!productId) return;
+function toggleWishlist(productId, event) {
+  if (event) event.stopPropagation(); // Prevents opening product modal if clicked on a card
+  
   const idx = wishlist.indexOf(productId);
-  if (idx > -1) { wishlist.splice(idx, 1); toast('Removed', 'Removed from wishlist', 'info'); }
-  else { wishlist.push(productId); toast('Added ❤️', 'Added to wishlist', 'success'); }
+  if (idx > -1) {
+    wishlist.splice(idx, 1);
+    toast('Removed', 'Removed from wishlist', 'info');
+  } else {
+    wishlist.push(productId);
+    toast('Added ❤️', 'Saved to wishlist', 'success');
+  }
+  
   saveWishlist();
-  updateModalWishBtn();
-  document.querySelectorAll(`[data-wish="${productId}"]`).forEach(btn => {
-    btn.innerHTML = wishlist.includes(productId) ? '<i class="fa-solid fa-heart" style="color:#ef4444"></i>' : '<i class="fa-regular fa-heart"></i>';
-  });
+  updateModalWishBtn(); // Update modal heart if open
+  
+  // Refresh wishlist list if modal is open
+  if (document.getElementById('wishlist-modal').classList.contains('open')) {
+    showWishlistModal();
+  }
 }
 
 async function showWishlistModal() {
   showModal('wishlist-modal');
   const container = document.getElementById('wishlist-items');
-  if (!wishlist.length) { container.innerHTML = '<p class="text-center color-text3 p-3">Your wishlist is empty.</p>'; return; }
+  if (!wishlist.length) {
+    container.innerHTML = '<p class="text-center color-text3 p-3">Your wishlist is empty.</p>';
+    return;
+  }
+  
   container.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
+  
   try {
     const { data: items } = await db.from('products').select('*').in('id', wishlist);
-    if (!items || !items.length) { container.innerHTML = '<p class="text-center color-text3 p-3">Products no longer available.</p>'; return; }
+    if (!items || !items.length) {
+      container.innerHTML = '<p class="text-center color-text3 p-3">Products no longer available.</p>';
+      return;
+    }
+    
     container.innerHTML = items.map(p => `
-      <div class="flex gap-3 items-center p-2" style="border-bottom:1px solid var(--border)">
-        <img src="${p.image_urls?.[0] || ''}" style="width:50px;height:50px;border-radius:8px;object-fit:cover">
+      <div class="wishlist-item" style="display:flex; gap:12px; align-items:center; padding:10px; border-bottom:1px solid var(--border)">
+        <img src="${p.image_url || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=100'}" style="width:60px; height:60px; border-radius:8px; object-fit:cover">
         <div style="flex:1">
-          <div class="font-bold text-sm">${escHtml(p.name)}</div>
-          <div class="color-green font-bold">₦${fmtN(p.price)}</div>
+          <div class="font-600 text-sm">${escHtml(p.name)}</div>
+          <div class="color-green font-bold text-sm">₦${fmtNum(p.price)}</div>
         </div>
-        <button class="btn btn-ghost btn-sm" onclick="toggleWishlist('${p.id}');showWishlistModal()"><i class="fa-solid fa-trash" style="color:var(--red)"></i></button>
-      </div>`).join('');
-  } catch(e) { container.innerHTML = '<p class="text-center color-danger">Error loading wishlist</p>'; }
+        <div style="display:flex; gap:5px">
+          <button class="btn btn-outline btn-sm" onclick="addToCart(${JSON.stringify({id:p.id,name:p.name,price:p.price,image_url:p.image_url,seller_id:p.seller_id}).replace(/"/g,'&quot;')})">
+            <i class="fa-solid fa-cart-plus"></i>
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick="toggleWishlist('${p.id}')">
+            <i class="fa-solid fa-trash" style="color:var(--danger)"></i>
+          </button>
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {
+    container.innerHTML = '<p class="text-center color-danger">Error loading wishlist</p>';
+  }
 }
 
 // ====================================================
