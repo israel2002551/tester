@@ -5170,15 +5170,36 @@ async function showWishlistModal() {
       return;
     }
     
-    container.innerHTML = items.map(p => `
+    // --- FLASH SALE LOGIC ---
+    const now = new Date();
+    
+    container.innerHTML = items.map(p => {
+      const isFlashActive = p.flash_price && p.flash_end && new Date(p.flash_end) > now;
+      const displayPrice = isFlashActive ? p.flash_price : p.price;
+      
+      // Prepare object for addToCart
+      const cartItem = {
+        id: p.id,
+        name: p.name,
+        price: displayPrice,
+        image_url: p.image_url,
+        seller_id: p.seller_id,
+        profiles: p.profiles,
+        is_flash: isFlashActive
+      };
+
+      return `
       <div class="wishlist-item" style="display:flex; gap:12px; align-items:center; padding:10px; border-bottom:1px solid var(--border)">
         <img src="${p.image_url || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=100'}" style="width:60px; height:60px; border-radius:8px; object-fit:cover">
         <div style="flex:1">
           <div class="font-600 text-sm">${escHtml(p.name)}</div>
-          <div class="color-green font-bold text-sm">₦${fmtNum(p.price)}</div>
+          <div class="color-green font-bold text-sm">
+             ${isFlashActive ? `<span style="color:var(--red); font-size:0.7rem">⚡</span> ` : ''}
+             ₦${fmtN(displayPrice)}
+          </div>
         </div>
         <div style="display:flex; gap:5px">
-          <button class="btn btn-outline btn-sm" onclick="addToCart(${JSON.stringify({id:p.id,name:p.name,price:p.price,image_url:p.image_url,seller_id:p.seller_id}).replace(/"/g,'&quot;')})">
+          <button class="btn btn-outline btn-sm" onclick="addToCart(${JSON.stringify(cartItem).replace(/"/g,'&quot;')})">
             <i class="fa-solid fa-cart-plus"></i>
           </button>
           <button class="btn btn-ghost btn-sm" onclick="toggleWishlist('${p.id}')">
@@ -5186,7 +5207,7 @@ async function showWishlistModal() {
           </button>
         </div>
       </div>
-    `).join('');
+    `}).join('');
   } catch(e) {
     container.innerHTML = '<p class="text-center color-danger">Error loading wishlist</p>';
   }
