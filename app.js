@@ -102,9 +102,6 @@ const db = window.supabase.createClient(SB_URL, SB_KEY, {
     detectSessionInUrl: true,
     storage:            window.localStorage
   }
-  db: {
-    schema: 'public' // If you keep getting this error, adding this line often helps
-  }
 });
 
 // ====================================================
