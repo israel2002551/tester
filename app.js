@@ -812,10 +812,20 @@ function prodCard(p) {
   const isFlashActive = p.flash_price && p.flash_end && new Date(p.flash_end) > now;
   const displayPrice = isFlashActive ? p.flash_price : p.price;
   
-  // Calculate discount dynamically based on which price is active
   const discount = p.original_price > displayPrice 
     ? Math.round((1 - displayPrice / p.original_price) * 100) 
     : 0;
+
+  // Prepare the object for the cart
+  const cartItem = {
+    id: p.id,
+    name: p.name,
+    price: displayPrice, // This is the crucial part
+    image_url: p.image_url,
+    seller_id: p.seller_id,
+    profiles: p.profiles,
+    is_flash: isFlashActive // Add this so Checkout knows it's a sale item
+  };
   // ------------------------
 
   const stockPct = p.stock_quantity !== undefined ? p.stock_quantity : 999;
@@ -838,7 +848,7 @@ function prodCard(p) {
       ${badges ? `<div class="prod-flags">${badges}</div>` : ''}
       ${isSoldOut 
         ? `<div class="prod-sold-overlay"><span class="prod-sold-label">SOLD OUT</span></div>` 
-        : `<button class="prod-quick-add" onclick="event.stopPropagation();addToCart(${JSON.stringify({id:p.id,name:p.name,price:displayPrice,image_url:p.image_url,seller_id:p.seller_id,profiles:p.profiles}).replace(/"/g,'&quot;')})" aria-label="Add to cart"><i class="fa-solid fa-cart-plus"></i></button>`
+        : `<button class="prod-quick-add" onclick="event.stopPropagation();addToCart(${JSON.stringify(cartItem).replace(/"/g,'&quot;')})" aria-label="Add to cart"><i class="fa-solid fa-cart-plus"></i></button>`
       }
     </div>
     <div class="prod-body">
@@ -850,7 +860,7 @@ function prodCard(p) {
       <div class="prod-rating-row"><span class="stars sm">${stars}</span><span class="text-xs color-text3">${p.avg_rating ? p.avg_rating.toFixed(1) : '5.0'} (${p.review_count||0})</span></div>
       <div class="prod-location"><i class="fa-solid fa-map-marker-alt" style="font-size:.6rem"></i>${escHtml(p.location||'Nigeria')}</div>
       <a class="prod-store-link" onclick="event.stopPropagation();viewStorefront('${p.seller_id}')"><i class="fa-solid fa-store" style="font-size:.6rem"></i>${escHtml(p.profiles?.name||'Seller')}</a>
-      ${!isSoldOut ? `<button class="prod-mobile-add" onclick="event.stopPropagation();addToCart(${JSON.stringify({id:p.id,name:p.name,price:displayPrice,image_url:p.image_url,seller_id:p.seller_id,profiles:p.profiles}).replace(/"/g,'&quot;')})"><i class="fa-solid fa-cart-plus"></i> Add to Cart</button>` : ''}
+      ${!isSoldOut ? `<button class="prod-mobile-add" onclick="event.stopPropagation();addToCart(${JSON.stringify(cartItem).replace(/"/g,'&quot;')})"><i class="fa-solid fa-cart-plus"></i> Add to Cart</button>` : ''}
     </div>
   </div>`;
 }
@@ -1032,20 +1042,7 @@ async function openProduct(id) {
   
   const origEl = document.getElementById('modal-orig-price');
   const discEl = document.getElementById('modal-discount');
-
-// Add this inside your openProduct(id) function
-function updateModalWishBtn() {
-  const btn = document.getElementById('modal-wishlist-btn');
-  if (!btn || !currentProd) return;
   
-  const isSaved = wishlist.includes(currentProd.id);
-  btn.onclick = (e) => toggleWishlist(currentProd.id, e);
-  btn.innerHTML = isSaved 
-    ? '<i class="fa-solid fa-heart" style="color:var(--danger)"></i>' 
-    : '<i class="fa-regular fa-heart"></i>';
-}
-  
-  // Use displayPrice for discount calculation
   if (p.original_price > displayPrice) {
     origEl.textContent = fmtN(p.original_price);
     discEl.textContent = `-${Math.round((1 - displayPrice / p.original_price) * 100)}%`;
@@ -1064,9 +1061,14 @@ function updateModalWishBtn() {
   sb.className = `badge ${stock===0?'badge-red':stock<=5?'badge-gold':'badge-green'}`;
   
   document.getElementById('modal-cart-btn').disabled = stock === 0;
-  // Update the Add to Cart button to use the flash price
+  
+  // Set the correct price for the cart
   document.getElementById('modal-cart-btn').onclick = () => {
-    addToCart({ ...p, price: displayPrice });
+    addToCart({ 
+      ...p, 
+      price: displayPrice, 
+      is_flash: isFlashActive // Useful for checkout logic
+    });
     closeModal('product-modal');
   };
   
@@ -1085,11 +1087,11 @@ function updateModalWishBtn() {
   if (p.seller_verified) flags.push('<span class="prod-badge prod-badge-verified">✓ Verified</span>');
   document.getElementById('modal-flags').innerHTML = flags.join('');
   
+  // Update wishlist and analytics
   updateModalWishBtn();
   loadProductReviews(id);
   trackAnalytics({ event_type: 'product_view', product_id: p.id, seller_id: p.seller_id });
 }
-
 
                  
 async function loadProductReviews(productId) {
@@ -1192,10 +1194,31 @@ function saveCart() { localStorage.setItem('bs_cart', JSON.stringify(cart)); upd
 
 function addToCart(prod) {
   if (!prod?.id) return;
+
   const existing = cart.find(c => c.id === prod.id);
-  if (existing) { existing.qty = (existing.qty || 1) + 1; } else { cart.push({...prod, qty: 1}); }
+
+  if (existing) {
+    // Increment quantity
+    existing.qty = (existing.qty || 1) + 1;
+    
+    // IMPORTANT: Update the price to the current one passed in (in case it changed)
+    // This ensures if a user adds a flash sale item, the price is locked correctly.
+    existing.price = prod.price; 
+    existing.is_flash = prod.is_flash; 
+  } else {
+    // Add new item with the provided price (which is the flash price if active)
+    cart.push({ ...prod, qty: 1 });
+  }
+
   saveCart();
-  trackAnalytics({ event_type: 'add_to_cart', product_id: prod.id, seller_id: prod.seller_id, amount: prod.price || 0 });
+  
+  trackAnalytics({ 
+    event_type: 'add_to_cart', 
+    product_id: prod.id, 
+    seller_id: prod.seller_id, 
+    amount: prod.price || 0 
+  });
+  
   toast('Added to Cart!', prod.name, 'success', 2000);
 }
 
