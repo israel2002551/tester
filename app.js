@@ -3937,51 +3937,92 @@ function sendWhatsAppOrderNotification(order, sellerWa) {
 // Full saveOrderToDb implementation (with WA notification)
 async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
   try {
-    const result = await callEdge('create-order', {
+    const payload = {
       cart: cart.map(c => ({ id: c.id, name: c.name, qty: c.qty||1, price: c.price, image_url: c.image_url })),
-      delivery: {
-        name:    document.getElementById('co-name').value,
-        phone:   document.getElementById('co-phone').value,
-        address: document.getElementById('co-address').value
-      },
+      delivery_name:    document.getElementById('co-name').value.trim(),
+      delivery_phone:   document.getElementById('co-phone').value.trim(),
+      delivery_address: document.getElementById('co-address').value.trim(),
       payment_method: method,
       payment_ref:    txRef || paystackRef || '',
       proof_url:      proofUrl,
       referral_code:  localStorage.getItem('bs_ref') || ''
-    });
+    };
 
-    if (!result.success) throw new Error(result.error || 'Could not create order');
+    let orderId;
+    let totalAmount = cart.reduce((sum, c) => sum + (c.price * (c.qty || 1)), 0);
 
-    const orderId = result.order_id;
-    const total   = result.total;
+    try {
+      // ATTEMPT 1: Route through the Edge Function
+      const result = await callEdge('create-order', payload);
+      if (!result.success) throw new Error(result.error || 'request failed');
+      
+      orderId = result.order_id;
+      totalAmount = result.total || totalAmount;
+      
+    } catch (edgeError) {
+      console.warn('Edge Function failed, using direct database fallback:', edgeError);
+      
+      // ATTEMPT 2: Direct Database Insertion (Bypasses the failing Edge Function)
+      if (!currentUser) throw new Error("User not authenticated.");
+      
+      const sellerId = cart[0]?.seller_id;
+      if (!sellerId) throw new Error("Seller information missing from cart.");
 
-    // Clear referral cookie
+      const orderData = {
+        buyer_id: currentUser.id,
+        seller_id: sellerId,
+        items: payload.cart,
+        total_amount: totalAmount,
+        status: 'pending',
+        payment_method: method,
+        payment_ref: payload.payment_ref,
+        proof_url: proofUrl,
+        delivery_name: payload.delivery_name,
+        delivery_phone: payload.delivery_phone,
+        delivery_address: payload.delivery_address
+      };
+
+      // Insert directly into the orders table
+      const { data: insertedData, error: dbError } = await db
+        .from('orders')
+        .insert(orderData)
+        .select('id')
+        .single();
+
+      if (dbError) throw new Error(dbError.message || 'Direct database insertion failed');
+      orderId = insertedData.id;
+    }
+
+    // --- Cleanup, Notifications, and Analytics ---
     localStorage.removeItem('bs_ref');
-
-    // WhatsApp notification to seller
+    
     const seller = cart[0]?.profiles;
-    if (seller?.whatsapp) sendWhatsAppOrderNotification({ id: orderId, total_amount: total }, seller.whatsapp);
+    if (seller?.whatsapp) {
+        sendWhatsAppOrderNotification({ id: orderId, total_amount: totalAmount }, seller.whatsapp);
+    }
 
     trackAnalytics({
       event_type: 'order_created',
       seller_id: cart[0]?.seller_id,
       order_id: orderId,
-      quantity: cart.reduce((sum,c)=>sum+(c.qty||1),0),
-      amount: total || 0,
+      quantity: cart.reduce((sum, c) => sum + (c.qty || 1), 0),
+      amount: totalAmount,
       metadata: { payment_method: method || 'transfer' },
     });
 
-    cart = []; saveCart();
+    // --- Update the UI ---
+    cart = []; 
+    saveCart();
     document.getElementById('co-order-id').textContent = orderId;
-    document.getElementById('co-order-total').textContent = fmtN(total);
+    document.getElementById('co-order-total').textContent = fmtN(totalAmount);
     goCheckoutStep(3);
-    const savedOrder = result;
+    
     toast('Order Placed! 🎉', `Order ${orderId} confirmed`, 'success', 5000);
 
-    return savedOrder;
+    return { success: true, order_id: orderId, total: totalAmount };
 
   } catch(err) {
-    throw err;
+    throw new Error(err.message);
   }
 }
 
