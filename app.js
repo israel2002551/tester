@@ -807,33 +807,50 @@ function renderProducts(prods) {
 }
 
 function prodCard(p) {
-  const discount = p.original_price && p.original_price > p.price ? Math.round((1 - p.price/p.original_price)*100) : 0;
+  // --- FLASH SALE LOGIC ---
+  const now = new Date();
+  const isFlashActive = p.flash_price && p.flash_end && new Date(p.flash_end) > now;
+  const displayPrice = isFlashActive ? p.flash_price : p.price;
+  
+  // Calculate discount dynamically based on which price is active
+  const discount = p.original_price > displayPrice 
+    ? Math.round((1 - displayPrice / p.original_price) * 100) 
+    : 0;
+  // ------------------------
+
   const stockPct = p.stock_quantity !== undefined ? p.stock_quantity : 999;
   const isSoldOut = stockPct === 0;
+
   const badges = [
-    discount ? `<span class="prod-badge prod-badge-discount">-${discount}%</span>` : '',
+    isFlashActive ? `<span class="prod-badge" style="background:var(--red); color:#fff;">⚡ Flash</span>` : '',
+    discount && !isFlashActive ? `<span class="prod-badge prod-badge-discount">-${discount}%</span>` : '',
     p.has_video ? `<span class="prod-badge prod-badge-video">🎬 Video</span>` : '',
     p.category === 'dropship' ? `<span class="prod-badge prod-badge-drop">Dropship</span>` : '',
     p.seller_verified ? `<span class="prod-badge prod-badge-verified">✓ Verified</span>` : ''
   ].filter(Boolean).join('');
-  const stars = p.avg_rating ? '★'.repeat(Math.round(p.avg_rating)) + '☆'.repeat(5-Math.round(p.avg_rating)) : '★★★★★';
+
+  const stars = p.avg_rating ? '★'.repeat(Math.round(p.avg_rating)) + '☆'.repeat(5 - Math.round(p.avg_rating)) : '★★★★★';
+
   return `
   <div class="prod-card" onclick="openProduct('${p.id}')">
     <div class="prod-img-wrap">
-      <img src="${p.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=400&fit=crop'}" alt="${escHtml(p.name)}" loading="lazy">
+      <img src="${p.image_url || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=400&fit=crop'}" alt="${escHtml(p.name)}" loading="lazy">
       ${badges ? `<div class="prod-flags">${badges}</div>` : ''}
-      ${isSoldOut ? `<div class="prod-sold-overlay"><span class="prod-sold-label">SOLD OUT</span></div>` : `<button class="prod-quick-add" onclick="event.stopPropagation();addToCart(${JSON.stringify({id:p.id,name:p.name,price:p.price,image_url:p.image_url,seller_id:p.seller_id,profiles:p.profiles}).replace(/"/g,'&quot;')})" aria-label="Add to cart"><i class="fa-solid fa-cart-plus"></i></button>`}
+      ${isSoldOut 
+        ? `<div class="prod-sold-overlay"><span class="prod-sold-label">SOLD OUT</span></div>` 
+        : `<button class="prod-quick-add" onclick="event.stopPropagation();addToCart(${JSON.stringify({id:p.id,name:p.name,price:displayPrice,image_url:p.image_url,seller_id:p.seller_id,profiles:p.profiles}).replace(/"/g,'&quot;')})" aria-label="Add to cart"><i class="fa-solid fa-cart-plus"></i></button>`
+      }
     </div>
     <div class="prod-body">
       <div class="prod-name">${escHtml(p.name)}</div>
       <div class="prod-price-row">
-        <span class="prod-price">${fmtN(p.price)}</span>
-        ${p.original_price>p.price ? `<span class="prod-orig">${fmtN(p.original_price)}</span>` : ''}
+        <span class="prod-price">${fmtN(displayPrice)}</span>
+        ${p.original_price > displayPrice ? `<span class="prod-orig">${fmtN(p.original_price)}</span>` : ''}
       </div>
       <div class="prod-rating-row"><span class="stars sm">${stars}</span><span class="text-xs color-text3">${p.avg_rating ? p.avg_rating.toFixed(1) : '5.0'} (${p.review_count||0})</span></div>
       <div class="prod-location"><i class="fa-solid fa-map-marker-alt" style="font-size:.6rem"></i>${escHtml(p.location||'Nigeria')}</div>
       <a class="prod-store-link" onclick="event.stopPropagation();viewStorefront('${p.seller_id}')"><i class="fa-solid fa-store" style="font-size:.6rem"></i>${escHtml(p.profiles?.name||'Seller')}</a>
-      ${!isSoldOut ? `<button class="prod-mobile-add" onclick="event.stopPropagation();addToCart(${JSON.stringify({id:p.id,name:p.name,price:p.price,image_url:p.image_url,seller_id:p.seller_id,profiles:p.profiles}).replace(/"/g,'&quot;')})"><i class="fa-solid fa-cart-plus"></i> Add to Cart</button>` : ''}
+      ${!isSoldOut ? `<button class="prod-mobile-add" onclick="event.stopPropagation();addToCart(${JSON.stringify({id:p.id,name:p.name,price:displayPrice,image_url:p.image_url,seller_id:p.seller_id,profiles:p.profiles}).replace(/"/g,'&quot;')})"><i class="fa-solid fa-cart-plus"></i> Add to Cart</button>` : ''}
     </div>
   </div>`;
 }
@@ -5485,15 +5502,51 @@ async function loadFlashSaleProducts() {
 
 async function createFlashSale() {
   if (!currentUser) return;
+  
   const productId = document.getElementById('flash-product')?.value;
   const flashPrice = parseFloat(document.getElementById('flash-price')?.value) || 0;
   const hours = parseInt(document.getElementById('flash-hours')?.value) || 24;
-  if (!productId || !flashPrice) { toast('Missing info', 'Select a product and set a sale price', 'warn'); return; }
+  
+  if (!productId || !flashPrice) { 
+    toast('Missing info', 'Select a product and set a sale price', 'warn'); 
+    return; 
+  }
+
+  const btn = event.target.closest('button');
+  const oldHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Saving...';
+
   try {
+    // 1. Calculate end time
     const flashEnd = new Date(Date.now() + hours * 3600000).toISOString();
-    await db.from('products').update({ flash_price: flashPrice, flash_end: flashEnd }).eq('id', productId).eq('seller_id', currentUser.id);
+    
+    // 2. Update the database
+    const { error } = await db.from('products')
+      .update({ 
+        flash_price: flashPrice, 
+        flash_end: flashEnd 
+      })
+      .eq('id', productId)
+      .eq('seller_id', currentUser.id);
+
+    if (error) throw error;
+
     toast('Flash Sale Live! ⚡', `Sale ends in ${hours} hours`, 'success');
-  } catch(e) { toast('Error', e.message, 'error'); }
+    
+    // 3. Clear the form
+    document.getElementById('flash-price').value = '';
+    
+    // 4. IMPORTANT: Refresh product state so the UI updates globally
+    await loadProducts(); // Refresh buyer view
+    await loadSellerProds(); // Refresh seller dashboard list
+
+  } catch(e) { 
+    toast('Error', e.message, 'error'); 
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = oldHtml;
+  }
 }
 
 // ====================================================
