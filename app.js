@@ -102,6 +102,9 @@ const db = window.supabase.createClient(SB_URL, SB_KEY, {
     detectSessionInUrl: true,
     storage:            window.localStorage
   }
+  db: {
+    schema: 'public' // If you keep getting this error, adding this line often helps
+  }
 });
 
 // ====================================================
@@ -1640,7 +1643,7 @@ async function loadBuyerOrders() {
   if (!currentUser) { document.getElementById('buyer-orders-empty').classList.remove('hidden'); document.getElementById('buyer-orders-skeleton').classList.add('hidden'); return; }
   document.getElementById('buyer-orders-skeleton').classList.remove('hidden');
   document.getElementById('buyer-orders-list').classList.add('hidden');
-  const { data: orders } = await db.from('orders').select('*').eq('buyer_id', currentUser.id).order('created_at',{ascending:false});
+  const { data: orders } = await db.from('orders').select('id, status, total_amount, created_at, delivery_name, delivery_address, items, payment_method, proof_url, seller_id, buyer_id').eq('buyer_id', currentUser.id).order('created_at',{ascending:false});
   document.getElementById('buyer-orders-skeleton').classList.add('hidden');
   const list = document.getElementById('buyer-orders-list');
   if (!orders?.length) { document.getElementById('buyer-orders-empty').classList.remove('hidden'); return; }
@@ -2767,39 +2770,51 @@ function copyRef() {
 }
 
 async function loadFlashSaleProducts() {
-  if (!currentUser) return;
+  if (!currentUser) {
+    console.warn("Flash Sale: No current user");
+    return;
+  }
   
   const selectEl = document.getElementById('flash-product');
-  if (!selectEl) return;
+  if (!selectEl) {
+    console.error("Flash Sale: Element #flash-product not found in DOM");
+    return;
+  }
   
-  // Clear existing options first
-  selectEl.innerHTML = '<option value="">Loading...</option>';
+  selectEl.innerHTML = '<option value="">Loading products...</option>';
   
   try {
+    console.log("Fetching active products for seller:", currentUser.id);
+    
+    // We add a manual check for the status column to ensure it matches your DB
     const { data: products, error } = await db.from('products')
-      .select('id, name, price')
+      .select('id, name, price, status')
       .eq('seller_id', currentUser.id)
       .eq('status', 'active');
       
-    if (error) throw error;
+    if (error) {
+      console.error("Supabase Query Error:", error);
+      throw error;
+    }
     
-    // Check if products exist and is an array
+    console.log("Products found:", products);
+    
     if (!products || products.length === 0) {
       selectEl.innerHTML = '<option value="">No active products found</option>';
       return;
     }
     
-    // Map the data
-    const options = products.map(p => 
+    // Build options
+    let options = products.map(p => 
       `<option value="${p.id}">${escHtml(p.name)} (${fmtN(p.price)})</option>`
     ).join('');
     
     selectEl.innerHTML = '<option value="">Select a product...</option>' + options;
       
   } catch(e) {
-    console.error("Flash Sale Load Error:", e);
-    selectEl.innerHTML = '<option value="">Error loading products</option>';
-    toast('Error', 'Could not load products for flash sales', 'error');
+    console.error("Critical Flash Sale Load Error:", e);
+    selectEl.innerHTML = '<option value="">Load Failed (Check Console)</option>';
+    toast('Error', 'Check console for DB query error', 'error');
   }
 }
 
