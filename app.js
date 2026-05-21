@@ -708,7 +708,7 @@ function showDash(section) {
   if (section === 'advertise') loadSellerAds();
   if (section === 'coupons') { 
     loadSellerCoupons(); 
-    loadFlashSaleProducts(); 
+    loadFlashSaleProducts();
 }
   if (section === 'analytics') loadSellerAnalytics();
 }
@@ -1015,6 +1015,8 @@ async function openProduct(id) {
   trackAnalytics({ event_type: 'product_view', product_id: p.id, seller_id: p.seller_id });
 }
 
+
+                 
 async function loadProductReviews(productId) {
   let { data, error } = await db.from('reviews').select('*,profiles!reviewer_id(name)').eq('product_id', productId).order('created_at', { ascending: false }).limit(10);
   if (error) {
@@ -2725,7 +2727,7 @@ function renderAffiliateSection() {
     <p class="dash-page-sub">Invite sellers, track conversions, and prepare payout-ready referral earnings.</p>
     <div class="referral-box mb-4">
       <div class="flex justify-between items-start gap-3 wrap">
-        <div><h3 style="color:#fff;margin-bottom:.28rem">Refer sellers and earn ₦500</h3><p style="color:rgba(255,255,255,.68);font-size:.84rem;max-width:620px">Share your link with business owners. You earn when a referred seller activates their store.</p></div>
+        <div><h3 style="color:#fff;margin-bottom:.28rem">Refer sellers and earn ₦5,000</h3><p style="color:rgba(255,255,255,.68);font-size:.84rem;max-width:620px">Share your link with business owners. You earn when a referred seller activates their store.</p></div>
         <span class="badge badge-gold">Seller activation reward</span>
       </div>
       <div class="referral-input-row" style="margin-top:1.25rem">
@@ -2748,7 +2750,7 @@ function renderAffiliateSection() {
     </div>
     <div class="dash-two-col mb-4">
       <div class="card card-pad"><h3 class="mb-3">Referral Toolkit</h3><div class="affiliate-tool-list"><button onclick="copyReferralMessage()"><i class="fa-solid fa-copy"></i><span>Copy invite message</span></button><button onclick="downloadReferralQr()"><i class="fa-solid fa-qrcode"></i><span>Open QR code</span></button><button onclick="showDash('advertise')"><i class="fa-solid fa-bullhorn"></i><span>Promote your offer</span></button></div></div>
-      <div class="card card-pad"><h3 class="mb-3">Payout Readiness</h3><div class="affiliate-payout-box"><div><span>Minimum payout</span><strong>₦500</strong></div><div><span>Bank account</span><strong id="aff-bank-status">Not set</strong></div></div><button class="btn btn-primary btn-full mt-3" onclick="requestAffiliatePayout()"><i class="fa-solid fa-wallet"></i> Request Affiliate Payout</button></div>
+      <div class="card card-pad"><h3 class="mb-3">Payout Readiness</h3><div class="affiliate-payout-box"><div><span>Minimum payout</span><strong>₦5,000</strong></div><div><span>Bank account</span><strong id="aff-bank-status">Not set</strong></div></div><button class="btn btn-primary btn-full mt-3" onclick="requestAffiliatePayout()"><i class="fa-solid fa-wallet"></i> Request Affiliate Payout</button></div>
     </div>
     <div class="card card-pad mb-4"><h3 class="mb-3">External Programs</h3><div class="affiliate-program-grid">
       <div class="affiliate-program-card"><i class="fa-brands fa-amazon" style="color:#f90"></i><strong>Amazon</strong><span>Track imported product links manually.</span><button class="btn btn-outline btn-sm" onclick="connectAffiliateProgram('Amazon')">Add Program</button></div>
@@ -2764,6 +2766,43 @@ function copyRef() {
   navigator.clipboard.writeText(link).then(()=>toast('Referral Link Copied!','Share to earn ₦500 per referral','success'));
 }
 
+async function loadFlashSaleProducts() {
+  if (!currentUser) return;
+  
+  const selectEl = document.getElementById('flash-product');
+  if (!selectEl) return;
+  
+  // Clear existing options first
+  selectEl.innerHTML = '<option value="">Loading...</option>';
+  
+  try {
+    const { data: products, error } = await db.from('products')
+      .select('id, name, price')
+      .eq('seller_id', currentUser.id)
+      .eq('status', 'active');
+      
+    if (error) throw error;
+    
+    // Check if products exist and is an array
+    if (!products || products.length === 0) {
+      selectEl.innerHTML = '<option value="">No active products found</option>';
+      return;
+    }
+    
+    // Map the data
+    const options = products.map(p => 
+      `<option value="${p.id}">${escHtml(p.name)} (${fmtN(p.price)})</option>`
+    ).join('');
+    
+    selectEl.innerHTML = '<option value="">Select a product...</option>' + options;
+      
+  } catch(e) {
+    console.error("Flash Sale Load Error:", e);
+    selectEl.innerHTML = '<option value="">Error loading products</option>';
+    toast('Error', 'Could not load products for flash sales', 'error');
+  }
+}
+
 async function loadAffiliateData() {
   if (!currentUser) return;
   ensureGrowthSections();
@@ -2776,7 +2815,7 @@ async function loadAffiliateData() {
   const { data, error } = await db.from('referrals').select('*').eq('referrer_id', currentUser.id).order('created_at', { ascending:false });
   if (!error) refs = data || [];
   const earned = (refs||[]).filter(r=>r.paid).reduce((s,r)=>s+(r.amount||500),0);
-  const pending = (refs||[]).filter(r=>!r.paid).reduce((s,r)=>s+(r.amount||500),0);
+  const pending = (refs||[]).filter(r=>!r.paid).reduce((s,r)=>s+(r.amount||5000),0);
   const trackedClicks = Number(localStorage.getItem(`bs_aff_clicks_${currentUser.id}`) || '0');
   document.getElementById('aff-total').textContent = fmtN(earned);
   document.getElementById('aff-pending').textContent = fmtN(pending);
@@ -2841,7 +2880,7 @@ function connectAffiliateProgram(name) {
 function requestAffiliatePayout() {
   const pending = parseFloat((document.getElementById('aff-pending')?.textContent || '0').replace(/[^\d.]/g,'')) || 0;
   if (!currentUser?.profile?.account_number) { toast('Bank Details Needed', 'Add your bank account in Store Settings first.', 'warn'); showDash('settings'); return; }
-  if (pending < 500) { toast('Not Ready Yet', 'Minimum affiliate payout is ₦500.', 'warn'); return; }
+  if (pending < 5000) { toast('Not Ready Yet', 'Minimum affiliate payout is ₦5,000.', 'warn'); return; }
   document.getElementById('wd-amount').value = pending;
   showDash('withdrawals');
   toast('Payout Prepared', 'Review and submit your withdrawal request.', 'info');
@@ -5375,6 +5414,44 @@ function removeCoupon() {
 // ====================================================
 //  FLASH SALES
 // ====================================================
+
+async function loadFlashSaleProducts() {
+  if (!currentUser) return;
+  
+  const selectEl = document.getElementById('flash-product');
+  if (!selectEl) return;
+  
+  // Clear existing options first
+  selectEl.innerHTML = '<option value="">Loading...</option>';
+  
+  try {
+    const { data: products, error } = await db.from('products')
+      .select('id, name, price')
+      .eq('seller_id', currentUser.id)
+      .eq('status', 'active');
+      
+    if (error) throw error;
+    
+    // Check if products exist and is an array
+    if (!products || products.length === 0) {
+      selectEl.innerHTML = '<option value="">No active products found</option>';
+      return;
+    }
+    
+    // Map the data
+    const options = products.map(p => 
+      `<option value="${p.id}">${escHtml(p.name)} (${fmtN(p.price)})</option>`
+    ).join('');
+    
+    selectEl.innerHTML = '<option value="">Select a product...</option>' + options;
+      
+  } catch(e) {
+    console.error("Flash Sale Load Error:", e);
+    selectEl.innerHTML = '<option value="">Error loading products</option>';
+    toast('Error', 'Could not load products for flash sales', 'error');
+  }
+}
+
 async function createFlashSale() {
   if (!currentUser) return;
   const productId = document.getElementById('flash-product')?.value;
