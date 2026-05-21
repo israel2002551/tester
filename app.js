@@ -1008,7 +1008,15 @@ async function openProduct(id) {
   currentProd = products.find(p => p.id === id);
   if (!currentProd) return;
   const p = currentProd;
+  
+  // --- FLASH SALE LOGIC ---
+  const now = new Date();
+  const isFlashActive = p.flash_price && p.flash_end && new Date(p.flash_end) > now;
+  const displayPrice = isFlashActive ? p.flash_price : p.price;
+  // ------------------------
+
   showModal('product-modal');
+  
   // Gallery
   const main = document.getElementById('gallery-main');
   if (p.has_video && p.video_url) {
@@ -1016,37 +1024,56 @@ async function openProduct(id) {
   } else {
     main.innerHTML = `<img src="${p.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=600'}" alt="${escHtml(p.name)}" loading="lazy" style="width:100%;height:100%;object-fit:contain">`;
   }
+  
   // Info
   document.getElementById('modal-prod-name').textContent = p.name;
-  document.getElementById('modal-price').textContent = fmtN(p.price);
+  document.getElementById('modal-price').textContent = fmtN(displayPrice);
   document.getElementById('modal-desc').textContent = p.description || '';
+  
   const origEl = document.getElementById('modal-orig-price');
   const discEl = document.getElementById('modal-discount');
-  if (p.original_price > p.price) {
+  
+  // Use displayPrice for discount calculation
+  if (p.original_price > displayPrice) {
     origEl.textContent = fmtN(p.original_price);
-    discEl.textContent = `-${Math.round((1-p.price/p.original_price)*100)}%`;
+    discEl.textContent = `-${Math.round((1 - displayPrice / p.original_price) * 100)}%`;
     discEl.classList.remove('hidden');
-  } else { origEl.textContent=''; discEl.classList.add('hidden'); }
+  } else { 
+    origEl.textContent = ''; 
+    discEl.classList.add('hidden'); 
+  }
+
   document.getElementById('modal-condition').textContent = p.condition || 'New';
   document.getElementById('modal-location').textContent = p.location || 'Nigeria';
+  
   const stock = p.stock_quantity;
   const sb = document.getElementById('modal-stock-badge');
   sb.textContent = stock === 0 ? 'Sold Out' : stock <= 5 ? `Only ${stock} left!` : 'In Stock';
   sb.className = `badge ${stock===0?'badge-red':stock<=5?'badge-gold':'badge-green'}`;
+  
   document.getElementById('modal-cart-btn').disabled = stock === 0;
+  // Update the Add to Cart button to use the flash price
+  document.getElementById('modal-cart-btn').onclick = () => {
+    addToCart({ ...p, price: displayPrice });
+    closeModal('product-modal');
+  };
+  
   document.getElementById('modal-negotiable-note').classList.toggle('hidden', !p.negotiable);
+  
   // Seller
   const seller = p.profiles || {};
   document.getElementById('modal-seller-name').textContent = seller.name || 'Seller';
   document.getElementById('modal-seller-email').textContent = `WhatsApp: ${seller.whatsapp||'N/A'}`;
   document.getElementById('modal-seller-avatar').textContent = (seller.name||'S')[0].toUpperCase();
+  
   // Flags
   const flags = [];
+  if (isFlashActive) flags.push('<span class="prod-badge" style="background:var(--red);color:#fff">⚡ Flash Sale</span>');
   if (p.has_video) flags.push('<span class="prod-badge prod-badge-video">🎬 Video</span>');
   if (p.seller_verified) flags.push('<span class="prod-badge prod-badge-verified">✓ Verified</span>');
   document.getElementById('modal-flags').innerHTML = flags.join('');
+  
   updateModalWishBtn();
-  // Reviews
   loadProductReviews(id);
   trackAnalytics({ event_type: 'product_view', product_id: p.id, seller_id: p.seller_id });
 }
