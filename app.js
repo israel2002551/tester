@@ -718,6 +718,25 @@ function setMobActive(btn) {
   btn.classList.add('active');
 }
 
+function renderWithdrawalHistory(withdrawals) {
+  const tbody = document.getElementById('wd-history');
+  if (!tbody) return;
+  
+  if (!withdrawals || withdrawals.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:1rem;color:var(--text3)">No withdrawal history yet</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = withdrawals.map(w => `
+    <tr>
+      <td>${fmtDate(w.created_at)}</td>
+      <td class="font-bold">${fmtN(w.amount)}</td>
+      <td><span class="badge ${w.status === 'paid' ? 'badge-green' : 'badge-gold'}">${w.status}</span></td>
+      <td class="text-xs color-text3">${w.id?.substr(0,8) || '—'}</td>
+    </tr>
+  `).join('');
+}
+
 // ====================================================
 //  SIDEBAR (MOBILE)
 // ====================================================
