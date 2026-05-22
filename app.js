@@ -1694,26 +1694,37 @@ function previewAdMedia(input) {
   const container = document.getElementById('ad-media-preview-container');
   const el = document.getElementById('ad-preview-el');
   if (!file || !container || !el) return;
-  const maxBytes = file.type.startsWith('video/') ? 50 * 1024 * 1024 : 8 * 1024 * 1024;
-  if (!file.type.startsWith('image/') && file.type !== 'video/mp4') {
+
+  // 1. Validation: Allow all image and all video types
+  const isImage = file.type.startsWith('image/');
+  const isVideo = file.type.startsWith('video/');
+
+  if (!isImage && !isVideo) {
     input.value = '';
-    toast('Unsupported file', 'Upload a JPG, PNG, WebP, or MP4 file.', 'warn');
+    toast('Unsupported file', 'Upload a valid image or video file.', 'warn');
     return;
   }
-  if (file.size > maxBytes) {
+
+  // 2. Validation: Apply 50MB limit to all media
+  const MAX_SIZE = 50 * 1024 * 1024;
+  if (file.size > MAX_SIZE) {
     input.value = '';
-    toast('File too large', file.type.startsWith('video/') ? 'Videos must be 50MB or less.' : 'Images must be 8MB or less.', 'warn');
+    toast('File too large', 'Media must be 50MB or less.', 'warn');
     return;
   }
+
   container.classList.remove('hidden');
   document.getElementById('ad-media-zone')?.classList.add('has-file');
   const label = document.querySelector('#ad-media-zone .upload-label');
   if (label) label.textContent = file.name;
+
   const reader = new FileReader();
   reader.onload = (e) => {
-    if (file.type.startsWith('video/')) {
+    // If it's a video (of any type), use the <video> tag
+    if (isVideo) {
       el.innerHTML = `<video src="${e.target.result}" controls style="max-width:100%;max-height:200px;border-radius:8px"></video>`;
     } else {
+      // Otherwise, assume it's an image
       el.innerHTML = `<img src="${e.target.result}" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:contain">`;
     }
   };
