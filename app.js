@@ -5816,44 +5816,71 @@ async function trackAdStat(adId, type) {
 async function initiateAdPayment() {
   if (!currentUser) { showModal('auth-modal'); return; }
   if (!isPaystackReady()) return;
+
   const title = document.getElementById('ad-title')?.value.trim();
   const desc = document.getElementById('ad-desc')?.value.trim();
   const cta = document.getElementById('ad-cta-select')?.value || 'Learn More';
   const link = normalizeAdUrl(document.getElementById('ad-link')?.value);
   const file = document.getElementById('ad-media-file')?.files?.[0];
+
+  // --- VALIDATION BLOCK ---
   if (!title) { toast('Missing title', 'Enter an ad title', 'warn'); return; }
   if (title.length > 80) { toast('Title too long', 'Keep the title under 80 characters.', 'warn'); return; }
   if (!desc) { toast('Missing description', 'Add a short description for your ad.', 'warn'); return; }
   if (desc.length > 180) { toast('Description too long', 'Keep the description under 180 characters.', 'warn'); return; }
   if (!link) { toast('Invalid link', 'Enter a valid destination link.', 'warn'); return; }
-  if (!file) { toast('Media needed', 'Upload an image or MP4 video for the ad.', 'warn'); return; }
+  if (!file) { toast('Media needed', 'Upload an image or video for the ad.', 'warn'); return; }
+
+  // Allow ALL images and ALL video formats
+  const isImage = file.type.startsWith('image/');
+  const isVideo = file.type.startsWith('video/');
+  
+  if (!isImage && !isVideo) {
+    toast('Unsupported file', 'Please upload a valid image or video file.', 'warn');
+    return;
+  }
+
+  // 50MB Size Safeguard
+  const MAX_SIZE = 50 * 1024 * 1024; 
+  if (file.size > MAX_SIZE) {
+    toast('File too large', 'Please keep your ad media under 50MB.', 'warn');
+    return;
+  }
+  // -------------------------
 
   const btn = document.getElementById('ad-pay-btn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processing…';
 
   try {
     let mediaUrl = '';
-    if (file) {
-      const ext = file.name.split('.').pop();
-      const path = `ads/${currentUser.id}/${Date.now()}.${ext}`;
-      const { error: upErr } = await db.storage.from('uploads').upload(path, file, { contentType: file.type, upsert: false });
-      if (upErr) throw upErr;
-      const { data } = db.storage.from('uploads').getPublicUrl(path);
-      mediaUrl = data.publicUrl;
-    }
+    // Upload the file
+    const ext = file.name.split('.').pop().toLowerCase();
+    const path = `ads/${currentUser.id}/${Date.now()}.${ext}`;
+    
+    const { error: upErr } = await db.storage.from('uploads').upload(path, file, { 
+      contentType: file.type, 
+      upsert: false 
+    });
+    
+    if (upErr) throw upErr;
+    
+    const { data } = db.storage.from('uploads').getPublicUrl(path);
+    mediaUrl = data.publicUrl;
 
     const adData = {
       title,
       description: desc || '',
       media_url: mediaUrl,
-      media_type: file?.type?.startsWith('video/') ? 'video' : 'image',
+      media_type: isVideo ? 'video' : 'image',
       cta_text: cta,
       cta_link: link,
       advertiser_type: currentRole || 'seller'
     };
 
+    // Initialize Paystack payment
     const init = await callEdge('init-ad-payment', { amount: AD_PRICE_KOBO / 100 });
     if (!init?.access_code && !init?.reference) throw new Error('Could not initialize ad payment');
+    
     const reference = init.reference;
     openPaystackTransaction({
       key: PAYSTACK_PUBLIC_KEY,
@@ -5867,7 +5894,10 @@ async function initiateAdPayment() {
         try {
           const paidReference = await resolvePaystackReference(response, reference);
           await callEdge('verify-ad-payment', { reference: paidReference, adData });
+          
           toast('Ad Submitted', 'Payment verified. Your ad is now waiting for admin approval.', 'success');
+          
+          // Reset Form
           document.getElementById('ad-title').value = '';
           document.getElementById('ad-desc').value = '';
           document.getElementById('ad-link').value = 'https://buysell.ng/';
@@ -5876,10 +5906,10 @@ async function initiateAdPayment() {
           document.getElementById('ad-media-zone')?.classList.remove('has-file');
           const label = document.querySelector('#ad-media-zone .upload-label');
           if (label) label.textContent = 'Click to upload Media (Image or Video)';
+          
           loadSellerAds();
         } catch (err) {
-          const paidReference = await resolvePaystackReference(response, reference);
-          toast('Verification Failed', (err.message || 'Contact support') + ' Ref: ' + paidReference, 'error');
+          toast('Verification Failed', err.message || 'Contact support', 'error');
         } finally {
           btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Submit Ad';
         }
@@ -5894,7 +5924,6 @@ async function initiateAdPayment() {
     btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Submit Ad';
   }
 }
-
 function closeAdPopup() {
   document.getElementById('ad-popup-overlay')?.classList.add('hidden');
   sessionStorage.setItem('bs_ads_dismissed_until', String(Date.now() + 30 * 60 * 1000));
