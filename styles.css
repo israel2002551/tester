@@ -304,6 +304,23 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .order-history-item{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:1.1rem;margin-bottom:.7rem;transition:border-color .2s}
 .order-history-item:hover{border-color:var(--green)}
 .order-status-badge{padding:.28rem .72rem;border-radius:99px;font-size:.72rem;font-weight:700}
+.buyer-order-card{display:grid;gap:.85rem}
+.buyer-order-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.85rem;align-items:start}
+.buyer-order-title{min-width:0}
+.buyer-order-title .font-bold{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.buyer-order-total{display:flex;flex-direction:column;align-items:flex-end;gap:.35rem;text-align:right}
+.buyer-order-total strong{color:var(--green);font-size:1rem}
+.buyer-order-items{display:flex;flex-wrap:wrap;gap:.4rem;padding:.7rem;background:var(--cream);border:1px solid var(--border);border-radius:8px}
+.buyer-order-meta{font-size:.76rem;color:var(--text3);display:flex;gap:.4rem;align-items:center;min-width:0}
+.buyer-order-meta span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.buyer-order-actions{display:flex;flex-wrap:wrap;gap:.5rem}
+.buyer-order-actions .btn{min-height:34px}
+@media(max-width:520px){
+  .buyer-order-head{grid-template-columns:1fr}
+  .buyer-order-total{align-items:flex-start;text-align:left;flex-direction:row;justify-content:space-between}
+  .buyer-order-actions{display:grid;grid-template-columns:1fr 1fr}
+  .buyer-order-actions .btn{width:100%;justify-content:center}
+}
 
 /* Storefront view */
 #storefront-view{display:none;min-height:100vh}
