@@ -1845,16 +1845,22 @@ async function loadBuyerOrders() {
       const proofUrl = o.proof_url || o.payment_proof_url || '';
       const paymentMethod = o.payment_method ? ` · ${escHtml(o.payment_method)}` : '';
       return `
-    <div class="order-history-item">
-      <div class="flex justify-between items-center flex-wrap gap-2 mb-2">
-        <div><div class="font-bold">${escHtml(o.id)}</div><div class="text-xs color-text3">${fmtDate(o.created_at)}${paymentMethod}</div></div>
-        <div class="flex items-center gap-2">
+    <div class="order-history-item buyer-order-card">
+      <div class="buyer-order-head">
+        <div class="buyer-order-title">
+          <div class="font-bold">Order ${escHtml(String(o.id).slice(0, 10))}</div>
+          <div class="text-xs color-text3">${fmtDate(o.created_at)}${paymentMethod}</div>
+        </div>
+        <div class="buyer-order-total">
           <span class="badge ${statusColors[o.status]||'badge-gray'}">${escHtml(o.status || 'pending')}</span>
-          <span class="font-bold color-green">${fmtN(o.total_amount)}</span>
+          <strong>${fmtN(o.total_amount)}</strong>
         </div>
       </div>
-      <div class="flex gap-1 flex-wrap mb-2">${itemHtml}</div>
-      <div class="flex gap-2 flex-wrap">
+      <div class="buyer-order-items">${itemHtml}</div>
+      <div class="buyer-order-meta">
+        <span><i class="fa-solid fa-location-dot"></i> ${escHtml(o.delivery_address || 'Delivery address not saved')}</span>
+      </div>
+      <div class="buyer-order-actions">
         ${o.seller_id ? `<button class="btn btn-outline btn-sm" onclick="openConversation('${escAttr(o.seller_id)}','Seller','${escAttr(productId)}')"><i class="fa-solid fa-message"></i> Message Seller</button>` : ''}
         ${o.status==='delivered' && productId ? `<button class="btn btn-primary btn-sm" onclick="openReviewModal('${escAttr(productId)}','Purchased item','${escAttr(o.seller_id || '')}')"><i class="fa-solid fa-star"></i> Review</button>` : ''}
         ${o.status==='delivered'?`<button class="btn btn-outline btn-sm" onclick="openDisputeModal('${escAttr(o.id)}')"><i class="fa-solid fa-exclamation-triangle"></i> Dispute</button>`:''}
@@ -3103,17 +3109,25 @@ async function submitDisputeDirect(orderId, type, desc) {
   };
   const attempts = [
     { ...base, dispute_type: type, description: desc },
-    { ...base, type, description: desc },
-    { ...base, reason: type, message: desc },
-    { order_id: orderId, user_id: currentUser.id, dispute_type: type, description: desc, status: 'open' }
+    { ...base, dispute_type: type, message: desc },
+    { ...base, issue_type: type, details: desc },
+    { ...base, type, message: desc },
+    { ...base, reason: type, note: desc },
+    { order_id: orderId, user_id: currentUser.id, dispute_type: type, message: desc, status: 'open' },
+    { order_id: orderId, user_id: currentUser.id, type, status: 'open' }
   ];
   let lastError = null;
   for (const row of attempts) {
-    const { error } = await db.from('disputes').insert(row);
-    if (!error) return;
-    lastError = error;
-    const msg = (error.message || '').toLowerCase();
-    if (!msg.includes('column') && !msg.includes('schema cache')) break;
+    const cleanRow = { ...row };
+    for (let i = 0; i < 8; i++) {
+      const { error } = await db.from('disputes').insert(cleanRow);
+      if (!error) return;
+      lastError = error;
+      const missing = getMsgMissingColumn(error);
+      const msg = (error.message || '').toLowerCase();
+      if (!missing || (!msg.includes('column') && !msg.includes('schema cache')) || !(missing in cleanRow)) break;
+      delete cleanRow[missing];
+    }
   }
   throw lastError || new Error('Could not file dispute.');
 }
@@ -3648,11 +3662,17 @@ async function adminPayWithdrawal(id) {
       await callEdge('admin-action', { action: 'pay_withdrawal', target_id: id });
     } catch (edgeError) {
       console.warn('pay_withdrawal function failed, using scoped update:', edgeError);
-      const { error } = await db.from('withdrawals')
-        .update({ status: 'paid', paid_at: new Date().toISOString() })
-        .eq('id', id)
-        .eq('status', 'pending');
-      if (error) throw error;
+      let update = { status: 'paid', paid_at: new Date().toISOString() };
+      for (let i = 0; i < 4; i++) {
+        const { error } = await db.from('withdrawals')
+          .update(update)
+          .eq('id', id)
+          .eq('status', 'pending');
+        if (!error) break;
+        const missing = getMsgMissingColumn(error);
+        if (!missing || !(missing in update)) throw error;
+        delete update[missing];
+      }
     }
   }
   catch(e) { toast('Error', e.message, 'error'); return; }
@@ -3667,11 +3687,31 @@ async function adminRejectWithdrawal(id) {
       await callEdge('admin-action', { action: 'reject_withdrawal', target_id: id, data: { reason } });
     } catch (edgeError) {
       console.warn('reject_withdrawal function failed, using scoped update:', edgeError);
-      const { error } = await db.from('withdrawals')
-        .update({ status: 'rejected', reject_reason: reason })
-        .eq('id', id)
-        .eq('status', 'pending');
-      if (error) throw error;
+      const attempts = [
+        { status: 'rejected', reject_reason: reason },
+        { status: 'rejected', rejection_reason: reason },
+        { status: 'rejected', reason },
+        { status: 'rejected', note: reason },
+        { status: 'rejected' }
+      ];
+      let lastError = null;
+      let saved = false;
+      for (const attempt of attempts) {
+        const update = { ...attempt };
+        for (let i = 0; i < 4; i++) {
+          const { error } = await db.from('withdrawals')
+            .update(update)
+            .eq('id', id)
+            .eq('status', 'pending');
+          if (!error) { saved = true; break; }
+          lastError = error;
+          const missing = getMsgMissingColumn(error);
+          if (!missing || !(missing in update)) break;
+          delete update[missing];
+        }
+        if (saved) break;
+      }
+      if (!saved) throw lastError || new Error('Could not reject withdrawal.');
     }
   }
   catch(e) { toast('Error', e.message, 'error'); return; }
@@ -5845,6 +5885,25 @@ function getAdLink(ad) {
   return ad.cta_link || ad.link_url || '#';
 }
 
+function getAdSellerId(ad) {
+  return ad?.seller_id || ad?.advertiser_id || ad?.user_id || ad?.profile_id || '';
+}
+
+function openAdDestination(adId, event) {
+  event?.preventDefault?.();
+  const ad = adPopupAds.find(a => a.id === adId) || adPopupAds[adPopupIndex];
+  if (!ad) return;
+  trackAdStat(ad.id, 'click');
+  closeAdPopup();
+  const sellerId = getAdSellerId(ad);
+  if (sellerId) {
+    viewStorefront(sellerId);
+    return;
+  }
+  const link = getAdLink(ad);
+  if (link && link !== '#') window.open(link, '_blank', 'noopener');
+}
+
 async function loadFlashSaleProducts() {
   if (!currentUser) return;
   
@@ -6033,6 +6092,8 @@ async function initiateAdPayment() {
       media_type: isVideo ? 'video' : 'image',
       cta_text: cta,
       cta_link: link,
+      seller_id: currentUser.id,
+      advertiser_id: currentUser.id,
       advertiser_type: currentRole || 'seller'
     };
 
@@ -6121,8 +6182,9 @@ function renderAdPopup() {
     </div>`;
   if (counter) counter.textContent = `${adPopupIndex+1}/${adPopupAds.length}`;
   if (ctaBtn) {
-    ctaBtn.href = getAdLink(ad);
-    ctaBtn.onclick = () => trackAdStat(ad.id, 'click');
+    ctaBtn.href = getAdSellerId(ad) ? '#' : getAdLink(ad);
+    ctaBtn.removeAttribute('target');
+    ctaBtn.onclick = (event) => openAdDestination(ad.id, event);
   }
   if (ctaText) ctaText.textContent = ad.cta_text || (getAdLink(ad) !== '#' ? 'Visit' : 'Close');
   const dots = document.getElementById('ad-popup-dots');
