@@ -641,8 +641,50 @@ function showBuyerView() {
 
 function isSellerAccessExpired(profile = currentUser?.profile) {
   if (!currentUser || currentUser.email === ADMIN_EMAIL) return false;
-  const trialEnd = profile?.trial_end ? new Date(profile.trial_end) : null;
-  return !!profile?.is_suspended || !trialEnd || trialEnd <= new Date();
+  const expiry = profile?.subscription_end || profile?.paid_until || profile?.trial_end;
+  const trialEnd = expiry ? new Date(expiry) : null;
+  if (profile?.is_suspended) return true;
+  if (trialEnd) return trialEnd <= new Date();
+  return !profile?.commission_paid;
+}
+
+function isKycApprovedStatus(status) {
+  return ['approved', 'verified', 'accepted'].includes(String(status || '').toLowerCase());
+}
+
+async function getSellerKycStatus(userId = currentUser?.id) {
+  if (!userId) return { status: 'missing', row: null };
+  if (currentUser?.profile && isKycApprovedStatus(currentUser.profile.kyc_status || currentUser.profile.verification_status)) {
+    return { status: 'approved', row: null };
+  }
+  try {
+    const { data, error } = await db.from('kyc_verifications')
+      .select('id,status,created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (error) throw error;
+    const row = data?.[0] || null;
+    return { status: row?.status || 'missing', row };
+  } catch (e) {
+    console.warn('KYC status check failed:', e);
+    return { status: currentUser?.profile?.kyc_status || 'missing', row: null };
+  }
+}
+
+async function requireSellerKyc() {
+  if (!currentUser || currentUser.email === ADMIN_EMAIL) return true;
+  const { status } = await getSellerKycStatus(currentUser.id);
+  if (isKycApprovedStatus(status)) return true;
+  showBuyerView();
+  const msg = status === 'pending'
+    ? 'Your KYC is pending admin review. Seller access opens after approval.'
+    : status === 'rejected'
+      ? 'Your KYC was rejected. Please resubmit clear documents before using the seller dashboard.'
+      : 'Complete KYC before using your seller dashboard.';
+  toast('KYC Required', msg, status === 'pending' ? 'info' : 'warn', 7000);
+  showModal('kyc-modal');
+  return false;
 }
 
 function showSellerAccessBlocked() {
@@ -650,9 +692,10 @@ function showSellerAccessBlocked() {
   document.getElementById('suspended-modal')?.classList.add('open');
 }
 
-function showSellerDashboard() {
+async function showSellerDashboard() {
   if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
   if (isSellerAccessExpired()) { showSellerAccessBlocked(); return; }
+  if (!(await requireSellerKyc())) return;
   document.getElementById('buyer-view').style.display = 'none';
   document.getElementById('seller-dashboard').style.display = 'block';
   document.getElementById('storefront-view').style.display = 'none';
@@ -1556,11 +1599,15 @@ async function submitTransferOrder() {
 //  REVIEWS
 // ====================================================
 let reviewProductId = null;
-function openReviewModal() {
+function openReviewModal(productId = null, productName = '', sellerId = null) {
   if (!currentUser) { showModal('auth-modal'); return; }
-  if (!currentProd) return;
-  reviewProductId = currentProd.id;
-  document.getElementById('review-product-name').textContent = currentProd.name;
+  const target = productId
+    ? { id: productId, name: productName || 'Purchased item', seller_id: sellerId || null }
+    : currentProd;
+  if (!target?.id) return;
+  reviewProductId = target.id;
+  currentProd = currentProd?.id === target.id ? currentProd : { ...(currentProd || {}), ...target };
+  document.getElementById('review-product-name').textContent = target.name || 'Purchased item';
   selectedRating = 0;
   setRating(0);
   document.getElementById('review-text').value = '';
@@ -1790,6 +1837,8 @@ async function loadBuyerOrders() {
     const statusColors = {pending:'badge-gold',confirmed:'badge-blue',shipped:'badge-purple',delivered:'badge-green',cancelled:'badge-red',refunded:'badge-gray'};
     list.innerHTML = (orders || []).map(o => {
       const orderItems = Array.isArray(o.items) ? o.items : [];
+      const firstItem = orderItems[0] || {};
+      const productId = firstItem.id || firstItem.product_id || '';
       const itemHtml = orderItems.length
         ? orderItems.map(i => `<span class="text-xs badge badge-gray">${escHtml(i.name || 'Item')} ×${i.qty || 1}</span>`).join('')
         : '<span class="text-xs color-text3">Order item history is still saved for newer orders; this older order may not include item details.</span>';
@@ -1806,6 +1855,8 @@ async function loadBuyerOrders() {
       </div>
       <div class="flex gap-1 flex-wrap mb-2">${itemHtml}</div>
       <div class="flex gap-2 flex-wrap">
+        ${o.seller_id ? `<button class="btn btn-outline btn-sm" onclick="openConversation('${escAttr(o.seller_id)}','Seller','${escAttr(productId)}')"><i class="fa-solid fa-message"></i> Message Seller</button>` : ''}
+        ${o.status==='delivered' && productId ? `<button class="btn btn-primary btn-sm" onclick="openReviewModal('${escAttr(productId)}','Purchased item','${escAttr(o.seller_id || '')}')"><i class="fa-solid fa-star"></i> Review</button>` : ''}
         ${o.status==='delivered'?`<button class="btn btn-outline btn-sm" onclick="openDisputeModal('${escAttr(o.id)}')"><i class="fa-solid fa-exclamation-triangle"></i> Dispute</button>`:''}
         ${proofUrl ? `<a href="${escAttr(proofUrl)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm"><i class="fa-solid fa-receipt"></i> Proof</a>` : ''}
         <button class="btn btn-outline btn-sm" onclick="openOrderTracking('${escAttr(o.id)}')"><i class="fa-solid fa-truck"></i> Track</button>
@@ -2168,7 +2219,11 @@ async function loadSellerOrders() {
   document.getElementById('orders-empty').classList.add('hidden');
   list.classList.remove('hidden');
   const statusColors = {pending:'badge-gold',confirmed:'badge-blue',shipped:'badge-purple',delivered:'badge-green',cancelled:'badge-red'};
-  list.innerHTML = orders.map(o=>`
+  list.innerHTML = orders.map(o=>{
+    const orderItems = Array.isArray(o.items) ? o.items : [];
+    const firstItem = orderItems[0] || {};
+    const productId = firstItem.id || firstItem.product_id || '';
+    return `
     <div class="card card-pad mb-3">
       <div class="flex justify-between items-start flex-wrap gap-2 mb-2">
         <div><div class="font-bold">${o.id}</div><div class="text-xs color-text3">${fmtDate(o.created_at)}</div></div>
@@ -2187,12 +2242,14 @@ async function loadSellerOrders() {
       </div>
       ${o.proof_url ? `<div class="mt-2"><a href="${o.proof_url}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-image"></i> View Proof</a></div>` : ''}
       <div class="flex gap-2 mt-3 flex-wrap">
+        ${o.buyer_id ? `<button onclick="openConversation('${escAttr(o.buyer_id)}','Buyer','${escAttr(productId)}')" class="btn btn-outline btn-sm"><i class="fa-solid fa-message"></i> Message Buyer</button>` : ''}
         ${o.status==='pending'?`<button onclick="updateOrderStatus('${o.id}','confirmed')" class="btn btn-primary btn-sm">Confirm Order</button>`:''}
         ${o.status==='confirmed'?`<button onclick="updateOrderStatus('${o.id}','shipped')" class="btn btn-sm" style="background:#ede9fe;color:#6d28d9">Mark Shipped</button>`:''}
         ${o.status==='shipped'?`<button onclick="updateOrderStatus('${o.id}','delivered')" class="btn btn-sm" style="background:#dcfce7;color:#15803d">Mark Delivered</button>`:''}
         <a href="https://wa.me/${(o.delivery_phone||'').replace(/\D/g,'')}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Contact</a>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 async function updateOrderStatus(id, status) {
@@ -3031,16 +3088,51 @@ function openDisputeModal(orderId) {
   showModal('dispute-modal');
 }
 
+async function submitDisputeDirect(orderId, type, desc) {
+  if (!currentUser || !orderId) throw new Error('Order not found for this dispute.');
+  const { data: order } = await db.from('orders').select('id,buyer_id,seller_id,status').eq('id', orderId).maybeSingle();
+  if (!order) throw new Error('Could not find this order.');
+  if (order.buyer_id !== currentUser.id && order.seller_id !== currentUser.id && !isAdmin()) {
+    throw new Error('You can only file a dispute for your own order.');
+  }
+  const base = {
+    order_id: orderId,
+    buyer_id: order.buyer_id || currentUser.id,
+    seller_id: order.seller_id || null,
+    status: 'open'
+  };
+  const attempts = [
+    { ...base, dispute_type: type, description: desc },
+    { ...base, type, description: desc },
+    { ...base, reason: type, message: desc },
+    { order_id: orderId, user_id: currentUser.id, dispute_type: type, description: desc, status: 'open' }
+  ];
+  let lastError = null;
+  for (const row of attempts) {
+    const { error } = await db.from('disputes').insert(row);
+    if (!error) return;
+    lastError = error;
+    const msg = (error.message || '').toLowerCase();
+    if (!msg.includes('column') && !msg.includes('schema cache')) break;
+  }
+  throw lastError || new Error('Could not file dispute.');
+}
+
 async function submitDispute() {
   const type = document.getElementById('dispute-type').value;
   const desc = document.getElementById('dispute-desc').value.trim();
   if (!type || !desc) { toast('Please fill all fields','','warn'); return; }
   try {
-    await callEdge('submit-dispute', {
-      order_id:     disputeOrderId,
-      dispute_type: type,
-      description:  desc
-    });
+    try {
+      await callEdge('submit-dispute', {
+        order_id:     disputeOrderId,
+        dispute_type: type,
+        description:  desc
+      });
+    } catch (edgeError) {
+      console.warn('submit-dispute function failed, using direct insert:', edgeError);
+      await submitDisputeDirect(disputeOrderId, type, desc);
+    }
   } catch(e) { toast('Error', e.message, 'error'); return; }
   toast('Dispute Filed', 'Admin will review within 24hrs', 'success');
   closeModal('dispute-modal');
@@ -3551,7 +3643,18 @@ async function loadAdminWithdrawals() {
 }
 
 async function adminPayWithdrawal(id) {
-  try { await callEdge('admin-action', { action: 'pay_withdrawal', target_id: id }); }
+  try {
+    try {
+      await callEdge('admin-action', { action: 'pay_withdrawal', target_id: id });
+    } catch (edgeError) {
+      console.warn('pay_withdrawal function failed, using scoped update:', edgeError);
+      const { error } = await db.from('withdrawals')
+        .update({ status: 'paid', paid_at: new Date().toISOString() })
+        .eq('id', id)
+        .eq('status', 'pending');
+      if (error) throw error;
+    }
+  }
   catch(e) { toast('Error', e.message, 'error'); return; }
   toast('Withdrawal Marked Paid ✅', '', 'success');
   loadAdminWithdrawals();
@@ -3559,7 +3662,18 @@ async function adminPayWithdrawal(id) {
 
 async function adminRejectWithdrawal(id) {
   const reason = prompt('Reason for rejection (optional):') || 'Rejected by admin';
-  try { await callEdge('admin-action', { action: 'reject_withdrawal', target_id: id, data: { reason } }); }
+  try {
+    try {
+      await callEdge('admin-action', { action: 'reject_withdrawal', target_id: id, data: { reason } });
+    } catch (edgeError) {
+      console.warn('reject_withdrawal function failed, using scoped update:', edgeError);
+      const { error } = await db.from('withdrawals')
+        .update({ status: 'rejected', reject_reason: reason })
+        .eq('id', id)
+        .eq('status', 'pending');
+      if (error) throw error;
+    }
+  }
   catch(e) { toast('Error', e.message, 'error'); return; }
   toast('Withdrawal Rejected', '', 'warn');
   loadAdminWithdrawals();
@@ -3862,24 +3976,42 @@ async function adminGrantCommission(sellerId) {
 async function adminDeactivateUser(userId) {
   if (!confirm('Deactivate this account and pause their listings?')) return;
   try {
-    await callEdge('admin-action', { action: 'deactivate_user', target_id: userId });
+    const { error: profileError } = await db.from('profiles').update({ is_suspended: true }).eq('id', userId);
+    if (profileError) throw profileError;
+    await db.from('products').update({ status: 'paused' }).eq('seller_id', userId);
     toast('Account Deactivated', 'Listings were paused.', 'warn');
     loadAdminAccounts();
     loadAdminSellers();
-  } catch(e) {
-    toast('Error', e.message, 'error');
+  } catch(directError) {
+    try {
+      await callEdge('admin-action', { action: 'deactivate_user', target_id: userId, data: { user_id: userId } });
+      toast('Account Deactivated', 'Listings were paused.', 'warn');
+      loadAdminAccounts();
+      loadAdminSellers();
+    } catch(e) {
+      toast('Error', e.message || directError.message, 'error');
+    }
   }
 }
 
 async function adminReactivateUser(userId) {
   if (!confirm('Reactivate this account and listings?')) return;
   try {
-    await callEdge('admin-action', { action: 'reactivate_user', target_id: userId });
+    const { error: profileError } = await db.from('profiles').update({ is_suspended: false }).eq('id', userId);
+    if (profileError) throw profileError;
+    await db.from('products').update({ status: 'active' }).eq('seller_id', userId).neq('stock_quantity', 0);
     toast('Account Reactivated', 'Listings were restored.', 'success');
     loadAdminAccounts();
     loadAdminSellers();
-  } catch(e) {
-    toast('Error', e.message, 'error');
+  } catch(directError) {
+    try {
+      await callEdge('admin-action', { action: 'reactivate_user', target_id: userId, data: { user_id: userId } });
+      toast('Account Reactivated', 'Listings were restored.', 'success');
+      loadAdminAccounts();
+      loadAdminSellers();
+    } catch(e) {
+      toast('Error', e.message || directError.message, 'error');
+    }
   }
 }
 async function checkBroadcastForUser() {
@@ -5008,7 +5140,14 @@ async function loadAdminKyc() {
 async function adminApproveKyc(kycId, userId) {
   if (!confirm('Approve this KYC submission?')) return;
   try {
-    await callEdge('admin-action', { action: 'approve_kyc', target_id: kycId, data: { user_id: userId } });
+    try {
+      await callEdge('admin-action', { action: 'approve_kyc', target_id: kycId, data: { user_id: userId } });
+    } catch (edgeError) {
+      console.warn('approve_kyc function failed, using scoped update:', edgeError);
+      const { error: kycError } = await db.from('kyc_verifications').update({ status: 'approved' }).eq('id', kycId);
+      if (kycError) throw kycError;
+      await db.from('profiles').update({ kyc_status: 'approved', seller_verified: true }).eq('id', userId);
+    }
     toast('KYC Approved ✅', 'Seller is now verified.', 'success');
     loadAdminKyc();
   } catch(e) { toast('Error', e.message, 'error'); }
@@ -5017,7 +5156,14 @@ async function adminApproveKyc(kycId, userId) {
 async function adminRejectKyc(kycId, userId) {
   const reason = prompt('Reason for rejection (optional):') || '';
   try {
-    await callEdge('admin-action', { action: 'reject_kyc', target_id: kycId, data: { user_id: userId, reason } });
+    try {
+      await callEdge('admin-action', { action: 'reject_kyc', target_id: kycId, data: { user_id: userId, reason } });
+    } catch (edgeError) {
+      console.warn('reject_kyc function failed, using scoped update:', edgeError);
+      const { error: kycError } = await db.from('kyc_verifications').update({ status: 'rejected', admin_note: reason }).eq('id', kycId);
+      if (kycError) throw kycError;
+      await db.from('profiles').update({ kyc_status: 'rejected', seller_verified: false }).eq('id', userId);
+    }
     toast('KYC Rejected', 'Seller has been notified.', 'info');
     loadAdminKyc();
   } catch(e) { toast('Error', e.message, 'error'); }
@@ -5071,6 +5217,8 @@ async function submitKyc(event) {
     });
 
     toast('KYC Submitted! 🎉', 'Your documents are under review.', 'success');
+    await db.from('profiles').update({ kyc_status: 'pending' }).eq('id', currentUser.id).then(() => {}).catch(() => {});
+    currentUser.profile = { ...(currentUser.profile || {}), kyc_status: 'pending' };
     closeModal('kyc-modal');
   } catch(e) {
     toast('Submission Error', e.message, 'error');
