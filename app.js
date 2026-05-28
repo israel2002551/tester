@@ -850,7 +850,6 @@ function renderProducts(prods) {
 }
 
 function prodCard(p) {
-  // --- FLASH SALE LOGIC ---
   const now = new Date();
   const isFlashActive = p.flash_price && p.flash_end && new Date(p.flash_end) > now;
   const displayPrice = isFlashActive ? p.flash_price : p.price;
@@ -859,25 +858,28 @@ function prodCard(p) {
     ? Math.round((1 - displayPrice / p.original_price) * 100) 
     : 0;
 
-  // Prepare the object for the cart
   const cartItem = {
     id: p.id,
     name: p.name,
-    price: displayPrice, // This is the crucial part
+    price: displayPrice,
     image_url: p.image_url,
     seller_id: p.seller_id,
     profiles: p.profiles,
-    is_flash: isFlashActive // Add this so Checkout knows it's a sale item
+    is_flash: isFlashActive
   };
-  // ------------------------
 
   const stockPct = p.stock_quantity !== undefined ? p.stock_quantity : 999;
   const isSoldOut = stockPct === 0;
 
+  // READ NEW BACKEND ARRAYS SAFELY FOR EXTRA BADGES
+  const imageCount = Array.isArray(p.images) ? p.images.length : 1;
+  const videoCount = Array.isArray(p.videos) ? p.videos.length : (p.has_video ? 1 : 0);
+
   const badges = [
     isFlashActive ? `<span class="prod-badge" style="background:var(--red); color:#fff;">⚡ Flash</span>` : '',
     discount && !isFlashActive ? `<span class="prod-badge prod-badge-discount">-${discount}%</span>` : '',
-    p.has_video ? `<span class="prod-badge prod-badge-video">🎬 Video</span>` : '',
+    videoCount > 0 ? `<span class="prod-badge prod-badge-video">🎬 Video (${videoCount})</span>` : '',
+    imageCount > 1 ? `<span class="prod-badge" style="background:var(--blue); color:#fff;">📸 Photos (${imageCount})</span>` : '',
     p.category === 'dropship' ? `<span class="prod-badge prod-badge-drop">Dropship</span>` : '',
     p.seller_verified ? `<span class="prod-badge prod-badge-verified">✓ Verified</span>` : ''
   ].filter(Boolean).join('');
@@ -907,7 +909,6 @@ function prodCard(p) {
     </div>
   </div>`;
 }
-
 // ====================================================
 //  FILTERS & SEARCH
 // ====================================================
@@ -1057,6 +1058,9 @@ function updatePriceDisplay() {
 // ====================================================
 //  PRODUCT DETAIL
 // ====================================================
+// ====================================================
+//  PRODUCT DETAIL — MULTI-MEDIA GALLERY ENHANCED
+// ====================================================
 async function openProduct(id) {
   currentProd = products.find(p => p.id === id);
   if (!currentProd) return;
@@ -1070,15 +1074,73 @@ async function openProduct(id) {
 
   showModal('product-modal');
   
-  // Gallery
-  const main = document.getElementById('gallery-main');
-  if (p.has_video && p.video_url) {
-    main.innerHTML = `<video src="${p.video_url}" controls playsinline style="width:100%;height:100%;object-fit:contain;border-radius:var(--radius-sm)" poster="${p.image_url||''}"></video>`;
-  } else {
-    main.innerHTML = `<img src="${p.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=600'}" alt="${escHtml(p.name)}" loading="lazy" style="width:100%;height:100%;object-fit:contain">`;
+  // Clean up and prepare raw media lists safely
+  const imgArray = Array.isArray(p.images) ? p.images : (p.image_url ? [p.image_url] : []);
+  const vidArray = Array.isArray(p.videos) ? p.videos : (p.video_url ? [p.video_url] : []);
+  
+  // Combine all interactive media assets into a single clean list for scrolling
+  const structuralMediaList = [];
+  vidArray.forEach(v => { if (v) structuralMediaList.push({ type: 'video', url: v }); });
+  imgArray.forEach(i => { if (i) structuralMediaList.push({ type: 'image', url: i }); });
+  
+  // Fallback string security logic if both lists came back completely empty
+  if (structuralMediaList.length === 0) {
+    structuralMediaList.push({ 
+      type: 'image', 
+      url: p.image_url || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=600' 
+    });
+  }
+
+  // Gallery view containers inside product-modal
+  const mainContainer = document.getElementById('gallery-main');
+  
+  // Internal helper function to change the main viewer frame smoothly
+  window.switchProductModalMediaView = function(index) {
+    const asset = structuralMediaList[index];
+    if (!asset || !mainContainer) return;
+    
+    if (asset.type === 'video') {
+      mainContainer.innerHTML = `<video src="${escAttr(asset.url)}" controls playsinline style="width:100%;height:100%;object-fit:contain;border-radius:var(--radius-sm)" poster="${escAttr(p.image_url || '')}"></video>`;
+    } else {
+      mainContainer.innerHTML = `<img src="${escAttr(asset.url)}" alt="${escAttr(p.name)}" style="width:100%;height:100%;object-fit:contain;border-radius:var(--radius-sm)">`;
+    }
+    
+    // Highlight matching active thumbnail preview container border dynamically
+    document.querySelectorAll('.modal-thumb-nav-btn').forEach((btn, btnIdx) => {
+      btn.style.borderColor = btnIdx === index ? 'var(--green)' : 'var(--border)';
+    });
+  };
+
+  // Render the initial primary media layout
+  switchProductModalMediaView(0);
+
+  // Add slider preview thumbnails if multiple media files are available
+  let thumbListHtml = '';
+  if (structuralMediaList.length > 1) {
+    thumbListHtml = `<div class="modal-media-thumbnails" style="display:flex;gap:8px;margin-top:10px;overflow-x:auto;padding-bottom:5px;">`;
+    structuralMediaList.forEach((asset, idx) => {
+      if (asset.type === 'video') {
+        thumbListHtml += `
+          <button class="modal-thumb-nav-btn" onclick="switchProductModalMediaView(${idx})" style="width:50px;height:50px;border:2px solid var(--border);border-radius:6px;overflow:hidden;background:#000;position:relative;flex-shrink:0;cursor:pointer;">
+            <i class="fa-solid fa-play" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-size:0.8rem;z-index:2;"></i>
+            <video src="${escAttr(asset.url)}" style="width:100%;height:100%;object-fit:cover;opacity:0.6;"></video>
+          </button>`;
+      } else {
+        thumbListHtml += `
+          <button class="modal-thumb-nav-btn" onclick="switchProductModalMediaView(${idx})" style="width:50px;height:50px;border:2px solid var(--border);border-radius:6px;overflow:hidden;flex-shrink:0;cursor:pointer;padding:0;">
+            <img src="${escAttr(asset.url)}" style="width:100%;height:100%;object-fit:cover;">
+          </button>`;
+      }
+    });
+    thumbListHtml += `</div>`;
   }
   
-  // Info
+  // Append or replace the thumb section element under gallery-main window frame
+  const existingThumbs = document.querySelector('.modal-media-thumbnails');
+  if (existingThumbs) existingThumbs.remove();
+  if (thumbListHtml) mainContainer.insertAdjacentHTML('afterend', thumbListHtml);
+
+  // Info mapping
   document.getElementById('modal-prod-name').textContent = p.name;
   document.getElementById('modal-price').textContent = fmtN(displayPrice);
   document.getElementById('modal-desc').textContent = p.description || '';
@@ -1105,12 +1167,12 @@ async function openProduct(id) {
   
   document.getElementById('modal-cart-btn').disabled = stock === 0;
   
-  // Set the correct price for the cart
+  // Ensure structured metadata mapping matches product configuration parameters correctly
   document.getElementById('modal-cart-btn').onclick = () => {
     addToCart({ 
       ...p, 
       price: displayPrice, 
-      is_flash: isFlashActive // Useful for checkout logic
+      is_flash: isFlashActive 
     });
     closeModal('product-modal');
   };
@@ -1126,16 +1188,14 @@ async function openProduct(id) {
   // Flags
   const flags = [];
   if (isFlashActive) flags.push('<span class="prod-badge" style="background:var(--red);color:#fff">⚡ Flash Sale</span>');
-  if (p.has_video) flags.push('<span class="prod-badge prod-badge-video">🎬 Video</span>');
+  if (vidArray.length > 0) flags.push('<span class="prod-badge prod-badge-video">🎬 Video Available</span>');
   if (p.seller_verified) flags.push('<span class="prod-badge prod-badge-verified">✓ Verified</span>');
   document.getElementById('modal-flags').innerHTML = flags.join('');
   
-  // Update wishlist and analytics
   updateModalWishBtn();
   loadProductReviews(id);
   trackAnalytics({ event_type: 'product_view', product_id: p.id, seller_id: p.seller_id });
 }
-
                  
 async function loadProductReviews(productId) {
   let { data, error } = await db.from('reviews').select('*,profiles!reviewer_id(name)').eq('product_id', productId).order('created_at', { ascending: false }).limit(10);
