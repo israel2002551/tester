@@ -284,6 +284,22 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .prod-store-link{font-size:.68rem;color:var(--text3);margin-top:.18rem;display:flex;align-items:center;gap:.22rem;text-decoration:none}
 .prod-store-link:hover{color:var(--green)}
 
+.prod-card{display:flex;flex-direction:column;min-height:100%}
+.prod-img-wrap{flex:0 0 auto}
+.prod-body{display:flex;flex-direction:column;gap:.28rem;min-height:132px}
+.prod-name{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;min-height:2.15em;line-height:1.28}
+.prod-price-row{min-height:1.35rem}
+.prod-rating-row,.prod-location,.prod-store-link{min-width:0}
+.prod-location,.prod-store-link{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prod-mobile-add{margin-top:auto}
+.prod-flags{right:.45rem;align-items:flex-start;max-width:calc(100% - .9rem)}
+.prod-badge{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:420px){
+  .products-grid{gap:.65rem}
+  .prod-body{padding:.58rem;min-height:126px}
+  .prod-price{font-size:.86rem}
+}
+
 /* Order history */
 .order-history-item{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:1.1rem;margin-bottom:.7rem;transition:border-color .2s}
 .order-history-item:hover{border-color:var(--green)}
