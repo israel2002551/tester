@@ -14,7 +14,7 @@ const CLAUDE_EDGE_URL = `${EDGE_URL}/smooth-handler`;
 const ADMIN_EMAIL = 'israelefe093@gmail.com';
 
 // ── Paystack ──────────────────────────────────────────
-const PAYSTACK_PUBLIC_KEY = 'pk_test_ecfb2bed734aa5eb754fad6ef5b62d44f817c782'; // Replace with live key for production
+const PAYSTACK_PUBLIC_KEY = 'pk_live_4fd75c570f7fb446f06b1ea5fc32c17683547fea'; // Replace with live key for production
 
 // ── Platform Fees ─────────────────────────────────────
 const COMMISSION_AMOUNT = 500000; // ₦5,000 in kobo
