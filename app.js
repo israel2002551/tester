@@ -1401,40 +1401,54 @@ function buyNow(prod) {
 function startCheckout() {
   if (!currentUser) { showModal('auth-modal'); return; }
   if (!cart.length) { toast('Cart is empty','','warn'); return; }
+  
+  const rawProductTotal = cart.reduce((sum,c)=>sum+(c.price*(c.qty||1)),0);
+  
   trackAnalytics({
     event_type: 'checkout_started',
     seller_id: cart[0]?.seller_id,
     quantity: cart.reduce((sum,c)=>sum+(c.qty||1),0),
-    amount: cart.reduce((sum,c)=>sum+(c.price*(c.qty||1)),0),
+    amount: rawProductTotal,
     metadata: { item_count: cart.length },
   });
+  
   goCheckoutStep(1);
   showModal('checkout-modal');
-  // Pre-fill
+  
+  // Pre-fill user profile info
   const p = currentUser.profile || {};
   if (p.name) document.getElementById('co-name').value = p.name;
   document.getElementById('co-pay-email').textContent = currentUser.email;
-  const total = cart.reduce((s,c)=>s+(c.price*(c.qty||1)),0);
-  const comm = Math.round(total * PLATFORM_FEE_PCT);
-  document.getElementById('co-pay-amount').textContent = fmtN(total);
-  document.getElementById('co-commission').textContent = fmtN(comm);
-  document.getElementById('co-total').textContent = fmtN(total);
-  // Order items
+  
+  // --- INVISIBLE COMMISSION MATHEMATICS ---
+  const secretComm = Math.round(rawProductTotal * PLATFORM_FEE_PCT);
+  const totalWithCommission = rawProductTotal + secretComm;
+  
+  // Render the unified price containing the commission hidden inside
+  document.getElementById('co-pay-amount').textContent = fmtN(totalWithCommission);
+  document.getElementById('co-total').textContent = fmtN(totalWithCommission);
+  
+  // Mask the old commission UI layout block and slide it out of display tree
+  const commEl = document.getElementById('co-commission');
+  if (commEl) {
+    commEl.textContent = fmtN(0);
+    commEl.closest('.pay-row')?.classList.add('hidden');
+  }
+  
+  // Order items rendering engine 
   document.getElementById('co-items').innerHTML = cart.map(c=>`
     <div class="order-item">
       <img src="${c.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=100'}" alt="" loading="lazy">
       <div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(c.name)}</div><div class="color-text3 text-xs">Qty: ${c.qty||1}</div></div>
       <div class="font-bold text-sm">${fmtN(c.price*(c.qty||1))}</div>
     </div>`).join('');
-  // Bank transfer details from first seller
-  const seller = cart[0]?.profiles || {};
-  document.getElementById('seller-bank-details-co').innerHTML = `
-    <div class="pay-row"><span class="label">Bank</span><span class="value">${escHtml(seller.bank_name||'Seller Bank')}</span></div>
-    <div class="pay-row"><span class="label">Account</span><span class="value highlight">${escHtml(seller.account_number||'Contact seller')}</span></div>
-    <div class="pay-row"><span class="label">Name</span><span class="value">${escHtml(seller.account_name||seller.name||'Seller')}</span></div>
-    <div class="pay-row"><span class="label">Amount</span><span class="value highlight">${fmtN(total)}</span></div>`;
+    
+  // Explicitly strip bank account layout text nodes out of display trees completely
+  const bankBox = document.getElementById('seller-bank-details-co');
+  if (bankBox) {
+    bankBox.innerHTML = `<p class="text-xs color-text3 p-2">Secure electronic processing managed directly by Paystack.</p>`;
+  }
 }
-
 function goCheckoutStep(step) {
   document.querySelectorAll('.checkout-panel').forEach(p => p.classList.remove('active'));
   document.getElementById(`co-p${step}`).classList.add('active');
@@ -1537,8 +1551,8 @@ async function resolvePaystackReference(response, fallback = '') {
 
 async function payWithPaystack() {
   if (cart.length === 0) { toast('Cart is empty', '', 'warn'); return; }
-  const total = cart.reduce((s, c) => s + (c.price * (c.qty || 1)), 0);
-  if (total <= 0) { toast('Invalid total amount', '', 'error'); return; }
+  const rawProductTotal = cart.reduce((s, c) => s + (c.price * (c.qty || 1)), 0);
+  if (rawProductTotal <= 0) { toast('Invalid total amount', '', 'error'); return; }
   if (!currentUser) { showModal('auth-modal'); return; }
   if (!isPaystackReady()) return;
 
@@ -1559,8 +1573,13 @@ async function payWithPaystack() {
       if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
       return;
     }
+
+    // --- INVISIBLE COMMISSION MATHEMATICS ---
+    const secretComm = Math.round(rawProductTotal * PLATFORM_FEE_PCT);
+    const hiddenTotalBillAmount = rawProductTotal + secretComm;
+    
     const reference = 'bs_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-    const amountKobo = Math.round(total * 100);
+    const amountKobo = Math.round(hiddenTotalBillAmount * 100); // Send total with built-in fee to gateway
 
     openPaystackTransaction({
       key: PAYSTACK_PUBLIC_KEY,
@@ -1584,17 +1603,19 @@ async function payWithPaystack() {
           if (result.success) {
             const seller = cart[0]?.profiles;
             if (seller?.whatsapp) sendWhatsAppOrderNotification({ id: result.order_id, total_amount: result.total_paid }, seller.whatsapp);
+            
             trackAnalytics({
               event_type: 'order_created',
               seller_id: cart[0]?.seller_id,
               order_id: result.order_id,
               quantity: cart.reduce((sum,c)=>sum+(c.qty||1),0),
-              amount: result.total_paid || total,
+              amount: result.total_paid || hiddenTotalBillAmount,
               metadata: { payment_method: 'paystack' },
             });
+            
             cart = []; saveCart();
             document.getElementById('co-order-id').textContent = result.order_id || '';
-            document.getElementById('co-order-total').textContent = fmtN(result.total_paid || total);
+            document.getElementById('co-order-total').textContent = fmtN(result.total_paid || hiddenTotalBillAmount);
             goCheckoutStep(3);
             toast('Payment Verified!', 'Your order is confirmed', 'success');
           }
@@ -1614,7 +1635,6 @@ async function payWithPaystack() {
     toast('Payment Error', err.message || 'Could not initialize Paystack', 'error');
   }
 }
-
 function handleProofUpload(input) {
   if (input.files?.[0]) {
     const zone = document.getElementById('proof-upload-zone');
@@ -3197,8 +3217,12 @@ async function submitDisputeDirect(orderId, type, desc) {
       const { error } = await db.from('disputes').insert(cleanRow);
       if (!error) return;
       lastError = error;
-      const missing = getMsgMissingColumn(error);
+      
+      // FIXED: Pointed to your actual global function string parser
+      const missing = missingColumn(error);
       const msg = (error.message || '').toLowerCase();
+      
+      // Intercept either column discrepancies or strict schema cache mismatches safely
       if (!missing || (!msg.includes('column') && !msg.includes('schema cache')) || !(missing in cleanRow)) break;
       delete cleanRow[missing];
     }
@@ -5707,24 +5731,37 @@ async function sendMessage() {
   const sendBtn = document.getElementById('msg-send-btn');
   input.value = '';
   if (sendBtn) sendBtn.disabled = true;
+  
   try {
     const payload = { sender_id: currentUser.id, receiver_id: currentChatPartner, content: text, is_read: false };
     if (currentChatProductId) payload.product_id = currentChatProductId;
+    
     let { error } = await db.from('messages').insert(payload);
-    if (error && getMsgMissingColumn(error) === 'product_id') {
+    
+    // Catch either a missing column schema mismatch or a foreign key relation error (deleted products)
+    const errText = (error?.message || '').toLowerCase();
+    const isForeignKeyViolation = errText.includes('foreign key') || errText.includes('fkey');
+    const isMissingColumn = missingColumn(error) === 'product_id';
+    
+    if (error && (isMissingColumn || isForeignKeyViolation)) {
+      console.warn('Product relationship context is invalid or missing in DB. Removing product_id context and retrying plain chat delivery...');
       delete payload.product_id;
-      ({ error } = await db.from('messages').insert(payload));
+      
+      // Retry query without product connection so the user chat still drops into the inbox
+      const retry = await db.from('messages').insert(payload);
+      if (retry.error) throw retry.error;
+    } else if (error) {
+      throw error;
     }
-    if (error) throw error;
+    
     openConversation(currentChatPartner, document.getElementById('msg-partner-name').textContent, currentChatProductId);
   } catch(e) {
-    input.value = text;
+    input.value = text; // Return text buffer to text input field if execution fails entirely
     toast('Message Failed', e.message || 'Could not send message', 'error');
   } finally {
     if (sendBtn) sendBtn.disabled = false;
   }
 }
-
 async function updateInboxCount() {
   const badge = document.getElementById('inbox-count');
   if (!badge) return;
