@@ -858,11 +858,15 @@ function prodCard(p) {
     ? Math.round((1 - displayPrice / p.original_price) * 100) 
     : 0;
 
+  // Resolve media arrays safely to prevent broken thumbnails at checkout
+  const imageList = Array.isArray(p.images) ? p.images : (p.image_url ? [p.image_url] : []);
+  const resolvedCartThumbnail = imageList[0] || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=400&fit=crop';
+
   const cartItem = {
     id: p.id,
     name: p.name,
     price: displayPrice,
-    image_url: p.image_url,
+    image_url: resolvedCartThumbnail, 
     seller_id: p.seller_id,
     profiles: p.profiles,
     is_flash: isFlashActive
@@ -871,9 +875,9 @@ function prodCard(p) {
   const stockPct = p.stock_quantity !== undefined ? p.stock_quantity : 999;
   const isSoldOut = stockPct === 0;
 
-  // READ NEW BACKEND ARRAYS SAFELY FOR EXTRA BADGES
-  const imageCount = Array.isArray(p.images) ? p.images.length : 1;
-  const videoCount = Array.isArray(p.videos) ? p.videos.length : (p.has_video ? 1 : 0);
+  // Safely parse incoming multi-media fields
+  const imageCount = Array.isArray(p.images) ? p.images.length : (p.image_url ? 1 : 0);
+  const videoCount = Array.isArray(p.videos) ? p.videos.length : (p.video_url || p.has_video ? 1 : 0);
 
   const badges = [
     isFlashActive ? `<span class="prod-badge" style="background:var(--red); color:#fff;">⚡ Flash</span>` : '',
@@ -886,14 +890,22 @@ function prodCard(p) {
 
   const stars = p.avg_rating ? '★'.repeat(Math.round(p.avg_rating)) + '☆'.repeat(5 - Math.round(p.avg_rating)) : '★★★★★';
 
+  // Secure HTML data-attribute string escaping pattern to handle punctuation safely
+  const serializedCartData = JSON.stringify(cartItem)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
   return `
   <div class="prod-card" onclick="openProduct('${p.id}')">
     <div class="prod-img-wrap">
-      <img src="${p.image_url || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=400&fit=crop'}" alt="${escHtml(p.name)}" loading="lazy">
+      <img src="${resolvedCartThumbnail}" alt="${escHtml(p.name)}" loading="lazy">
       ${badges ? `<div class="prod-flags">${badges}</div>` : ''}
       ${isSoldOut 
         ? `<div class="prod-sold-overlay"><span class="prod-sold-label">SOLD OUT</span></div>` 
-        : `<button class="prod-quick-add" onclick="event.stopPropagation();addToCart(${JSON.stringify(cartItem).replace(/"/g,'&quot;')})" aria-label="Add to cart"><i class="fa-solid fa-cart-plus"></i></button>`
+        : `<button class="prod-quick-add" onclick="event.stopPropagation();addToCart(${serializedCartData})" aria-label="Add to cart"><i class="fa-solid fa-cart-plus"></i></button>`
       }
     </div>
     <div class="prod-body">
@@ -905,11 +917,10 @@ function prodCard(p) {
       <div class="prod-rating-row"><span class="stars sm">${stars}</span><span class="text-xs color-text3">${p.avg_rating ? p.avg_rating.toFixed(1) : '5.0'} (${p.review_count||0})</span></div>
       <div class="prod-location"><i class="fa-solid fa-map-marker-alt" style="font-size:.6rem"></i>${escHtml(p.location||'Nigeria')}</div>
       <a class="prod-store-link" onclick="event.stopPropagation();viewStorefront('${p.seller_id}')"><i class="fa-solid fa-store" style="font-size:.6rem"></i>${escHtml(p.profiles?.name||'Seller')}</a>
-      ${!isSoldOut ? `<button class="prod-mobile-add" onclick="event.stopPropagation();addToCart(${JSON.stringify(cartItem).replace(/"/g,'&quot;')})"><i class="fa-solid fa-cart-plus"></i> Add to Cart</button>` : ''}
+      ${!isSoldOut ? `<button class="prod-mobile-add" onclick="event.stopPropagation();addToCart(${serializedCartData})"><i class="fa-solid fa-cart-plus"></i> Add to Cart</button>` : ''}
     </div>
   </div>`;
-}
-// ====================================================
+}// ====================================================
 //  FILTERS & SEARCH
 // ====================================================
 function filterCat(cat) {
@@ -1074,14 +1085,14 @@ async function openProduct(id) {
 
   showModal('product-modal');
   
-  // Clean up and prepare raw media lists safely
-  const imgArray = Array.isArray(p.images) ? p.images : (p.image_url ? [p.image_url] : []);
-  const vidArray = Array.isArray(p.videos) ? p.videos : (p.video_url ? [p.video_url] : []);
+  // Clean up and prepare raw media lists safely, ignoring empty values
+  const imgArray = (Array.isArray(p.images) ? p.images : (p.image_url ? [p.image_url] : [])).filter(Boolean);
+  const vidArray = (Array.isArray(p.videos) ? p.videos : (p.video_url ? [p.video_url] : [])).filter(Boolean);
   
   // Combine all interactive media assets into a single clean list for scrolling
   const structuralMediaList = [];
-  vidArray.forEach(v => { if (v) structuralMediaList.push({ type: 'video', url: v }); });
-  imgArray.forEach(i => { if (i) structuralMediaList.push({ type: 'image', url: i }); });
+  vidArray.forEach(v => structuralMediaList.push({ type: 'video', url: v }));
+  imgArray.forEach(i => structuralMediaList.push({ type: 'image', url: i }));
   
   // Fallback string security logic if both lists came back completely empty
   if (structuralMediaList.length === 0) {
@@ -1100,7 +1111,7 @@ async function openProduct(id) {
     if (!asset || !mainContainer) return;
     
     if (asset.type === 'video') {
-      mainContainer.innerHTML = `<video src="${escAttr(asset.url)}" controls playsinline style="width:100%;height:100%;object-fit:contain;border-radius:var(--radius-sm)" poster="${escAttr(p.image_url || '')}"></video>`;
+      mainContainer.innerHTML = `<video src="${escAttr(asset.url)}" controls autoplay playsinline style="width:100%;height:100%;object-fit:contain;border-radius:var(--radius-sm)" poster="${escAttr(p.image_url || '')}"></video>`;
     } else {
       mainContainer.innerHTML = `<img src="${escAttr(asset.url)}" alt="${escAttr(p.name)}" style="width:100%;height:100%;object-fit:contain;border-radius:var(--radius-sm)">`;
     }
@@ -1111,18 +1122,19 @@ async function openProduct(id) {
     });
   };
 
-  // Render the initial primary media layout
-  switchProductModalMediaView(0);
+  // Force clean up old navigation nodes from prior modal instances before calculating HTML Injections
+  const existingThumbs = document.querySelector('.modal-media-thumbnails');
+  if (existingThumbs) existingThumbs.remove();
 
   // Add slider preview thumbnails if multiple media files are available
   let thumbListHtml = '';
   if (structuralMediaList.length > 1) {
-    thumbListHtml = `<div class="modal-media-thumbnails" style="display:flex;gap:8px;margin-top:10px;overflow-x:auto;padding-bottom:5px;">`;
+    thumbListHtml = `<div class="modal-media-thumbnails" style="display:flex;gap:8px;margin-top:10px;overflow-x:auto;padding-bottom:5px;width:100%;">`;
     structuralMediaList.forEach((asset, idx) => {
       if (asset.type === 'video') {
         thumbListHtml += `
-          <button class="modal-thumb-nav-btn" onclick="switchProductModalMediaView(${idx})" style="width:50px;height:50px;border:2px solid var(--border);border-radius:6px;overflow:hidden;background:#000;position:relative;flex-shrink:0;cursor:pointer;">
-            <i class="fa-solid fa-play" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-size:0.8rem;z-index:2;"></i>
+          <button class="modal-thumb-nav-btn" onclick="switchProductModalMediaView(${idx})" style="width:50px;height:50px;border:2px solid var(--border);border-radius:6px;overflow:hidden;background:#000;position:relative;flex-shrink:0;cursor:pointer;padding:0;">
+            <i class="fa-solid fa-play" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-size:0.7rem;z-index:2;"></i>
             <video src="${escAttr(asset.url)}" style="width:100%;height:100%;object-fit:cover;opacity:0.6;"></video>
           </button>`;
       } else {
@@ -1135,10 +1147,12 @@ async function openProduct(id) {
     thumbListHtml += `</div>`;
   }
   
-  // Append or replace the thumb section element under gallery-main window frame
-  const existingThumbs = document.querySelector('.modal-media-thumbnails');
-  if (existingThumbs) existingThumbs.remove();
-  if (thumbListHtml) mainContainer.insertAdjacentHTML('afterend', thumbListHtml);
+  if (thumbListHtml && mainContainer) {
+    mainContainer.insertAdjacentHTML('afterend', thumbListHtml);
+  }
+
+  // Render the initial primary media layout (and apply thumbnail highlight styles now that nodes exist)
+  switchProductModalMediaView(0);
 
   // Info mapping
   document.getElementById('modal-prod-name').textContent = p.name;
