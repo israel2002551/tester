@@ -858,15 +858,18 @@ function prodCard(p) {
     ? Math.round((1 - displayPrice / p.original_price) * 100) 
     : 0;
 
-  // Resolve media arrays safely to prevent broken thumbnails at checkout
-  const imageList = Array.isArray(p.images) ? p.images : (p.image_url ? [p.image_url] : []);
-  const resolvedCartThumbnail = imageList[0] || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=400&fit=crop';
+  // Safely look for images array
+  const imageList = Array.isArray(p.images) ? p.images.filter(Boolean) : [];
+
+  // --- FIXED IMAGE RESOLUTION ---
+  // Prioritize the primary database column string, then look inside scraped arrays, then fallback to unsplash
+  const resolvedCardThumbnail = p.image_url || imageList[0] || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=400&fit=crop';
 
   const cartItem = {
     id: p.id,
     name: p.name,
     price: displayPrice,
-    image_url: resolvedCartThumbnail, 
+    image_url: resolvedCardThumbnail, 
     seller_id: p.seller_id,
     profiles: p.profiles,
     is_flash: isFlashActive
@@ -875,8 +878,7 @@ function prodCard(p) {
   const stockPct = p.stock_quantity !== undefined ? p.stock_quantity : 999;
   const isSoldOut = stockPct === 0;
 
-  // Safely parse incoming multi-media fields
-  const imageCount = Array.isArray(p.images) ? p.images.length : (p.image_url ? 1 : 0);
+  const imageCount = imageList.length > 0 ? imageList.length : (p.image_url ? 1 : 0);
   const videoCount = Array.isArray(p.videos) ? p.videos.length : (p.video_url || p.has_video ? 1 : 0);
 
   const badges = [
@@ -890,7 +892,6 @@ function prodCard(p) {
 
   const stars = p.avg_rating ? '★'.repeat(Math.round(p.avg_rating)) + '☆'.repeat(5 - Math.round(p.avg_rating)) : '★★★★★';
 
-  // Secure HTML data-attribute string escaping pattern to handle punctuation safely
   const serializedCartData = JSON.stringify(cartItem)
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
@@ -901,7 +902,7 @@ function prodCard(p) {
   return `
   <div class="prod-card" onclick="openProduct('${p.id}')">
     <div class="prod-img-wrap">
-      <img src="${resolvedCartThumbnail}" alt="${escHtml(p.name)}" loading="lazy">
+      <img src="${resolvedCardThumbnail}" alt="${escHtml(p.name)}" loading="lazy">
       ${badges ? `<div class="prod-flags">${badges}</div>` : ''}
       ${isSoldOut 
         ? `<div class="prod-sold-overlay"><span class="prod-sold-label">SOLD OUT</span></div>` 
@@ -920,9 +921,12 @@ function prodCard(p) {
       ${!isSoldOut ? `<button class="prod-mobile-add" onclick="event.stopPropagation();addToCart(${serializedCartData})"><i class="fa-solid fa-cart-plus"></i> Add to Cart</button>` : ''}
     </div>
   </div>`;
-}// ====================================================
+}
+
+// ====================================================
 //  FILTERS & SEARCH
 // ====================================================
+
 function filterCat(cat) {
   document.querySelectorAll('.cat-chip').forEach(c => c.classList.toggle('active', c.dataset.cat === cat));
   if (cat === 'all') { delete activeFilters.category; document.getElementById('section-title-text').textContent = 'Latest Products'; }
@@ -1194,9 +1198,12 @@ async function openProduct(id) {
   document.getElementById('modal-negotiable-note').classList.toggle('hidden', !p.negotiable);
   
   // Seller
+// Seller
   const seller = p.profiles || {};
   document.getElementById('modal-seller-name').textContent = seller.name || 'Seller';
-  document.getElementById('modal-seller-email').textContent = `WhatsApp: ${seller.whatsapp||'N/A'}`;
+  
+  // SECURED: Masking WhatsApp contact details from buyers
+  document.getElementById('modal-seller-email').textContent = 'Contact via In-App Chat Secure System';
   document.getElementById('modal-seller-avatar').textContent = (seller.name||'S')[0].toUpperCase();
   
   // Flags
@@ -1467,11 +1474,17 @@ function goCheckoutStep(step) {
 }
 
 function selectPM(method) {
-  checkoutPaymentMethod = method;
-  document.getElementById('pm-paystack').classList.toggle('selected', method==='paystack');
-  document.getElementById('pm-transfer').classList.toggle('selected', method==='transfer');
-  document.getElementById('pm-paystack-panel').classList.toggle('hidden', method!=='paystack');
-  document.getElementById('pm-transfer-panel').classList.toggle('hidden', method!=='transfer');
+  checkoutPaymentMethod = 'paystack'; // Enforce Paystack exclusively
+  
+  const pmPaystack = document.getElementById('pm-paystack');
+  const pmTransfer = document.getElementById('pm-transfer');
+  const pmPaystackPanel = document.getElementById('pm-paystack-panel');
+  const pmTransferPanel = document.getElementById('pm-transfer-panel');
+
+  if (pmPaystack) pmPaystack.classList.add('selected');
+  if (pmTransfer) pmTransfer.classList.remove('selected');
+  if (pmPaystackPanel) pmPaystackPanel.classList.remove('hidden');
+  if (pmTransferPanel) pmTransferPanel.classList.add('hidden');
 }
 
 function isPaystackReady() {
@@ -2346,8 +2359,8 @@ async function loadSellerOrders() {
         ${o.status==='pending'?`<button onclick="updateOrderStatus('${o.id}','confirmed')" class="btn btn-primary btn-sm">Confirm Order</button>`:''}
         ${o.status==='confirmed'?`<button onclick="updateOrderStatus('${o.id}','shipped')" class="btn btn-sm" style="background:#ede9fe;color:#6d28d9">Mark Shipped</button>`:''}
         ${o.status==='shipped'?`<button onclick="updateOrderStatus('${o.id}','delivered')" class="btn btn-sm" style="background:#dcfce7;color:#15803d">Mark Delivered</button>`:''}
-        <a href="https://wa.me/${(o.delivery_phone||'').replace(/\D/g,'')}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Contact</a>
-      </div>
+        
+        </div>
     </div>`;
   }).join('');
 }
@@ -2576,47 +2589,31 @@ async function loadSettings() {
 async function saveSettings(e) {
   e.preventDefault();
   if (!currentUser) return;
-  const updates = {
-    store_name: document.getElementById('s-store-name').value.trim(),
-    store_description: document.getElementById('s-store-desc').value.trim(),
-    whatsapp: document.getElementById('s-whatsapp').value.trim(),
-    bank_name: document.getElementById('s-bank-name').value.trim(),
-    account_number: document.getElementById('s-account-num').value.trim(),
-    account_name: document.getElementById('s-account-name').value.trim(),
-    paystack_key: document.getElementById('s-paystack-key').value.trim(),
-    notif_email: document.getElementById('s-notif-email').value.trim()
-  };
-  await callEdge('update-profile', updates);
-  if (currentUser.profile) Object.assign(currentUser.profile, updates);
-  toast('Settings Saved! ✅', '', 'success');
-  loadWithdrawalData();
-}
-
-async function saveSettings(e) {
-  e.preventDefault();
-  if (!currentUser) return;
+  
   const btn = document.getElementById('settings-save-btn');
   const oldHtml = btn?.innerHTML;
+  
   const updates = {
     store_name: document.getElementById('s-store-name').value.trim(),
     store_category: document.getElementById('s-store-cat').value,
     store_description: document.getElementById('s-store-desc').value.trim(),
     whatsapp: document.getElementById('s-whatsapp').value.trim(),
-    bank_name: document.getElementById('s-bank-name').value.trim(),
-    account_number: document.getElementById('s-account-num').value.trim(),
-    account_name: document.getElementById('s-account-name').value.trim(),
     paystack_key: document.getElementById('s-paystack-key').value.trim(),
     notif_email: document.getElementById('s-notif-email').value.trim()
   };
-  if (!updates.whatsapp || !updates.bank_name || !updates.account_number || !updates.account_name) {
-    toast('Missing details', 'WhatsApp and bank details are required.', 'warn');
+  
+  // Cleaned validation rules: Removed strict bank verification constraints
+  if (!updates.store_name || !updates.whatsapp) {
+    toast('Missing details', 'Store Name and WhatsApp contact are required.', 'warn');
     return;
   }
+  
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving...'; }
+  
   try {
     await callEdge('update-profile', updates);
     if (currentUser.profile) Object.assign(currentUser.profile, updates);
-    toast('Settings Saved!', 'Your store details are updated.', 'success');
+    toast('Settings Saved! ✅', 'Your store details are updated.', 'success');
     loadWithdrawalData();
   } catch (err) {
     toast('Save Failed', err.message || 'Could not save settings', 'error');
@@ -2624,7 +2621,6 @@ async function saveSettings(e) {
     if (btn) { btn.disabled = false; btn.innerHTML = oldHtml || '<i class="fa-solid fa-floppy-disk"></i> Save All Settings'; }
   }
 }
-
 // ====================================================
 //  WITHDRAWALS
 // ====================================================
@@ -3157,11 +3153,18 @@ function connectAffiliateProgram(name) {
 
 function requestAffiliatePayout() {
   const pending = parseFloat((document.getElementById('aff-pending')?.textContent || '0').replace(/[^\d.]/g,'')) || 0;
-  if (!currentUser?.profile?.account_number) { toast('Bank Details Needed', 'Add your bank account in Store Settings first.', 'warn'); showDash('settings'); return; }
-  if (pending < 5000) { toast('Not Ready Yet', 'Minimum affiliate payout is ₦5,000.', 'warn'); return; }
-  document.getElementById('wd-amount').value = pending;
+  
+  // REMOVED: Legacy account_number validation block to allow pure Paystack processing
+  if (pending < 5000) { 
+    toast('Not Ready Yet', 'Minimum affiliate payout is ₦5,000.', 'warn'); 
+    return; 
+  }
+  
+  const wdAmountInput = document.getElementById('wd-amount');
+  if (wdAmountInput) wdAmountInput.value = pending;
+  
   showDash('withdrawals');
-  toast('Payout Prepared', 'Review and submit your withdrawal request.', 'info');
+  toast('Payout Prepared', 'Review and submit your Paystack processing request.', 'info');
 }
 
 async function loadWithdrawalHistory() {
@@ -4585,6 +4588,14 @@ async function viewStorefront(sellerId) {
 // ====================================================
 //  UTIL
 // ====================================================
+
+function missingColumn(error) {
+  if (!error) return "";
+  const text = `${error.message || ""} ${error.details || ""} ${error.hint || ""}`;
+  const quoted = text.match(/'([^']+)' column/i) || text.match(/column "([^"]+)"/i);
+  return quoted ? quoted[1] : "";
+}
+
 function fmtN(n) { return '₦' + fmtNum(n); }
 function fmtNum(n) { if (!n && n!==0) return '0'; return Math.round(n).toLocaleString('en-NG'); }
 function fmtDate(d) { if (!d) return ''; return new Date(d).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'}); }
