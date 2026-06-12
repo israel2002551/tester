@@ -2186,8 +2186,11 @@ async function submitProduct(e) {
     const VALID_CATS  = ['electronics','fashion','home','phones','beauty','sports','dropship','other'];
     const VALID_CONDS = ['new','used-like-new','used-good'];
 
-    if (!nameVal || nameVal.length < 3)          { toast('Invalid name','Product name must be at least 3 characters','warn'); return; }
-    if (nameVal.length > 120)                    { toast('Name too long','Max 120 characters','warn'); return; }
+    if (!nameVal || nameVal.length < 3)          { toast('Invalid name','Product name must be at least 3 characters','warn'); return; }// Change this line inside submitProduct(e)
+if (nameVal.length > 300) { 
+  toast('Name too long', 'Max 300 characters', 'warn'); 
+  return; 
+}
     if (isNaN(priceVal) || priceVal <= 0)        { toast('Invalid price','Enter a price greater than 0','warn'); return; }
     if (priceVal > 100000000)                    { toast('Price too high','Maximum price is ₦100,000,000','warn'); return; }
     if (stockVal < 0 || stockVal > 100000)       { toast('Invalid stock','Stock must be between 0 and 100,000','warn'); return; }
