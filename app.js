@@ -2693,12 +2693,12 @@ async function requestWithdrawal() {
 //  DROPSHIPPING
 // ====================================================
 const dropshipCatalog = [
-  { id:'mini-projector', niche:'electronics', name:'Mini Projector', supplier:'CJ Dropshipping', cost:45000, price:120000, shipping:6500, stock:120, delivery:'10-18 days', demand:'High', image:'https://images.unsplash.com/photo-1601944177325-f8867652837f?w=600&h=420&fit=crop', description:'Portable mini projector for movies, football nights, church presentations, and home entertainment.' },
-  { id:'earbuds-pro', niche:'electronics', name:'Wireless Earbuds Pro', supplier:'AliExpress', cost:12000, price:35000, shipping:2500, stock:240, delivery:'8-15 days', demand:'High', image:'https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?w=600&h=420&fit=crop', description:'Bluetooth earbuds with charging case, deep bass, touch controls, and long battery life.' },
-  { id:'smart-watch', niche:'electronics', name:'Fitness Smart Watch', supplier:'CJ Dropshipping', cost:18000, price:55000, shipping:3000, stock:180, delivery:'9-16 days', demand:'High', image:'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&h=420&fit=crop', description:'Smart watch with fitness tracking, call alerts, heart-rate monitoring, and durable strap.' },
-  { id:'kitchen-set', niche:'home', name:'Kitchen Gadget Set', supplier:'AliExpress', cost:8500, price:25000, shipping:2200, stock:300, delivery:'12-20 days', demand:'Medium', image:'https://images.unsplash.com/photo-1556911220-bff31c812dba?w=600&h=420&fit=crop', description:'Multi-piece kitchen gadget set for faster food prep, storage, slicing, and everyday cooking.' },
-  { id:'makeup-organizer', niche:'beauty', name:'Makeup Organizer Box', supplier:'CJ Dropshipping', cost:9500, price:28500, shipping:2300, stock:160, delivery:'10-17 days', demand:'Medium', image:'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=600&h=420&fit=crop', description:'Clear cosmetic organizer for makeup, skincare products, perfumes, and dressing table storage.' },
-  { id:'travel-backpack', niche:'fashion', name:'Anti-Theft Travel Backpack', supplier:'AliExpress', cost:14000, price:42000, shipping:3500, stock:130, delivery:'11-19 days', demand:'High', image:'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=600&h=420&fit=crop', description:'Durable anti-theft backpack with laptop compartment, USB port, and water-resistant fabric.' }
+  { id:'mini-projector', niche:'electronics', name:'Mini Projector HD', supplier:'Temu', cost:45000, price:120000, shipping:6500, stock:120, delivery:'7-12 days', demand:'High', image:'https://images.unsplash.com/photo-1601944177325-f8867652837f?w=600&h=420&fit=crop', description:'Portable mini projector for movies, football nights, and coding presentations.' },
+  { id:'earbuds-pro', niche:'electronics', name:'Wireless Earbuds Pro', supplier:'AliExpress', cost:12000, price:35000, shipping:2500, stock:240, delivery:'8-15 days', demand:'High', image:'https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?w=600&h=420&fit=crop', description:'Bluetooth earbuds with charging case, deep bass, and touch controls.' },
+  { id:'smart-watch', niche:'electronics', name:'Fitness Smart Watch', supplier:'Temu', cost:18000, price:55000, shipping:3000, stock:180, delivery:'6-10 days', demand:'High', image:'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&h=420&fit=crop', description:'Smart watch with fitness tracking, heart-rate monitoring, and durable strap.' },
+  { id:'esp32-camera', niche:'electronics', name:'Seeed Studio XIAO ESP32S3 Sense', supplier:'Amazon', cost:15000, price:29000, shipping:4500, stock:95, delivery:'5-9 days', demand:'Very High', image:'https://images.unsplash.com/photo-1517055720413-77a13546dd1e?w=600&h=420&fit=crop', description:'ESP32S3 board with OV2640 camera module, perfect for hardware AI tracking projects.' },
+  { id:'anti-theft-bag', niche:'fashion', name:'Anti-Theft Travel Backpack', supplier:'AliExpress', cost:14000, price:42000, shipping:3500, stock:130, delivery:'11-19 days', demand:'High', image:'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=600&h=420&fit=crop', description:'Durable anti-theft backpack with laptop compartment and water-resistant fabric.' },
+  { id:'oled-display', niche:'electronics', name:'1.3-inch RGB OLED Display Module', supplier:'Amazon', cost:5000, price:12000, shipping:2000, stock:150, delivery:'4-8 days', demand:'High', image:'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=600&h=420&fit=crop', description:'High-contrast 240x240 mini display, crisp visual rendering for microcontrollers.' }
 ];
 let dropshipConnections = {};
 let activeDropshipCatalog = dropshipCatalog;
@@ -2759,13 +2759,22 @@ function renderDropshipSection() {
                <i class="fa-solid fa-external-link-alt"></i> Browse AliExpress
             </a>
           </div>
-          <div class="supplier-card" data-supplier-card="cj">
+          <div class="supplier-card" data-supplier-card="temu">
             <div class="flex items-center gap-3 mb-3">
-              <div class="trust-icon" style="background:#ffedd5;font-size:1.1rem"><i class="fa-solid fa-box" style="color:#ea580c"></i></div>
-              <div><div class="font-600">CJ Dropshipping</div><div class="text-xs color-text3">QC, fulfilment and faster shipping</div></div>
+              <div class="trust-icon" style="background:#ffedd5;font-size:1.1rem"><i class="fa-solid fa-bolt" style="color:#d97706"></i></div>
+              <div><div class="font-600">Temu</div><div class="text-xs color-text3">Trending consumer goods, lightning fast air shipping</div></div>
             </div>
-            <a href="https://cjdropshipping.com" target="_blank" class="btn btn-primary btn-full btn-sm" style="text-decoration:none; text-align:center;">
-               <i class="fa-solid fa-external-link-alt"></i> Browse CJ
+            <a href="https://www.temu.com" target="_blank" class="btn btn-primary btn-full btn-sm" style="text-decoration:none; text-align:center; background:#ea580c;">
+               <i class="fa-solid fa-external-link-alt"></i> Browse Temu
+            </a>
+          </div>
+          <div class="supplier-card" data-supplier-card="amazon" style="grid-column: span 2;">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="trust-icon" style="background:#fef9c3;font-size:1.1rem"><i class="fa-brands fa-amazon" style="color:#a16207"></i></div>
+              <div><div class="font-600">Amazon Premium</div><div class="text-xs color-text3">High-quality components, tools, and developer supplies</div></div>
+            </div>
+            <a href="https://www.amazon.com" target="_blank" class="btn btn-primary btn-full btn-sm" style="text-decoration:none; text-align:center; background:#232f3e;">
+               <i class="fa-solid fa-external-link-alt"></i> Browse Amazon
             </a>
           </div>
         </div>
@@ -2785,11 +2794,10 @@ function renderDropshipSection() {
       </div>
     </div>
 
-    <!-- URL Import Bar -->
     <div class="card card-pad mb-4" style="background:var(--cream); border:1px solid var(--border);">
       <label class="form-label" style="font-size:.85rem;">Import Product by URL</label>
       <div style="display:flex; gap:.5rem;">
-        <input type="url" id="ds-import-url" class="form-input" placeholder="Paste AliExpress or CJ product link here..." style="flex:1;">
+        <input type="url" id="ds-import-url" class="form-input" placeholder="Paste AliExpress, Temu, or Amazon product link here..." style="flex:1;">
         <button class="btn btn-primary" onclick="importFromUrl(event)">
           <i class="fa-solid fa-download"></i> Fetch & Import
         </button>
