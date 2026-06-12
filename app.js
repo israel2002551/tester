@@ -1076,6 +1076,9 @@ function updatePriceDisplay() {
 // ====================================================
 //  PRODUCT DETAIL — MULTI-MEDIA GALLERY ENHANCED
 // ====================================================
+// ====================================================
+//  PRODUCT DETAIL — FLUID MULTI-MEDIA GALLERY UNIFIED
+// ====================================================
 async function openProduct(id) {
   currentProd = products.find(p => p.id === id);
   if (!currentProd) return;
@@ -1108,6 +1111,19 @@ async function openProduct(id) {
 
   // Gallery view containers inside product-modal
   const mainContainer = document.getElementById('gallery-main');
+  if (mainContainer) {
+    // FORCE STRUCTURAL BOUNDS: Prevent custom videos from squashing modal grid systems
+    mainContainer.style.width = '100%';
+    mainContainer.style.height = '320px';
+    mainContainer.style.maxHeight = '350px';
+    mainContainer.style.position = 'relative';
+    mainContainer.style.background = '#000';
+    mainContainer.style.borderRadius = '12px';
+    mainContainer.style.overflow = 'hidden';
+    mainContainer.style.display = 'flex';
+    mainContainer.style.alignItems = 'center';
+    mainContainer.style.justifyContent = 'center';
+  }
   
   // Internal helper function to change the main viewer frame smoothly
   window.switchProductModalMediaView = function(index) {
@@ -1115,14 +1131,22 @@ async function openProduct(id) {
     if (!asset || !mainContainer) return;
     
     if (asset.type === 'video') {
-      mainContainer.innerHTML = `<video src="${escAttr(asset.url)}" controls autoplay playsinline style="width:100%;height:100%;object-fit:contain;border-radius:var(--radius-sm)" poster="${escAttr(p.image_url || '')}"></video>`;
+      mainContainer.innerHTML = `
+        <div style="position:relative; width:100%; height:100%; display:flex; align-items:center; justify-content:center;">
+          <video src="${escAttr(asset.url)}" controls autoplay muted playsinline 
+            style="width:100%; height:100%; object-fit:contain; background:#000;">
+          </video>
+        </div>`;
     } else {
-      mainContainer.innerHTML = `<img src="${escAttr(asset.url)}" alt="${escAttr(p.name)}" style="width:100%;height:100%;object-fit:contain;border-radius:var(--radius-sm)">`;
+      mainContainer.innerHTML = `
+        <img src="${escAttr(asset.url)}" alt="${escAttr(p.name)}" 
+          style="width:100%; height:100%; object-fit:contain; background:#fafafa;">`;
     }
     
     // Highlight matching active thumbnail preview container border dynamically
     document.querySelectorAll('.modal-thumb-nav-btn').forEach((btn, btnIdx) => {
       btn.style.borderColor = btnIdx === index ? 'var(--green)' : 'var(--border)';
+      btn.style.boxShadow = btnIdx === index ? '0 0 0 2px var(--green-xlt)' : 'none';
     });
   };
 
@@ -1133,18 +1157,18 @@ async function openProduct(id) {
   // Add slider preview thumbnails if multiple media files are available
   let thumbListHtml = '';
   if (structuralMediaList.length > 1) {
-    thumbListHtml = `<div class="modal-media-thumbnails" style="display:flex;gap:8px;margin-top:10px;overflow-x:auto;padding-bottom:5px;width:100%;">`;
+    thumbListHtml = `<div class="modal-media-thumbnails" style="display:flex; gap:8px; margin-top:12px; overflow-x:auto; padding-bottom:6px; width:100%; scrollbar-width:thin;">`;
     structuralMediaList.forEach((asset, idx) => {
       if (asset.type === 'video') {
         thumbListHtml += `
-          <button class="modal-thumb-nav-btn" onclick="switchProductModalMediaView(${idx})" style="width:50px;height:50px;border:2px solid var(--border);border-radius:6px;overflow:hidden;background:#000;position:relative;flex-shrink:0;cursor:pointer;padding:0;">
-            <i class="fa-solid fa-play" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-size:0.7rem;z-index:2;"></i>
-            <video src="${escAttr(asset.url)}" style="width:100%;height:100%;object-fit:cover;opacity:0.6;"></video>
+          <button class="modal-thumb-nav-btn" onclick="switchProductModalMediaView(${idx})" style="width:54px; height:54px; border:2px solid var(--border); border-radius:8px; overflow:hidden; background:#000; position:relative; flex-shrink:0; cursor:pointer; padding:0; transition:all 0.15s ease;">
+            <i class="fa-solid fa-circle-play" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#fff; font-size:1.1rem; z-index:2; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5));"></i>
+            <video src="${escAttr(asset.url)}" style="width:100%; height:100%; object-fit:cover; opacity:0.55;"></video>
           </button>`;
       } else {
         thumbListHtml += `
-          <button class="modal-thumb-nav-btn" onclick="switchProductModalMediaView(${idx})" style="width:50px;height:50px;border:2px solid var(--border);border-radius:6px;overflow:hidden;flex-shrink:0;cursor:pointer;padding:0;">
-            <img src="${escAttr(asset.url)}" style="width:100%;height:100%;object-fit:cover;">
+          <button class="modal-thumb-nav-btn" onclick="switchProductModalMediaView(${idx})" style="width:54px; height:54px; border:2px solid var(--border); border-radius:8px; overflow:hidden; background:#fff; flex-shrink:0; cursor:pointer; padding:0; transition:all 0.15s ease;">
+            <img src="${escAttr(asset.url)}" style="width:100%; height:100%; object-fit:cover;">
           </button>`;
       }
     });
@@ -1197,8 +1221,7 @@ async function openProduct(id) {
   
   document.getElementById('modal-negotiable-note').classList.toggle('hidden', !p.negotiable);
   
-  // Seller
-// Seller
+  // Seller Profile Mapping
   const seller = p.profiles || {};
   document.getElementById('modal-seller-name').textContent = seller.name || 'Seller';
   
@@ -1206,7 +1229,7 @@ async function openProduct(id) {
   document.getElementById('modal-seller-email').textContent = 'Contact via In-App Chat Secure System';
   document.getElementById('modal-seller-avatar').textContent = (seller.name||'S')[0].toUpperCase();
   
-  // Flags
+  // Flags Layout Array Injections
   const flags = [];
   if (isFlashActive) flags.push('<span class="prod-badge" style="background:var(--red);color:#fff">⚡ Flash Sale</span>');
   if (vidArray.length > 0) flags.push('<span class="prod-badge prod-badge-video">🎬 Video Available</span>');
