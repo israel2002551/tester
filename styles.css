@@ -370,10 +370,61 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .auth-google-btn:hover{background:var(--cream);border-color:var(--green-lt)}
 .auth-google-btn .fa-google{color:#ea4335}
 
-/* Product detail */
-#product-modal .modal-box{max-width:840px;padding:0;overflow:hidden}
-.product-modal-grid{display:grid;grid-template-columns:1fr 1fr}
-@media(max-width:600px){.product-modal-grid{grid-template-columns:1fr};#product-modal .modal-box{border-radius:16px 16px 20px 20px;max-height:95vh}}
+/* Product detail *//* Product detail */
+#product-modal .modal-box {
+  max-width: 850px;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* MODAL COLUMN CONTROLLER: Enforces strict left-to-right flex layouts */
+.product-modal-grid {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 24px;
+  width: 100%;
+}
+
+.product-modal-gallery {
+  flex: 1 !important;
+  min-width: 0 !important; 
+  max-width: 50% !important;
+  background: var(--cream);
+  border-radius: 20px 0 0 20px;
+  padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.product-modal-info {
+  flex: 1 !important;
+  min-width: 0 !important;
+  display: flex;
+  flex-direction: column;
+  padding: 1.4rem;
+}
+
+/* RESPONSIVE MOBILE OVERRIDE: Collapse columns back to rows gracefully on narrow viewports */
+@media (max-width: 768px) {
+  .product-modal-grid {
+    flex-direction: column !important;
+    gap: 12px;
+  }
+  .product-modal-gallery {
+    max-width: 100% !important;
+    border-radius: 16px 16px 0 0;
+    padding: 0.9rem;
+  }
+  .product-modal-info {
+    padding: 1rem;
+  }
+  #product-modal .modal-box {
+    border-radius: 16px 16px 20px 20px;
+    max-height: 95vh;
+  }
+}
 .product-modal-gallery{background:var(--cream);border-radius:20px 0 0 20px;padding:1.2rem;display:flex;flex-direction:column;align-items:center}
 @media(max-width:600px){.product-modal-gallery{border-radius:16px 16px 0 0;padding:.9rem}}
 .gallery-main{aspect-ratio:1;width:100%;border-radius:var(--radius);overflow:hidden;background:#fff;border:1px solid var(--border);display:flex;align-items:center;justify-content:center}
