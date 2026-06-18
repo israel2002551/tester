@@ -1465,6 +1465,44 @@ function startCheckout() {
     commEl.closest('.pay-row')?.classList.add('hidden');
   }
   
+  // --- DYNAMIC PAYMENT METHOD RENDERING (WITH WALLET CHANNELS) ---
+  const isSeller = currentRole === 'seller' || currentRole === 'admin' || currentRole === 'both';
+  const availableBalText = document.getElementById('wd-available')?.textContent || '₦0';
+  const availableBalance = parseFloat(availableBalText.replace(/[^\d.]/g, '')) || 0;
+  const isUnderfunded = availableBalance < totalWithCommission;
+
+  let walletCardHtml = '';
+  if (isSeller) {
+    walletCardHtml = `
+      <div class="payment-method-card wallet-card ${isUnderfunded ? 'disabled' : ''}" 
+           id="pm-wallet" onclick="if(!${isUnderfunded}){selectCheckoutPaymentMethod('wallet')}"
+           style="position:relative; overflow:hidden; border:2px solid var(--border); border-radius:var(--radius-sm); padding:1rem; cursor:${isUnderfunded ? 'not-allowed' : 'pointer'}; opacity:${isUnderfunded ? '0.6' : '1'}">
+        <span class="payment-method-icon"><i class="fa-solid fa-wallet" style="color:var(--green)"></i></span>
+        <div class="payment-method-title">Wallet Revenue</div>
+        <div class="payment-method-sub">Available: ${fmtN(availableBalance)}</div>
+        ${isUnderfunded ? `<div style="color:var(--danger); font-size:0.65rem; font-weight:700; margin-top:4px;">❌ Insufficient Funds</div>` : ''}
+      </div>`;
+  }
+
+  const methodGrid = document.getElementById('co-p2');
+  if (methodGrid) {
+    const gridContainer = methodGrid.querySelector('.payment-method-grid');
+    if (gridContainer) {
+      gridContainer.outerHTML = `
+        <div class="payment-method-grid" style="display:grid; grid-template-columns: ${isSeller ? '1fr 1fr' : '1fr'}; gap:0.7rem;">
+          <div class="payment-method-card paystack-card selected" id="pm-paystack" onclick="selectCheckoutPaymentMethod('paystack')">
+            <span class="payment-method-icon"><i class="fa-solid fa-credit-card" style="color:#0BA4DB"></i></span>
+            <div class="payment-method-title">Paystack Checkout</div>
+            <div class="payment-method-sub">Cards, USSD, Transfer</div>
+          </div>
+          ${walletCardHtml}
+        </div>`;
+    }
+  }
+
+  // Reset explicit gateway checkout selection state to default on entry window
+  checkoutPaymentMethod = 'paystack';
+  
   // Order items rendering engine 
   document.getElementById('co-items').innerHTML = cart.map(c=>`
     <div class="order-item">
@@ -1671,6 +1709,84 @@ async function payWithPaystack() {
     toast('Payment Error', err.message || 'Could not initialize Paystack', 'error');
   }
 }
+
+// --- NEW WALLET SELECTION METHOD AND ENGINE CORES ---
+function selectCheckoutPaymentMethod(method) {
+  checkoutPaymentMethod = method;
+  document.getElementById('pm-paystack').classList.toggle('selected', method === 'paystack');
+  const walletCard = document.getElementById('pm-wallet');
+  if (walletCard) walletCard.classList.toggle('selected', method === 'wallet');
+  
+  // Dynamically flip the submit button execution routing target
+  const payBtn = document.querySelector('#pm-paystack-panel .btn-paystack') || document.querySelector('#co-p2 .btn-primary');
+  if (payBtn) {
+    if (method === 'wallet') {
+      payBtn.setAttribute('onclick', 'payWithWalletRevenue()');
+      payBtn.innerHTML = '<i class="fa-solid fa-wallet"></i> Pay with Wallet Balance';
+      payBtn.className = 'btn btn-primary btn-full btn-lg';
+    } else {
+      payBtn.setAttribute('onclick', 'payWithPaystack()');
+      payBtn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Proceed with Paystack';
+      payBtn.className = 'btn btn-paystack btn-full btn-lg';
+    }
+  }
+}
+
+async function payWithWalletRevenue() {
+  if (cart.length === 0) { toast('Cart is empty', '', 'warn'); return; }
+  const rawProductTotal = cart.reduce((s, c) => s + (c.price * (c.qty || 1)), 0);
+  if (!currentUser) { showModal('auth-modal'); return; }
+
+  const btn = document.querySelector('#co-p2 .btn') || document.querySelector('.btn-primary');
+  const oldHtml = btn?.innerHTML;
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processing Wallet Debit...'; }
+
+  try {
+    const checkoutPayload = {
+      cart: cart.map(c => ({ id: c.id, qty: c.qty || 1 })),
+      delivery_name: document.getElementById('co-name').value.trim(),
+      delivery_phone: document.getElementById('co-phone').value.trim(),
+      delivery_address: document.getElementById('co-address').value.trim(),
+    };
+
+    const secretComm = Math.round(rawProductTotal * PLATFORM_FEE_PCT);
+    const hiddenTotalBillAmount = rawProductTotal + secretComm;
+
+    const result = await callEdge('verify-payment', {
+      reference: 'wal_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+      ...checkoutPayload,
+      payment_method: 'wallet_revenue',
+      total_amount: hiddenTotalBillAmount
+    });
+
+    if (result.success) {
+      const seller = cart[0]?.profiles;
+      if (seller?.whatsapp) sendWhatsAppOrderNotification({ id: result.order_id, total_amount: hiddenTotalBillAmount }, seller.whatsapp);
+      
+      trackAnalytics({
+        event_type: 'order_created',
+        seller_id: cart[0]?.seller_id,
+        order_id: result.order_id,
+        quantity: cart.reduce((sum,c)=>sum+(c.qty||1),0),
+        amount: hiddenTotalBillAmount,
+        metadata: { payment_method: 'wallet_revenue' },
+      });
+      
+      cart = []; saveCart();
+      document.getElementById('co-order-id').textContent = result.order_id || '';
+      document.getElementById('co-order-total').textContent = fmtN(hiddenTotalBillAmount);
+      goCheckoutStep(3);
+      toast('Payment Successful!', 'Order settled via Wallet Revenue balance', 'success');
+      loadWithdrawalData();
+      loadSellerStats();
+    }
+  } catch (err) {
+    toast('Transaction Declined', err.message || 'Deduction failed.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
+  }
+}
+
 function handleProofUpload(input) {
   if (input.files?.[0]) {
     const zone = document.getElementById('proof-upload-zone');
@@ -2548,6 +2664,41 @@ function payCommissionPaystack() {
   });
 }
 
+function payCommissionViaWallet() {
+  if (!currentUser) return;
+  const availableBalText = document.getElementById('wd-available')?.textContent || '₦0';
+  const availableBalance = parseFloat(availableBalText.replace(/[^\d.]/g, '')) || 0;
+  
+  if (availableBalance < 5000) {
+    toast('Insufficient Funds', 'Your Wallet balance must be at least ₦5,000 to renew subscription.', 'warn');
+    return;
+  }
+  
+  if (!confirm('Deduct ₦5,000 from your marketplace wallet revenue to instantly extend store validity for 30 days?')) return;
+  
+  const badge = document.getElementById('comm-status-badge');
+  toast('Processing Ledger Adjustment...', '', 'info');
+
+  callEdge('admin-action', {
+    action: 'pay_commission_via_wallet',
+    target_id: currentUser.id
+  }).then(() => {
+    currentUser.profile.commission_paid = true;
+    currentUser.profile.is_suspended = false;
+    currentUser.profile.trial_end = new Date(Date.now() + 30*86400000).toISOString();
+    
+    document.getElementById('suspended-modal').classList.remove('open');
+    document.body.classList.remove('modal-open');
+    toast('Hosting Extended! 🏪', 'Store subscription activated successfully.', 'success');
+    
+    loadWithdrawalData();
+    checkSellerCommission();
+    loadSellerStats();
+  }).catch(err => {
+    toast('Adjustment Failed', err.message || 'Internal ledger processing exception error.', 'error');
+  });
+}
+
 async function submitCommissionReceipt() {
   const file = document.getElementById('commission-file').files[0];
   const ref  = document.getElementById('commission-ref').value.trim();
@@ -2597,21 +2748,104 @@ async function submitCommissionReceipt() {
 async function loadSettings() {
   if (!currentUser?.profile) return;
   const p = currentUser.profile;
-  document.getElementById('s-store-name').value = p.store_name||'';
+  
+  // Pre-fill existing basic data
+  document.getElementById('s-store-name').value = p.store_name || '';
   document.getElementById('s-store-cat').value = p.store_category || p.category || 'Electronics';
-  document.getElementById('s-store-desc').value = p.store_description||'';
-  document.getElementById('s-whatsapp').value = p.whatsapp||'';
-  document.getElementById('s-bank-name').value = p.bank_name||'';
-  document.getElementById('s-account-num').value = p.account_number||'';
-  document.getElementById('s-account-name').value = p.account_name||'';
-  document.getElementById('s-paystack-key').value = p.paystack_key||'';
-  document.getElementById('s-notif-email').value = p.notif_email||p.email||'';
-  // Withdrawal panel
-  document.getElementById('wd-bank-name').textContent = p.bank_name||'Not set';
-  document.getElementById('wd-acct-num').textContent = p.account_number||'—';
-  document.getElementById('wd-acct-name').textContent = p.account_name||'—';
+  document.getElementById('s-store-desc').value = p.store_description || '';
+  document.getElementById('s-whatsapp').value = p.whatsapp || '';
+  document.getElementById('s-bank-name').value = p.bank_name || '';
+  document.getElementById('s-account-num').value = p.account_number || '';
+  document.getElementById('s-account-name').value = p.account_name || '';
+  document.getElementById('s-paystack-key').value = p.paystack_key || '';
+  document.getElementById('s-notif-email').value = p.notif_email || p.email || '';
+  
+  // Withdrawal panel indicators
+  document.getElementById('wd-bank-name').textContent = p.bank_name || 'Not set';
+  document.getElementById('wd-acct-num').textContent = p.account_number || '—';
+  document.getElementById('wd-acct-name').textContent = p.account_name || '—';
+
+  // --- NEW: BRAND CUSTOMIZATION LIVE DOM INJECTIONS ---
+  const settingsSection = document.getElementById('ds-settings');
+  if (settingsSection && !document.getElementById('brand-identity-panel')) {
+    // Locate your settings form element container
+    const formElement = document.getElementById('settings-save-btn')?.closest('form');
+    if (formElement) {
+      const brandPanelHtml = `
+        <div class="card card-pad mb-4" id="brand-identity-panel" style="border-top: 4px solid var(--green)">
+          <h3 class="mb-2"><i class="fa-solid fa-palette color-green"></i> Brand Identity Setup</h3>
+          <p class="text-xs color-text3 mb-3">Upload your custom merchant logo and set up customer-facing profile accents.</p>
+          
+          <div class="form-grid form-grid-2 mb-3">
+            <div class="form-group">
+              <label class="form-label">Brand Logo Image</label>
+              <div class="upload-zone" id="brand-logo-zone" onclick="document.getElementById('s-brand-logo-file').click()" style="padding: 1rem;">
+                <i class="fa-solid fa-cloud-arrow-up color-green"></i>
+                <div class="upload-label" id="brand-logo-filename" style="font-size: 0.78rem;">Click to choose Logo</div>
+                <input type="file" id="s-brand-logo-file" accept="image/*" class="hidden" onchange="previewSellerBrandLogo(this)">
+              </div>
+            </div>
+            <div class="form-group flex items-center justify-center">
+              <div id="brand-logo-preview-wrap" style="width: 90px; height: 90px; border-radius: 14px; border: 2px dashed var(--border); overflow: hidden; background: var(--cream); display: flex; align-items: center; justify-content: center;">
+                ${p.logo_url ? `<img src="${p.logo_url}" style="width:100%; height:100%; object-fit:cover;">` : `<i class="fa-solid fa-store" style="font-size: 1.8rem; color: var(--border2)"></i>`}
+              </div>
+            </div>
+          </div>
+
+          <div class="form-grid form-grid-2">
+            <div class="form-group">
+              <label class="form-label">Instagram Handle</label>
+              <div class="input-group">
+                <span class="input-prefix"><i class="fa-brands fa-instagram"></i></span>
+                <input type="text" id="s-instagram" class="form-input" placeholder="username" value="${p.instagram_handle || ''}">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Physical Store Address</label>
+              <div class="input-group">
+                <span class="input-prefix"><i class="fa-solid fa-location-dot"></i></span>
+                <input type="text" id="s-address" class="form-input" placeholder="e.g. Computer Village, Ikeja" value="${p.store_address || ''}">
+              </div>
+            </div>
+          </div>
+        </div>`;
+      
+      // Inject the brand panel right before the form input wrapper groups
+      formElement.insertAdjacentHTML('afterbegin', brandPanelHtml);
+    }
+  } else if (document.getElementById('brand-identity-panel')) {
+    // If the node elements exist already, just populate fresh variables
+    document.getElementById('s-instagram').value = p.instagram_handle || '';
+    document.getElementById('s-address').value = p.store_address || '';
+    if (p.logo_url) {
+      document.getElementById('brand-logo-preview-wrap').innerHTML = `<img src="${p.logo_url}" style="width:100%; height:100%; object-fit:cover;">`;
+    }
+  }
 }
 
+// Live local form file picker reader mapping callback
+function previewSellerBrandLogo(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  
+  if (!file.type.startsWith('image/') || file.size > 3 * 1024 * 1024) {
+    toast('Invalid Asset File', 'Please select an image file under 3MB.', 'warn');
+    input.value = '';
+    return;
+  }
+  
+  const label = document.getElementById('brand-logo-filename');
+  if (label) label.textContent = file.name;
+  
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const wrap = document.getElementById('brand-logo-preview-wrap');
+    if (wrap) wrap.innerHTML = `<img src="${e.target.result}" style="width:100%; height:100%; object-fit:cover;">`;
+  };
+  reader.readAsDataURL(file);
+}
+
+// Complete rewrite of saveSettings execution handler block
 async function saveSettings(e) {
   e.preventDefault();
   if (!currentUser) return;
@@ -2625,28 +2859,48 @@ async function saveSettings(e) {
     store_description: document.getElementById('s-store-desc').value.trim(),
     whatsapp: document.getElementById('s-whatsapp').value.trim(),
     paystack_key: document.getElementById('s-paystack-key').value.trim(),
-    notif_email: document.getElementById('s-notif-email').value.trim()
+    notif_email: document.getElementById('s-notif-email').value.trim(),
+    // Added extended metadata attributes
+    instagram_handle: document.getElementById('s-instagram')?.value.trim() || '',
+    store_address: document.getElementById('s-address')?.value.trim() || ''
   };
   
-  // Cleaned validation rules: Removed strict bank verification constraints
   if (!updates.store_name || !updates.whatsapp) {
     toast('Missing details', 'Store Name and WhatsApp contact are required.', 'warn');
     return;
   }
   
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving...'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving Identity...'; }
   
   try {
+    // 1. Process brand logo profile uploads asynchronously if populated
+    const logoFileInput = document.getElementById('s-brand-logo-file');
+    if (logoFileInput?.files?.[0]) {
+      const file = logoFileInput.files[0];
+      const ext = file.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '');
+      const path = `branding/merchant_${currentUser.id}_${Date.now()}.${ext}`;
+      
+      toast('Uploading logo...', '', 'info', 2000);
+      const uploaded = await uploadToFirstAvailableBucket(['uploads', 'products'], path, file, { contentType: file.type, upsert: true });
+      updates.logo_url = uploaded.publicUrl;
+    }
+
+    // 2. Transmit all identity modifications directly to the profile edge framework
     await callEdge('update-profile', updates);
+    
+    // Synced properties updates locally
     if (currentUser.profile) Object.assign(currentUser.profile, updates);
-    toast('Settings Saved! ✅', 'Your store details are updated.', 'success');
+    
+    toast('Profile Brand Saved! 🎨', 'Your store profile parameters are updated.', 'success');
     loadWithdrawalData();
   } catch (err) {
-    toast('Save Failed', err.message || 'Could not save settings', 'error');
+    toast('Save Failed', err.message || 'Could not update your store profile.', 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = oldHtml || '<i class="fa-solid fa-floppy-disk"></i> Save All Settings'; }
   }
 }
+
+
 // ====================================================
 //  WITHDRAWALS
 // ====================================================
@@ -4588,7 +4842,24 @@ async function viewStorefront(sellerId) {
   document.getElementById('storefront-view').style.display = 'block';
   const { data: seller } = await db.from('profiles').select('*').eq('id', sellerId).single();
   if (!seller) { toast('Store not found','','error'); return; }
-  document.getElementById('sf-avatar').textContent = (seller.name||'S')[0].toUpperCase();
+  // --- DYNAMIC LOGO IMAGE CONTEXT RESOLUTION ---
+  const avatarNode = document.getElementById('sf-avatar');
+  if (seller.logo_url) {
+    avatarNode.style.background = 'transparent';
+    avatarNode.style.boxShadow = 'none';
+    avatarNode.innerHTML = `<img src="${sanitizeUrl(seller.logo_url)}" alt="Logo" style="width:100%; height:100%; object-fit:cover; border-radius:50%; border:2px solid rgba(255,255,255,0.4);">`;
+  } else {
+    avatarNode.style.background = 'linear-gradient(135deg, var(--green), var(--green-lt))';
+    avatarNode.textContent = (seller.name || 'S')[0].toUpperCase();
+  }
+
+  // Append new location metrics if available under the desc elements context
+  if (seller.store_address) {
+    document.getElementById('sf-desc').insertAdjacentHTML('beforeend', `
+      <div style="font-size:0.75rem; color:rgba(255,255,255,0.7); margin-top:6px;">
+        <i class="fa-solid fa-location-dot"></i> Store Hub: ${escHtml(seller.store_address)}
+      </div>`);
+  }
   document.getElementById('sf-name').textContent = seller.name || 'Seller Store';
   document.getElementById('sf-desc').textContent = seller.store_description || 'Welcome to our store!';
   document.getElementById('sf-wa-link').href = `https://wa.me/${(seller.whatsapp||'').replace(/\D/g,'')}`;
