@@ -4196,12 +4196,21 @@ async function adminRejectWithdrawal(id) {
 async function sendBroadcast() {
   if (!isAdmin()) return;
   const title  = document.getElementById('bc-title').value.trim();
-  const body   = document.getElementById('bc-body').value.trim();
+  const body   = document.getElementById('bc-body').value.trim(); // Reads text string from DOM
   const target = document.getElementById('bc-target').value;
   const type   = document.querySelector('input[name="bc-type"]:checked')?.value || 'info';
+  
   if (!title || !body) { toast('Fill in title and message', '', 'warn'); return; }
-  try { await callEdge('send-broadcast', { title, body, target, type }); }
-  catch(e) { toast('Error', e.message, 'error'); return; }
+  
+  try { 
+    // Passes payload keys straight to your Edge Function
+    await callEdge('send-broadcast', { title, body, target, type }); 
+  }
+  catch(e) { 
+    toast('Error', e.message, 'error'); 
+    return; 
+  }
+  
   toast('📣 Broadcast Sent!', 'To: ' + target, 'success');
   document.getElementById('bc-title').value = '';
   document.getElementById('bc-body').value  = '';
