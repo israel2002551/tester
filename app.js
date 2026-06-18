@@ -109,22 +109,70 @@ const db = window.supabase.createClient(SB_URL, SB_KEY, {
 // ====================================================
 
 // ====================================================
-//  PWA
+//  PWA PUSH NOTIFICATION ENGINE INITIALIZATION
 // ====================================================
 if ('serviceWorker' in navigator) {
-  const sw = `data:application/javascript,self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});self.addEventListener('install',()=>self.skipWaiting());`;
-  navigator.serviceWorker.register(sw).catch(()=>{});
-}
-const manifest = {name:'BUYSELL Nigeria',short_name:'BUYSELL',start_url: window.location.origin + '/','display':'standalone',theme_color:'#0b1f14',background_color:'#fdf8ef',icons:[]};
-const mBlob = new Blob([JSON.stringify(manifest)],{type:'application/json'});
-const mUrl = URL.createObjectURL(mBlob);
-const mLink = document.createElement('link');
-mLink.rel='manifest';mLink.href=mUrl;
-if(document.head) document.head.appendChild(mLink); else document.documentElement.appendChild(mLink);
+  // Enhanced Service Worker string script with Push Notification Event handlers built right in
+  const swCode = `
+    self.addEventListener('fetch', e => {
+      e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
+    });
+    
+    self.addEventListener('install', () => self.skipWaiting());
+    
+    // BACKGROUND PUSH LISTENER: Fires even if the browser/site is closed!
+    self.addEventListener('push', event => {
+      let data = { title: 'BUYSELL Nigeria', body: 'New update available on the platform!', icon: '/favicon.ico' };
+      try {
+        if (event.data) {
+          data = event.data.json();
+        }
+      } catch (err) {
+        if (event.data) data.body = event.data.text();
+      }
 
-window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstallPrompt = e; setTimeout(()=>document.getElementById('pwa-banner').classList.add('show'), 3000); });
-function installPWA() { if (deferredInstallPrompt) { deferredInstallPrompt.prompt(); deferredInstallPrompt.userChoice.then(()=>{ document.getElementById('pwa-banner').classList.remove('show'); deferredInstallPrompt = null; }); } }
-function dismissPWA() { document.getElementById('pwa-banner').classList.remove('show'); }
+      const options = {
+        body: data.body,
+        icon: data.icon || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=120',
+        badge: '/favicon.ico',
+        vibrate: [200, 100, 200],
+        data: { url: data.click_url || self.location.origin }
+      };
+
+      event.waitUntil(
+        self.registration.showNotification(data.title, options)
+      );
+    });
+
+    // NOTIFICATION CLICK ACTION Routing Module
+    self.addEventListener('notificationclick', event => {
+      event.notification.close();
+      event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+          // If the marketplace app is already open, just focus the tab window
+          for (const client of clientList) {
+            if (client.url === event.notification.data.url && 'focus' in client) {
+              return client.focus();
+            }
+          }
+          // Otherwise, open a fresh window straight to the alert context link address
+          if (clients.openWindow) {
+            return clients.openWindow(event.notification.data.url);
+          }
+        })
+      );
+    });
+  `;
+
+  const blob = new Blob([swCode], { type: 'application/javascript' });
+  const swUrl = URL.createObjectURL(blob);
+  
+  navigator.serviceWorker.register(swUrl).then(reg => {
+    console.log('[PUSH ENGINE] Service Worker operational bounds established.');
+    // Check if user is logged in, then prompt for permission keys token sync strings
+    setTimeout(syncUserNotificationToken, 5000);
+  }).catch(err => console.warn('SW Register failed:', err));
+}
 
 // ====================================================
 //  TOAST
@@ -473,7 +521,7 @@ function updateNavForUser() {
   }
   // Referral link
   const rc = currentUser.profile?.referral_code || 'ref_' + currentUser.id?.substr(0,8);
-  document.getElementById('referral-link').value = `https://buysell.ng/ref/${rc}`;
+  document.getElementById('referral-link').value = `http://buysell-markerplace.com/ref/${rc}`;
 }
 
 async function sendPasswordReset() {
@@ -1222,12 +1270,27 @@ async function openProduct(id) {
   document.getElementById('modal-negotiable-note').classList.toggle('hidden', !p.negotiable);
   
   // Seller Profile Mapping
+// Seller Profile Mapping
   const seller = p.profiles || {};
   document.getElementById('modal-seller-name').textContent = seller.name || 'Seller';
-  
-  // SECURED: Masking WhatsApp contact details from buyers
   document.getElementById('modal-seller-email').textContent = 'Contact via In-App Chat Secure System';
   document.getElementById('modal-seller-avatar').textContent = (seller.name||'S')[0].toUpperCase();
+
+  // SECURED FORCE: Ensure any direct WhatsApp shortcut button on the product modal is completely hidden or repurposed
+  const modalWaBtn = document.getElementById('modal-whatsapp-btn') || document.querySelector('.modal-wa-btn');
+  if (modalWaBtn) {
+    modalWaBtn.style.display = 'none'; // Completely strip it from the user display tree
+  }
+
+  // Bind the in-app chat trigger securely to the action button
+  const contactSellerBtn = document.getElementById('modal-contact-btn') || document.getElementById('modal-chat-btn');
+  if (contactSellerBtn) {
+    const productId = p.id;
+    contactSellerBtn.onclick = () => {
+      openMessageModal(p.seller_id, seller.name || 'Seller', productId);
+      closeModal('product-modal');
+    };
+  }
   
   // Flags Layout Array Injections
   const flags = [];
@@ -1330,7 +1393,7 @@ function shareStore() {
 }
 
 function copyStoreLink() {
-  const link = `https://buysell.ng/store/${currentUser?.id?.substr(0,8)||'your-store'}`;
+  const link = `http://buysell-markerplace.com/store/${currentUser?.id?.substr(0,8)||'your-store'}`;
   navigator.clipboard.writeText(link).then(()=>toast('Store Link Copied!','Share with customers','success'));
 }
 
@@ -1431,6 +1494,10 @@ function buyNow(prod) {
 function startCheckout() {
   if (!currentUser) { showModal('auth-modal'); return; }
   if (!cart.length) { toast('Cart is empty','','warn'); return; }
+
+if (currentUser?.profile?.role !== 'buyer') {
+    loadWithdrawalData();
+  }
   
   const rawProductTotal = cart.reduce((sum,c)=>sum+(c.price*(c.qty||1)),0);
   
@@ -1465,10 +1532,27 @@ function startCheckout() {
     commEl.closest('.pay-row')?.classList.add('hidden');
   }
   
-  // --- DYNAMIC PAYMENT METHOD RENDERING (WITH WALLET CHANNELS) ---
-  const isSeller = currentRole === 'seller' || currentRole === 'admin' || currentRole === 'both';
-  const availableBalText = document.getElementById('wd-available')?.textContent || '₦0';
-  const availableBalance = parseFloat(availableBalText.replace(/[^\d.]/g, '')) || 0;
+// --- DYNAMIC PAYMENT METHOD RENDERING (WITH WALLET CHANNELS) ---
+  // Look directly at the profile parameters in the database session to check if they are a merchant
+  const profileRole = currentUser?.profile?.role || 'buyer';
+  const accountType = currentUser?.profile?.accounts || '';
+  
+  // Safely registers them as a merchant even if they are currently browsing the marketplace as a buyer
+  const isSeller = profileRole === 'seller' || profileRole === 'admin' || accountType === 'seller' || accountType === 'both';
+  
+  // BULLETPROOF BALANCE EXTRACTION: Read live DOM text if available; otherwise compute from cache or fallback safely
+  const availableBalText = document.getElementById('wd-available')?.textContent || '';
+  let availableBalance = 0;
+
+  if (availableBalText) {
+    availableBalance = parseFloat(availableBalText.replace(/[^\d.]/g, '')) || 0;
+  } else if (currentUser?.profile?.wallet_balance !== undefined) {
+    // If the seller dashboard tab isn't active on screen, pull straight from the profile session object configuration
+    availableBalance = parseFloat(currentUser.profile.wallet_balance) || 0;
+  } else {
+    availableBalance = 0;
+  }
+
   const isUnderfunded = availableBalance < totalWithCommission;
 
   let walletCardHtml = '';
@@ -1501,7 +1585,7 @@ function startCheckout() {
   }
 
   // Reset explicit gateway checkout selection state to default on entry window
-  checkoutPaymentMethod = 'paystack';
+  checkoutPaymentMethod = 'paystack'
   
   // Order items rendering engine 
   document.getElementById('co-items').innerHTML = cart.map(c=>`
@@ -4727,7 +4811,7 @@ function sendWhatsAppOrderNotification(order, sellerWa) {
     `Total: ${fmtN(order.total_amount)}\n` +
     `Payment: ${order.payment_method}\n\n` +
     `Deliver to:\n${order.delivery_name}\n${order.delivery_phone}\n${order.delivery_address}\n\n` +
-    `Log in to dashboard to confirm: https://buysell.ng`
+    `Log in to dashboard to confirm: http://buysell-markerplace.com`
   );
   // Open in background tab (silent notification fallback)
   const waUrl = `https://wa.me/${phone}?text=${msg}`;
@@ -6420,6 +6504,38 @@ function renderSellerAdsTable(ads) {
   }).join('');
 }
 
+async function syncUserNotificationToken() {
+  if (!currentUser || !('Notification' in window) || !('PushManager' in window)) return;
+
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+
+    // If no active device subscription vector exists, create a new one
+    if (!subscription) {
+      // NOTE: You can generate a custom VAPID public key via online generator lines
+      const VAPID_PUBLIC_KEY = "BHy42JVEzqL40I-Mhvu9dRK8Ewov4GSFKy5IIcsOKgerR-Z8DE_9WNc1N1GPShB0XF3fnjOwz2XpNtf4fdoOn50"; 
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: VAPID_PUBLIC_KEY
+      });
+    }
+
+    // Upsert token registration matrix to user profiles table tracking strings
+    await db.from('profiles').update({
+      push_subscription_token: JSON.stringify(subscription),
+      updated_at: new Date().toISOString()
+    }).eq('id', currentUser.id);
+
+    console.log('[PUSH ENGINE] Device token synchronized securely with database schema keys.');
+  } catch (err) {
+    console.warn('[PUSH ENGINE] Registration token sync bypassed: ', err.message);
+  }
+}
+
 async function loadActiveAds() {
   try {
     const dismissedUntil = Number(sessionStorage.getItem('bs_ads_dismissed_until') || 0);
@@ -6547,7 +6663,7 @@ async function initiateAdPayment() {
           // Reset Form
           document.getElementById('ad-title').value = '';
           document.getElementById('ad-desc').value = '';
-          document.getElementById('ad-link').value = 'https://buysell.ng/';
+          document.getElementById('ad-link').value = 'http://buysell-markerplace.com/';
           document.getElementById('ad-media-file').value = '';
           document.getElementById('ad-media-preview-container')?.classList.add('hidden');
           document.getElementById('ad-media-zone')?.classList.remove('has-file');
