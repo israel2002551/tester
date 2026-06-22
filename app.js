@@ -112,10 +112,29 @@ const db = window.supabase.createClient(SB_URL, SB_KEY, {
 //  PWA PUSH NOTIFICATION ENGINE INITIALIZATION
 // ====================================================
 if ('serviceWorker' in navigator) {
-  // Enhanced Service Worker string script with Push Notification Event handlers built right in
+  // Enhanced Service Worker string script with Live Network Exclusion guards built in
   const swCode = `
     self.addEventListener('fetch', e => {
-      e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
+      const url = new String(e.request.url);
+      
+      // ====================================================
+      //  CRITICAL EXCLUSION GUARD: LIVE NETWORK PIPELINES
+      // ====================================================
+      // Never allow the service worker to cache real-time database transactions, 
+      // edge function handlers, or checkout payment gateways.
+      if (
+        url.includes('/functions/v1/') || 
+        url.includes('supabase.co') || 
+        url.includes('api.paystack.co')
+      ) {
+        console.log('[SW GUARD] Bypassing cache. Fetching live database row:', e.request.url);
+        return; // Terminate cache routing pass and go directly to live network stream
+      }
+
+      // Standard caching handler for assets (HTML, CSS, UI icons, Fonts)
+      e.respondWith(
+        caches.match(e.request).then(r => r || fetch(e.request))
+      );
     });
     
     self.addEventListener('install', () => self.skipWaiting());
@@ -168,7 +187,7 @@ if ('serviceWorker' in navigator) {
   const swUrl = URL.createObjectURL(blob);
   
   navigator.serviceWorker.register(swUrl).then(reg => {
-    console.log('[PUSH ENGINE] Service Worker operational bounds established.');
+    console.log('[PUSH ENGINE] Service Worker operational bounds established with Network Exclusions.');
     // Check if user is logged in, then prompt for permission keys token sync strings
     setTimeout(syncUserNotificationToken, 5000);
   }).catch(err => console.warn('SW Register failed:', err));
@@ -2969,12 +2988,12 @@ async function saveSettings(e) {
       updates.logo_url = uploaded.publicUrl;
     }
 
-    // 2. Transmit all identity modifications directly to the profile edge framework
-    await callEdge('update-profile', updates);
+// 2. Clean payload metrics and transmit straight to the profile edge framework
+    const cleanUpdates = purgePayloadNulls(updates);
+    await callEdge('update-profile', cleanUpdates);
     
     // Synced properties updates locally
-    if (currentUser.profile) Object.assign(currentUser.profile, updates);
-    
+    if (currentUser.profile) Object.assign(currentUser.profile, cleanUpdates);    
     toast('Profile Brand Saved! 🎨', 'Your store profile parameters are updated.', 'success');
     loadWithdrawalData();
   } catch (err) {
@@ -2990,24 +3009,46 @@ async function saveSettings(e) {
 // ====================================================
 async function loadWithdrawalData() {
   if (!currentUser) return;
-  const [{ data: profile }, { data: orders }, { data: withdrawals }] = await Promise.all([
+  
+  // Simultaneously pull profile configs, raw order vectors, standard bank payouts, and internal wallet purchases
+  const [{ data: profile }, { data: orders }, { data: withdrawals }, { data: walletTransactions }] = await Promise.all([
     db.from('profiles').select('bank_name,account_number,account_name').eq('id', currentUser.id).maybeSingle(),
     db.from('orders').select('total_amount,status').eq('seller_id', currentUser.id),
-    db.from('withdrawals').select('amount,status,created_at,id').eq('seller_id', currentUser.id).order('created_at',{ascending:false})
+    db.from('withdrawals').select('amount,status,created_at,id').eq('seller_id', currentUser.id).order('created_at',{ascending:false}),
+    db.from('wallet_transactions').select('amount').eq('seller_id', currentUser.id).eq('type', 'debit_purchase')
   ]);
+
   if (profile) {
     currentUser.profile = { ...(currentUser.profile || {}), ...profile };
     document.getElementById('wd-bank-name').textContent = profile.bank_name || 'Not set';
     document.getElementById('wd-acct-num').textContent = profile.account_number || '—';
     document.getElementById('wd-acct-name').textContent = profile.account_name || '—';
   }
-  const revenue = (orders||[]).filter(o=>o.status==='delivered').reduce((s,o)=>s+Number(o.total_amount||0),0);
-  const pendingAmt = (withdrawals||[]).filter(w=>w.status==='pending').reduce((s,w)=>s+Number(w.amount||0),0);
-  const totalPaid = (withdrawals||[]).filter(w=>w.status==='paid').reduce((s,w)=>s+Number(w.amount||0),0);
-  const available = Math.max(0, revenue * 0.92 - pendingAmt - totalPaid);
+
+  // 1. Compute historical marketplace incoming streams (92% net merchant split)
+  const revenue = (orders || []).filter(o => o.status === 'delivered').reduce((s, o) => s + Number(o.total_amount || 0), 0);
+  
+  // 2. Compute classic outward bank wire transfers
+  const pendingAmt = (withdrawals || []).filter(w => w.status === 'pending').reduce((s, w) => s + Number(w.amount || 0), 0);
+  const totalPaid = (withdrawals || []).filter(w => w.status === 'paid').reduce((s, w) => s + Number(w.amount || 0), 0);
+  
+  // 3. Compute closed-loop internal purchase debits
+  const internalSpentAmt = (walletTransactions || []).reduce((s, t) => s + Number(t.amount || 0), 0);
+
+  // 4. UNIFIED LEDGER FORMULA PASS
+  // Net Funds Available = (Delivered GMV * 0.92) - Pending Bank Cashouts - Completed Bank Cashouts - Internal Purchases
+  const available = Math.max(0, (revenue * 0.92) - pendingAmt - totalPaid - internalSpentAmt);
+
+  // 5. Render exact calculated metrics cleanly to display viewport layout frames
   document.getElementById('wd-available').textContent = fmtN(available);
   document.getElementById('wd-pending').textContent = fmtN(pendingAmt);
   document.getElementById('wd-total').textContent = fmtN(totalPaid);
+  
+  // Sync the locally cached user profile runtime configuration state 
+  if (currentUser.profile) {
+    currentUser.profile.wallet_balance = available;
+  }
+
   renderWithdrawalHistory(withdrawals || []);
 }
 
@@ -4953,9 +4994,28 @@ async function viewStorefront(sellerId) {
         <i class="fa-solid fa-location-dot"></i> Store Hub: ${escHtml(seller.store_address)}
       </div>`);
   }
-  document.getElementById('sf-name').textContent = seller.name || 'Seller Store';
+document.getElementById('sf-name').textContent = seller.name || 'Seller Store';
   document.getElementById('sf-desc').textContent = seller.store_description || 'Welcome to our store!';
-  document.getElementById('sf-wa-link').href = `https://wa.me/${(seller.whatsapp||'').replace(/\D/g,'')}`;
+  
+  // ====================================================
+  //  EXCLUSION SECURED: PRIVACY AND TRANSACTION RETENTION
+  // ====================================================
+  // 1. Permanently hide or hijack the legacy public WhatsApp link element
+  const sfWaLink = document.getElementById('sf-wa-link');
+  if (sfWaLink) {
+    sfWaLink.removeAttribute('target'); // Prevent opening an external window
+    sfWaLink.href = '#';
+    
+    // Repurpose the button layout to invoke the secure in-app messaging matrix instead
+    sfWaLink.innerHTML = '<i class="fa-solid fa-comments"></i> Message Seller';
+    sfWaLink.className = 'btn btn-primary btn-sm';
+    sfWaLink.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openConversation(sellerId, seller.name || 'Seller');
+    };
+  }
+
   const { data: prods } = await db.from('products').select('*').eq('seller_id', sellerId).eq('status','active');
   const sfProds = prods || [];
   document.getElementById('sf-prod-count').textContent = sfProds.length;
@@ -4970,10 +5030,14 @@ async function viewStorefront(sellerId) {
   document.getElementById('sf-review-count').textContent = `${allRevs.length} reviews`;
   document.getElementById('sf-stars').textContent = '★'.repeat(Math.round(+avgRating))+'☆'.repeat(5-Math.round(+avgRating));
   // Share button URL
+// Share button URL setup
   const sfUrl = `${window.location.origin}${window.location.pathname}?store=${sellerId}`;
-  document.getElementById('sf-wa-link').parentElement.querySelectorAll('button').forEach(b => {
-    if (b.textContent.includes('Share')) b.onclick = () => { navigator.clipboard?.writeText(sfUrl).then(()=>toast('Store Link Copied!','','success')).catch(()=>{}); if(navigator.share) navigator.share({title:seller.name,url:sfUrl}); };
-  });
+  const sfWaButtonElement = document.getElementById('sf-wa-link');
+  if (sfWaButtonElement && sfWaButtonElement.parentElement) {
+    sfWaButtonElement.parentElement.querySelectorAll('button').forEach(b => {
+      if (b.textContent.includes('Share')) b.onclick = () => { navigator.clipboard?.writeText(sfUrl).then(()=>toast('Store Link Copied!','','success')).catch(()=>{}); if(navigator.share) navigator.share({title:seller.name,url:sfUrl}); };
+    });
+  }
   const grid = document.getElementById('sf-products-grid');
   const empty = document.getElementById('sf-empty');
   if (!sfProds.length) { grid.innerHTML=''; empty.classList.remove('hidden'); }
@@ -5011,11 +5075,26 @@ function escAttr(s) {
   return String(s||'').replace(/[^a-zA-Z0-9 _\-\.,:@]/g, c => '&#'+c.charCodeAt(0)+';');
 }
 function sanitizeUrl(url) {
-  // Block javascript: and data: URIs
   if (!url) return '';
   const u = String(url).trim().toLowerCase();
   if (u.startsWith('javascript:') || u.startsWith('data:text') || u.startsWith('vbscript:')) return '';
   return String(url).trim();
+}
+
+// ====================================================
+// SECURITY PLUG: PURGE PAYLOAD NULLS
+// ====================================================
+function purgePayloadNulls(obj) {
+  if (typeof obj !== 'object' || obj === null) return obj;
+  
+  const clean = { ...obj };
+  Object.keys(clean).forEach(key => {
+    // Convert empty frontend fields to clean database null objects
+    if (clean[key] === '' || clean[key] === undefined) {
+      clean[key] = null;
+    }
+  });
+  return clean;
 }
 
 let pickupMap = null;
@@ -5149,10 +5228,12 @@ function shareCurrentProduct() {
 // --- PHASE 1-4 INJECTIONS ---
 function validateInput(str) {
   if (typeof str !== 'string') return '';
-  const invalid = /<script.*?>.*?<\/script>|<.*?on\w+?=.*?>|(SELECT|INSERT|UPDATE|DELETE|DROP|UNION)\s+/i;
-  if (invalid.test(str)) {
-    toast('Security Error', 'Invalid characters detected', 'error');
-    throw new Error("Malicious input detected");
+  
+  // EXCLUSION GUARD: Target actual dangerous HTML tag injections, ignore generic words
+  const malformedTagInjection = /<script.*?>.*?<\/script>|<[^>]+on\w+\s*=\s*["'][^"]*["']/i;
+  if (malformedTagInjection.test(str)) {
+    toast('Security Notice', 'Invalid markdown tags blocked.', 'error');
+    throw new Error("HTML markup characters excluded from database capture pipelines.");
   }
   return str.trim();
 }
@@ -6141,9 +6222,22 @@ async function sendMessage() {
   input.value = '';
   if (sendBtn) sendBtn.disabled = true;
   
-  try {
-    const payload = { sender_id: currentUser.id, receiver_id: currentChatPartner, content: text, is_read: false };
-    if (currentChatProductId) payload.product_id = currentChatProductId;
+try {
+    // Sanitize and structure the payload fields cleanly
+    const payload = { 
+      sender_id: currentUser.id, 
+      receiver_id: currentChatPartner, 
+      content: String(text), // Enforce pure string primitive type explicitly
+      is_read: false 
+    };
+    
+    if (currentChatProductId) {
+      payload.product_id = currentChatProductId;
+    }
+    
+    // If your table schema has an extra metadata slot requiring explicit JSON structures, 
+    // it must be safely included or initialized as a valid JSON string structure like this:
+    // payload.metadata = {}; 
     
     let { error } = await db.from('messages').insert(payload);
     
