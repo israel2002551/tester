@@ -688,6 +688,44 @@ function enterSite(mode) {
 }
 
 
+// ==========================================
+// 1. Paste the Helper Function (Top Level or near your other UI functions)
+// ==========================================
+function processInboundChatRedirects() {
+  const urlParameters = new URLSearchParams(window.location.search);
+  const targetChatPartnerId = urlParameters.get('chat');
+  
+  // Make sure we have a valid chat parameter and a logged-in user
+  if (targetChatPartnerId && currentUser) {
+    console.log('[INBOUND ROUTER] Direct chat intercept parameter caught. Partner ID:', targetChatPartnerId);
+    
+    // Clear URL parameters cleanly so reloading the window doesn't keep opening the popup
+    window.history.replaceState({}, document.title, window.location.pathname);
+    
+    // Fetch user profile properties asynchronously out of database and toggle UI focus layout panels
+    db.from('profiles').select('name').eq('id', targetChatPartnerId).maybeSingle().then(({ data: partner }) => {
+      const companionName = partner ? partner.name : 'Verified Merchant';
+      
+      // Invoke your app's native messaging modal handler to pop open the chat window!
+      openConversation(targetChatPartnerId, companionName); 
+    });
+  }
+}
+
+// ==========================================
+// 2. Add it directly inside your existing Auth Listener
+// ==========================================
+supabase.auth.onAuthStateChange((event, session) => {
+  if (session?.user) {
+    // ... layout setup or loading your current user info happens here ...
+    
+    // ⬇️ PLACE THE CALL RIGHT HERE ⬇️
+    // The 800ms timeout gives your marketplace layout a split second to finish loading 
+    // its interface before the chat window cleanly slides open.
+    setTimeout(processInboundChatRedirects, 800);
+  }
+});
+
 function showBuyerView() {
   document.getElementById('buyer-view').style.display = 'block';
   document.getElementById('seller-dashboard').style.display = 'none';
