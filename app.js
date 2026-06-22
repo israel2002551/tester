@@ -6972,37 +6972,6 @@ async function loadProviderBookings() {
 // ====================================================
 //  VOICE INPUT
 // ====================================================
-let voiceRecognition = null;
-function toggleVoiceInput() {
-  const btn = document.getElementById('voice-btn');
-  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-    toast('Not Supported', 'Voice input is not available in your browser', 'warn');
-    return;
-  }
-  if (voiceRecognition) {
-    voiceRecognition.stop();
-    voiceRecognition = null;
-    if (btn) btn.style.background = 'var(--purple)';
-    return;
-  }
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  voiceRecognition = new SR();
-  voiceRecognition.lang = 'en-NG';
-  voiceRecognition.continuous = false;
-  voiceRecognition.interimResults = false;
-  if (btn) btn.style.background = '#ef4444';
-
-  voiceRecognition.onresult = (e) => {
-    const transcript = e.results[0][0].transcript;
-    const searchInput = document.getElementById('search-input');
-    if (searchInput) { searchInput.value = transcript; doSearch(); }
-    else { toast('You said', transcript, 'info'); }
-  };
-  voiceRecognition.onerror = () => { toast('Voice Error', 'Could not understand. Try again.', 'warn'); };
-  voiceRecognition.onend = () => { voiceRecognition = null; if (btn) btn.style.background = 'var(--purple)'; };
-  voiceRecognition.start();
-  toast('Listening…', 'Speak now to search', 'info');
-}
 
 // ====================================================
 //  LANGUAGE
