@@ -19,5 +19,3 @@ upgrade_*.py
 features_dump.txt
 refactor.py
 
-node_modules/
-auth_info_baileys/
