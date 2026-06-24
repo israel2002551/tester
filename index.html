@@ -14,6 +14,39 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script type="module">
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal) {
+    
+    // 1. Initialize configuration values
+    await OneSignal.init({
+      appId: "a30fe2f5-9915-415b-a889-f768b0fa96cf",
+      allowLocalhostAsSecureOrigin: true, // Crucial for development testing loops!
+      
+      // Target paths mapped for your GitHub Pages repository architecture
+      serviceWorkerParam: { scope: "/buysell-frontend/" },
+      serviceWorkerPath: "buysell-frontend/OneSignalSDKWorker.js"
+    });
+
+    // 2. Request user interaction prompt window automatically
+    await OneSignal.Notifications.requestPermission();
+
+    // 3. Bind browser device profile mapping to the Supabase Account ID row
+    // Assumes your global 'supabase' initialization instance runs or resolves cleanly
+    if (window.supabase) {
+      window.supabase.auth.onAuthStateChange(async (event, session) => {
+        if (session?.user) {
+          console.log("🔗 Binding active browser pipeline to Supabase ID:", session.user.id);
+          await OneSignal.login(session.user.id);
+        } else if (event === 'SIGNED_OUT') {
+          console.log("🔒 Clearing user session token reference mapping.");
+          await OneSignal.logout();
+        }
+      });
+    }
+  });
+</script>
 <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
 <!-- Security headers (supplement server-side headers) -->
 <meta http-equiv="X-Content-Type-Options" content="nosniff">
