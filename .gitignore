@@ -18,3 +18,6 @@ update_app_groq.py
 upgrade_*.py
 features_dump.txt
 refactor.py
+
+node_modules/
+auth_info_baileys/
