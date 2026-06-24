@@ -95,6 +95,7 @@ async function trackAnalytics(event) {
 }
 
 
+// ✅ REPLACE WITH THIS:
 const db = window.supabase.createClient(SB_URL, SB_KEY, {
   auth: {
     persistSession:     true,
@@ -103,6 +104,10 @@ const db = window.supabase.createClient(SB_URL, SB_KEY, {
     storage:            window.localStorage
   }
 });
+
+// Attach the client to global window scope so index.html can see it!
+window.db = db;
+window.supabase = db;
 
 // ====================================================
 //  STATE
@@ -582,8 +587,19 @@ async function sendPasswordReset() {
   }
 }
 
+// ✅ REPLACE WITH THIS:
 async function logoutUser() {
+  // 1. Log out of active Supabase database session
   await db.auth.signOut();
+  
+  // 2. Unlink the active browser session from OneSignal Push alerts
+  if (window.OneSignalDeferred) {
+    window.OneSignalDeferred.push(async function(OneSignal) {
+      console.log("[ONESIGNAL] Unlinking session token on user sign out.");
+      await OneSignal.logout();
+    });
+  }
+
   if (messageChannel) {
     db.removeChannel(messageChannel);
     messageChannel = null;
