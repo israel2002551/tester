@@ -95,8 +95,10 @@ async function trackAnalytics(event) {
 }
 
 
-// ✅ REPLACE WITH THIS:
-const db = window.supabase.createClient(SB_URL, SB_KEY, {
+// ====================================================
+//  INITIALIZE SUPABASE ARCHITECTURE CONTEXT
+// ====================================================
+const supabaseClient = window.supabase.createClient(SB_URL, SB_KEY, {
   auth: {
     persistSession:     true,
     autoRefreshToken:   true,
@@ -105,9 +107,12 @@ const db = window.supabase.createClient(SB_URL, SB_KEY, {
   }
 });
 
-// Attach the client to global window scope so index.html can see it!
-window.db = db;
-window.supabase = db;
+// Alias the constant 'db' so your existing app logic doesn't break
+const db = supabaseClient;
+
+// Safely attach the initialized client instances to global window tracking memory
+window.db = supabaseClient;
+window.supabaseAppClient = supabaseClient;
 
 // ====================================================
 //  STATE
@@ -731,11 +736,7 @@ function processInboundChatRedirects() {
 // ==========================================
 // 2. Add it directly inside your existing Auth Listener
 // ==========================================
-db.auth.onAuthStateChange((event, session) => {
-  if (session?.user) {
-    setTimeout(processInboundChatRedirects, 800);
-  }
-});
+
 
 function showBuyerView() {
   document.getElementById('buyer-view').style.display = 'block';
