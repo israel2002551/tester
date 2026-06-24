@@ -715,13 +715,8 @@ function processInboundChatRedirects() {
 // ==========================================
 // 2. Add it directly inside your existing Auth Listener
 // ==========================================
-supabase.auth.onAuthStateChange((event, session) => {
+db.auth.onAuthStateChange((event, session) => {
   if (session?.user) {
-    // ... layout setup or loading your current user info happens here ...
-    
-    // ⬇️ PLACE THE CALL RIGHT HERE ⬇️
-    // The 800ms timeout gives your marketplace layout a split second to finish loading 
-    // its interface before the chat window cleanly slides open.
     setTimeout(processInboundChatRedirects, 800);
   }
 });
