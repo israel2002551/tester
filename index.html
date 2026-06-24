@@ -19,14 +19,14 @@
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   OneSignalDeferred.push(async function(OneSignal) {
     
-    await OneSignal.init({
-      appId: "a30fe2f5-9915-415b-a889-f768b0fa96cf",
-      allowLocalhostAsSecureOrigin: true,
-      
-      // 🚀 PERFECT DIR ROUTING FOR ASSETS DEPLOYED VIA PUBLIC FOLDERS:
-      serviceWorkerParam: { scope: "/tester/" },
-      serviceWorkerPath: "tester/OneSignalSDKWorker.js" // Looks directly at the root of /tester/
-    });
+await OneSignal.init({
+  appId: "a30fe2f5-9915-415b-a889-f768b0fa96cf",
+  allowLocalhostAsSecureOrigin: true,
+  
+  // 🚀 FIXED RESOLUTION FOR REPOSITORY ROOT PATHS:
+  serviceWorkerParam: { scope: "/tester/" },
+  serviceWorkerPath: "OneSignalSDKWorker.js" // ── Remove the 'tester/' prefix here!
+});
 
     await OneSignal.Notifications.requestPermission();
 
