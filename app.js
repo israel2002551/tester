@@ -121,87 +121,7 @@ window.supabaseAppClient = supabaseClient;
 // ====================================================
 //  PWA PUSH NOTIFICATION ENGINE INITIALIZATION
 // ====================================================
-if ('serviceWorker' in navigator) {
-  // Enhanced Service Worker string script with Live Network Exclusion guards built in
-  const swCode = `
-    self.addEventListener('fetch', e => {
-      const url = new String(e.request.url);
-      
-      // ====================================================
-      //  CRITICAL EXCLUSION GUARD: LIVE NETWORK PIPELINES
-      // ====================================================
-      // Never allow the service worker to cache real-time database transactions, 
-      // edge function handlers, or checkout payment gateways.
-      if (
-        url.includes('/functions/v1/') || 
-        url.includes('supabase.co') || 
-        url.includes('api.paystack.co')
-      ) {
-        console.log('[SW GUARD] Bypassing cache. Fetching live database row:', e.request.url);
-        return; // Terminate cache routing pass and go directly to live network stream
-      }
 
-      // Standard caching handler for assets (HTML, CSS, UI icons, Fonts)
-      e.respondWith(
-        caches.match(e.request).then(r => r || fetch(e.request))
-      );
-    });
-    
-    self.addEventListener('install', () => self.skipWaiting());
-    
-    // BACKGROUND PUSH LISTENER: Fires even if the browser/site is closed!
-    self.addEventListener('push', event => {
-      let data = { title: 'BUYSELL Nigeria', body: 'New update available on the platform!', icon: '/favicon.ico' };
-      try {
-        if (event.data) {
-          data = event.data.json();
-        }
-      } catch (err) {
-        if (event.data) data.body = event.data.text();
-      }
-
-      const options = {
-        body: data.body,
-        icon: data.icon || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=120',
-        badge: '/favicon.ico',
-        vibrate: [200, 100, 200],
-        data: { url: data.click_url || self.location.origin }
-      };
-
-      event.waitUntil(
-        self.registration.showNotification(data.title, options)
-      );
-    });
-
-    // NOTIFICATION CLICK ACTION Routing Module
-    self.addEventListener('notificationclick', event => {
-      event.notification.close();
-      event.waitUntil(
-        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
-          // If the marketplace app is already open, just focus the tab window
-          for (const client of clientList) {
-            if (client.url === event.notification.data.url && 'focus' in client) {
-              return client.focus();
-            }
-          }
-          // Otherwise, open a fresh window straight to the alert context link address
-          if (clients.openWindow) {
-            return clients.openWindow(event.notification.data.url);
-          }
-        })
-      );
-    });
-  `;
-
-  const blob = new Blob([swCode], { type: 'application/javascript' });
-  const swUrl = URL.createObjectURL(blob);
-  
-  navigator.serviceWorker.register(swUrl).then(reg => {
-    console.log('[PUSH ENGINE] Service Worker operational bounds established with Network Exclusions.');
-    // Check if user is logged in, then prompt for permission keys token sync strings
-    setTimeout(syncUserNotificationToken, 5000);
-  }).catch(err => console.warn('SW Register failed:', err));
-}
 
 // ====================================================
 //  TOAST
@@ -3417,7 +3337,7 @@ async function loadDropshipData() {
   const dropshipProducts = products || [];
   const importedEl = document.getElementById('ds-imported');
   if (importedEl) importedEl.textContent = dropshipProducts.length;
-  const { data: orders } = await db.from('orders').select('total_amount,status,product_id').eq('seller_id', currentUser.id);
+  const { data: orders } = await db.from('orders').select('total_amount,status,items').eq('seller_id', currentUser.id);
   const ids = new Set(dropshipProducts.map(p => p.id));
   const dsOrders = (orders || []).filter(o => ids.has(o.product_id));
   const sales = dsOrders.filter(o => o.status === 'delivered').reduce((s,o)=>s + (o.total_amount || 0), 0);
