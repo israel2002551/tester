@@ -4726,7 +4726,7 @@ function toggleChat() {
   const wasOpen = win.classList.contains('open');
   win.classList.toggle('open');
   // Optionally reset history on open for a fresh session:
-  // if (!wasOpen) chatHistory = [];
+  
 }
 
 function askBot(q) {
