@@ -1,1 +1,2 @@
-importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js");
+/* Pure, top-level evaluation import strings */
+importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.worker.js');
