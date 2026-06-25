@@ -6977,3 +6977,73 @@ function setLanguage(lang) {
   localStorage.setItem('bs_lang', lang);
   toast('Language', `Switched to ${lang === 'en' ? 'English' : lang === 'pcm' ? 'Pidgin' : lang === 'ha' ? 'Hausa' : lang === 'yo' ? 'Yoruba' : lang === 'ig' ? 'Igbo' : lang}`, 'info');
 }
+// ==========================================
+// BULLETPROOF AUTH HEADER SYNC
+// ==========================================
+(function() {
+  function syncAuthHeader() {
+    // 🔍 1. TRY MULTIPLE COMMON SELECTORS TO FIND YOUR BUTTON
+    const authButton = 
+      document.getElementById('signInBtn') || 
+      document.querySelector('[id*="sign"]') ||
+      document.querySelector('.auth-btn-class') || 
+      document.querySelector('button[onclick*="Google"]'); // Finds it if it has an inline onclick
+    
+    // If it still can't find it by selector, search by its text content!
+    let targetBtn = authButton;
+    if (!targetBtn) {
+      const buttons = document.querySelectorAll('button');
+      for (let btn of buttons) {
+        if (btn.textContent.trim().toLowerCase().includes('sign in')) {
+          targetBtn = btn;
+          break;
+        }
+      }
+    }
+
+    if (!targetBtn) {
+      console.warn("⚠️ Auth sync: Could not find the Sign In button on this page layer.");
+      return;
+    }
+
+    // Ensure we have access to your Supabase client instance
+    const client = window.supabaseAppClient || window.supabase || (typeof supabase !== 'undefined' ? supabase : null);
+    if (!client) {
+      console.error("❌ Auth sync: Supabase client instance is missing!");
+      return;
+    }
+
+    // 🚀 2. RUN THE AUTH STATE WATCHER
+    client.auth.onAuthStateChange((event, session) => {
+      if (session && session.user) {
+        console.log("🟢 User active session found:", session.user.email);
+        targetBtn.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
+        
+        targetBtn.onclick = async (e) => {
+          e.preventDefault();
+          await client.auth.signOut();
+          localStorage.clear(); // Clear any leftover state
+          window.location.reload();
+        };
+      } else {
+        console.log("🔴 No active user session.");
+        targetBtn.innerHTML = `<i class="fas fa-sign-in-alt"></i> Sign In`;
+        
+        targetBtn.onclick = (e) => {
+          e.preventDefault();
+          if (typeof handleGoogleSignIn === 'function') {
+            handleGoogleSignIn();
+          } else if (typeof signInWithGoogle === 'function') {
+            signInWithGoogle();
+          } else {
+            console.error("❌ Auth sync: Google login function not found!");
+          }
+        };
+      }
+    });
+  }
+
+  // Run immediately on script execution, and retry when DOM is completely loaded
+  syncAuthHeader();
+  document.addEventListener('DOMContentLoaded', syncAuthHeader);
+})();
