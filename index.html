@@ -19,30 +19,31 @@
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   OneSignalDeferred.push(async function(OneSignal) {
     
-await OneSignal.init({
-  appId: "a30fe2f5-9915-415b-a889-f768b0fa96cf",
-  allowLocalhostAsSecureOrigin: true,
-  
-  // 🚀 FIXED RESOLUTION FOR REPOSITORY ROOT PATHS:
-serviceWorker: {
-        path: "OneSignalSDKWorker.js", // Direct file name since it compiles inside public/
-        scope: "/tester/"              // Points exactly to your GitHub repository path subdirectory
+    await OneSignal.init({
+      appId: "a30fe2f5-9915-415b-a889-f768b0fa96cf",
+      allowLocalhostAsSecureOrigin: true,
+      
+      // 🚀 FORCE THE SDK TO TARGET GITHUB PAGES SUBDIRECTORIES
+      siteUrl: "https://israel2002551.github.io/tester/",
+      
+      serviceWorker: {
+        path: "OneSignalSDKWorker.js", 
+        scope: "/tester/"             
       }
     });
 
     await OneSignal.Notifications.requestPermission();
 
-    // Wait cleanly for app.js to initialize our specific client naming handle
+    // Sync session state cleanly
     const syncSessionInterval = setInterval(() => {
       if (window.supabaseAppClient) {
         clearInterval(syncSessionInterval);
         
         window.supabaseAppClient.auth.onAuthStateChange(async (event, session) => {
           if (session?.user) {
-            console.log("🔗 Binding browser device push tokens to User ID:", session.user.id);
+            console.log("🔗 Syncing user device token setup...");
             await OneSignal.login(session.user.id);
           } else if (event === 'SIGNED_OUT') {
-            console.log("🔒 Clearing user push reference matrix tracking tokens.");
             await OneSignal.logout();
           }
         });
