@@ -23,25 +23,25 @@
       appId: "a30fe2f5-9915-415b-a889-f768b0fa96cf",
       allowLocalhostAsSecureOrigin: true,
       
-      // 🚀 FORCE THE SDK TO TARGET GITHUB PAGES SUBDIRECTORIES
-      siteUrl: "https://israel2002551.github.io/tester/",
+      // 🚀 CHANGED TO MATCH YOUR EXACT ONESIGNAL DOMAINfootprint ORIGIN:
+      siteUrl: "https://israel2002551.github.io", 
       
       serviceWorker: {
-        path: "OneSignalSDKWorker.js", 
-        scope: "/tester/"             
+        path: "OneSignalSDKWorker.js",
+        scope: "/tester/"
       }
     });
 
     await OneSignal.Notifications.requestPermission();
 
-    // Sync session state cleanly
+    // Check interval loop waiting for app.js instantiation
     const syncSessionInterval = setInterval(() => {
       if (window.supabaseAppClient) {
         clearInterval(syncSessionInterval);
         
         window.supabaseAppClient.auth.onAuthStateChange(async (event, session) => {
           if (session?.user) {
-            console.log("🔗 Syncing user device token setup...");
+            console.log("🔗 Syncing user token registration...");
             await OneSignal.login(session.user.id);
           } else if (event === 'SIGNED_OUT') {
             await OneSignal.logout();
