@@ -114,6 +114,36 @@ const db = supabaseClient;
 window.db = supabaseClient;
 window.supabaseAppClient = supabaseClient;
 
+const authButton = document.querySelector('.nav-sign-in-btn'); 
+
+if (authButton) {
+  // Listen to active auth session updates from Supabase
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (session && session.user) {
+      // 🟢 USER IS SIGNED IN: Switch to Sign Out
+      authButton.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
+      
+      authButton.onclick = async (e) => {
+        e.preventDefault();
+        await supabase.auth.signOut();
+        window.location.reload(); 
+      };
+    } else {
+      // 🔴 USER IS NOT SIGNED IN: Keep standard Sign In
+      authButton.innerHTML = `<i class="fas fa-sign-in-alt"></i> Sign In`;
+      
+      authButton.onclick = (e) => {
+        e.preventDefault();
+        if (typeof handleGoogleSignIn === 'function') {
+          handleGoogleSignIn(); 
+        } else {
+          console.error("handleGoogleSignIn function is not defined!");
+        }
+      };
+    }
+  });
+}
+
 // ====================================================
 //  STATE
 // ====================================================
