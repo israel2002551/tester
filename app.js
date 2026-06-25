@@ -127,14 +127,49 @@ window.supabaseAppClient = supabaseClient;
 //  TOAST
 // ====================================================
 function toast(title, msg='', type='success', dur=3500) {
-  const tc = document.getElementById('toast-container');
+  let tc = document.getElementById('toast-container');
+  
+  // 🚀 AUTOMATIC FALLBACK GUARD: If the HTML div isn't parsed yet, build it dynamically!
+  if (!tc) {
+    tc = document.createElement('div');
+    tc.id = 'toast-container';
+    document.body.appendChild(tc);
+  }
+
   const el = document.createElement('div');
   el.className = `toast-item ${type}`;
-  const icons = {success:'fa-check-circle',error:'fa-exclamation-triangle',info:'fa-info-circle',warn:'fa-exclamation-circle'};
-  const cols = {success:'var(--green)',error:'var(--danger)',info:'var(--blue)',warn:'var(--gold)'};
-  el.innerHTML = `<i class="fa-solid ${icons[type]||icons.info}" style="color:${cols[type]||cols.info};font-size:1.1rem;flex-shrink:0"></i><div class="ti"><div class="ti-title">${title}</div>${msg?`<div class="ti-msg">${msg}</div>`:''}</div><button onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.85rem;flex-shrink:0"><i class="fa-solid fa-times"></i></button>`;
+  
+  const icons = {
+    success: 'fa-check-circle',
+    error: 'fa-exclamation-triangle',
+    info: 'fa-info-circle',
+    warn: 'fa-exclamation-circle'
+  };
+  
+  const cols = {
+    success: 'var(--green)',
+    error: 'var(--danger)',
+    info: 'var(--blue)',
+    warn: 'var(--gold)'
+  };
+  
+  el.innerHTML = `
+    <i class="fa-solid ${icons[type] || icons.info}" style="color:${cols[type] || cols.info};font-size:1.1rem;flex-shrink:0"></i>
+    <div class="ti">
+      <div class="ti-title">${title}</div>
+      ${msg ? `<div class="ti-msg">${msg}</div>` : ''}
+    </div>
+    <button onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.85rem;flex-shrink:0">
+      <i class="fa-solid fa-times"></i>
+    </button>
+  `;
+  
   tc.appendChild(el);
-  setTimeout(() => { el.classList.add('exiting'); setTimeout(()=>el.remove(), 300); }, dur);
+  
+  setTimeout(() => { 
+    el.classList.add('exiting'); 
+    setTimeout(() => el.remove(), 300); 
+  }, dur);
 }
 
 // ====================================================
