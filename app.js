@@ -121,14 +121,14 @@ async function trackAnalytics(event) {
 // ==========================================================================
 if (typeof supabase !== 'undefined') {
   supabase.auth.onAuthStateChange(async (event, session) => {
-    console.log(`⚡ Auth State Changed event: ${event}`);
+    console.log(`⚡ Unified Single-Page Auth Event: ${event}`);
     
     const authButton = document.querySelector('.nav-sign-in-btn') || 
                        document.getElementById('landing-auth-btn') ||
                        document.getElementById('nav-auth-inner-btn');
 
     if (session && session.user) {
-      console.log("🟢 Active User Session Found: " + session.user.email);
+      console.log("🟢 User Session Authenticated: " + session.user.email);
       currentUser = session.user;
 
       if (authButton) {
@@ -137,7 +137,7 @@ if (typeof supabase !== 'undefined') {
           e.preventDefault();
           localStorage.clear();
           await supabase.auth.signOut();
-          window.location.href = 'index.html';
+          window.location.reload(); // Instantly reload to reset the single-page state back to the beginning
         };
       }
 
@@ -151,36 +151,27 @@ if (typeof supabase !== 'undefined') {
 
           if (error) throw error;
 
-          const selectionPortal = document.getElementById('landing');
-          if (selectionPortal) {
-            selectionPortal.style.display = 'none';
-          }
+          // 🚀 HIDE BOTH THE MARKETING WALL AND ONBOARDING CARDS ON SUCCESSFUL SIGN IN
+          if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').classList.add('hidden');
+          if (document.getElementById('landing')) document.getElementById('landing').classList.add('hidden');
 
-          if (profile && profile.role === 'seller') {
-            console.log("🏪 Mounting Seller Dashboard panels...");
-            if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.add('hidden');
-            if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.remove('hidden');
-            if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.remove('hidden');
+          currentRole = profile?.role || 'buyer';
 
-            if (typeof loadSellerProds === 'function') loadSellerProds();
+          // Mount dashboards cleanly using your global view functions
+          if (currentRole === 'seller') {
+            if (typeof showSellerDashboard === 'function') showSellerDashboard();
           } else {
-            console.log("🛍️ Mounting Shopper Buyer view panels...");
-            if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.add('hidden');
-            if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.remove('hidden');
-            if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.remove('hidden');
-
-            if (typeof loadProducts === 'function') loadProducts();
+            if (typeof showBuyerView === 'function') showBuyerView();
           }
 
         } catch (dbError) {
-          console.error("❌ Profile lookup error: ", dbError.message);
-          if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.remove('hidden');
-          if (typeof loadProducts === 'function') loadProducts();
+          console.error("Profile routing exception:", dbError.message);
+          if (typeof showBuyerView === 'function') showBuyerView();
         }
       }, 150);
 
     } else {
-      console.log("🔴 Unauthenticated Guest Context.");
+      console.log("🔴 Guest State Active.");
       currentUser = null;
       currentRole = 'buyer';
 
@@ -195,15 +186,14 @@ if (typeof supabase !== 'undefined') {
         };
       }
 
-      const path = window.location.pathname;
-      const isProtectedView = path.includes('portal.html') || (
-                             !path.includes('index.html') && 
-                             path !== '/' && 
-                             path !== '');
-
-      if (isProtectedView) {
-        window.location.href = 'index.html';
-      }
+      // 🚀 REVEAL THE MARKETING FRONT AND CARDS IF NO USER IS LOGGED IN
+      if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').classList.remove('hidden');
+      if (document.getElementById('landing')) document.getElementById('landing').classList.remove('hidden');
+      
+      // Keep main application panels locked out
+      if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.add('hidden');
+      if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.add('hidden');
+      if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.add('hidden');
     }
   });
 }
