@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>BUYSELL Nigeria | Premium Marketplace</title>
+  <link rel="icon" href="data:,">
+  <meta name="description" content="Nigeria's #1 marketplace. Buy, sell, dropship & earn affiliate income.">
+  <meta name="theme-color" content="#0b1f14">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <div id="marketing-placeholder"></div>
+
+  <script src="https://js.paystack.co/v2/inline.js"></script>
+  <script data-cfasync="false" src="config.js?v=3.1"></script>
+
+  <script>
+    (function() {
+      'use strict';
+
+      // 1. Fetch separate marketing content
+      fetch('marketing.html')
+        .then(response => response.text())
+        .then(htmlContent => {
+          document.getElementById('marketing-placeholder').innerHTML = htmlContent;
+
+          // 2. Adjust marketing action triggers to change pages instead of scrolling
+          document.querySelectorAll('.bs-scroll-link').forEach(link => {
+            link.addEventListener('click', function(e) {
+              e.preventDefault();
+              window.location.href = 'portal.html'; // Direct route to onboarding
+            });
+          });
+
+          // 3. Initialize scroll reveals for the injected html elements
+          const revealEls = document.querySelectorAll('.bs-reveal');
+          if ('IntersectionObserver' in window) {
+            const io = new IntersectionObserver((entries) => {
+              entries.forEach((entry, i) => {
+                if (entry.isIntersecting) {
+                  setTimeout(() => entry.target.classList.add('is-visible'), i * 60);
+                  io.unobserve(entry.target);
+                }
+              });
+            }, { threshold: 0.1 });
+            revealEls.forEach(el => io.observe(el));
+          } else {
+            revealEls.forEach(el => el.classList.add('is-visible'));
+          }
+
+          // 4. Tabs & FAQ setup scripts for marketing file
+          document.querySelectorAll('.bs-how__tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+              document.querySelectorAll('.bs-how__tab').forEach(t => t.classList.remove('bs-active'));
+              tab.classList.add('bs-active');
+              document.querySelectorAll('.bs-how__flow').forEach(flow => {
+                if (flow.dataset.flow === tab.dataset.tab) {
+                  flow.classList.add('bs-active');
+                } else { flow.classList.remove('bs-active'); }
+              });
+            });
+          });
+
+          document.querySelectorAll('.bs-faq__trigger').forEach(trigger => {
+            trigger.addEventListener('click', () => {
+              const item = trigger.closest('.bs-faq__item');
+              item.classList.toggle('is-open');
+            });
+          });
+
+          // 5. Counters
+          const counterObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+              if (entry.isIntersecting) {
+                const el = entry.target;
+                const target = parseInt(el.dataset.count);
+                let current = 0;
+                const step = target / 50;
+                const interval = setInterval(() => {
+                  current += step;
+                  if (current >= target) {
+                    el.textContent = target.toLocaleString() + '+';
+                    clearInterval(interval);
+                  } else {
+                    el.textContent = Math.floor(current).toLocaleString() + '+';
+                  }
+                }, 20);
+                counterObserver.unobserve(el);
+              }
+            });
+          }, { threshold: 0.3 });
+          document.querySelectorAll('[data-count]').forEach(c => counterObserver.observe(c));
+        })
+        .catch(err => console.error("Error launching home layout core: ", err));
+    })();
+  </script>
+</body>
+</html>
