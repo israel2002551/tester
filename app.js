@@ -766,19 +766,16 @@ function handleLandingAuthClick() {
 }
 
 function enterSite(mode) {
-  console.log("🚀 User manually clicked choice onboarding card selection option:", mode);
+  console.log("🚀 Manual selection pass triggered for role:", mode);
   
-  // Set an intentional user traversal flag token into local browser memory
   localStorage.setItem('bs_manual_navigation_pass', 'true');
 
   if (!currentUser) {
-    // If a guest clicks a role card, open the registration modal form right away
     showModal('auth-modal');
     toggleAuth('signup');
     return;
-  }
+  } // 👈 Closes: if (!currentUser)
 
-  // If they are already authenticated, force hide landing layers and reveal dashboards immediately
   if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').style.setProperty('display', 'none', 'important');
   if (document.getElementById('landing')) document.getElementById('landing').style.setProperty('display', 'none', 'important');
 
@@ -787,7 +784,7 @@ function enterSite(mode) {
   } else {
     if (typeof showBuyerView === 'function') showBuyerView();
   }
-}
+} // 👈 Closes: function enterSite(mode)
 
 
 // ==========================================
@@ -5393,18 +5390,21 @@ function shareCurrentProduct() {
 // ====================================================
 // 🚀 UNIFIED SINGLE-PAGE RUNTIME INITIALIZATION
 // ====================================================
+// ====================================================
+// 🚀 UNIFIED SINGLE-PAGE RUNTIME INITIALIZATION
+// ====================================================
 (async function init() {
   console.log("🎬 Launching single-page application lifecycle...");
   
   const savedLogo = localStorage.getItem('buysell_custom_logo');
   if (savedLogo) applySiteLogo(savedLogo);
-  
+
   if (typeof updateCartCount === 'function') updateCartCount();
   if (typeof updateWishlistCount === 'function') updateWishlistCount();
   if (typeof handleDeepLink === 'function') handleDeepLink();
   if (typeof checkBroadcastForUser === 'function') checkBroadcastForUser();
 
-  // 🔔 Real-time incoming order listening pipeline for active merchants
+  // Real-time order updates for sellers
   db.channel('orders-rt').on('postgres_changes', { 
     event: 'INSERT', 
     schema: 'public', 
@@ -5417,7 +5417,7 @@ function shareCurrentProduct() {
     }
   }).subscribe();
 
-  // ⚠️ Real-time background low stock warnings tracking system
+  // Real-time low stock alerts
   db.channel('stock-rt').on('postgres_changes', { 
     event: 'UPDATE', 
     schema: 'public', 
@@ -5432,7 +5432,7 @@ function shareCurrentProduct() {
       }
     }
   }).subscribe();
-})(); // 👈 This closes the file with no hanging brackets!
+})(); // 👈 This explicitly shuts down the self-invoking function thread cleanly.
 // --- PHASE 1-4 INJECTIONS ---
 function validateInput(str) {
   if (typeof str !== 'string') return '';
