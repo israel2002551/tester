@@ -117,7 +117,7 @@ window.supabaseAppClient = window.supabaseClient;
 
 
 // ==========================================================================
-// 🎛️ DYNAMIC ROLE-BASED DASHBOARD ROUTING ENGINE (SINGLE-PAGE UPDATED)
+// 🎛️ DYNAMIC ROLE-BASED DASHBOARD ROUTING ENGINE (REPAIRED SINGLE-PAGE)
 // ==========================================================================
 if (typeof supabase !== 'undefined') {
   supabase.auth.onAuthStateChange(async (event, session) => {
@@ -137,7 +137,7 @@ if (typeof supabase !== 'undefined') {
           e.preventDefault();
           localStorage.clear();
           await supabase.auth.signOut();
-          window.location.reload(); // Hard refresh clean slate back to the marketing page
+          window.location.reload(); 
         };
       }
 
@@ -151,7 +151,6 @@ if (typeof supabase !== 'undefined') {
 
           if (error) throw error;
 
-          // Sync profile contexts locally
           currentUser.profile = profile || {
             role: session.user.user_metadata?.role || 'buyer',
             name: session.user.user_metadata?.name || 'User',
@@ -160,19 +159,18 @@ if (typeof supabase !== 'undefined') {
           currentRole = currentUser.profile?.role || 'buyer';
 
           // Initialize background notification and parsing streams
-          updateNavForUser();
-          updateInboxCount();
-          setupMessageRealtime();
-          processInboundChatRedirects();
+          if (typeof updateNavForUser === 'function') updateNavForUser();
+          if (typeof updateInboxCount === 'function') updateInboxCount();
+          if (typeof setupMessageRealtime === 'function') setupMessageRealtime();
+          if (typeof processInboundChatRedirects === 'function') processInboundChatRedirects();
 
-          // 🚀 THE FIX: Hide the marketing placeholder wall cleanly
-          if (document.getElementById('marketing-placeholder')) {
-            document.getElementById('marketing-placeholder').classList.add('hidden');
-          }
+          // Hide the marketing wall layout placeholder cleanly
+          const marketingWall = document.getElementById('marketing-placeholder');
+          if (marketingWall) marketingWall.classList.add('hidden');
 
-          // Evaluate account metadata role matrix parameters
+          // Evaluate user permissions role strings
           if (currentRole === 'seller' || currentRole === 'admin' || currentUser.profile?.accounts === 'both') {
-            console.log("🏪 Session role verified. Mounting merchant workspace dashboard...");
+            console.log("🏪 Mounting seller dashboard panel workspace...");
             if (document.getElementById('landing')) document.getElementById('landing').classList.add('hidden');
             if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.add('hidden');
             if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.remove('hidden');
@@ -180,32 +178,35 @@ if (typeof supabase !== 'undefined') {
 
             if (currentRole === 'admin' && currentUser.email === ADMIN_EMAIL) {
               document.getElementById('admin-nav-item')?.classList.remove('hidden');
-              loadAdminOverview();
+              if (typeof loadAdminOverview === 'function') loadAdminOverview();
             } else {
-              checkSellerCommission();
-              loadSellerStats();
-              loadSellerProds();
-              loadSellerOrders();
-              renderChart();
+              if (typeof checkSellerCommission === 'function') checkSellerCommission();
+              if (typeof loadSellerStats === 'function') loadSellerStats();
+              if (typeof loadSellerProds === 'function') loadSellerProds();
+              if (typeof loadSellerOrders === 'function') loadSellerOrders();
+              if (typeof renderChart === 'function') renderChart();
             }
           } else {
-            console.log("🛍️ Session role verified. Mounting split gateway onboard options screen...");
-            // 🚀 THE CRITICAL CORRECTION: 
-            // Instead of jumping directly into the shop, show them the main landing selection choices card array!
-            if (document.getElementById('landing')) document.getElementById('landing').classList.remove('hidden');
+            console.log("🛍️ Mounting onboarding choice gateway panel cards...");
+            // 🚀 CRITICAL REPAIR: Reveal your onboarding cards selection panel smoothly
+            const landingPanel = document.getElementById('landing');
+            if (landingPanel) {
+              landingPanel.classList.remove('hidden');
+              landingPanel.style.display = 'block';
+            }
             if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.add('hidden');
             if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.add('hidden');
             if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.add('hidden');
           }
 
         } catch (dbError) {
-          console.error("Profile routing exception occurred:", dbError.message);
-          showBuyerView();
+          console.error("❌ Profile check failed, defaulting to marketplace view safely:", dbError.message);
+          if (document.getElementById('landing')) document.getElementById('landing').classList.remove('hidden');
         }
       }, 150);
 
     } else {
-      console.log("🔴 Guest State Active.");
+      console.log("🔴 Guest Context Registered.");
       currentUser = null;
       currentRole = 'buyer';
 
@@ -220,7 +221,7 @@ if (typeof supabase !== 'undefined') {
         };
       }
 
-      // Restore baseline presentation layers for anonymous guests
+      // Display presentation components for unauthenticated guests
       if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').classList.remove('hidden');
       if (document.getElementById('landing')) document.getElementById('landing').classList.remove('hidden');
       if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.add('hidden');
@@ -809,23 +810,43 @@ function processInboundChatRedirects() {
 
 
 function showBuyerView() {
-  document.getElementById('buyer-view').style.display = 'block';
-  document.getElementById('seller-dashboard').style.display = 'none';
-  document.getElementById('storefront-view').style.display = 'none';
-  if(document.getElementById('admin-portal-view')) document.getElementById('admin-portal-view').style.display = 'none';
-  if(document.getElementById('service-provider-view')) document.getElementById('service-provider-view').style.display = 'none';
+  const buyerView = document.getElementById('buyer-view');
+  const sellerDash = document.getElementById('seller-dashboard');
+  const storefrontView = document.getElementById('storefront-view');
+  const mainNav = document.getElementById('main-nav');
+  const adminPortal = document.getElementById('admin-portal-view');
+  const landingPortal = document.getElementById('landing');
+  const marketingPlaceholder = document.getElementById('marketing-placeholder');
 
-  document.getElementById('toggle-view-icon').className = 'fa-solid fa-store';
-  document.getElementById('toggle-view-text').textContent = 'Seller Dashboard';
-  document.getElementById('mob-ham-btn').style.display = 'none';
+  // 1. Reveal the Buyer View and the main navigation header bar
+  if (buyerView) buyerView.classList.remove('hidden');
+  if (mainNav) mainNav.classList.remove('hidden');
+
+  // 2. Hide everything else on the single page canvas
+  if (sellerDash) sellerDash.classList.add('hidden');
+  if (storefrontView) storefrontView.classList.add('hidden');
+  if (adminPortal) adminPortal.classList.add('hidden');
+  if (landingPortal) landingPortal.classList.add('hidden');
+  if (marketingPlaceholder) marketingPlaceholder.classList.add('hidden');
+
+  // 3. Reset utility UI control elements
+  const toggleIcon = document.getElementById('toggle-view-icon');
+  const toggleText = document.getElementById('toggle-view-text');
+  if (toggleIcon) toggleIcon.className = 'fa-solid fa-store';
+  if (toggleText) toggleText.textContent = 'Seller Dashboard';
+  
+  const mobHamBtn = document.getElementById('mob-ham-btn');
+  if (mobHamBtn) mobHamBtn.style.display = 'none';
+  
   document.body.classList.remove('in-seller');
   currentRole = 'buyer';
-  startCarousel();
-  loadProducts();
-  loadActiveAds();
-  updateCartCount();
-}
 
+  // 4. Fire standard buyer data pipelines safely
+  if (typeof startCarousel === 'function') startCarousel();
+  if (typeof loadProducts === 'function') loadProducts();
+  if (typeof loadActiveAds === 'function') loadActiveAds();
+  if (typeof updateCartCount === 'function') updateCartCount();
+}
 function isSellerAccessExpired(profile = currentUser?.profile) {
   if (!currentUser || currentUser.email === ADMIN_EMAIL) return false;
   const expiry = profile?.subscription_end || profile?.paid_until || profile?.trial_end;
@@ -883,30 +904,52 @@ async function showSellerDashboard() {
   if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
   if (isSellerAccessExpired()) { showSellerAccessBlocked(); return; }
   if (!(await requireSellerKyc())) return;
-  document.getElementById('buyer-view').style.display = 'none';
-  document.getElementById('seller-dashboard').style.display = 'block';
-  document.getElementById('storefront-view').style.display = 'none';
-  if(document.getElementById('admin-portal-view')) document.getElementById('admin-portal-view').style.display = 'none';
-  if(document.getElementById('service-provider-view')) document.getElementById('service-provider-view').style.display = 'none';
 
-  document.getElementById('toggle-view-icon').className = 'fa-solid fa-store';
-  document.getElementById('toggle-view-text').textContent = 'Back to Shopping';
-  document.getElementById('mob-ham-btn').style.display = 'flex';
-  // Show/hide admin nav item
+  const buyerView = document.getElementById('buyer-view');
+  const sellerDash = document.getElementById('seller-dashboard');
+  const storefrontView = document.getElementById('storefront-view');
+  const mainNav = document.getElementById('main-nav');
+  const adminPortal = document.getElementById('admin-portal-view');
+  const landingPortal = document.getElementById('landing');
+  const marketingPlaceholder = document.getElementById('marketing-placeholder');
+
+  // 1. Reveal the Merchant Workspace and the navigation bar
+  if (sellerDash) sellerDash.classList.remove('hidden');
+  if (mainNav) mainNav.classList.remove('hidden');
+
+  // 2. Hide all buyer-centric and pre-login landing elements
+  if (buyerView) buyerView.classList.add('hidden');
+  if (storefrontView) storefrontView.classList.add('hidden');
+  if (adminPortal) adminPortal.classList.add('hidden');
+  if (landingPortal) landingPortal.classList.add('hidden');
+  if (marketingPlaceholder) marketingPlaceholder.classList.add('hidden');
+
+  // 3. Swap navigation action button states
+  const toggleIcon = document.getElementById('toggle-view-icon');
+  const toggleText = document.getElementById('toggle-view-text');
+  if (toggleIcon) toggleIcon.className = 'fa-solid fa-store';
+  if (toggleText) toggleText.textContent = 'Back to Shopping';
+  
+  const mobHamBtn = document.getElementById('mob-ham-btn');
+  if (mobHamBtn) mobHamBtn.style.display = 'flex';
+
   const adminNavItem = document.getElementById('admin-nav-item');
   if (adminNavItem) adminNavItem.style.display = currentUser?.email === ADMIN_EMAIL ? 'flex' : 'none';
+  
   document.body.classList.add('in-seller');
   currentRole = 'seller';
-  stopCarousel();
-  checkSellerCommission();
-  loadSellerStats();
-  loadSellerProds();
-  loadSellerOrders();
-  renderChart();
-  loadWithdrawalData();
-  loadDropshipData();
-  loadAffiliateData();
-  loadSellerAds();
+  
+  // 4. Initialize vendor inventory data tracking pipelines
+  if (typeof stopCarousel === 'function') stopCarousel();
+  if (typeof checkSellerCommission === 'function') checkSellerCommission();
+  if (typeof loadSellerStats === 'function') loadSellerStats();
+  if (typeof loadSellerProds === 'function') loadSellerProds();
+  if (typeof loadSellerOrders === 'function') loadSellerOrders();
+  if (typeof renderChart === 'function') renderChart();
+  if (typeof loadWithdrawalData === 'function') loadWithdrawalData();
+  if (typeof loadDropshipData === 'function') loadDropshipData();
+  if (typeof loadAffiliateData === 'function') loadAffiliateData();
+  if (typeof loadSellerAds === 'function') loadSellerAds();
 }
 
 function toggleView() {
