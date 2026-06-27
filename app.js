@@ -757,26 +757,41 @@ function handleLandingAuthClick() {
 }
 
 function enterSite(mode) {
-  document.getElementById('landing').style.opacity = '0';
-  setTimeout(() => {
-    document.getElementById('landing').style.display = 'none';
-    document.getElementById('topbar')?.style.setProperty('display', 'none');
-    document.getElementById('main-nav').style.display = 'block';
-    document.getElementById('chatbot-fab').style.display = 'flex';
-    document.getElementById('wa-fab').style.display = 'flex';
-    
-    const isAdmin = currentUser && currentUser.email === ADMIN_EMAIL && currentUser.profile?.role === 'admin';
-    
-    if (isAdmin) {
-      showAdminPortal();
-    } else if (mode === 'seller' || mode === 'both') {
-      showSellerDashboard();
-    } else if (mode === 'service_provider') {
-      showServiceDashboard();
-    } else {
-      showBuyerView();
-    }
-  }, 350);
+  console.log("🚀 Switching app viewport layout mode to:", mode);
+
+  // 1. Target your elements securely
+  const landingPortal = document.getElementById('landing');
+  const marketingPlaceholder = document.getElementById('marketing-placeholder');
+  const mainNav = document.getElementById('main-nav');
+  const chatbotFab = document.getElementById('chatbot-fab');
+  const waFab = document.getElementById('wa-fab');
+
+  // 2. Hide the pre-login marketing wall and choice cards instantly
+  if (landingPortal) {
+    landingPortal.classList.add('hidden');
+    landingPortal.style.display = 'none'; // Failsafe override
+  }
+  if (marketingPlaceholder) {
+    marketingPlaceholder.classList.add('hidden');
+  }
+
+  // 3. Reveal your global floating features and navigation header bar
+  if (mainNav) mainNav.classList.remove('hidden');
+  if (chatbotFab) chatbotFab.style.display = 'flex';
+  if (waFab) waFab.style.display = 'flex';
+  
+  // 4. Evaluate admin flags and hand off viewport mounting cleanly
+  const isAdmin = currentUser && currentUser.email === ADMIN_EMAIL && currentUser.profile?.role === 'admin';
+  
+  if (isAdmin) {
+    showAdminPortal();
+  } else if (mode === 'seller' || mode === 'both') {
+    showSellerDashboard();
+  } else if (mode === 'service_provider') {
+    if (typeof showServiceDashboard === 'function') showServiceDashboard();
+  } else {
+    showBuyerView();
+  }
 }
 
 
@@ -5363,27 +5378,49 @@ function shareCurrentProduct() {
 // ====================================================
 //  INIT
 // ====================================================
+// ====================================================
+// 🚀 UNIFIED SINGLE-PAGE RUNTIME INITIALIZATION
+// ====================================================
 (async function init() {
+  console.log("🎬 Launching single-page application lifecycle...");
+  
   const savedLogo = localStorage.getItem('buysell_custom_logo');
   if (savedLogo) applySiteLogo(savedLogo);
-  await checkSession();
-  updateCartCount();
-  updateWishlistCount();
-  handleDeepLink();
-  checkBroadcastForUser();
-  // Real-time order updates for sellers
-  db.channel('orders-rt').on('postgres_changes',{event:'INSERT',schema:'public',table:'orders'},payload=>{
-    if (currentRole==='seller' && payload.new?.seller_id===currentUser?.id) {
+  
+  // 🚀 FIXED: Removed 'await checkSession()' because authentication tracking 
+  // and view-mounting are handled dynamically by the onAuthStateChange interceptor at the top!
+
+  if (typeof updateCartCount === 'function') updateCartCount();
+  if (typeof updateWishlistCount === 'function') updateWishlistCount();
+  if (typeof handleDeepLink === 'function') handleDeepLink();
+  if (typeof checkBroadcastForUser === 'function') checkBroadcastForUser();
+
+  // 🔔 Real-time incoming order listening pipeline for active merchants
+  db.channel('orders-rt').on('postgres_changes', { 
+    event: 'INSERT', 
+    schema: 'public', 
+    table: 'orders' 
+  }, payload => {
+    if (currentRole === 'seller' && payload.new?.seller_id === currentUser?.id) {
       toast('New Order! 🛍️', 'Check your orders panel', 'success', 6000);
-      loadSellerOrders();
-      loadSellerStats();
+      if (typeof loadSellerOrders === 'function') loadSellerOrders();
+      if (typeof loadSellerStats === 'function') loadSellerStats();
     }
   }).subscribe();
-  // Real-time low stock alerts
-  db.channel('stock-rt').on('postgres_changes',{event:'UPDATE',schema:'public',table:'products'},payload=>{
+
+  // ⚠️ Real-time background low stock warnings tracking system
+  db.channel('stock-rt').on('postgres_changes', { 
+    event: 'UPDATE', 
+    schema: 'public', 
+    table: 'products' 
+  }, payload => {
     const p = payload.new;
-    if (currentRole==='seller' && p?.seller_id===currentUser?.id && p?.stock_quantity !== undefined && p?.low_stock_alert && p.stock_quantity <= p.low_stock_alert && p.stock_quantity > 0) {
-      toast(`⚠️ Low Stock: ${p.name}`, `Only ${p.stock_quantity} left`, 'warn', 7000);
+    const isTargetMerchant = currentRole === 'seller' && p?.seller_id === currentUser?.id;
+    
+    if (isTargetMerchant && p?.stock_quantity !== undefined && p?.low_stock_alert) {
+      if (p.stock_quantity <= p.low_stock_alert && p.stock_quantity > 0) {
+        toast(`⚠️ Low Stock: ${p.name}`, `Only ${p.stock_quantity} left inside inventory`, 'warn', 7000);
+      }
     }
   }).subscribe();
 })();
