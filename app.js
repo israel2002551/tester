@@ -14,6 +14,9 @@ let selectedRating = 0, checkoutPaymentMethod = 'paystack';
 let deferredInstallPrompt = null, salesChart = null;
 let sellerAnalyticsChart = null;
 let carouselStartX = 0;
+// 🚀 MOVE THESE TWO LINES HERE (TO THE TOP VARIABLES AREA):
+let wishlist = JSON.parse(localStorage.getItem('bs_wishlist') || '[]');
+let compareList = JSON.parse(localStorage.getItem('bs_compare') || '[]');
 const analyticsSessionId = localStorage.getItem('bs_analytics_session') || ('sess_' + Date.now() + '_' + Math.random().toString(36).slice(2));
 localStorage.setItem('bs_analytics_session', analyticsSessionId);
 
@@ -6094,7 +6097,6 @@ function dismissInstallBar() {
 // ====================================================
 //  WISHLIST
 // ====================================================
-let wishlist = JSON.parse(localStorage.getItem('bs_wishlist') || '[]');
 
 function saveWishlist() {
   localStorage.setItem('bs_wishlist', JSON.stringify(wishlist));
@@ -6203,7 +6205,6 @@ async function showWishlistModal() {
 // ====================================================
 //  COMPARE
 // ====================================================
-let compareList = JSON.parse(localStorage.getItem('bs_compare') || '[]');
 function saveCompare() {
   localStorage.setItem('bs_compare', JSON.stringify(compareList));
   const bar = document.getElementById('compare-bar');
