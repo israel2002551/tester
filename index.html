@@ -76,7 +76,8 @@
 
   <div id="marketing-placeholder"></div>
 <!-- ==================== LANDING ==================== -->
-<div id="landing">
+<!-- 🚀 CHANGE THIS LINE TO INCLUDE display: none; -->
+<div id="landing" style="display: none;">
   <div class="landing-bg"></div>
   <header class="landing-header">
     <a href="#" class="brand-logo">
@@ -2544,16 +2545,26 @@
 <script data-cfasync="false" src="config.js?v=3.1"></script>
 <script src="app.js?v=3.3"></script>
   <!-- 🚀 REPLACE THE BOTTOM FETCH BLOCK IN index.html WITH THIS REMASTERED VERSION -->
+<!-- 🚀 REPLACE THE BOTTOM FETCH SCRIPT WITH THIS: -->
 <script>
   (function() {
     'use strict';
 
+    // 1. Fetch separate marketing page HTML
     fetch('marketing.html')
       .then(response => response.text())
       .then(htmlContent => {
-        document.getElementById('marketing-placeholder').innerHTML = htmlContent;
+        // Inject content into the placeholder
+        const placeholder = document.getElementById('marketing-placeholder');
+        placeholder.innerHTML = htmlContent;
 
-        // 1. Initialize Reveal on Scroll Observers
+        // 2. NOW REVEAL THE OLD PORTAL LAYOUT CONTAINER IN THE DOM BACKGROUND
+        const oldLanding = document.getElementById('landing');
+        if (oldLanding) {
+          oldLanding.style.display = 'block'; 
+        }
+
+        // 3. Initialize Reveal on Scroll Observers
         const revealEls = document.querySelectorAll('.bs-reveal');
         if ('IntersectionObserver' in window) {
           const io = new IntersectionObserver((entries) => {
@@ -2569,7 +2580,7 @@
           revealEls.forEach(el => el.classList.add('is-visible'));
         }
 
-        // 2. Smooth Scrolling Setup
+        // 4. Smooth Scrolling Setup between the separate layers
         document.querySelectorAll('.bs-scroll-link').forEach(link => {
           link.addEventListener('click', function(e) {
             const target = document.querySelector(this.getAttribute('href'));
@@ -2580,7 +2591,7 @@
           });
         });
 
-        // 3. Buyer / Seller Workflow Tabs Engine
+        // 5. Buyer / Seller Workflow Tabs Engine
         document.querySelectorAll('.bs-how__tab').forEach(tab => {
           tab.addEventListener('click', () => {
             document.querySelectorAll('.bs-how__tab').forEach(t => t.classList.remove('bs-active'));
@@ -2597,7 +2608,7 @@
           });
         });
 
-        // 4. FAQ Accordion Handling
+        // 6. FAQ Accordion Handling
         document.querySelectorAll('.bs-faq__trigger').forEach(trigger => {
           trigger.addEventListener('click', () => {
             const item = trigger.closest('.bs-faq__item');
@@ -2607,7 +2618,7 @@
           });
         });
 
-        // 5. High-Performance Eased Number Counters
+        // 7. Number Counters Animation
         const counterObserver = new IntersectionObserver((entries) => {
           entries.forEach(entry => {
             if (entry.isIntersecting) {
