@@ -117,7 +117,7 @@ async function trackAnalytics(event) {
 
 
 // ==========================================================================
-// 🎛️ DYNAMIC ROLE-BASED DASHBOARD ROUTING ENGINE
+// 🎛️ DYNAMIC ROLE-BASED DASHBOARD ROUTING ENGINE (SINGLE-PAGE UPDATED)
 // ==========================================================================
 if (typeof supabase !== 'undefined') {
   supabase.auth.onAuthStateChange(async (event, session) => {
@@ -137,7 +137,7 @@ if (typeof supabase !== 'undefined') {
           e.preventDefault();
           localStorage.clear();
           await supabase.auth.signOut();
-          window.location.reload(); // Instantly reload to reset the single-page state back to the beginning
+          window.location.reload(); // Hard refresh clean slate back to the marketing page
         };
       }
 
@@ -145,28 +145,62 @@ if (typeof supabase !== 'undefined') {
         try {
           const { data: profile, error } = await supabase
             .from('profiles')
-            .select('role')
+            .select('*')
             .eq('id', session.user.id)
             .maybeSingle();
 
           if (error) throw error;
 
-          // 🚀 HIDE BOTH THE MARKETING WALL AND ONBOARDING CARDS ON SUCCESSFUL SIGN IN
-          if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').classList.add('hidden');
-          if (document.getElementById('landing')) document.getElementById('landing').classList.add('hidden');
+          // Sync profile contexts locally
+          currentUser.profile = profile || {
+            role: session.user.user_metadata?.role || 'buyer',
+            name: session.user.user_metadata?.name || 'User',
+            email: session.user.email
+          };
+          currentRole = currentUser.profile?.role || 'buyer';
 
-          currentRole = profile?.role || 'buyer';
+          // Initialize background notification and parsing streams
+          updateNavForUser();
+          updateInboxCount();
+          setupMessageRealtime();
+          processInboundChatRedirects();
 
-          // Mount dashboards cleanly using your global view functions
-          if (currentRole === 'seller') {
-            if (typeof showSellerDashboard === 'function') showSellerDashboard();
+          // 🚀 THE FIX: Hide the marketing placeholder wall cleanly
+          if (document.getElementById('marketing-placeholder')) {
+            document.getElementById('marketing-placeholder').classList.add('hidden');
+          }
+
+          // Evaluate account metadata role matrix parameters
+          if (currentRole === 'seller' || currentRole === 'admin' || currentUser.profile?.accounts === 'both') {
+            console.log("🏪 Session role verified. Mounting merchant workspace dashboard...");
+            if (document.getElementById('landing')) document.getElementById('landing').classList.add('hidden');
+            if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.add('hidden');
+            if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.remove('hidden');
+            if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.remove('hidden');
+
+            if (currentRole === 'admin' && currentUser.email === ADMIN_EMAIL) {
+              document.getElementById('admin-nav-item')?.classList.remove('hidden');
+              loadAdminOverview();
+            } else {
+              checkSellerCommission();
+              loadSellerStats();
+              loadSellerProds();
+              loadSellerOrders();
+              renderChart();
+            }
           } else {
-            if (typeof showBuyerView === 'function') showBuyerView();
+            console.log("🛍️ Session role verified. Mounting split gateway onboard options screen...");
+            // 🚀 THE CRITICAL CORRECTION: 
+            // Instead of jumping directly into the shop, show them the main landing selection choices card array!
+            if (document.getElementById('landing')) document.getElementById('landing').classList.remove('hidden');
+            if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.add('hidden');
+            if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.add('hidden');
+            if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.add('hidden');
           }
 
         } catch (dbError) {
-          console.error("Profile routing exception:", dbError.message);
-          if (typeof showBuyerView === 'function') showBuyerView();
+          console.error("Profile routing exception occurred:", dbError.message);
+          showBuyerView();
         }
       }, 150);
 
@@ -186,11 +220,9 @@ if (typeof supabase !== 'undefined') {
         };
       }
 
-      // 🚀 REVEAL THE MARKETING FRONT AND CARDS IF NO USER IS LOGGED IN
+      // Restore baseline presentation layers for anonymous guests
       if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').classList.remove('hidden');
       if (document.getElementById('landing')) document.getElementById('landing').classList.remove('hidden');
-      
-      // Keep main application panels locked out
       if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.add('hidden');
       if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.add('hidden');
       if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.add('hidden');
