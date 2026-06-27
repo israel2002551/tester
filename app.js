@@ -129,10 +129,19 @@ if (typeof supabase !== 'undefined') {
 
     // 🚀 THE FIX: If it's just an automated background check (INITIAL_SESSION / TOKEN_REFRESHED),
     // do NOT automatically redirect or hide the home landing page layouts!
-    if (session && session.user && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
-      console.log("🟢 User Session Authenticated via Explicit Action: " + session.user.email);
-      currentUser = session.user;
+   if (typeof supabase !== 'undefined') {
+  supabase.auth.onAuthStateChange(async (event, session) => {
+    console.log(`⚡ Gatekeeper Auth Engine Event: ${event}`);
+    
+    const authButton = document.querySelector('.nav-sign-in-btn') || 
+                       document.getElementById('landing-auth-btn') ||
+                       document.getElementById('nav-auth-inner-btn');
 
+    if (session && session.user) {
+      currentUser = session.user;
+      console.log("📥 Active user credentials cached securely in memory: " + currentUser.email);
+
+      // 1. Sync header button triggers to act as a 'Sign Out' control
       if (authButton) {
         authButton.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
         authButton.onclick = async (e) => {
@@ -143,98 +152,70 @@ if (typeof supabase !== 'undefined') {
         };
       }
 
-      setTimeout(async () => {
-        try {
-          const { data: profile, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .maybeSingle();
+      // 2. Fetch the user's role parameters quietly in the background without modifying layout views yet
+      try {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .maybeSingle();
 
-          if (error) throw error;
-
-          currentUser.profile = profile || {
-            role: session.user.user_metadata?.role || 'buyer',
-            name: session.user.user_metadata?.name || 'User',
-            email: session.user.email
-          };
-          currentRole = currentUser.profile?.role || 'buyer';
-
-          if (typeof updateNavForUser === 'function') updateNavForUser();
-          if (typeof updateInboxCount === 'function') updateInboxCount();
-          if (typeof setupMessageRealtime === 'function') setupMessageRealtime();
-          if (typeof processInboundChatRedirects === 'function') processInboundChatRedirects();
-
-          // Hide presentation layers cleanly
-          const marketingWall = document.getElementById('marketing-placeholder');
-          if (marketingWall) marketingWall.style.setProperty('display', 'none', 'important');
-          
-          const landingPanel = document.getElementById('landing');
-          if (landingPanel) landingPanel.style.setProperty('display', 'none', 'important');
-
-          if (currentRole === 'seller' || currentRole === 'admin' || currentUser.profile?.accounts === 'both') {
-            const sellerDash = document.getElementById('seller-dashboard');
-            const mainNav = document.getElementById('main-nav');
-            
-            if (sellerDash) {
-              sellerDash.classList.remove('hidden');
-              sellerDash.style.setProperty('display', 'block', 'important');
-              const innerLayout = sellerDash.querySelector('.dash-layout');
-              if (innerLayout) innerLayout.style.setProperty('display', 'flex', 'important');
-            }
-            if (mainNav) {
-              mainNav.classList.remove('hidden');
-              mainNav.style.setProperty('display', 'block', 'important');
-            }
-            
-            if (currentRole === 'admin' && currentUser.email === ADMIN_EMAIL) {
-              document.getElementById('admin-nav-item')?.classList.remove('hidden');
-              if (typeof loadAdminOverview === 'function') loadAdminOverview();
-            } else {
-              if (typeof checkSellerCommission === 'function') checkSellerCommission();
-              if (typeof loadSellerStats === 'function') loadSellerStats();
-              if (typeof loadSellerProds === 'function') loadSellerProds();
-              if (typeof loadSellerOrders === 'function') loadSellerOrders();
-              if (typeof renderChart === 'function') renderChart();
-            }
-          } else {
-            const buyerView = document.getElementById('buyer-view');
-            const mainNav = document.getElementById('main-nav');
-            
-            if (buyerView) {
-              buyerView.classList.remove('hidden');
-              buyerView.style.setProperty('display', 'block', 'important');
-            }
-            if (mainNav) {
-              mainNav.classList.remove('hidden');
-              mainNav.style.setProperty('display', 'block', 'important');
-            }
-            if (typeof startCarousel === 'function') startCarousel();
-            if (typeof loadProducts === 'function') loadProducts();
-          }
-
-        } catch (dbError) {
-          console.error("❌ Single-page layout compilation error:", dbError.message);
+        if (!error && profile) {
+          currentUser.profile = profile;
+          currentRole = profile.role || 'buyer';
         }
-      }, 150);
-
-    } else if (event === 'INITIAL_SESSION' && session) {
-      // 🚀 Cache the user session context quietly in background memory without changing the screen display
-      currentUser = session.user;
-      console.log("📥 Stored session footprint in memory: " + currentUser.email);
-      
-      // Update your navbar buttons quietly in the background
-      if (authButton) {
-        authButton.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
-        authButton.onclick = async (e) => {
-          e.preventDefault();
-          localStorage.clear();
-          await supabase.auth.signOut();
-          window.location.reload(); 
-        };
+      } catch (e) {
+        console.warn("⚠️ Background profile parsing deferred:", e.message);
       }
-    } else if (!session) {
-      console.log("🔴 Guest Context Registered.");
+
+      // 🚀 THE FIXED GATEKEEPER LOGIC: 
+      // If the user just clicked a portal card ('I'm a Buyer' / 'I'm a Seller') to call enterSite manually,
+      // or if they just explicitly typed their password to fire a fresh login event, let them inside.
+      // Otherwise, if they just refreshed the browser, enforce strict visibility bounds on your marketing sections!
+      if (event === 'SIGNED_IN' && !localStorage.getItem('bs_manual_navigation_pass')) {
+        console.log("⏸️ Background login detected on boot. Holding layout position on marketing landing...");
+        
+        // Force-reveal marketing copy and hide main application layers completely
+        if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').style.setProperty('display', 'block', 'important');
+        if (document.getElementById('landing')) document.getElementById('landing').style.setProperty('display', 'block', 'important');
+        if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.add('hidden');
+        if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.add('hidden');
+        if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.add('hidden');
+      } else {
+        // If an explicit login form submission or a card click occurred, clear flags and process routing
+        localStorage.removeItem('bs_manual_navigation_pass');
+        
+        // Hide initial welcome frames
+        if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').style.setProperty('display', 'none', 'important');
+        if (document.getElementById('landing')) document.getElementById('landing').style.setProperty('display', 'none', 'important');
+
+        // Mount the dashboard matching their exact configuration role parameters
+        if (currentRole === 'seller' || currentUser.profile?.accounts === 'both' || currentRole === 'admin') {
+          const sellerDash = document.getElementById('seller-dashboard');
+          const mainNav = document.getElementById('main-nav');
+          if (sellerDash) {
+            sellerDash.classList.remove('hidden');
+            sellerDash.style.setProperty('display', 'block', 'important');
+            const innerLayout = sellerDash.querySelector('.dash-layout');
+            if (innerLayout) innerLayout.style.setProperty('display', 'flex', 'important');
+          }
+          if (mainNav) {
+            mainNav.classList.remove('hidden');
+            mainNav.style.setProperty('display', 'block', 'important');
+          }
+          
+          if (typeof checkSellerCommission === 'function') checkSellerCommission();
+          if (typeof loadSellerStats === 'function') loadSellerStats();
+          if (typeof loadSellerProds === 'function') loadSellerProds();
+          if (typeof loadSellerOrders === 'function') loadSellerOrders();
+          if (typeof renderChart === 'function') renderChart();
+        } else {
+          if (typeof showBuyerView === 'function') showBuyerView();
+        }
+      }
+
+    } else {
+      console.log("🔴 Guest View Matrix Active.");
       currentUser = null;
       currentRole = 'buyer';
 
@@ -249,10 +230,12 @@ if (typeof supabase !== 'undefined') {
         };
       }
 
-      // Display marketing layers for visitors
+      // Display baseline presentation modules for anonymous visitors
       if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').style.setProperty('display', 'block', 'important');
       if (document.getElementById('landing')) document.getElementById('landing').style.setProperty('display', 'block', 'important');
       if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.add('hidden');
+      if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.add('hidden');
+      if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.add('hidden');
     }
   });
 }
@@ -783,40 +766,26 @@ function handleLandingAuthClick() {
 }
 
 function enterSite(mode) {
-  console.log("🚀 Switching app viewport layout mode to:", mode);
+  console.log("🚀 User manually clicked choice onboarding card selection option:", mode);
+  
+  // Set an intentional user traversal flag token into local browser memory
+  localStorage.setItem('bs_manual_navigation_pass', 'true');
 
-  // 1. Target your elements securely
-  const landingPortal = document.getElementById('landing');
-  const marketingPlaceholder = document.getElementById('marketing-placeholder');
-  const mainNav = document.getElementById('main-nav');
-  const chatbotFab = document.getElementById('chatbot-fab');
-  const waFab = document.getElementById('wa-fab');
-
-  // 2. Hide the pre-login marketing wall and choice cards instantly
-  if (landingPortal) {
-    landingPortal.classList.add('hidden');
-    landingPortal.style.display = 'none'; // Failsafe override
-  }
-  if (marketingPlaceholder) {
-    marketingPlaceholder.classList.add('hidden');
+  if (!currentUser) {
+    // If a guest clicks a role card, open the registration modal form right away
+    showModal('auth-modal');
+    toggleAuth('signup');
+    return;
   }
 
-  // 3. Reveal your global floating features and navigation header bar
-  if (mainNav) mainNav.classList.remove('hidden');
-  if (chatbotFab) chatbotFab.style.display = 'flex';
-  if (waFab) waFab.style.display = 'flex';
-  
-  // 4. Evaluate admin flags and hand off viewport mounting cleanly
-  const isAdmin = currentUser && currentUser.email === ADMIN_EMAIL && currentUser.profile?.role === 'admin';
-  
-  if (isAdmin) {
-    showAdminPortal();
-  } else if (mode === 'seller' || mode === 'both') {
-    showSellerDashboard();
-  } else if (mode === 'service_provider') {
-    if (typeof showServiceDashboard === 'function') showServiceDashboard();
+  // If they are already authenticated, force hide landing layers and reveal dashboards immediately
+  if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').style.setProperty('display', 'none', 'important');
+  if (document.getElementById('landing')) document.getElementById('landing').style.setProperty('display', 'none', 'important');
+
+  if (mode === 'seller' || mode === 'both') {
+    if (typeof showSellerDashboard === 'function') showSellerDashboard();
   } else {
-    showBuyerView();
+    if (typeof showBuyerView === 'function') showBuyerView();
   }
 }
 
