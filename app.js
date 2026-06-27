@@ -5390,15 +5390,15 @@ function shareCurrentProduct() {
 // ====================================================
 // 🚀 UNIFIED SINGLE-PAGE RUNTIME INITIALIZATION
 // ====================================================
+// ====================================================
+// 🚀 UNIFIED SINGLE-PAGE RUNTIME INITIALIZATION
+// ====================================================
 (async function init() {
   console.log("🎬 Launching single-page application lifecycle...");
   
   const savedLogo = localStorage.getItem('buysell_custom_logo');
   if (savedLogo) applySiteLogo(savedLogo);
   
-  // 🚀 FIXED: Removed 'await checkSession()' because authentication tracking 
-  // and view-mounting are handled dynamically by the onAuthStateChange interceptor at the top!
-
   if (typeof updateCartCount === 'function') updateCartCount();
   if (typeof updateWishlistCount === 'function') updateWishlistCount();
   if (typeof handleDeepLink === 'function') handleDeepLink();
@@ -5432,8 +5432,7 @@ function shareCurrentProduct() {
       }
     }
   }).subscribe();
-})();
-
+})(); // 👈 This closes the file with no hanging brackets!
 // --- PHASE 1-4 INJECTIONS ---
 function validateInput(str) {
   if (typeof str !== 'string') return '';
