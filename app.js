@@ -101,6 +101,9 @@ async function trackAnalytics(event) {
 // ==========================================================================
 // 🔐 SUPABASE INITIALIZATION & GLOBAL WINDOW INSTANCES
 // ==========================================================================
+// ==========================================================================
+// 🔐 SUPABASE INITIALIZATION & GLOBAL WINDOW INSTANCES
+// ==========================================================================
 const supabaseClient = window.supabase.createClient(SB_URL, SB_KEY, {
   auth: {
     persistSession:     true,
@@ -110,11 +113,11 @@ const supabaseClient = window.supabase.createClient(SB_URL, SB_KEY, {
   }
 });
 
-// Alias variables so your existing code architecture doesn't break
+// Alias parameters to keep existing database functions operational
 const db = supabaseClient;
-const supabase = supabaseClient; // Crucial: This prevents 'supabase is undefined' errors below
+const supabase = supabaseClient;
 
-// Attach instances globally to window memory tracking pipelines
+// Expose architecture clients to window tracking pipelines
 window.db = supabaseClient;
 window.supabase = supabaseClient;
 window.supabaseAppClient = supabaseClient;
@@ -124,66 +127,93 @@ window.supabaseAppClient = supabaseClient;
 // ==========================================================================
 if (typeof supabase !== 'undefined') {
   supabase.auth.onAuthStateChange(async (event, session) => {
+    console.log(`⚡ Auth State Changed event: ${event}`);
     
-    // Target the main authorization button (if visible on the current page layer)
-    const authButton = document.querySelector('.nav-sign-in-btn') || document.getElementById('landing-auth-btn');
+    // Target whatever sign-in control element is currently visible on the page
+    const authButton = document.querySelector('.nav-sign-in-btn') || 
+                       document.getElementById('landing-auth-btn') ||
+                       document.getElementById('nav-auth-inner-btn');
 
     if (session && session.user) {
-      console.log("🟢 Active User Account Connected: " + session.user.email);
+      console.log("🟢 Active User Session Found: " + session.user.email);
 
-      // 1. Update your header button states cleanly
+      // 1. Update UI Action States to handle logging out smoothly
       if (authButton) {
         authButton.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
         authButton.onclick = async (e) => {
           e.preventDefault();
           await supabase.auth.signOut();
           localStorage.clear();
-          window.location.href = 'index.html'; // Bounce back to the main marketing page on sign out
+          window.location.href = 'index.html';
         };
       }
 
-      try {
-        // 2. Query your Supabase 'profiles' table to identify the user's role
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .single();
+      // 2. Wrap profile checking inside a temporary delay loop to prevent social OAuth race failures
+      setTimeout(async () => {
+        try {
+          const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .maybeSingle(); // Prevents crashing if the user record hasn't fully updated yet
 
-        if (error) throw error;
+          if (error) throw error;
 
-        // 3. Clear onboarding choice views automatically if they exist on the screen
-        const portalLandingLayer = document.getElementById('landing');
-        if (portalLandingLayer) {
-          portalLandingLayer.style.display = 'none';
-        }
+          // 3. Clear away the selection cards container if present on portal.html
+          const selectionPortal = document.getElementById('landing');
+          if (selectionPortal) {
+            selectionPortal.style.display = 'none';
+          }
 
-        // 4. Mount specific workspace dashboards cleanly based on database metadata roles
-        if (profile && profile.role === 'seller') {
-          // USER IS A MERCHANT: Mount Seller Operations View
-          if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.add('hidden');
-          if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.remove('hidden');
+          // 4. Evaluate Roles & Cleanly Mount Specific Workspace Views
+          if (profile && profile.role === 'seller') {
+            console.log("🏪 Mounting Seller Dashboard panels...");
+            
+            if (document.getElementById('buyer-view')) {
+              document.getElementById('buyer-view').classList.add('hidden');
+            }
+            if (document.getElementById('seller-dashboard')) {
+              document.getElementById('seller-dashboard').classList.remove('hidden');
+            }
+            if (document.getElementById('main-nav')) {
+              document.getElementById('main-nav').classList.remove('hidden');
+            }
+
+            // Run merchant catalog data pipelines safely
+            if (typeof loadSellerProds === 'function') loadSellerProds();
+
+          } else {
+            console.log("🛍️ Mounting Shopper Buyer view panels...");
+            
+            if (document.getElementById('seller-dashboard')) {
+              document.getElementById('seller-dashboard').classList.add('hidden');
+            }
+            if (document.getElementById('buyer-view')) {
+              document.getElementById('buyer-view').classList.remove('hidden');
+            }
+            if (document.getElementById('main-nav')) {
+              document.getElementById('main-nav').classList.remove('hidden');
+            }
+
+            // Run standard product listing feeds safely
+            if (typeof loadProducts === 'function') loadProducts();
+          }
+
+        } catch (dbError) {
+          console.error("❌ Profile synchronization error: ", dbError.message);
           
-          // Trigger your background seller functions securely
-          if (typeof loadSellerProds === 'function') loadSellerProds();
-          
-        } else {
-          // USER IS A SHOPPER: Mount Buyer Marketplace Feed
-          if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.add('hidden');
-          if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.remove('hidden');
-          
-          // Trigger your background product catalog loops
+          // Fallback Strategy: If profile table check errors, don't break the screen; default to catalog view
+          if (document.getElementById('buyer-view')) {
+            document.getElementById('buyer-view').classList.remove('hidden');
+          }
           if (typeof loadProducts === 'function') loadProducts();
         }
-
-      } catch (dbError) {
-        console.error("Failed to map dashboard layer constraints: ", dbError.message);
-      }
+      }, 150); // A 150ms buffer allows OAuth redirect signatures to parse smoothly
 
     } else {
-      console.log("🔴 Unauthenticated Guest Session Context.");
+      console.log("🔴 Unauthenticated Guest Context.");
 
-      // Revert header button back to default login trigger states
+      // Revert elements back to their default initialization bounds
       if (authButton) {
         authButton.innerHTML = `<i class="fas fa-sign-in-alt"></i> Sign In`;
         authButton.onclick = (e) => {
@@ -195,9 +225,14 @@ if (typeof supabase !== 'undefined') {
         };
       }
 
-      // Safety Net: Guard protected workflow dashboards from direct URL manual entry bypasses
-      const currentUrlPath = window.location.pathname;
-      if (!currentUrlPath.includes('index.html') && !currentUrlPath.includes('portal.html') && currentUrlPath !== '/') {
+      // 5. Refined Router Safety Net Guard parameters
+      const path = window.location.pathname;
+      const isProtectedView = !path.includes('index.html') && 
+                             !path.includes('portal.html') && 
+                             path !== '/' && 
+                             path !== '';
+
+      if (isProtectedView) {
         window.location.href = 'index.html';
       }
     }
