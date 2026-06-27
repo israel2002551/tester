@@ -99,7 +99,8 @@ async function trackAnalytics(event) {
 //  INITIALIZE SUPABASE ARCHITECTURE CONTEXT
 
 // ====================================================
-// 🔐 SAFE SUPABASE INITIALIZATION & VARIABLES
+// ====================================================
+// 🔐 SAFE SUPABASE INITIALIZATION & VARIABLES (FIXED)
 // ====================================================
 var supabaseClient;
 if (typeof window.supabaseClient === 'undefined') {
@@ -115,7 +116,7 @@ if (typeof window.supabaseClient === 'undefined') {
   supabaseClient = window.supabaseClient;
 }
 
-// Re-assign existing instances without re-declaring them with 'const'
+// Re-assign existing global references without re-declaring them with 'const'
 db = supabaseClient;
 supabase = supabaseClient;
 
