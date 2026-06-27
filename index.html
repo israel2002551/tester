@@ -74,6 +74,7 @@
 
 <div class="mob-sidebar-overlay" id="mob-overlay" onclick="closeMobSidebar()"></div>
 
+  <div id="marketing-placeholder"></div>
 <!-- ==================== LANDING ==================== -->
 <div id="landing">
   <div class="landing-bg"></div>
@@ -82,10 +83,8 @@
       <div class="brand-icon">B</div>
       <div><div class="brand-text">BUY<span>SELL</span></div><div class="brand-tld">.nigeria</div></div>
     </a>
-<button class="btn btn-ghost btn-sm" id="landing-auth-btn" onclick="handleLandingAuthClick()">
-  <i class="fa-solid fa-sign-in-alt" id="landing-auth-icon"></i> 
-  <span id="landing-auth-text">Sign In</span>
-</button>
+<!-- 🚀 CHANGE TO THIS: -->
+<button class="btn btn-ghost btn-sm" id="landing-auth-btn" onclick="showModal('auth-modal');toggleAuth('login')"><i class="fa-solid fa-sign-in-alt" id="landing-auth-icon"></i> <span id="landing-auth-text">Sign In</span></button>
   </header>
   <main class="landing-main">
     <div class="landing-inner">
