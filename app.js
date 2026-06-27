@@ -97,27 +97,28 @@ async function trackAnalytics(event) {
 
 // ====================================================
 //  INITIALIZE SUPABASE ARCHITECTURE CONTEXT
+
 // ====================================================
-// ==========================================================================
-// 🔐 SUPABASE INITIALIZATION & GLOBAL WINDOW INSTANCES
-// ==========================================================================
-// ==========================================================================
-// 🔐 SUPABASE INITIALIZATION & GLOBAL WINDOW INSTANCES
-// ==========================================================================
-const supabaseClient = window.supabase.createClient(SB_URL, SB_KEY, {
-  auth: {
-    persistSession:     true,
-    autoRefreshToken:   true,
-    detectSessionInUrl: true,
-    storage:            window.localStorage
-  }
-});
+// 🔐 SAFE SUPABASE INITIALIZATION & VARIABLES
+// ====================================================
+var supabaseClient;
+if (typeof window.supabaseClient === 'undefined') {
+  supabaseClient = window.supabase.createClient(SB_URL, SB_KEY, {
+    auth: {
+      persistSession:     true,
+      autoRefreshToken:   true,
+      detectSessionInUrl: true,
+      storage:            window.localStorage
+    }
+  });
+} else {
+  supabaseClient = window.supabaseClient;
+}
 
-// Alias parameters to keep existing database functions operational
-const db = supabaseClient;
-const supabase = supabaseClient;
+// Re-assign existing instances without re-declaring them with 'const'
+db = supabaseClient;
+supabase = supabaseClient;
 
-// Expose architecture clients to window tracking pipelines
 window.db = supabaseClient;
 window.supabase = supabaseClient;
 window.supabaseAppClient = supabaseClient;
@@ -142,9 +143,10 @@ if (typeof supabase !== 'undefined') {
         authButton.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
         authButton.onclick = async (e) => {
           e.preventDefault();
-          await supabase.auth.signOut();
+          // Clear localStorage before signing out to clean interceptor frames
           localStorage.clear();
-          window.location.href = 'index.html';
+          await supabase.auth.signOut();
+          window.location.href = 'index.html'; 
         };
       }
 
@@ -227,10 +229,13 @@ if (typeof supabase !== 'undefined') {
 
       // 5. Refined Router Safety Net Guard parameters
       const path = window.location.pathname;
-      const isProtectedView = !path.includes('index.html') && 
-                             !path.includes('portal.html') && 
+      
+      // 🚀 REDIRECT CORRECTION: If an active user logged out inside portal.html, 
+      // we must instantly kick them back to index.html instead of displaying a blank portal screen
+      const isProtectedView = path.includes('portal.html') || (
+                             !path.includes('index.html') && 
                              path !== '/' && 
-                             path !== '';
+                             path !== '');
 
       if (isProtectedView) {
         window.location.href = 'index.html';
