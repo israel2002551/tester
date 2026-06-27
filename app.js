@@ -2,25 +2,7 @@
 //  BUYSELL Nigeria — Main Application
 //  Config loaded from config.js (secrets are .gitignored)
 // ====================================================
-// 🔐 SAFE SUPABASE INITIALIZATION & VARIABLES
-if (typeof window.supabaseClient === 'undefined') {
-  window.supabaseClient = window.supabase.createClient(SB_URL, SB_KEY, {
-    auth: {
-      persistSession:     true,
-      autoRefreshToken:   true,
-      detectSessionInUrl: true,
-      storage:            window.localStorage
-    }
-  });
-}
 
-// 🚀 FIX: Re-assign globally without re-declaring 'const' or 'let'
-db = window.supabaseClient;
-supabase = window.supabaseClient;
-
-window.db = window.supabaseClient;
-window.supabase = window.supabaseClient;
-window.supabaseAppClient = window.supabaseClient;
 
 let chatHistory = []; 
 let adminAiHistory = [];
@@ -113,7 +95,25 @@ async function trackAnalytics(event) {
   }
 }
 
+// 🔐 SAFE SUPABASE INITIALIZATION & VARIABLES
+if (typeof window.supabaseClient === 'undefined') {
+  window.supabaseClient = window.supabase.createClient(SB_URL, SB_KEY, {
+    auth: {
+      persistSession:     true,
+      autoRefreshToken:   true,
+      detectSessionInUrl: true,
+      storage:            window.localStorage
+    }
+  });
+}
 
+// 🚀 FIX: Re-assign globally without re-declaring 'const' or 'let'
+db = window.supabaseClient;
+supabase = window.supabaseClient;
+
+window.db = window.supabaseClient;
+window.supabase = window.supabaseClient;
+window.supabaseAppClient = window.supabaseClient;
 
 
 // ==========================================================================
