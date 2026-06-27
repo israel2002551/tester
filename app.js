@@ -119,12 +119,6 @@ window.supabase = window.supabaseClient;
 window.supabaseAppClient = window.supabaseClient;
 
 
-// ==========================================================================
-// 🎛️ DYNAMIC ROLE-BASED DASHBOARD ROUTING ENGINE (REPAIRED SINGLE-PAGE)
-// ==========================================================================
-// ==========================================================================
-// 🎛️ DYNAMIC ROLE-BASED DASHBOARD ROUTING ENGINE (FINAL VISIBILITY BUILD)
-// ==========================================================================
 if (typeof supabase !== 'undefined') {
   supabase.auth.onAuthStateChange(async (event, session) => {
     console.log(`⚡ Unified Single-Page Auth Event: ${event}`);
@@ -133,8 +127,10 @@ if (typeof supabase !== 'undefined') {
                        document.getElementById('landing-auth-btn') ||
                        document.getElementById('nav-auth-inner-btn');
 
-    if (session && session.user) {
-      console.log("🟢 User Session Authenticated: " + session.user.email);
+    // 🚀 THE FIX: If it's just an automated background check (INITIAL_SESSION / TOKEN_REFRESHED),
+    // do NOT automatically redirect or hide the home landing page layouts!
+    if (session && session.user && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
+      console.log("🟢 User Session Authenticated via Explicit Action: " + session.user.email);
       currentUser = session.user;
 
       if (authButton) {
@@ -164,54 +160,33 @@ if (typeof supabase !== 'undefined') {
           };
           currentRole = currentUser.profile?.role || 'buyer';
 
-          // Initialize background notification and parsing streams safely
           if (typeof updateNavForUser === 'function') updateNavForUser();
           if (typeof updateInboxCount === 'function') updateInboxCount();
           if (typeof setupMessageRealtime === 'function') setupMessageRealtime();
           if (typeof processInboundChatRedirects === 'function') processInboundChatRedirects();
 
-          // Force-hide marketing placeholders on authorized states
+          // Hide presentation layers cleanly
           const marketingWall = document.getElementById('marketing-placeholder');
-          if (marketingWall) {
-            marketingWall.classList.add('hidden');
-            marketingWall.style.setProperty('display', 'none', 'important');
-          }
+          if (marketingWall) marketingWall.style.setProperty('display', 'none', 'important');
+          
           const landingPanel = document.getElementById('landing');
-          if (landingPanel) {
-            landingPanel.classList.add('hidden');
-            landingPanel.style.setProperty('display', 'none', 'important');
-          }
+          if (landingPanel) landingPanel.style.setProperty('display', 'none', 'important');
 
-          // Evaluate account metadata and trigger high-priority UI updates
           if (currentRole === 'seller' || currentRole === 'admin' || currentUser.profile?.accounts === 'both') {
-            console.log("🏪 Overriding CSS styles. Mounting seller workspace layout...");
-            
             const sellerDash = document.getElementById('seller-dashboard');
             const mainNav = document.getElementById('main-nav');
-            const buyerView = document.getElementById('buyer-view');
             
             if (sellerDash) {
               sellerDash.classList.remove('hidden');
               sellerDash.style.setProperty('display', 'block', 'important');
-              sellerDash.style.setProperty('opacity', '1', 'important');
-              sellerDash.style.setProperty('visibility', 'visible', 'important');
-              
-              // Force-reveal all direct structural child components
               const innerLayout = sellerDash.querySelector('.dash-layout');
               if (innerLayout) innerLayout.style.setProperty('display', 'flex', 'important');
-              
-              const activeSection = sellerDash.querySelector('.dash-section.active');
-              if (activeSection) activeSection.style.setProperty('display', 'block', 'important');
             }
             if (mainNav) {
               mainNav.classList.remove('hidden');
               mainNav.style.setProperty('display', 'block', 'important');
             }
-            if (buyerView) {
-              buyerView.classList.add('hidden');
-              buyerView.style.setProperty('display', 'none', 'important');
-            }
-
+            
             if (currentRole === 'admin' && currentUser.email === ADMIN_EMAIL) {
               document.getElementById('admin-nav-item')?.classList.remove('hidden');
               if (typeof loadAdminOverview === 'function') loadAdminOverview();
@@ -223,27 +198,17 @@ if (typeof supabase !== 'undefined') {
               if (typeof renderChart === 'function') renderChart();
             }
           } else {
-            console.log("🛍️ Overriding CSS styles. Mounting buyer storefront feed...");
-            
             const buyerView = document.getElementById('buyer-view');
             const mainNav = document.getElementById('main-nav');
-            const sellerDash = document.getElementById('seller-dashboard');
             
             if (buyerView) {
               buyerView.classList.remove('hidden');
               buyerView.style.setProperty('display', 'block', 'important');
-              buyerView.style.setProperty('opacity', '1', 'important');
-              buyerView.style.setProperty('visibility', 'visible', 'important');
             }
             if (mainNav) {
               mainNav.classList.remove('hidden');
               mainNav.style.setProperty('display', 'block', 'important');
             }
-            if (sellerDash) {
-              sellerDash.classList.add('hidden');
-              sellerDash.style.setProperty('display', 'none', 'important');
-            }
-            
             if (typeof startCarousel === 'function') startCarousel();
             if (typeof loadProducts === 'function') loadProducts();
           }
@@ -253,7 +218,22 @@ if (typeof supabase !== 'undefined') {
         }
       }, 150);
 
-    } else {
+    } else if (event === 'INITIAL_SESSION' && session) {
+      // 🚀 Cache the user session context quietly in background memory without changing the screen display
+      currentUser = session.user;
+      console.log("📥 Stored session footprint in memory: " + currentUser.email);
+      
+      // Update your navbar buttons quietly in the background
+      if (authButton) {
+        authButton.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
+        authButton.onclick = async (e) => {
+          e.preventDefault();
+          localStorage.clear();
+          await supabase.auth.signOut();
+          window.location.reload(); 
+        };
+      }
+    } else if (!session) {
       console.log("🔴 Guest Context Registered.");
       currentUser = null;
       currentRole = 'buyer';
@@ -269,19 +249,10 @@ if (typeof supabase !== 'undefined') {
         };
       }
 
-      // Display baseline presentation panels for anonymous visitors
-      if (document.getElementById('marketing-placeholder')) {
-        document.getElementById('marketing-placeholder').classList.remove('hidden');
-        document.getElementById('marketing-placeholder').style.setProperty('display', 'block', 'important');
-      }
-      if (document.getElementById('landing')) {
-        document.getElementById('landing').classList.remove('hidden');
-        document.getElementById('landing').style.setProperty('display', 'block', 'important');
-      }
-      
+      // Display marketing layers for visitors
+      if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').style.setProperty('display', 'block', 'important');
+      if (document.getElementById('landing')) document.getElementById('landing').style.setProperty('display', 'block', 'important');
       if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.add('hidden');
-      if (document.getElementById('buyer-view')) buyerView.style.setProperty('display', 'none', 'important');
-      if (document.getElementById('seller-dashboard')) sellerDash.style.setProperty('display', 'none', 'important');
     }
   });
 }
