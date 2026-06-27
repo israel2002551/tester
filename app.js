@@ -2,6 +2,25 @@
 //  BUYSELL Nigeria — Main Application
 //  Config loaded from config.js (secrets are .gitignored)
 // ====================================================
+// 🔐 SAFE SUPABASE INITIALIZATION & VARIABLES
+if (typeof window.supabaseClient === 'undefined') {
+  window.supabaseClient = window.supabase.createClient(SB_URL, SB_KEY, {
+    auth: {
+      persistSession:     true,
+      autoRefreshToken:   true,
+      detectSessionInUrl: true,
+      storage:            window.localStorage
+    }
+  });
+}
+
+// 🚀 FIX: Re-assign globally without re-declaring 'const' or 'let'
+db = window.supabaseClient;
+supabase = window.supabaseClient;
+
+window.db = window.supabaseClient;
+window.supabase = window.supabaseClient;
+window.supabaseAppClient = window.supabaseClient;
 
 let chatHistory = []; 
 let adminAiHistory = [];
@@ -95,34 +114,7 @@ async function trackAnalytics(event) {
 }
 
 
-// ====================================================
-//  INITIALIZE SUPABASE ARCHITECTURE CONTEXT
 
-// ====================================================
-// ====================================================
-// 🔐 SAFE SUPABASE INITIALIZATION & VARIABLES (FIXED)
-// ====================================================
-var supabaseClient;
-if (typeof window.supabaseClient === 'undefined') {
-  supabaseClient = window.supabase.createClient(SB_URL, SB_KEY, {
-    auth: {
-      persistSession:     true,
-      autoRefreshToken:   true,
-      detectSessionInUrl: true,
-      storage:            window.localStorage
-    }
-  });
-} else {
-  supabaseClient = window.supabaseClient;
-}
-
-// Re-assign existing global references without re-declaring them with 'const'
-db = supabaseClient;
-supabase = supabaseClient;
-
-window.db = supabaseClient;
-window.supabase = supabaseClient;
-window.supabaseAppClient = supabaseClient;
 
 // ==========================================================================
 // 🎛️ DYNAMIC ROLE-BASED DASHBOARD ROUTING ENGINE
@@ -131,92 +123,67 @@ if (typeof supabase !== 'undefined') {
   supabase.auth.onAuthStateChange(async (event, session) => {
     console.log(`⚡ Auth State Changed event: ${event}`);
     
-    // Target whatever sign-in control element is currently visible on the page
     const authButton = document.querySelector('.nav-sign-in-btn') || 
                        document.getElementById('landing-auth-btn') ||
                        document.getElementById('nav-auth-inner-btn');
 
     if (session && session.user) {
       console.log("🟢 Active User Session Found: " + session.user.email);
+      currentUser = session.user;
 
-      // 1. Update UI Action States to handle logging out smoothly
       if (authButton) {
         authButton.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
         authButton.onclick = async (e) => {
           e.preventDefault();
-          // Clear localStorage before signing out to clean interceptor frames
           localStorage.clear();
           await supabase.auth.signOut();
-          window.location.href = 'index.html'; 
+          window.location.href = 'index.html';
         };
       }
 
-      // 2. Wrap profile checking inside a temporary delay loop to prevent social OAuth race failures
       setTimeout(async () => {
         try {
           const { data: profile, error } = await supabase
             .from('profiles')
             .select('role')
             .eq('id', session.user.id)
-            .maybeSingle(); // Prevents crashing if the user record hasn't fully updated yet
+            .maybeSingle();
 
           if (error) throw error;
 
-          // 3. Clear away the selection cards container if present on portal.html
           const selectionPortal = document.getElementById('landing');
           if (selectionPortal) {
             selectionPortal.style.display = 'none';
           }
 
-          // 4. Evaluate Roles & Cleanly Mount Specific Workspace Views
           if (profile && profile.role === 'seller') {
             console.log("🏪 Mounting Seller Dashboard panels...");
-            
-            if (document.getElementById('buyer-view')) {
-              document.getElementById('buyer-view').classList.add('hidden');
-            }
-            if (document.getElementById('seller-dashboard')) {
-              document.getElementById('seller-dashboard').classList.remove('hidden');
-            }
-            if (document.getElementById('main-nav')) {
-              document.getElementById('main-nav').classList.remove('hidden');
-            }
+            if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.add('hidden');
+            if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.remove('hidden');
+            if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.remove('hidden');
 
-            // Run merchant catalog data pipelines safely
             if (typeof loadSellerProds === 'function') loadSellerProds();
-
           } else {
             console.log("🛍️ Mounting Shopper Buyer view panels...");
-            
-            if (document.getElementById('seller-dashboard')) {
-              document.getElementById('seller-dashboard').classList.add('hidden');
-            }
-            if (document.getElementById('buyer-view')) {
-              document.getElementById('buyer-view').classList.remove('hidden');
-            }
-            if (document.getElementById('main-nav')) {
-              document.getElementById('main-nav').classList.remove('hidden');
-            }
+            if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.add('hidden');
+            if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.remove('hidden');
+            if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.remove('hidden');
 
-            // Run standard product listing feeds safely
             if (typeof loadProducts === 'function') loadProducts();
           }
 
         } catch (dbError) {
-          console.error("❌ Profile synchronization error: ", dbError.message);
-          
-          // Fallback Strategy: If profile table check errors, don't break the screen; default to catalog view
-          if (document.getElementById('buyer-view')) {
-            document.getElementById('buyer-view').classList.remove('hidden');
-          }
+          console.error("❌ Profile lookup error: ", dbError.message);
+          if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.remove('hidden');
           if (typeof loadProducts === 'function') loadProducts();
         }
-      }, 150); // A 150ms buffer allows OAuth redirect signatures to parse smoothly
+      }, 150);
 
     } else {
       console.log("🔴 Unauthenticated Guest Context.");
+      currentUser = null;
+      currentRole = 'buyer';
 
-      // Revert elements back to their default initialization bounds
       if (authButton) {
         authButton.innerHTML = `<i class="fas fa-sign-in-alt"></i> Sign In`;
         authButton.onclick = (e) => {
@@ -228,11 +195,7 @@ if (typeof supabase !== 'undefined') {
         };
       }
 
-      // 5. Refined Router Safety Net Guard parameters
       const path = window.location.pathname;
-      
-      // 🚀 REDIRECT CORRECTION: If an active user logged out inside portal.html, 
-      // we must instantly kick them back to index.html instead of displaying a blank portal screen
       const isProtectedView = path.includes('portal.html') || (
                              !path.includes('index.html') && 
                              path !== '/' && 
@@ -244,7 +207,6 @@ if (typeof supabase !== 'undefined') {
     }
   });
 }
-
 // ====================================================
 //  STATE
 // ====================================================
