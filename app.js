@@ -98,6 +98,9 @@ async function trackAnalytics(event) {
 // ====================================================
 //  INITIALIZE SUPABASE ARCHITECTURE CONTEXT
 // ====================================================
+// ==========================================================================
+// 🔐 SUPABASE INITIALIZATION & GLOBAL WINDOW INSTANCES
+// ==========================================================================
 const supabaseClient = window.supabase.createClient(SB_URL, SB_KEY, {
   auth: {
     persistSession:     true,
@@ -107,39 +110,96 @@ const supabaseClient = window.supabase.createClient(SB_URL, SB_KEY, {
   }
 });
 
-// Alias the constant 'db' so your existing app logic doesn't break
+// Alias variables so your existing code architecture doesn't break
 const db = supabaseClient;
+const supabase = supabaseClient; // Crucial: This prevents 'supabase is undefined' errors below
 
-// Safely attach the initialized client instances to global window tracking memory
+// Attach instances globally to window memory tracking pipelines
 window.db = supabaseClient;
+window.supabase = supabaseClient;
 window.supabaseAppClient = supabaseClient;
 
-const authButton = document.querySelector('.nav-sign-in-btn'); 
+// ==========================================================================
+// 🎛️ DYNAMIC ROLE-BASED DASHBOARD ROUTING ENGINE
+// ==========================================================================
+if (typeof supabase !== 'undefined') {
+  supabase.auth.onAuthStateChange(async (event, session) => {
+    
+    // Target the main authorization button (if visible on the current page layer)
+    const authButton = document.querySelector('.nav-sign-in-btn') || document.getElementById('landing-auth-btn');
 
-if (authButton) {
-  // Listen to active auth session updates from Supabase
-  supabase.auth.onAuthStateChange((event, session) => {
     if (session && session.user) {
-      // 🟢 USER IS SIGNED IN: Switch to Sign Out
-      authButton.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
-      
-      authButton.onclick = async (e) => {
-        e.preventDefault();
-        await supabase.auth.signOut();
-        window.location.reload(); 
-      };
-    } else {
-      // 🔴 USER IS NOT SIGNED IN: Keep standard Sign In
-      authButton.innerHTML = `<i class="fas fa-sign-in-alt"></i> Sign In`;
-      
-      authButton.onclick = (e) => {
-        e.preventDefault();
-        if (typeof handleGoogleSignIn === 'function') {
-          handleGoogleSignIn(); 
-        } else {
-          console.error("handleGoogleSignIn function is not defined!");
+      console.log("🟢 Active User Account Connected: " + session.user.email);
+
+      // 1. Update your header button states cleanly
+      if (authButton) {
+        authButton.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
+        authButton.onclick = async (e) => {
+          e.preventDefault();
+          await supabase.auth.signOut();
+          localStorage.clear();
+          window.location.href = 'index.html'; // Bounce back to the main marketing page on sign out
+        };
+      }
+
+      try {
+        // 2. Query your Supabase 'profiles' table to identify the user's role
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+
+        if (error) throw error;
+
+        // 3. Clear onboarding choice views automatically if they exist on the screen
+        const portalLandingLayer = document.getElementById('landing');
+        if (portalLandingLayer) {
+          portalLandingLayer.style.display = 'none';
         }
-      };
+
+        // 4. Mount specific workspace dashboards cleanly based on database metadata roles
+        if (profile && profile.role === 'seller') {
+          // USER IS A MERCHANT: Mount Seller Operations View
+          if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.add('hidden');
+          if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.remove('hidden');
+          
+          // Trigger your background seller functions securely
+          if (typeof loadSellerProds === 'function') loadSellerProds();
+          
+        } else {
+          // USER IS A SHOPPER: Mount Buyer Marketplace Feed
+          if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.add('hidden');
+          if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.remove('hidden');
+          
+          // Trigger your background product catalog loops
+          if (typeof loadProducts === 'function') loadProducts();
+        }
+
+      } catch (dbError) {
+        console.error("Failed to map dashboard layer constraints: ", dbError.message);
+      }
+
+    } else {
+      console.log("🔴 Unauthenticated Guest Session Context.");
+
+      // Revert header button back to default login trigger states
+      if (authButton) {
+        authButton.innerHTML = `<i class="fas fa-sign-in-alt"></i> Sign In`;
+        authButton.onclick = (e) => {
+          e.preventDefault();
+          if (typeof showModal === 'function') {
+            showModal('auth-modal');
+            toggleAuth('login');
+          }
+        };
+      }
+
+      // Safety Net: Guard protected workflow dashboards from direct URL manual entry bypasses
+      const currentUrlPath = window.location.pathname;
+      if (!currentUrlPath.includes('index.html') && !currentUrlPath.includes('portal.html') && currentUrlPath !== '/') {
+        window.location.href = 'index.html';
+      }
     }
   });
 }
