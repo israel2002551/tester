@@ -122,6 +122,9 @@ window.supabaseAppClient = window.supabaseClient;
 // ==========================================================================
 // 🎛️ DYNAMIC ROLE-BASED DASHBOARD ROUTING ENGINE (REPAIRED SINGLE-PAGE)
 // ==========================================================================
+// ==========================================================================
+// 🎛️ DYNAMIC ROLE-BASED DASHBOARD ROUTING ENGINE (FINAL VISIBILITY BUILD)
+// ==========================================================================
 if (typeof supabase !== 'undefined') {
   supabase.auth.onAuthStateChange(async (event, session) => {
     console.log(`⚡ Unified Single-Page Auth Event: ${event}`);
@@ -161,23 +164,53 @@ if (typeof supabase !== 'undefined') {
           };
           currentRole = currentUser.profile?.role || 'buyer';
 
-          // Initialize background notification and parsing streams
+          // Initialize background notification and parsing streams safely
           if (typeof updateNavForUser === 'function') updateNavForUser();
           if (typeof updateInboxCount === 'function') updateInboxCount();
           if (typeof setupMessageRealtime === 'function') setupMessageRealtime();
           if (typeof processInboundChatRedirects === 'function') processInboundChatRedirects();
 
-          // Hide the marketing wall layout placeholder cleanly
+          // Force-hide marketing placeholders on authorized states
           const marketingWall = document.getElementById('marketing-placeholder');
-          if (marketingWall) marketingWall.classList.add('hidden');
+          if (marketingWall) {
+            marketingWall.classList.add('hidden');
+            marketingWall.style.setProperty('display', 'none', 'important');
+          }
+          const landingPanel = document.getElementById('landing');
+          if (landingPanel) {
+            landingPanel.classList.add('hidden');
+            landingPanel.style.setProperty('display', 'none', 'important');
+          }
 
-          // Evaluate user permissions role strings
+          // Evaluate account metadata and trigger high-priority UI updates
           if (currentRole === 'seller' || currentRole === 'admin' || currentUser.profile?.accounts === 'both') {
-            console.log("🏪 Mounting seller dashboard panel workspace...");
-            if (document.getElementById('landing')) document.getElementById('landing').classList.add('hidden');
-            if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.add('hidden');
-            if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.remove('hidden');
-            if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.remove('hidden');
+            console.log("🏪 Overriding CSS styles. Mounting seller workspace layout...");
+            
+            const sellerDash = document.getElementById('seller-dashboard');
+            const mainNav = document.getElementById('main-nav');
+            const buyerView = document.getElementById('buyer-view');
+            
+            if (sellerDash) {
+              sellerDash.classList.remove('hidden');
+              sellerDash.style.setProperty('display', 'block', 'important');
+              sellerDash.style.setProperty('opacity', '1', 'important');
+              sellerDash.style.setProperty('visibility', 'visible', 'important');
+              
+              // Force-reveal all direct structural child components
+              const innerLayout = sellerDash.querySelector('.dash-layout');
+              if (innerLayout) innerLayout.style.setProperty('display', 'flex', 'important');
+              
+              const activeSection = sellerDash.querySelector('.dash-section.active');
+              if (activeSection) activeSection.style.setProperty('display', 'block', 'important');
+            }
+            if (mainNav) {
+              mainNav.classList.remove('hidden');
+              mainNav.style.setProperty('display', 'block', 'important');
+            }
+            if (buyerView) {
+              buyerView.classList.add('hidden');
+              buyerView.style.setProperty('display', 'none', 'important');
+            }
 
             if (currentRole === 'admin' && currentUser.email === ADMIN_EMAIL) {
               document.getElementById('admin-nav-item')?.classList.remove('hidden');
@@ -190,21 +223,33 @@ if (typeof supabase !== 'undefined') {
               if (typeof renderChart === 'function') renderChart();
             }
           } else {
-            console.log("🛍️ Mounting onboarding choice gateway panel cards...");
-            // 🚀 CRITICAL REPAIR: Reveal your onboarding cards selection panel smoothly
-            const landingPanel = document.getElementById('landing');
-            if (landingPanel) {
-              landingPanel.classList.remove('hidden');
-              landingPanel.style.display = 'block';
+            console.log("🛍️ Overriding CSS styles. Mounting buyer storefront feed...");
+            
+            const buyerView = document.getElementById('buyer-view');
+            const mainNav = document.getElementById('main-nav');
+            const sellerDash = document.getElementById('seller-dashboard');
+            
+            if (buyerView) {
+              buyerView.classList.remove('hidden');
+              buyerView.style.setProperty('display', 'block', 'important');
+              buyerView.style.setProperty('opacity', '1', 'important');
+              buyerView.style.setProperty('visibility', 'visible', 'important');
             }
-            if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.add('hidden');
-            if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.add('hidden');
-            if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.add('hidden');
+            if (mainNav) {
+              mainNav.classList.remove('hidden');
+              mainNav.style.setProperty('display', 'block', 'important');
+            }
+            if (sellerDash) {
+              sellerDash.classList.add('hidden');
+              sellerDash.style.setProperty('display', 'none', 'important');
+            }
+            
+            if (typeof startCarousel === 'function') startCarousel();
+            if (typeof loadProducts === 'function') loadProducts();
           }
 
         } catch (dbError) {
-          console.error("❌ Profile check failed, defaulting to marketplace view safely:", dbError.message);
-          if (document.getElementById('landing')) document.getElementById('landing').classList.remove('hidden');
+          console.error("❌ Single-page layout compilation error:", dbError.message);
         }
       }, 150);
 
@@ -224,12 +269,19 @@ if (typeof supabase !== 'undefined') {
         };
       }
 
-      // Display presentation components for unauthenticated guests
-      if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').classList.remove('hidden');
-      if (document.getElementById('landing')) document.getElementById('landing').classList.remove('hidden');
+      // Display baseline presentation panels for anonymous visitors
+      if (document.getElementById('marketing-placeholder')) {
+        document.getElementById('marketing-placeholder').classList.remove('hidden');
+        document.getElementById('marketing-placeholder').style.setProperty('display', 'block', 'important');
+      }
+      if (document.getElementById('landing')) {
+        document.getElementById('landing').classList.remove('hidden');
+        document.getElementById('landing').style.setProperty('display', 'block', 'important');
+      }
+      
       if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.add('hidden');
-      if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.add('hidden');
-      if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.add('hidden');
+      if (document.getElementById('buyer-view')) buyerView.style.setProperty('display', 'none', 'important');
+      if (document.getElementById('seller-dashboard')) sellerDash.style.setProperty('display', 'none', 'important');
     }
   });
 }
@@ -836,34 +888,98 @@ function showBuyerView() {
   const landingPortal = document.getElementById('landing');
   const marketingPlaceholder = document.getElementById('marketing-placeholder');
 
-  // 1. Reveal the Buyer View and the main navigation header bar
-  if (buyerView) buyerView.classList.remove('hidden');
-  if (mainNav) mainNav.classList.remove('hidden');
+  // 🚀 Direct Inline Override: Force reveal using style properties to bypass stylesheet conflicts
+  if (buyerView) {
+    buyerView.classList.remove('hidden');
+    buyerView.style.setProperty('display', 'block', 'important');
+  }
+  if (mainNav) {
+    mainNav.classList.remove('hidden');
+    mainNav.style.setProperty('display', 'block', 'important');
+  }
 
-  // 2. Hide everything else on the single page canvas
-  if (sellerDash) sellerDash.classList.add('hidden');
-  if (storefrontView) storefrontView.classList.add('hidden');
-  if (adminPortal) adminPortal.classList.add('hidden');
-  if (landingPortal) landingPortal.classList.add('hidden');
-  if (marketingPlaceholder) marketingPlaceholder.classList.add('hidden');
+  // Force hide alternative system elements completely
+  if (sellerDash) { sellerDash.classList.add('hidden'); sellerDash.style.setProperty('display', 'none', 'important'); }
+  if (storefrontView) { storefrontView.classList.add('hidden'); storefrontView.style.setProperty('display', 'none', 'important'); }
+  if (adminPortal) { adminPortal.classList.add('hidden'); adminPortal.style.setProperty('display', 'none', 'important'); }
+  if (landingPortal) { landingPortal.classList.add('hidden'); landingPortal.style.setProperty('display', 'none', 'important'); }
+  if (marketingPlaceholder) { marketingPlaceholder.classList.add('hidden'); marketingPlaceholder.style.setProperty('display', 'none', 'important'); }
 
-  // 3. Reset utility UI control elements
   const toggleIcon = document.getElementById('toggle-view-icon');
   const toggleText = document.getElementById('toggle-view-text');
   if (toggleIcon) toggleIcon.className = 'fa-solid fa-store';
   if (toggleText) toggleText.textContent = 'Seller Dashboard';
   
   const mobHamBtn = document.getElementById('mob-ham-btn');
-  if (mobHamBtn) mobHamBtn.style.display = 'none';
+  if (mobHamBtn) mobHamBtn.style.setProperty('display', 'none', 'important');
   
   document.body.classList.remove('in-seller');
   currentRole = 'buyer';
 
-  // 4. Fire standard buyer data pipelines safely
   if (typeof startCarousel === 'function') startCarousel();
   if (typeof loadProducts === 'function') loadProducts();
   if (typeof loadActiveAds === 'function') loadActiveAds();
   if (typeof updateCartCount === 'function') updateCartCount();
+}
+
+async function showSellerDashboard() {
+  if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
+  if (isSellerAccessExpired()) { showSellerAccessBlocked(); return; }
+  if (!(await requireSellerKyc())) return;
+
+  const buyerView = document.getElementById('buyer-view');
+  const sellerDash = document.getElementById('seller-dashboard');
+  const storefrontView = document.getElementById('storefront-view');
+  const mainNav = document.getElementById('main-nav');
+  const adminPortal = document.getElementById('admin-portal-view');
+  const landingPortal = document.getElementById('landing');
+  const marketingPlaceholder = document.getElementById('marketing-placeholder');
+
+  // 🚀 Direct Inline Override: Force layout display block for the merchant workspace panel
+  if (sellerDash) {
+    sellerDash.classList.remove('hidden');
+    sellerDash.style.setProperty('display', 'block', 'important');
+    
+    // Failsafe: Ensure its inner direct child layout wrapper isn't set to display none by CSS
+    const innerLayout = sellerDash.querySelector('.dash-layout');
+    if (innerLayout) innerLayout.style.setProperty('display', 'flex', 'important');
+  }
+  if (mainNav) {
+    mainNav.classList.remove('hidden');
+    mainNav.style.setProperty('display', 'block', 'important');
+  }
+
+  // Force hide buyer marketplace feeds and pre-login options entirely
+  if (buyerView) { buyerView.classList.add('hidden'); buyerView.style.setProperty('display', 'none', 'important'); }
+  if (storefrontView) { storefrontView.classList.add('hidden'); storefrontView.style.setProperty('display', 'none', 'important'); }
+  if (adminPortal) { adminPortal.classList.add('hidden'); adminPortal.style.setProperty('display', 'none', 'important'); }
+  if (landingPortal) { landingPortal.classList.add('hidden'); landingPortal.style.setProperty('display', 'none', 'important'); }
+  if (marketingPlaceholder) { marketingPlaceholder.classList.add('hidden'); marketingPlaceholder.style.setProperty('display', 'none', 'important'); }
+
+  const toggleIcon = document.getElementById('toggle-view-icon');
+  const toggleText = document.getElementById('toggle-view-text');
+  if (toggleIcon) toggleIcon.className = 'fa-solid fa-store';
+  if (toggleText) toggleText.textContent = 'Back to Shopping';
+  
+  const mobHamBtn = document.getElementById('mob-ham-btn');
+  if (mobHamBtn) mobHamBtn.style.setProperty('display', 'flex', 'important');
+
+  const adminNavItem = document.getElementById('admin-nav-item');
+  if (adminNavItem) adminNavItem.style.setProperty('display', (currentUser?.email === ADMIN_EMAIL ? 'flex' : 'none'), 'important');
+  
+  document.body.classList.add('in-seller');
+  currentRole = 'seller';
+  
+  if (typeof stopCarousel === 'function') stopCarousel();
+  if (typeof checkSellerCommission === 'function') checkSellerCommission();
+  if (typeof loadSellerStats === 'function') loadSellerStats();
+  if (typeof loadSellerProds === 'function') loadSellerProds();
+  if (typeof loadSellerOrders === 'function') loadSellerOrders();
+  if (typeof renderChart === 'function') renderChart();
+  if (typeof loadWithdrawalData === 'function') loadWithdrawalData();
+  if (typeof loadDropshipData === 'function') loadDropshipData();
+  if (typeof loadAffiliateData === 'function') loadAffiliateData();
+  if (typeof loadSellerAds === 'function') loadSellerAds();
 }
 function isSellerAccessExpired(profile = currentUser?.profile) {
   if (!currentUser || currentUser.email === ADMIN_EMAIL) return false;
@@ -918,57 +1034,7 @@ function showSellerAccessBlocked() {
   document.getElementById('suspended-modal')?.classList.add('open');
 }
 
-async function showSellerDashboard() {
-  if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
-  if (isSellerAccessExpired()) { showSellerAccessBlocked(); return; }
-  if (!(await requireSellerKyc())) return;
 
-  const buyerView = document.getElementById('buyer-view');
-  const sellerDash = document.getElementById('seller-dashboard');
-  const storefrontView = document.getElementById('storefront-view');
-  const mainNav = document.getElementById('main-nav');
-  const adminPortal = document.getElementById('admin-portal-view');
-  const landingPortal = document.getElementById('landing');
-  const marketingPlaceholder = document.getElementById('marketing-placeholder');
-
-  // 1. Reveal the Merchant Workspace and the navigation bar
-  if (sellerDash) sellerDash.classList.remove('hidden');
-  if (mainNav) mainNav.classList.remove('hidden');
-
-  // 2. Hide all buyer-centric and pre-login landing elements
-  if (buyerView) buyerView.classList.add('hidden');
-  if (storefrontView) storefrontView.classList.add('hidden');
-  if (adminPortal) adminPortal.classList.add('hidden');
-  if (landingPortal) landingPortal.classList.add('hidden');
-  if (marketingPlaceholder) marketingPlaceholder.classList.add('hidden');
-
-  // 3. Swap navigation action button states
-  const toggleIcon = document.getElementById('toggle-view-icon');
-  const toggleText = document.getElementById('toggle-view-text');
-  if (toggleIcon) toggleIcon.className = 'fa-solid fa-store';
-  if (toggleText) toggleText.textContent = 'Back to Shopping';
-  
-  const mobHamBtn = document.getElementById('mob-ham-btn');
-  if (mobHamBtn) mobHamBtn.style.display = 'flex';
-
-  const adminNavItem = document.getElementById('admin-nav-item');
-  if (adminNavItem) adminNavItem.style.display = currentUser?.email === ADMIN_EMAIL ? 'flex' : 'none';
-  
-  document.body.classList.add('in-seller');
-  currentRole = 'seller';
-  
-  // 4. Initialize vendor inventory data tracking pipelines
-  if (typeof stopCarousel === 'function') stopCarousel();
-  if (typeof checkSellerCommission === 'function') checkSellerCommission();
-  if (typeof loadSellerStats === 'function') loadSellerStats();
-  if (typeof loadSellerProds === 'function') loadSellerProds();
-  if (typeof loadSellerOrders === 'function') loadSellerOrders();
-  if (typeof renderChart === 'function') renderChart();
-  if (typeof loadWithdrawalData === 'function') loadWithdrawalData();
-  if (typeof loadDropshipData === 'function') loadDropshipData();
-  if (typeof loadAffiliateData === 'function') loadAffiliateData();
-  if (typeof loadSellerAds === 'function') loadSellerAds();
-}
 
 function toggleView() {
   if (currentRole === 'seller') showBuyerView();
