@@ -7,7 +7,7 @@
 <link rel="icon" href="data:,">
 <meta name="description" content="Nigeria's #1 marketplace. Buy, sell, dropship & earn affiliate income.">
 <meta name="theme-color" content="#0b1f14">
-
+  
 <!-- PWA Manifest injected by JS below -->
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -24,9 +24,11 @@
     document.head.appendChild(oneSignalSdk);
   }
 </script>
-<script type="module">
+<script>
   window.OneSignalDeferred = window.OneSignalDeferred || [];
+  if (location.protocol === 'http:' || location.protocol === 'https:') {
   OneSignalDeferred.push(async function(OneSignal) {
+    try {
     
     await OneSignal.init({
       appId: "a30fe2f5-9915-415b-a889-f768b0fa96cf",
@@ -47,17 +49,25 @@
         clearInterval(syncSessionInterval);
         
         window.supabaseAppClient.auth.onAuthStateChange(async (event, session) => {
+          try {
           if (session?.user) {
             console.log("🔗 Syncing user token registration...");
             await OneSignal.login(session.user.id);
           } else if (event === 'SIGNED_OUT') {
             await OneSignal.logout();
           }
+          } catch (error) {
+            console.warn('OneSignal session sync skipped.', error);
+          }
         });
       }
     }, 100);
 
+    } catch (error) {
+      console.warn('OneSignal unavailable in this browser context.', error);
+    }
   });
+  }
 </script>
   <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
 <!-- Security headers (supplement server-side headers) -->
@@ -65,7 +75,7 @@
 <meta http-equiv="X-XSS-Protection" content="1; mode=block">
 <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
 <meta http-equiv="Permissions-Policy" content="camera=(), geolocation=()">
-<link rel="stylesheet" href="styles.css?v=6.5">
+<link rel="stylesheet" href="styles.css?v=6.6">
 </head>
 <body>
 
@@ -2554,7 +2564,7 @@
 
 <script src="https://js.paystack.co/v2/inline.js"></script>
 <script data-cfasync="false" src="config.js?v=3.1"></script>
-<script src="app.js?v=6.5"></script>
+<script src="app.js?v=6.6"></script>
   <script>
     (function() {
       'use strict';
