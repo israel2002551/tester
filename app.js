@@ -1691,8 +1691,16 @@ async function loadProductReviews(productId) {
 
 
 function goBackFromStorefront() {
-  document.getElementById('storefront-view').style.display = 'none';
-  document.getElementById('buyer-view').style.display = 'block';
+  const storefrontView = document.getElementById('storefront-view');
+  const buyerView = document.getElementById('buyer-view');
+  if (storefrontView) {
+    storefrontView.classList.add('hidden');
+    storefrontView.style.display = 'none';
+  }
+  if (buyerView) {
+    buyerView.classList.remove('hidden');
+    buyerView.style.display = 'block';
+  }
 }
 
 function shareStore() {
@@ -5262,8 +5270,16 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
 async function viewStorefront(sellerId) {
   if (!sellerId) return;
   closeModal('product-modal');
-  document.getElementById('buyer-view').style.display = 'none';
-  document.getElementById('storefront-view').style.display = 'block';
+  const buyerView = document.getElementById('buyer-view');
+  const storefrontView = document.getElementById('storefront-view');
+  if (buyerView) {
+    buyerView.classList.add('hidden');
+    buyerView.style.display = 'none';
+  }
+  if (storefrontView) {
+    storefrontView.classList.remove('hidden');
+    storefrontView.style.display = 'block';
+  }
   const { data: seller } = await db.from('profiles').select('*').eq('id', sellerId).single();
   if (!seller) { toast('Store not found','','error'); return; }
   // --- DYNAMIC LOGO IMAGE CONTEXT RESOLUTION ---
@@ -5570,11 +5586,18 @@ function showAdminPortal() {
 
 function showServiceDashboard() {
   if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
-  document.getElementById('buyer-view').style.display = 'none';
-  document.getElementById('seller-dashboard').style.display = 'none';
-  document.getElementById('storefront-view').style.display = 'none';
-  
-  document.getElementById('service-provider-view').style.display = 'block';
+  ['buyer-view', 'seller-dashboard', 'storefront-view'].forEach(id => {
+    const view = document.getElementById(id);
+    if (!view) return;
+    view.classList.add('hidden');
+    view.style.display = 'none';
+  });
+
+  const serviceView = document.getElementById('service-provider-view');
+  if (serviceView) {
+    serviceView.classList.remove('hidden');
+    serviceView.style.display = 'block';
+  }
   document.body.classList.add('in-seller');
   currentRole = 'service_provider';
 
