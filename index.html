@@ -15,7 +15,15 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  if (location.protocol === 'http:' || location.protocol === 'https:') {
+    const oneSignalSdk = document.createElement('script');
+    oneSignalSdk.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js';
+    oneSignalSdk.defer = true;
+    document.head.appendChild(oneSignalSdk);
+  }
+</script>
 <script type="module">
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   OneSignalDeferred.push(async function(OneSignal) {
@@ -57,7 +65,7 @@
 <meta http-equiv="X-XSS-Protection" content="1; mode=block">
 <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
 <meta http-equiv="Permissions-Policy" content="camera=(), geolocation=()">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=6.5">
 </head>
 <body>
 
@@ -77,8 +85,8 @@
 
 <!-- ==================== LANDING ==================== -->
 <!-- 🚀 CHANGE THIS LINE TO INCLUDE display: none; -->
-  <div id="marketing-placeholder"></div>
-<div id="landing" style="display: block;">
+  <div id="marketing-placeholder" class="hidden" style="display:none"></div>
+<div id="landing" style="display: flex;">
   <div class="landing-bg"></div>
   <header class="landing-header">
     <a href="#" class="brand-logo">
@@ -106,7 +114,7 @@
             <div class="portal-feat"><i class="fa-solid fa-credit-card"></i> Paystack Secure</div>
             <div class="portal-feat"><i class="fa-brands fa-whatsapp"></i> WhatsApp Support</div>
           </div>
-          <button class="btn btn-gold btn-full">Start Shopping <i class="fa-solid fa-arrow-right"></i></button>
+          <button class="btn btn-gold btn-full" type="button" onclick="event.stopPropagation(); enterSite('buyer')">Start Shopping <i class="fa-solid fa-arrow-right"></i></button>
         </div>
         <div class="portal-card seller-card delay-2" onclick="enterSite('seller')">
           <span class="portal-badge">1 Month FREE</span>
@@ -118,7 +126,7 @@
             <div class="portal-feat"><i class="fa-solid fa-globe"></i> Dropshipping</div>
             <div class="portal-feat"><i class="fa-solid fa-star"></i> Reviews System</div>
           </div>
-          <button class="btn btn-primary btn-full">Open Your Store <i class="fa-solid fa-arrow-right"></i></button>
+          <button class="btn btn-primary btn-full" type="button" onclick="event.stopPropagation(); enterSite('seller')">Open Your Store <i class="fa-solid fa-arrow-right"></i></button>
         </div>
         <!-- 
         <div class="portal-card seller-card delay-3" onclick="enterSite('service_provider')" style="border-color:var(--purple)">
@@ -2546,10 +2554,11 @@
 
 <script src="https://js.paystack.co/v2/inline.js"></script>
 <script data-cfasync="false" src="config.js?v=3.1"></script>
-<script src="app.js?v=6.3"></script>
+<script src="app.js?v=6.5"></script>
   <script>
     (function() {
       'use strict';
+      if (location.protocol === 'file:') return;
       // Load the separate marketing presentation layouts live onto this canvas layout frame
       fetch('marketing.html')
         .then(response => response.text())
