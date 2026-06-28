@@ -127,15 +127,15 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .brand-tld{font-size:.67rem;color:rgba(255,255,255,.35);margin-top:.2rem}
 .landing-main{flex:1;display:flex;align-items:center;justify-content:center;position:relative;z-index:2;padding:1.5rem;overflow-y:auto}
 .landing-inner{max-width:1060px;width:100%}
-.landing-tagline{text-align:center;margin-bottom:2.25rem;animation:fadeUp .6s ease both}
+.landing-tagline{text-align:center;margin-bottom:2.25rem}
 .pre-badge{display:inline-flex;align-items:center;gap:.5rem;background:rgba(25,168,71,.15);border:1px solid rgba(25,168,71,.3);color:var(--green-lt);padding:.38rem .95rem;border-radius:99px;font-size:.78rem;font-weight:600;margin-bottom:1.1rem}
 .landing-tagline h1{font-size:clamp(1.75rem,5vw,3.4rem);color:#fff;line-height:1.1;margin-bottom:.7rem}
 .landing-tagline h1 em{font-style:normal;background:linear-gradient(90deg,var(--gold),var(--green-lt));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .landing-tagline p{color:rgba(255,255,255,.55);font-size:.98rem;max-width:500px;margin:0 auto}
 .portal-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.1rem;max-width:720px;margin:0 auto}
 @media(max-width:560px){.portal-grid{grid-template-columns:1fr;gap:.9rem}}
-.portal-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:1.6rem;cursor:pointer;transition:all .3s ease;position:relative;overflow:hidden;animation:fadeUp .5s ease both}
-.portal-card:hover{border-color:rgba(255,255,255,.25);transform:translateY(-4px);box-shadow:0 24px 60px rgba(0,0,0,.3)}
+.portal-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:1.6rem;cursor:pointer;transition:border-color .2s ease,box-shadow .2s ease;position:relative;overflow:hidden}
+.portal-card:hover{border-color:rgba(255,255,255,.25);box-shadow:0 18px 44px rgba(0,0,0,.24)}
 .portal-card.buyer-card:hover{border-color:rgba(244,180,0,.5)}
 .portal-card.seller-card:hover{border-color:rgba(25,168,71,.5)}
 .portal-icon{width:54px;height:54px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:1.35rem;margin-bottom:1.1rem}
