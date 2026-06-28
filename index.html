@@ -91,7 +91,7 @@
 
 <!-- ==================== LANDING ==================== -->
 <!-- 🚀 CHANGE THIS LINE TO INCLUDE display: none; -->
-  <div id="marketing-placeholder" class="hidden" style="display:none"></div>
+  <div id="marketing-placeholder" style="display:none"></div>
 <div id="landing" style="display: flex;">
   <div class="landing-bg"></div>
   <header class="landing-header">
@@ -160,7 +160,7 @@
 </div>
 
 <!-- ==================== NAV ==================== -->
-<nav id="main-nav">
+<nav id="main-nav" class="hidden">
   <div class="nav-inner">
     <button class="mob-ham-btn" id="mob-ham-btn" onclick="openMobSidebar()" style="display:none" aria-label="Menu"><i class="fa-solid fa-bars"></i></button>
     <a href="#" class="nav-brand-sm" onclick="handleNavBrand(event)">
@@ -200,7 +200,7 @@
 </nav>
 
 <!-- ==================== BUYER VIEW ==================== -->
-<div id="buyer-view">
+<div id="buyer-view" class="hidden">
   <!-- Hero -->
   <div class="buyer-inner hero-section">
     <div class="hero-carousel" id="hero-carousel">
@@ -380,7 +380,7 @@
 </div>
 
 <!-- ==================== STOREFRONT VIEW ==================== -->
-<div id="storefront-view">
+<div id="storefront-view" class="hidden">
   <div class="storefront-header">
     <div class="sf-inner">
       <button onclick="goBackFromStorefront()" class="btn btn-ghost btn-sm mb-3"><i class="fa-solid fa-arrow-left"></i> Back to Marketplace</button>
@@ -415,7 +415,7 @@
 
 
 <!-- ==================== SELLER DASHBOARD ==================== -->
-<div id="seller-dashboard">
+<div id="seller-dashboard" class="hidden">
   <div class="dash-layout">
     <aside class="dash-sidebar" id="dash-sidebar">
       <div class="dash-sidebar-head">
@@ -1867,7 +1867,7 @@
 </div>
 
 <!-- ==================== ADMIN PORTAL ==================== -->
-<div id="admin-portal-view" style="display:none;min-height:100vh;background:var(--forest);">
+<div id="admin-portal-view" class="hidden" style="display:none;min-height:100vh;background:var(--forest);">
   <div style="display:flex;height:100vh;">
     <!-- Admin Sidebar -->
     <div class="admin-sidebar" style="width:250px;background:#06140c;color:#fff;padding:1.5rem;display:flex;flex-direction:column;overflow-y:auto;">
