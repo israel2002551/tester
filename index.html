@@ -86,7 +86,7 @@
       <div><div class="brand-text">BUY<span>SELL</span></div><div class="brand-tld">.nigeria</div></div>
     </a>
 <!-- 🚀 CHANGE TO THIS: -->
-<button class="btn btn-ghost btn-sm" id="landing-auth-btn" onclick="showModal('auth-modal');toggleAuth('login')"><i class="fa-solid fa-sign-in-alt" id="landing-auth-icon"></i> <span id="landing-auth-text">Sign In</span></button>
+<button class="btn btn-ghost btn-sm" id="landing-auth-btn" onclick="handleLandingAuthClick()"><i class="fa-solid fa-sign-in-alt" id="landing-auth-icon"></i> <span id="landing-auth-text">Sign In</span></button>
   </header>
   <main class="landing-main">
     <div class="landing-inner">
@@ -159,11 +159,9 @@
       <button class="search-btn" onclick="doSearch()" aria-label="Search"><i class="fa-solid fa-search"></i></button>
     </div>
     <div class="nav-actions">
-<div id="nav-auth-btns"><button class="btn btn-primary btn-sm" onclick="showModal('auth-modal');toggleAuth('login')">Sign In</button></div>
-
-<div id="nav-auth-btns">
-  <button class="btn btn-primary btn-sm" id="nav-auth-inner-btn" onclick="showModal('auth-modal');toggleAuth('login')">Sign In</button>
-</div>
+      <div id="nav-auth-btns">
+        <button class="btn btn-primary btn-sm" id="nav-auth-inner-btn" onclick="showModal('auth-modal');toggleAuth('login')">Sign In</button>
+      </div>
       <div id="nav-user-btns" class="hidden flex items-center gap-2">
         <div class="cart-btn" onclick="showWishlistModal()" title="Wishlist" style="position:relative">
           <i class="fa-solid fa-heart" style="color:#ef4444"></i>
@@ -1186,6 +1184,10 @@
 <div id="auth-modal" class="modal-overlay">
   <div class="modal-box"><button class="modal-close" onclick="closeModal('auth-modal')"><i class="fa-solid fa-times"></i></button>
     <div class="auth-logo"><div class="brand-icon" style="width:52px;height:52px;font-size:1.5rem;margin-bottom:.5rem">B</div><div class="brand-text" style="color:var(--text)">BUY<span>SELL</span></div></div>
+    <div style="text-align:center;margin:-.25rem 0 1rem">
+      <h2 id="auth-panel-title" style="font-size:1.08rem;margin:0 0 .25rem;color:var(--text)">Welcome back</h2>
+      <p id="auth-panel-subtitle" style="font-size:.82rem;line-height:1.45;color:var(--text3);margin:0">Sign in to continue to BUYSELL Nigeria.</p>
+    </div>
     <div class="auth-tabs">
       <button class="auth-tab active" id="auth-tab-login"  onclick="toggleAuth('login')">Sign In</button>
       <button class="auth-tab"        id="auth-tab-signup" onclick="toggleAuth('signup')">Sign Up</button>
