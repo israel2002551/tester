@@ -7,7 +7,38 @@
 let chatHistory = []; 
 let adminAiHistory = [];
 let currentUser = null, currentRole = 'buyer', currentProd = null;
-let cart = JSON.parse(localStorage.getItem('bs_cart') || '[]');
+function createSafeStorage() {
+  const fallback = new Map();
+  const memoryStorage = {
+    getItem: key => fallback.has(key) ? fallback.get(key) : null,
+    setItem: (key, value) => fallback.set(key, String(value)),
+    removeItem: key => fallback.delete(key),
+    clear: () => fallback.clear(),
+  };
+
+  try {
+    const storage = window.localStorage;
+    const testKey = '__bs_storage_test__';
+    storage.setItem(testKey, '1');
+    storage.removeItem(testKey);
+    return storage;
+  } catch (error) {
+    console.warn('Persistent browser storage is blocked; using temporary in-memory storage.', error);
+    return memoryStorage;
+  }
+}
+
+const appStorage = createSafeStorage();
+function readStoredJson(key, fallback) {
+  try {
+    return JSON.parse(appStorage.getItem(key) || JSON.stringify(fallback));
+  } catch {
+    return fallback;
+  }
+}
+
+let pendingEntryRole = appStorage.getItem('bs_entry_role') || '';
+let cart = readStoredJson('bs_cart', []);
 let products = [], filteredProducts = [], activeFilters = {};
 let carouselIndex = 0, carouselTimer = null;
 let selectedRating = 0, checkoutPaymentMethod = 'paystack';
@@ -15,10 +46,42 @@ let deferredInstallPrompt = null, salesChart = null;
 let sellerAnalyticsChart = null;
 let carouselStartX = 0;
 // 🚀 MOVE THESE TWO LINES HERE (TO THE TOP VARIABLES AREA):
-let wishlist = JSON.parse(localStorage.getItem('bs_wishlist') || '[]');
-let compareList = JSON.parse(localStorage.getItem('bs_compare') || '[]');
-const analyticsSessionId = localStorage.getItem('bs_analytics_session') || ('sess_' + Date.now() + '_' + Math.random().toString(36).slice(2));
-localStorage.setItem('bs_analytics_session', analyticsSessionId);
+let wishlist = readStoredJson('bs_wishlist', []);
+let compareList = readStoredJson('bs_compare', []);
+const analyticsSessionId = appStorage.getItem('bs_analytics_session') || ('sess_' + Date.now() + '_' + Math.random().toString(36).slice(2));
+appStorage.setItem('bs_analytics_session', analyticsSessionId);
+
+function showMarketLandingPage() {
+  const marketing = document.getElementById('marketing-placeholder');
+  const landing = document.getElementById('landing');
+  const mainNav = document.getElementById('main-nav');
+  const buyerView = document.getElementById('buyer-view');
+  const sellerDash = document.getElementById('seller-dashboard');
+  const storefront = document.getElementById('storefront-view');
+
+  if (marketing) {
+    marketing.classList.remove('hidden');
+    marketing.style.setProperty('display', 'block', 'important');
+  }
+  if (landing) {
+    landing.classList.remove('hidden');
+    landing.style.setProperty('display', 'block', 'important');
+  }
+  if (mainNav) mainNav.classList.add('hidden');
+  if (buyerView) {
+    buyerView.classList.add('hidden');
+    buyerView.style.setProperty('display', 'none', 'important');
+  }
+  if (sellerDash) {
+    sellerDash.classList.add('hidden');
+    sellerDash.style.setProperty('display', 'none', 'important');
+  }
+  if (storefront) {
+    storefront.classList.add('hidden');
+    storefront.style.setProperty('display', 'none', 'important');
+  }
+  document.body.classList.remove('in-seller');
+}
 
 async function postAiRequest(body, endpoints = []) {
   const session = (await db.auth.getSession()).data.session;
@@ -105,7 +168,7 @@ if (typeof window.supabaseClient === 'undefined') {
       persistSession:     true,
       autoRefreshToken:   true,
       detectSessionInUrl: true,
-      storage:            window.localStorage
+      storage:            appStorage
     }
   });
 }
@@ -119,17 +182,7 @@ window.supabase = window.supabaseClient;
 window.supabaseAppClient = window.supabaseClient;
 
 
-if (typeof supabase !== 'undefined') {
-  supabase.auth.onAuthStateChange(async (event, session) => {
-    console.log(`⚡ Unified Single-Page Auth Event: ${event}`);
-    
-    const authButton = document.querySelector('.nav-sign-in-btn') || 
-                       document.getElementById('landing-auth-btn') ||
-                       document.getElementById('nav-auth-inner-btn');
-
-    // 🚀 THE FIX: If it's just an automated background check (INITIAL_SESSION / TOKEN_REFRESHED),
-    // do NOT automatically redirect or hide the home landing page layouts!
-  // 🎛️ CLEAN GATEKEEPER ROUTING SUBSCRIPTION INTERCEPTOR
+// Auth state listener keeps the visible header and active view in sync.
 if (typeof supabase !== 'undefined') {
   supabase.auth.onAuthStateChange(async (event, session) => {
     console.log(`⚡ Gatekeeper Auth Engine Event: ${event}`);
@@ -146,7 +199,7 @@ if (typeof supabase !== 'undefined') {
         authButton.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
         authButton.onclick = async (e) => {
           e.preventDefault();
-          localStorage.clear();
+          appStorage.clear();
           await supabase.auth.signOut();
           window.location.reload(); 
         };
@@ -167,26 +220,12 @@ if (typeof supabase !== 'undefined') {
         console.warn("⚠️ Background profile parsing deferred:", e.message);
       }
 
-      // Enforce landing position on passive initial background loads
-      if (event === 'SIGNED_IN' && !localStorage.getItem('bs_manual_navigation_pass')) {
-        console.log("⏸️ Background login detected on boot. Holding layout position on marketing landing...");
-        
-        if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').style.setProperty('display', 'block', 'important');
-        if (document.getElementById('landing')) document.getElementById('landing').style.setProperty('display', 'block', 'important');
-        if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.add('hidden');
-        if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.add('hidden');
-        if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.add('hidden');
+      // Keep passive session restores on the market landing. Only button clicks set this pass.
+      if (!appStorage.getItem('bs_manual_navigation_pass')) {
+        console.log("Background session detected. Holding layout on market landing.");
+        showMarketLandingPage();
       } else {
-        localStorage.removeItem('bs_manual_navigation_pass');
-        
-        if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').style.setProperty('none', 'none', 'important');
-        if (document.getElementById('landing')) document.getElementById('landing').style.setProperty('display', 'none', 'important');
-
-        if (currentRole === 'seller' || currentUser.profile?.accounts === 'both' || currentRole === 'admin') {
-          if (typeof showSellerDashboard === 'function') showSellerDashboard();
-        } else {
-          if (typeof showBuyerView === 'function') showBuyerView();
-        }
+        continuePendingEntry();
       }
 
     } else {
@@ -205,11 +244,7 @@ if (typeof supabase !== 'undefined') {
         };
       }
 
-      if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').style.setProperty('display', 'block', 'important');
-      if (document.getElementById('landing')) document.getElementById('landing').style.setProperty('display', 'block', 'important');
-      if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.add('hidden');
-      if (document.getElementById('buyer-view')) document.getElementById('buyer-view').classList.add('hidden');
-      if (document.getElementById('seller-dashboard')) document.getElementById('seller-dashboard').classList.add('hidden');
+      showMarketLandingPage();
     }
   });
 }
@@ -281,6 +316,91 @@ document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('cli
 // ====================================================
 //  AUTH
 // ====================================================
+function normalizeEntryRole(role) {
+  return ['buyer', 'seller', 'both', 'service_provider'].includes(role) ? role : 'buyer';
+}
+
+function setPendingEntryRole(role) {
+  pendingEntryRole = normalizeEntryRole(role);
+  appStorage.setItem('bs_entry_role', pendingEntryRole);
+  return pendingEntryRole;
+}
+
+function getPendingEntryRole() {
+  return normalizeEntryRole(pendingEntryRole || appStorage.getItem('bs_entry_role') || 'buyer');
+}
+
+function clearPendingEntryRole() {
+  pendingEntryRole = '';
+  appStorage.removeItem('bs_entry_role');
+}
+
+function updateAuthPanelCopy(mode) {
+  const role = getPendingEntryRole();
+  const title = document.getElementById('auth-panel-title');
+  const subtitle = document.getElementById('auth-panel-subtitle');
+  if (!title || !subtitle) return;
+
+  const isSignup = mode === 'signup';
+  const copy = {
+    buyer: {
+      title: isSignup ? 'Create your buyer account' : 'Buyer sign in',
+      subtitle: isSignup ? 'Join BUYSELL Nigeria to save carts, track orders, and message sellers.' : 'Sign in to continue shopping the marketplace.',
+    },
+    seller: {
+      title: isSignup ? 'Open your seller store' : 'Seller sign in',
+      subtitle: isSignup ? 'Create your store account and start your free first month.' : 'Sign in to continue to your seller dashboard.',
+    },
+    both: {
+      title: isSignup ? 'Create buyer and seller access' : 'Sign in to your account',
+      subtitle: isSignup ? 'Shop products and manage your own store from one BUYSELL account.' : 'Sign in to continue to your marketplace account.',
+    },
+    service_provider: {
+      title: isSignup ? 'Create service provider access' : 'Service provider sign in',
+      subtitle: isSignup ? 'Create an account to offer services and connect with local clients.' : 'Sign in to continue to your service dashboard.',
+    },
+  };
+
+  title.textContent = copy[role]?.title || copy.buyer.title;
+  subtitle.textContent = copy[role]?.subtitle || copy.buyer.subtitle;
+}
+
+function openEntryAuth(role = 'buyer', mode = 'login') {
+  setPendingEntryRole(role);
+  showModal('auth-modal');
+  toggleAuth(mode);
+}
+
+function profileHasSellerAccess(profile = currentUser?.profile) {
+  const role = profile?.role;
+  const accounts = profile?.accounts;
+  return role === 'seller' || role === 'admin' || accounts === 'seller' || accounts === 'both';
+}
+
+function continuePendingEntry() {
+  if (!currentUser) return;
+  const role = getPendingEntryRole();
+  appStorage.removeItem('bs_manual_navigation_pass');
+  clearPendingEntryRole();
+
+  if (role === 'seller' || role === 'both') {
+    if (profileHasSellerAccess()) {
+      showSellerDashboard();
+    } else {
+      showBuyerView();
+      toast('Seller account required', 'Create or sign in with a seller account to open the seller dashboard.', 'warn', 6000);
+    }
+    return;
+  }
+
+  if (role === 'service_provider' && typeof showServiceDashboard === 'function') {
+    showServiceDashboard();
+    return;
+  }
+
+  showBuyerView();
+}
+
 function toggleAuth(mode) {
   const isLogin  = mode === 'login';
   const isSignup = mode === 'signup';
@@ -311,7 +431,8 @@ function toggleAuth(mode) {
   document.getElementById('auth-terms-group').classList.toggle('hidden', isLogin);
   document.getElementById('auth-btn-text').textContent = isLogin ? 'Sign In' : 'Create Account';
   document.getElementById('auth-password').setAttribute('autocomplete', isLogin ? 'current-password' : 'new-password');
-  if (isSignup) selectRole('buyer');
+  if (isSignup) selectRole(pendingEntryRole || appStorage.getItem('bs_entry_role') || 'buyer');
+  updateAuthPanelCopy(mode);
 }
 
 async function uploadToFirstAvailableBucket(buckets, path, file, options = {}) {
@@ -328,9 +449,10 @@ async function uploadToFirstAvailableBucket(buckets, path, file, options = {}) {
 }
 
 async function signInWithGoogle() {
-  const rawRole = document.querySelector('input[name="auth-role-radio"]:checked')?.value || 'buyer';
+  const rawRole = pendingEntryRole || appStorage.getItem('bs_entry_role') || document.querySelector('input[name="auth-role-radio"]:checked')?.value || 'buyer';
   const role = rawRole === 'both' ? 'seller' : rawRole;
-  localStorage.setItem('bs_google_profile_hint', JSON.stringify({
+  setPendingEntryRole(rawRole);
+  appStorage.setItem('bs_google_profile_hint', JSON.stringify({
     role,
     accounts: rawRole,
     whatsapp: document.getElementById('auth-wa')?.value.trim() || '',
@@ -349,16 +471,18 @@ async function signInWithGoogle() {
     });
     if (error) throw error;
   } catch (err) {
-    localStorage.removeItem('bs_google_profile_hint');
+    appStorage.removeItem('bs_google_profile_hint');
     toast('Google Sign In Failed', err.message || 'Please try again', 'error');
   }
 }
 
 // Role card selector
 function selectRole(role) {
+  setPendingEntryRole(role);
   document.querySelectorAll('.role-card').forEach(c => c.classList.remove('active'));
   document.getElementById('role-card-' + role)?.classList.add('active');
-  document.querySelector(`input[name="auth-role-radio"][value="${role}"]`).checked = true;
+  const roleInput = document.querySelector(`input[name="auth-role-radio"][value="${role}"]`);
+  if (roleInput) roleInput.checked = true;
   // Show/hide WhatsApp for seller/both/service_provider
   const needsWa = role === 'seller' || role === 'both' || role === 'service_provider';
   document.getElementById('auth-wa-group').classList.toggle('hidden', !needsWa);
@@ -413,6 +537,7 @@ async function handleAuth(e) {
       const user = data.session?.user || data.user;
       await onAuthSuccess(user);
       closeModal('auth-modal');
+      continuePendingEntry();
 
     } else {
       // ── SIGN UP ──────────────────────────────────────────────
@@ -449,6 +574,7 @@ async function handleAuth(e) {
           const user = loginData.session?.user || loginData.user;
           await onAuthSuccess(user);
           closeModal('auth-modal');
+          continuePendingEntry();
           return;
         } else if (msg.includes('rate limit') || msg.includes('too many')) {
           toast('Too Many Attempts', 'Wait a few minutes and try again', 'warn', 7000);
@@ -474,6 +600,7 @@ async function handleAuth(e) {
       await upsertProfile(user, { name, role, accounts, whatsapp: wa });
       await onAuthSuccess(user);
       closeModal('auth-modal');
+      continuePendingEntry();
 
       const msgs = {
         buyer:            '🛍️ Welcome! Browse thousands of products.',
@@ -498,7 +625,7 @@ async function handleAuth(e) {
 async function upsertProfile(user, meta) {
   if (!user?.id) return;
   const trialEnd = new Date(); trialEnd.setDate(trialEnd.getDate() + 30);
-  const referredBy = meta.referred_by || localStorage.getItem('bs_ref') || user.user_metadata?.referred_by || '';
+  const referredBy = meta.referred_by || appStorage.getItem('bs_ref') || user.user_metadata?.referred_by || '';
   const { error } = await db.from('profiles').upsert({
     id:              user.id,
     name:            meta.name     || user.user_metadata?.name     || 'User',
@@ -519,7 +646,7 @@ async function onAuthSuccess(user) {
   currentUser = user;
   let googleProfileHint = {};
   try {
-    googleProfileHint = JSON.parse(localStorage.getItem('bs_google_profile_hint') || '{}');
+    googleProfileHint = JSON.parse(appStorage.getItem('bs_google_profile_hint') || '{}');
   } catch {
     googleProfileHint = {};
   }
@@ -539,7 +666,7 @@ async function onAuthSuccess(user) {
   } else {
     currentUser.profile = profile;
   }
-  localStorage.removeItem('bs_google_profile_hint');
+  appStorage.removeItem('bs_google_profile_hint');
 
   currentRole = currentUser.profile?.role || 'buyer';
   updateNavForUser();
@@ -553,10 +680,10 @@ async function checkSession() {
     if (event === 'SIGNED_IN' && session?.user) {
       if (!currentUser) {
         await onAuthSuccess(session.user);
-        // Auto-enter site if still on landing page
-        if (document.getElementById('landing') &&
-            document.getElementById('landing').style.display !== 'none') {
-          enterSite(currentUser?.profile?.role || 'buyer');
+        if (appStorage.getItem('bs_manual_navigation_pass')) {
+          continuePendingEntry();
+        } else {
+          showMarketLandingPage();
         }
       }
     }
@@ -734,26 +861,25 @@ function handleLandingAuthClick() {
   if (currentUser) {
     enterSite(currentUser.profile?.role || 'buyer');
   } else {
-    showModal('auth-modal');
-    toggleAuth('login');
+    openEntryAuth('buyer', 'login');
   }
 }
 
 function enterSite(mode) {
+  const entryRole = setPendingEntryRole(mode);
   console.log("🚀 Manual selection pass triggered for role:", mode);
   
-  localStorage.setItem('bs_manual_navigation_pass', 'true');
+  appStorage.setItem('bs_manual_navigation_pass', 'true');
 
   if (!currentUser) {
-    showModal('auth-modal');
-    toggleAuth('signup');
+    openEntryAuth(entryRole, 'login');
     return;
   } // 👈 Closes: if (!currentUser)
 
   if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').style.setProperty('display', 'none', 'important');
   if (document.getElementById('landing')) document.getElementById('landing').style.setProperty('display', 'none', 'important');
 
-  if (mode === 'seller' || mode === 'both') {
+  if (entryRole === 'seller' || entryRole === 'both') {
     if (typeof showSellerDashboard === 'function') showSellerDashboard();
   } else {
     if (typeof showBuyerView === 'function') showBuyerView();
@@ -1577,7 +1703,7 @@ function copyStoreLink() {
 // ====================================================
 //  CART
 // ====================================================
-function saveCart() { localStorage.setItem('bs_cart', JSON.stringify(cart)); updateCartCount(); }
+function saveCart() { appStorage.setItem('bs_cart', JSON.stringify(cart)); updateCartCount(); }
 
 function addToCart(prod) {
   if (!prod?.id) return;
@@ -3661,7 +3787,7 @@ async function loadAffiliateData() {
   if (!error) refs = data || [];
   const earned = (refs||[]).filter(r=>r.paid).reduce((s,r)=>s+(r.amount||500),0);
   const pending = (refs||[]).filter(r=>!r.paid).reduce((s,r)=>s+(r.amount||5000),0);
-  const trackedClicks = Number(localStorage.getItem(`bs_aff_clicks_${currentUser.id}`) || '0');
+  const trackedClicks = Number(appStorage.getItem(`bs_aff_clicks_${currentUser.id}`) || '0');
   document.getElementById('aff-total').textContent = fmtN(earned);
   document.getElementById('aff-pending').textContent = fmtN(pending);
   document.getElementById('aff-clicks').textContent = Math.max(trackedClicks, (refs||[]).length * 4);
@@ -3679,7 +3805,7 @@ function getReferralMessage() {
 function bumpAffiliateClick() {
   if (!currentUser) return;
   const key = `bs_aff_clicks_${currentUser.id}`;
-  localStorage.setItem(key, String(Number(localStorage.getItem(key) || '0') + 1));
+  appStorage.setItem(key, String(Number(appStorage.getItem(key) || '0') + 1));
   const el = document.getElementById('aff-clicks');
   if (el) el.textContent = Number(el.textContent || '0') + 1;
 }
@@ -3716,9 +3842,9 @@ function downloadReferralQr() {
 function connectAffiliateProgram(name) {
   const url = prompt(`Paste your ${name} affiliate link or program URL:`);
   if (!url) return;
-  const programs = JSON.parse(localStorage.getItem('bs_affiliate_programs') || '[]');
+  const programs = JSON.parse(appStorage.getItem('bs_affiliate_programs') || '[]');
   programs.push({ name, url, created_at: new Date().toISOString() });
-  localStorage.setItem('bs_affiliate_programs', JSON.stringify(programs));
+  appStorage.setItem('bs_affiliate_programs', JSON.stringify(programs));
   toast(`${name} Added`, 'Program link saved on this device.', 'success');
 }
 
@@ -3888,9 +4014,9 @@ async function saveAdminLogo() {
     const { data: pubData } = db.storage.from('uploads').getPublicUrl(path);
     const logoUrl = pubData.publicUrl;
 
-    // 3. Save to localStorage so it persists instantly for all page reloads
+    // 3. Save to browser storage so it persists instantly for all page reloads
     // (In a full scale app, you'd also save this to a 'site_settings' table in Supabase)
-    localStorage.setItem('buysell_custom_logo', logoUrl);
+    appStorage.setItem('buysell_custom_logo', logoUrl);
     
     // 4. Apply globally to the DOM right now
     applySiteLogo(logoUrl);
@@ -5001,7 +5127,7 @@ async function handleDeepLink() {
   }
   if (refCode) {
     // Track referral click
-    localStorage.setItem('bs_ref', refCode);
+    appStorage.setItem('bs_ref', refCode);
   }
 }
 
@@ -5041,7 +5167,7 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
       payment_method: method,
       payment_ref:    txRef || paystackRef || '',
       proof_url:      proofUrl,
-      referral_code:  localStorage.getItem('bs_ref') || ''
+      referral_code:  appStorage.getItem('bs_ref') || ''
     };
 
     let orderId;
@@ -5091,7 +5217,7 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
     }
 
     // --- Cleanup, Notifications, and Analytics ---
-    localStorage.removeItem('bs_ref');
+    appStorage.removeItem('bs_ref');
     
     const seller = cart[0]?.profiles;
     if (seller?.whatsapp) {
@@ -5370,7 +5496,7 @@ function shareCurrentProduct() {
 (async function init() {
   console.log("🎬 Launching single-page application lifecycle...");
   
-  const savedLogo = localStorage.getItem('buysell_custom_logo');
+  const savedLogo = appStorage.getItem('buysell_custom_logo');
   if (savedLogo) applySiteLogo(savedLogo);
 
   if (typeof updateCartCount === 'function') updateCartCount();
@@ -6078,7 +6204,7 @@ function dismissInstallBar() {
 // ====================================================
 
 function saveWishlist() {
-  localStorage.setItem('bs_wishlist', JSON.stringify(wishlist));
+  appStorage.setItem('bs_wishlist', JSON.stringify(wishlist));
   updateWishlistCount();
 }
 
@@ -6185,7 +6311,7 @@ async function showWishlistModal() {
 //  COMPARE
 // ====================================================
 function saveCompare() {
-  localStorage.setItem('bs_compare', JSON.stringify(compareList));
+  appStorage.setItem('bs_compare', JSON.stringify(compareList));
   const bar = document.getElementById('compare-bar');
   const countEl = document.getElementById('compare-count');
   if (bar) bar.classList.toggle('hidden', compareList.length === 0);
@@ -6556,13 +6682,13 @@ async function deleteCoupon(couponId) {
 }
 
 function applyCoupon() {
-  const code = document.getElementById('co-coupon-code')?.value.trim().toUpperCase();
+  const code = document.getElementById('coupon-code')?.value.trim().toUpperCase();
   if (!code) return;
   toast('Coupon Applied', `Code "${code}" will be validated at checkout`, 'success');
 }
 
 function removeCoupon() {
-  const el = document.getElementById('co-coupon-code');
+  const el = document.getElementById('coupon-code');
   if (el) el.value = '';
   toast('Coupon Removed', '', 'info');
 }
@@ -7088,7 +7214,7 @@ async function submitServiceReview() {
 // ====================================================
 async function loadProviderBookings() {
   if (!currentUser) return;
-  const container = document.getElementById('sp-bookings-list');
+  const container = document.getElementById('spd-bookings-list');
   if (!container) return;
   container.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
   try {
@@ -7119,7 +7245,7 @@ async function loadProviderBookings() {
 //  LANGUAGE
 // ====================================================
 function setLanguage(lang) {
-  localStorage.setItem('bs_lang', lang);
+  appStorage.setItem('bs_lang', lang);
   toast('Language', `Switched to ${lang === 'en' ? 'English' : lang === 'pcm' ? 'Pidgin' : lang === 'ha' ? 'Hausa' : lang === 'yo' ? 'Yoruba' : lang === 'ig' ? 'Igbo' : lang}`, 'info');
 }
 // ==========================================
