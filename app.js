@@ -194,7 +194,7 @@ if (typeof supabase !== 'undefined') {
                        document.getElementById('nav-auth-inner-btn');
 
     if (session && session.user) {
-      currentUser = session.user;
+      await onAuthSuccess(session.user);
       console.log("📥 Active user credentials cached securely in memory: " + currentUser.email);
 
       if (authButton) {
@@ -454,6 +454,7 @@ async function signInWithGoogle() {
   const rawRole = pendingEntryRole || appStorage.getItem('bs_entry_role') || document.querySelector('input[name="auth-role-radio"]:checked')?.value || 'buyer';
   const role = rawRole === 'both' ? 'seller' : rawRole;
   setPendingEntryRole(rawRole);
+  appStorage.setItem('bs_manual_navigation_pass', 'true');
   appStorage.setItem('bs_google_profile_hint', JSON.stringify({
     role,
     accounts: rawRole,
@@ -464,7 +465,7 @@ async function signInWithGoogle() {
     const { error } = await db.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin + window.location.pathname,
+        redirectTo: `${PUBLIC_SITE_URL}/`,
         queryParams: {
           access_type: 'offline',
           prompt: 'select_account',
@@ -473,6 +474,7 @@ async function signInWithGoogle() {
     });
     if (error) throw error;
   } catch (err) {
+    appStorage.removeItem('bs_manual_navigation_pass');
     appStorage.removeItem('bs_google_profile_hint');
     toast('Google Sign In Failed', err.message || 'Please try again', 'error');
   }
