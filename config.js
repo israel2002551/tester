@@ -12,6 +12,10 @@ const CLAUDE_EDGE_URL = `${EDGE_URL}/smooth-handler`;
 
 // ── Admin ─────────────────────────────────────────────
 const ADMIN_EMAIL = 'israelefe093@gmail.com';
+const ADMIN_EMAILS = [
+  ADMIN_EMAIL,
+  'peaceomomofe34@gmail.com'
+];
 
 // ── Paystack ──────────────────────────────────────────
 const PAYSTACK_PUBLIC_KEY = 'pk_live_4fd75c570f7fb446f06b1ea5fc32c17683547fea'; // Replace with live key for production
