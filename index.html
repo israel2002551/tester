@@ -2570,11 +2570,19 @@
         .then(response => response.text())
         .then(htmlContent => {
           document.getElementById('marketing-placeholder').innerHTML = htmlContent;
+          if (typeof showMarketLandingPage === 'function') showMarketLandingPage();
 
           // Wire scrolling links local behavior anchors
           document.querySelectorAll('.bs-scroll-link').forEach(link => {
             link.addEventListener('click', function(e) {
               const target = document.querySelector(this.getAttribute('href'));
+              if (target?.id === 'landing') {
+                e.preventDefault();
+                document.getElementById('marketing-placeholder')?.style.setProperty('display', 'none', 'important');
+                target.classList.remove('hidden');
+                target.style.setProperty('display', 'flex', 'important');
+                return;
+              }
               if (target) { e.preventDefault(); target.scrollIntoView({ behavior: 'smooth' }); }
             });
           });
