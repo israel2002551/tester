@@ -7,6 +7,7 @@
 let chatHistory = []; 
 let adminAiHistory = [];
 let currentUser = null, currentRole = 'buyer', currentProd = null;
+const PUBLIC_SITE_URL = 'https://buysell-markerplace.com';
 function createSafeStorage() {
   const fallback = new Map();
   const memoryStorage = {
@@ -185,102 +186,48 @@ window.supabaseAppClient = window.supabaseClient;
 
 // Auth state listener keeps the visible header and active view in sync.
 if (typeof supabase !== 'undefined') {
-  supabase.auth.onAuthStateChange(async (event, session) => {
-    console.log(`⚡ Gatekeeper Auth Engine Event: ${event}`);
-    
-    const authButton = document.querySelector('.nav-sign-in-btn') || 
-                       document.getElementById('landing-auth-btn') ||
-                       document.getElementById('nav-auth-inner-btn');
+  supabase.auth.onAuthStateChange(async (event, session) => {
+    console.log(`⚡ Gatekeeper Auth Engine Event: ${event}`);
+    
+    const authButton = document.querySelector('.nav-sign-in-btn') || 
+                       document.getElementById('landing-auth-btn') ||
+                       document.getElementById('nav-auth-inner-btn');
 
-    if (session && session.user) {
-      currentUser = session.user;
-      console.log("📥 Active user credentials cached securely in memory: " + currentUser.email);
+    if (session && session.user) {
+      currentUser = session.user;
+      console.log("📥 Active user credentials cached securely in memory: " + currentUser.email);
 
-      if (authButton) {
-        authButton.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
-        authButton.onclick = async (e) => {
-          e.preventDefault();
-          appStorage.clear();
-          await supabase.auth.signOut();
-          window.location.reload(); 
-        };
-      }
+      if (authButton) {
+        authButton.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
+        authButton.onclick = async (e) => {
+          e.preventDefault();
+          appStorage.clear();
+          await supabase.auth.signOut();
+          window.location.reload(); 
+        };
+      }
 
-      try {
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .maybeSingle();
+      try {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .maybeSingle();
 
-        if (!error && profile) {
-          currentUser.profile = profile;
-          currentRole = profile.role || 'buyer';
-        }
-      } catch (e) {
-        console.warn("⚠️ Background profile parsing deferred:", e.message);
-      }
-
-      // Keep passive session restores on the market landing. Only button clicks set this pass.
-      if (!appStorage.getItem('bs_manual_navigation_pass')) {
-        console.log("Background session detected. Holding layout on market landing.");
-        showMarketLandingPage();
-      } else {
-        continuePendingEntry();
-      }
-
-    } else {
-      console.log("🔴 Guest View Matrix Active.");
-      currentUser = null;
-      currentRole = 'buyer';
-
-      if (authButton) {
-        authButton.innerHTML = `<i class="fas fa-sign-in-alt"></i> Sign In`;
-        authButton.onclick = (e) => {
-          e.preventDefault();
-          if (typeof showModal === 'function') {
-            showModal('auth-modal');
-            toggleAuth('login');
-          }
-        };
-      }
-
-      showMarketLandingPage();
-    }
-  });
-} 
-      // =========================================================================
-      // 🔀 DYNAMIC ENTRY FILTER GATEKEEPER
-      // =========================================================================
-      // Check for manual interface button cards passes or fresh Google OAuth returns
-      const safeStorage = typeof appStorage !== 'undefined' ? appStorage : localStorage;
-      const isManualNavPass = safeStorage.getItem('bs_manual_navigation_pass');
-      
-      const isGoogleCallbackPass = window.location.hash.includes('access_token=') || 
-                                   window.location.search.includes('code=');
-
-      // If they just refreshed natively, hold them securely on the promotional front page.
-      // If they just clicked an onboarding button or came back from Google, push them past the barrier!
-      if (!isManualNavPass && !isGoogleCallbackPass) {
-        console.log("Background session detected. Holding layout on market landing.");
-        if (typeof showMarketLandingPage === 'function') showMarketLandingPage();
-      } else {
-        safeStorage.removeItem('bs_manual_navigation_pass');
-        console.log("🔓 Session validation cleared. Forwarding user into workspace dashboards...");
-        
-        if (typeof continuePendingEntry === 'function') {
-          continuePendingEntry();
-        } else {
-          // In-app fallback routing if continuePendingEntry is still compiling
-          if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').style.setProperty('display', 'none', 'important');
-          if (document.getElementById('landing')) document.getElementById('landing').style.setProperty('display', 'none', 'important');
-
-          if (currentRole === 'seller' || currentUser.profile?.accounts === 'both' || currentRole === 'admin') {
-            if (typeof showSellerDashboard === 'function') showSellerDashboard();
-          } else {
-            if (typeof showBuyerView === 'function') showBuyerView();
-          }
+        if (!error && profile) {
+          currentUser.profile = profile;
+          currentRole = profile.role || 'buyer';
         }
+      } catch (e) {
+        console.warn("⚠️ Background profile parsing deferred:", e.message);
+      }
+
+      // Keep passive session restores on the market landing. Only button clicks set this pass.
+      if (!appStorage.getItem('bs_manual_navigation_pass')) {
+        console.log("Background session detected. Holding layout on market landing.");
+        showMarketLandingPage();
+      } else {
+        continuePendingEntry();
       }
 
     } else {
@@ -299,7 +246,7 @@ if (typeof supabase !== 'undefined') {
         };
       }
 
-      if (typeof showMarketLandingPage === 'function') showMarketLandingPage();
+      showMarketLandingPage();
     }
   });
 }
@@ -696,38 +643,6 @@ async function upsertProfile(user, meta) {
   if (error) console.warn('upsertProfile error:', error.message);
 }
 
-async function checkSession() {
-  // Subscribe to auth state changes FIRST so we don't miss the initial event
-  db.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_IN' && session?.user) {
-      if (!currentUser) {
-        await onAuthSuccess(session.user);
-        if (appStorage.getItem('bs_manual_navigation_pass')) {
-          continuePendingEntry();
-        } else {
-          showMarketLandingPage();
-        }
-      }
-    }
-    if (event === 'SIGNED_OUT') {
-      if (messageChannel) {
-        db.removeChannel(messageChannel);
-        messageChannel = null;
-      }
-      currentUser = null;
-      currentRole = 'buyer';
-      currentChatPartner = null;
-      currentChatProductId = null;
-      updateInboxCount();
-    }
-    if (event === 'TOKEN_REFRESHED' && session?.user) {
-      currentUser = session.user;
-    }
-    if (event === 'USER_UPDATED' && session?.user) {
-      currentUser = session.user;
-    }
-  });
-  
 async function onAuthSuccess(user) {
   if (!user) return;
   currentUser = user;
@@ -761,6 +676,44 @@ async function onAuthSuccess(user) {
   setupMessageRealtime();
 }
 
+async function checkSession() {
+  // Subscribe to auth state changes FIRST so we don't miss the initial event
+  db.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && session?.user) {
+      if (!currentUser) {
+        await onAuthSuccess(session.user);
+        if (appStorage.getItem('bs_manual_navigation_pass')) {
+          continuePendingEntry();
+        } else {
+          showMarketLandingPage();
+        }
+      }
+    }
+    if (event === 'SIGNED_OUT') {
+      if (messageChannel) {
+        db.removeChannel(messageChannel);
+        messageChannel = null;
+      }
+      currentUser = null;
+      currentRole = 'buyer';
+      currentChatPartner = null;
+      currentChatProductId = null;
+      updateInboxCount();
+    }
+    if (event === 'TOKEN_REFRESHED' && session?.user) {
+      currentUser = session.user;
+    }
+    if (event === 'USER_UPDATED' && session?.user) {
+      currentUser = session.user;
+    }
+  });
+
+  // Then check for an existing persisted session
+  const { data: { session } } = await db.auth.getSession();
+  if (session?.user) {
+    await onAuthSuccess(session.user);
+  }
+}
 
 function updateNavForUser() {
   if (!currentUser) return;
@@ -780,7 +733,7 @@ function updateNavForUser() {
   }
   // Referral link
   const rc = currentUser.profile?.referral_code || 'ref_' + currentUser.id?.substr(0,8);
-  document.getElementById('referral-link').value = `http://buysell-markerplace.com/ref/${rc}`;
+  document.getElementById('referral-link').value = `${PUBLIC_SITE_URL}/ref/${rc}`;
 }
 
 async function sendPasswordReset() {
@@ -794,7 +747,7 @@ async function sendPasswordReset() {
 
   try {
     const { error } = await db.auth.resetPasswordForEmail(email, {
-      redirectTo: 'https://israel2002551.github.io/BUYSELL_Nigeria_FINAL/'
+      redirectTo: PUBLIC_SITE_URL
     });
 
     if (error) {
@@ -1759,7 +1712,7 @@ function shareStore() {
 }
 
 function copyStoreLink() {
-  const link = `http://buysell-markerplace.com/store/${currentUser?.id?.substr(0,8)||'your-store'}`;
+  const link = `${PUBLIC_SITE_URL}/store/${currentUser?.id?.substr(0,8)||'your-store'}`;
   navigator.clipboard.writeText(link).then(()=>toast('Store Link Copied!','Share with customers','success'));
 }
 
@@ -5208,7 +5161,7 @@ function sendWhatsAppOrderNotification(order, sellerWa) {
     `Total: ${fmtN(order.total_amount)}\n` +
     `Payment: ${order.payment_method}\n\n` +
     `Deliver to:\n${order.delivery_name}\n${order.delivery_phone}\n${order.delivery_address}\n\n` +
-    `Log in to dashboard to confirm: http://buysell-markerplace.com`
+    `Log in to dashboard to confirm: ${PUBLIC_SITE_URL}`
   );
   // Open in background tab (silent notification fallback)
   const waUrl = `https://wa.me/${phone}?text=${msg}`;
@@ -7150,7 +7103,7 @@ async function initiateAdPayment() {
           // Reset Form
           document.getElementById('ad-title').value = '';
           document.getElementById('ad-desc').value = '';
-          document.getElementById('ad-link').value = 'http://buysell-markerplace.com/';
+          document.getElementById('ad-link').value = `${PUBLIC_SITE_URL}/`;
           document.getElementById('ad-media-file').value = '';
           document.getElementById('ad-media-preview-container')?.classList.add('hidden');
           document.getElementById('ad-media-zone')?.classList.remove('has-file');
