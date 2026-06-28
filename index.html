@@ -672,7 +672,7 @@
             </div>
             <div class="form-group">
               <label class="form-label">Destination Link <span class="req">*</span></label>
-              <input type="url" id="ad-link" class="form-input" placeholder="https://buysell.ng/your-store" value="https://buysell.ng/">
+              <input type="url" id="ad-link" class="form-input" placeholder="https://buysell-markerplace.com/your-store" value="https://buysell-markerplace.com/">
             </div>
           </div>
           <div class="form-group">
@@ -2560,11 +2560,15 @@
 
 <script src="https://js.paystack.co/v2/inline.js"></script>
 <script data-cfasync="false" src="config.js?v=3.1"></script>
-<script src="app.js?v=7.0"></script>
+<script src="app.js?v=7.1"></script>
   <script>
     (function() {
       'use strict';
-      if (location.protocol === 'file:') return;
+      if (location.protocol === 'file:') {
+        if (typeof showMarketLandingPage === 'function') showMarketLandingPage();
+        console.info('Open this project through https://buysell-markerplace.com or a local HTTP server to load the full marketing landing page.');
+        return;
+      }
       // Load the separate marketing presentation layouts live onto this canvas layout frame
       fetch('marketing.html')
         .then(response => response.text())
@@ -2603,7 +2607,10 @@
             revealEls.forEach(el => el.classList.add('is-visible'));
           }
         })
-        .catch(err => console.error("Error setting up pre-landing view engine context:", err));
+        .catch(err => {
+          if (typeof showMarketLandingPage === 'function') showMarketLandingPage();
+          console.error("Error setting up pre-landing view engine context:", err);
+        });
     })();
   </script>
 
