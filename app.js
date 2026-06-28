@@ -58,14 +58,15 @@ function showMarketLandingPage() {
   const buyerView = document.getElementById('buyer-view');
   const sellerDash = document.getElementById('seller-dashboard');
   const storefront = document.getElementById('storefront-view');
+  const hasMarketingLanding = !!marketing?.querySelector('#marketing-landing');
 
   if (marketing) {
-    marketing.classList.add('hidden');
-    marketing.style.setProperty('display', 'none', 'important');
+    marketing.classList.toggle('hidden', !hasMarketingLanding);
+    marketing.style.setProperty('display', hasMarketingLanding ? 'block' : 'none', 'important');
   }
   if (landing) {
-    landing.classList.remove('hidden');
-    landing.style.setProperty('display', 'flex', 'important');
+    landing.classList.toggle('hidden', hasMarketingLanding);
+    landing.style.setProperty('display', hasMarketingLanding ? 'none' : 'flex', 'important');
   }
   if (mainNav) mainNav.classList.add('hidden');
   if (buyerView) {
