@@ -146,6 +146,17 @@ async function callEdge(fnName, body) {
   return data;
 }
 
+function getAdminEmails() {
+  const configured = typeof ADMIN_EMAILS !== 'undefined' && Array.isArray(ADMIN_EMAILS)
+    ? ADMIN_EMAILS
+    : (typeof ADMIN_EMAIL !== 'undefined' ? [ADMIN_EMAIL] : []);
+  return configured.map(email => String(email || '').trim().toLowerCase()).filter(Boolean);
+}
+
+function isAdminEmail(email = currentUser?.email) {
+  return getAdminEmails().includes(String(email || '').trim().toLowerCase());
+}
+
 async function trackAnalytics(event) {
   try {
     const session = (await db.auth.getSession()).data.session;
@@ -728,8 +739,7 @@ function updateNavForUser() {
   document.getElementById('dash-user-email').textContent = currentUser.email || '';
   // Admin check
   // DB-backed admin check — email alone is not sufficient
-  const isAdmin = currentUser.email === ADMIN_EMAIL &&
-                  currentUser.profile?.role === 'admin';
+  const isAdmin = isAdminEmail();
   if (isAdmin) {
     document.getElementById('admin-nav-item')?.classList.remove('hidden');
   }
@@ -1012,7 +1022,7 @@ async function showSellerDashboard() {
   if (mobHamBtn) mobHamBtn.style.setProperty('display', 'flex', 'important');
 
   const adminNavItem = document.getElementById('admin-nav-item');
-  if (adminNavItem) adminNavItem.style.setProperty('display', (currentUser?.email === ADMIN_EMAIL ? 'flex' : 'none'), 'important');
+  if (adminNavItem) adminNavItem.style.setProperty('display', (isAdminEmail() ? 'flex' : 'none'), 'important');
   
   document.body.classList.add('in-seller');
   currentRole = 'seller';
@@ -1029,7 +1039,7 @@ async function showSellerDashboard() {
   if (typeof loadSellerAds === 'function') loadSellerAds();
 }
 function isSellerAccessExpired(profile = currentUser?.profile) {
-  if (!currentUser || currentUser.email === ADMIN_EMAIL) return false;
+  if (!currentUser || isAdminEmail()) return false;
   const expiry = profile?.subscription_end || profile?.paid_until || profile?.trial_end;
   const trialEnd = expiry ? new Date(expiry) : null;
   if (profile?.is_suspended) return true;
@@ -1062,7 +1072,7 @@ async function getSellerKycStatus(userId = currentUser?.id) {
 }
 
 async function requireSellerKyc() {
-  if (!currentUser || currentUser.email === ADMIN_EMAIL) return true;
+  if (!currentUser || isAdminEmail()) return true;
   const { status } = await getSellerKycStatus(currentUser.id);
   if (isKycApprovedStatus(status)) return true;
   showBuyerView();
@@ -3149,7 +3159,7 @@ async function checkSellerCommission() {
   if (!expired) { badge.className='badge badge-green'; badge.textContent=`Active - ${Math.ceil((trialEnd-new Date())/86400000)}d left`; }
   else { badge.className='badge badge-red'; badge.textContent='Suspended'; }
   // Show suspended modal if needed
-  if (expired && currentUser.email !== ADMIN_EMAIL) {
+  if (expired && !isAdminEmail()) {
     document.getElementById('suspended-modal').classList.add('open');
   }
 }
@@ -4090,8 +4100,7 @@ let _adminRevenueChart = null;
 
 function isAdmin() {
   // Both email AND database role must match — prevents email spoofing
-  return currentUser?.email === ADMIN_EMAIL &&
-         currentUser?.profile?.role === 'admin';
+  return isAdminEmail();
 }
 
 function guardAdminPanel() {
