@@ -200,7 +200,10 @@ if (typeof supabase !== 'undefined') {
         authButton.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
         authButton.onclick = async (e) => {
           e.preventDefault();
-          appStorage.clear();
+          // Failsafe: Support both your customized appStorage and traditional localStorage objects securely
+          if (typeof appStorage !== 'undefined') appStorage.clear();
+          else localStorage.clear();
+          
           await supabase.auth.signOut();
           window.location.reload(); 
         };
@@ -221,12 +224,38 @@ if (typeof supabase !== 'undefined') {
         console.warn("⚠️ Background profile parsing deferred:", e.message);
       }
 
-      // Keep passive session restores on the market landing. Only button clicks set this pass.
-      if (!appStorage.getItem('bs_manual_navigation_pass')) {
+      // =========================================================================
+      // 🔀 DYNAMIC ENTRY FILTER GATEKEEPER
+      // =========================================================================
+      // Check for manual interface button cards passes or fresh Google OAuth returns
+      const safeStorage = typeof appStorage !== 'undefined' ? appStorage : localStorage;
+      const isManualNavPass = safeStorage.getItem('bs_manual_navigation_pass');
+      
+      const isGoogleCallbackPass = window.location.hash.includes('access_token=') || 
+                                   window.location.search.includes('code=');
+
+      // If they just refreshed natively, hold them securely on the promotional front page.
+      // If they just clicked an onboarding button or came back from Google, push them past the barrier!
+      if (!isManualNavPass && !isGoogleCallbackPass) {
         console.log("Background session detected. Holding layout on market landing.");
-        showMarketLandingPage();
+        if (typeof showMarketLandingPage === 'function') showMarketLandingPage();
       } else {
-        continuePendingEntry();
+        safeStorage.removeItem('bs_manual_navigation_pass');
+        console.log("🔓 Session validation cleared. Forwarding user into workspace dashboards...");
+        
+        if (typeof continuePendingEntry === 'function') {
+          continuePendingEntry();
+        } else {
+          // In-app fallback routing if continuePendingEntry is still compiling
+          if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').style.setProperty('display', 'none', 'important');
+          if (document.getElementById('landing')) document.getElementById('landing').style.setProperty('display', 'none', 'important');
+
+          if (currentRole === 'seller' || currentUser.profile?.accounts === 'both' || currentRole === 'admin') {
+            if (typeof showSellerDashboard === 'function') showSellerDashboard();
+          } else {
+            if (typeof showBuyerView === 'function') showBuyerView();
+          }
+        }
       }
 
     } else {
@@ -245,7 +274,7 @@ if (typeof supabase !== 'undefined') {
         };
       }
 
-      showMarketLandingPage();
+      if (typeof showMarketLandingPage === 'function') showMarketLandingPage();
     }
   });
 }
