@@ -22,8 +22,8 @@ function createSafeStorage() {
     storage.setItem(testKey, '1');
     storage.removeItem(testKey);
     return storage;
-  } catch (error) {
-    console.warn('Persistent browser storage is blocked; using temporary in-memory storage.', error);
+  } catch {
+    console.info('Persistent browser storage is unavailable here; using temporary in-memory storage.');
     return memoryStorage;
   }
 }
@@ -60,12 +60,12 @@ function showMarketLandingPage() {
   const storefront = document.getElementById('storefront-view');
 
   if (marketing) {
-    marketing.classList.remove('hidden');
-    marketing.style.setProperty('display', 'block', 'important');
+    marketing.classList.add('hidden');
+    marketing.style.setProperty('display', 'none', 'important');
   }
   if (landing) {
     landing.classList.remove('hidden');
-    landing.style.setProperty('display', 'block', 'important');
+    landing.style.setProperty('display', 'flex', 'important');
   }
   if (mainNav) mainNav.classList.add('hidden');
   if (buyerView) {
@@ -872,6 +872,12 @@ function enterSite(mode) {
   appStorage.setItem('bs_manual_navigation_pass', 'true');
 
   if (!currentUser) {
+    if (entryRole === 'buyer') {
+      appStorage.removeItem('bs_manual_navigation_pass');
+      clearPendingEntryRole();
+      showBuyerView();
+      return;
+    }
     openEntryAuth(entryRole, 'login');
     return;
   } // 👈 Closes: if (!currentUser)
