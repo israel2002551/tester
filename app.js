@@ -194,16 +194,14 @@ if (typeof supabase !== 'undefined') {
 
     if (session && session.user) {
       currentUser = session.user;
-      console.log("📥 Active user credentials cached securely in memory: " + currentUser.email);
+      console.log("🟢 Active user credentials cached securely in memory: " + currentUser.email);
 
       if (authButton) {
         authButton.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
         authButton.onclick = async (e) => {
           e.preventDefault();
-          // Failsafe: Support both your customized appStorage and traditional localStorage objects securely
           if (typeof appStorage !== 'undefined') appStorage.clear();
           else localStorage.clear();
-          
           await supabase.auth.signOut();
           window.location.reload(); 
         };
@@ -224,6 +222,53 @@ if (typeof supabase !== 'undefined') {
         console.warn("⚠️ Background profile parsing deferred:", e.message);
       }
 
+      // 🚀 THE ULTIMATE SINGLE ENTRY ROUTER
+      const safeStorage = typeof appStorage !== 'undefined' ? appStorage : localStorage;
+      const isManualNavPass = safeStorage.getItem('bs_manual_navigation_pass');
+      const isGoogleCallbackPass = window.location.hash.includes('access_token=') || 
+                                   window.location.search.includes('code=');
+
+      if (!isManualNavPass && !isGoogleCallbackPass) {
+        console.log("⏸️ Background session detected. Holding layout on market landing.");
+        if (typeof showMarketLandingPage === 'function') showMarketLandingPage();
+      } else {
+        safeStorage.removeItem('bs_manual_navigation_pass');
+        console.log("🔓 Session validation cleared. Forwarding user into workspace dashboards...");
+        
+        // Hide initial promotional welcome banners instantly
+        if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').style.setProperty('display', 'none', 'important');
+        if (document.getElementById('landing')) document.getElementById('landing').style.setProperty('display', 'none', 'important');
+
+        // Render dashboard workspace canvas frameworks matching profile parameters
+        if (currentRole === 'seller' || currentUser.profile?.accounts === 'both' || currentRole === 'admin') {
+          if (typeof showSellerDashboard === 'function') showSellerDashboard();
+        } else {
+          if (typeof showBuyerView === 'function') showBuyerView();
+        }
+      }
+
+    } else {
+      console.log("🔴 Guest View Matrix Active.");
+      currentUser = null;
+      currentRole = 'buyer';
+
+      if (authButton) {
+        authButton.innerHTML = `<i class="fas fa-sign-in-alt"></i> Sign In`;
+        authButton.onclick = (e) => {
+          e.preventDefault();
+          if (typeof showModal === 'function') {
+            showModal('auth-modal');
+            toggleAuth('login');
+          }
+        };
+      }
+
+      if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').style.setProperty('display', 'block', 'important');
+      if (document.getElementById('landing')) document.getElementById('landing').style.setProperty('display', 'flex', 'important');
+      if (document.getElementById('main-nav')) document.getElementById('main-nav').classList.add('hidden');
+    }
+  });
+}
       // =========================================================================
       // 🔀 DYNAMIC ENTRY FILTER GATEKEEPER
       // =========================================================================
@@ -704,44 +749,6 @@ async function onAuthSuccess(user) {
   setupMessageRealtime();
 }
 
-async function checkSession() {
-  // Subscribe to auth state changes FIRST so we don't miss the initial event
-  db.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_IN' && session?.user) {
-      if (!currentUser) {
-        await onAuthSuccess(session.user);
-        if (appStorage.getItem('bs_manual_navigation_pass')) {
-          continuePendingEntry();
-        } else {
-          showMarketLandingPage();
-        }
-      }
-    }
-    if (event === 'SIGNED_OUT') {
-      if (messageChannel) {
-        db.removeChannel(messageChannel);
-        messageChannel = null;
-      }
-      currentUser = null;
-      currentRole = 'buyer';
-      currentChatPartner = null;
-      currentChatProductId = null;
-      updateInboxCount();
-    }
-    if (event === 'TOKEN_REFRESHED' && session?.user) {
-      currentUser = session.user;
-    }
-    if (event === 'USER_UPDATED' && session?.user) {
-      currentUser = session.user;
-    }
-  });
-
-  // Then check for an existing persisted session
-  const { data: { session } } = await db.auth.getSession();
-  if (session?.user) {
-    await onAuthSuccess(session.user);
-  }
-}
 
 function updateNavForUser() {
   if (!currentUser) return;
