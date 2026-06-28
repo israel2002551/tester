@@ -1812,12 +1812,55 @@ function buyNow(prod) {
   startCheckout();
 }
 
-function startCheckout() {
+function isSellerAccount(profile = currentUser?.profile || {}) {
+  const role = profile.role || 'buyer';
+  const accounts = profile.accounts || '';
+  return role === 'seller' || role === 'admin' || accounts === 'seller' || accounts === 'both';
+}
+
+async function getSellerAvailableRevenue(sellerId = currentUser?.id) {
+  if (!sellerId) return { available: 0, revenue: 0, pending: 0, paid: 0, walletDebits: 0 };
+
+  const [{ data: orders }, { data: withdrawals }, { data: walletTransactions }] = await Promise.all([
+    db.from('orders').select('total_amount,status').eq('seller_id', sellerId),
+    db.from('withdrawals').select('amount,status').eq('seller_id', sellerId),
+    db.from('wallet_transactions').select('amount,type').eq('seller_id', sellerId)
+  ]);
+
+  const revenue = (orders || [])
+    .filter(o => o.status === 'delivered')
+    .reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+  const pending = (withdrawals || [])
+    .filter(w => w.status === 'pending')
+    .reduce((sum, w) => sum + Number(w.amount || 0), 0);
+  const paid = (withdrawals || [])
+    .filter(w => w.status === 'paid')
+    .reduce((sum, w) => sum + Number(w.amount || 0), 0);
+  const walletDebits = (walletTransactions || [])
+    .filter(t => String(t.type || '').startsWith('debit'))
+    .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+  const available = Math.max(0, (revenue * 0.92) - pending - paid - walletDebits);
+
+  return { available, revenue, pending, paid, walletDebits };
+}
+
+async function startCheckout() {
   if (!currentUser) { showModal('auth-modal'); return; }
   if (!cart.length) { toast('Cart is empty','','warn'); return; }
 
-if (currentUser?.profile?.role !== 'buyer') {
-    loadWithdrawalData();
+  let availableBalance = Number(currentUser?.profile?.wallet_balance || 0);
+  const isSeller = isSellerAccount();
+  if (isSeller) {
+    try {
+      const wallet = await getSellerAvailableRevenue(currentUser.id);
+      availableBalance = wallet.available;
+      if (currentUser.profile) currentUser.profile.wallet_balance = availableBalance;
+      const wdAvailable = document.getElementById('wd-available');
+      if (wdAvailable) wdAvailable.textContent = fmtN(availableBalance);
+    } catch (err) {
+      console.warn('Could not refresh wallet revenue before checkout:', err);
+      loadWithdrawalData();
+    }
   }
   
   const rawProductTotal = cart.reduce((sum,c)=>sum+(c.price*(c.qty||1)),0);
@@ -1854,26 +1897,6 @@ if (currentUser?.profile?.role !== 'buyer') {
   }
   
 // --- DYNAMIC PAYMENT METHOD RENDERING (WITH WALLET CHANNELS) ---
-  // Look directly at the profile parameters in the database session to check if they are a merchant
-  const profileRole = currentUser?.profile?.role || 'buyer';
-  const accountType = currentUser?.profile?.accounts || '';
-  
-  // Safely registers them as a merchant even if they are currently browsing the marketplace as a buyer
-  const isSeller = profileRole === 'seller' || profileRole === 'admin' || accountType === 'seller' || accountType === 'both';
-  
-  // BULLETPROOF BALANCE EXTRACTION: Read live DOM text if available; otherwise compute from cache or fallback safely
-  const availableBalText = document.getElementById('wd-available')?.textContent || '';
-  let availableBalance = 0;
-
-  if (availableBalText) {
-    availableBalance = parseFloat(availableBalText.replace(/[^\d.]/g, '')) || 0;
-  } else if (currentUser?.profile?.wallet_balance !== undefined) {
-    // If the seller dashboard tab isn't active on screen, pull straight from the profile session object configuration
-    availableBalance = parseFloat(currentUser.profile.wallet_balance) || 0;
-  } else {
-    availableBalance = 0;
-  }
-
   const isUnderfunded = availableBalance < totalWithCommission;
 
   let walletCardHtml = '';
@@ -2137,12 +2160,90 @@ function selectCheckoutPaymentMethod(method) {
   }
 }
 
+async function insertWithMissingColumnRetry(tableName, row, selectCols = '*') {
+  const payload = { ...row };
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const query = db.from(tableName).insert(payload);
+    const { data, error } = selectCols
+      ? await query.select(selectCols).maybeSingle()
+      : await query;
+
+    if (!error) return data;
+
+    const col = missingColumn(error);
+    if (col && Object.prototype.hasOwnProperty.call(payload, col)) {
+      delete payload[col];
+      continue;
+    }
+
+    throw error;
+  }
+
+  throw new Error(`Could not insert into ${tableName}`);
+}
+
+async function createWalletRevenueOrder(checkoutPayload, totalAmount, walletRef) {
+  const productSellerId = cart[0]?.seller_id;
+  if (!productSellerId) throw new Error('Seller information missing from cart.');
+
+  const orderId = crypto.randomUUID();
+  const orderData = {
+    id: orderId,
+    buyer_id: currentUser.id,
+    seller_id: productSellerId,
+    items: cart.map(c => ({
+      id: c.id,
+      name: c.name,
+      qty: c.qty || 1,
+      price: c.price,
+      image_url: c.image_url || ''
+    })),
+    total_amount: totalAmount,
+    status: 'pending',
+    payment_method: 'wallet_revenue',
+    payment_ref: walletRef,
+    delivery_name: checkoutPayload.delivery_name,
+    delivery_phone: checkoutPayload.delivery_phone,
+    delivery_address: checkoutPayload.delivery_address,
+    created_at: new Date().toISOString()
+  };
+
+  const insertedOrder = await insertWithMissingColumnRetry('orders', orderData);
+
+  try {
+    await insertWithMissingColumnRetry('wallet_transactions', {
+      seller_id: currentUser.id,
+      buyer_id: currentUser.id,
+      order_id: insertedOrder?.id || orderId,
+      amount: totalAmount,
+      type: 'debit_purchase',
+      reference: walletRef,
+      description: 'Marketplace purchase paid with revenue wallet',
+      status: 'completed',
+      created_at: new Date().toISOString()
+    });
+  } catch (err) {
+    await db.from('orders')
+      .update({ status: 'cancelled' })
+      .eq('id', insertedOrder?.id || orderId)
+      .eq('buyer_id', currentUser.id);
+    throw new Error(err.message || 'Wallet debit could not be recorded.');
+  }
+
+  return { success: true, order_id: insertedOrder?.id || orderId, total_paid: totalAmount };
+}
+
 async function payWithWalletRevenue() {
   if (cart.length === 0) { toast('Cart is empty', '', 'warn'); return; }
   const rawProductTotal = cart.reduce((s, c) => s + (c.price * (c.qty || 1)), 0);
   if (!currentUser) { showModal('auth-modal'); return; }
+  if (!isSellerAccount()) {
+    toast('Seller wallet required', 'Only sellers can pay from available revenue.', 'warn');
+    return;
+  }
 
-  const btn = document.querySelector('#co-p2 .btn') || document.querySelector('.btn-primary');
+  const btn = document.querySelector('#pm-paystack-panel .btn-paystack') || document.querySelector('#pm-paystack-panel .btn-primary');
   const oldHtml = btn?.innerHTML;
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processing Wallet Debit...'; }
 
@@ -2153,16 +2254,25 @@ async function payWithWalletRevenue() {
       delivery_phone: document.getElementById('co-phone').value.trim(),
       delivery_address: document.getElementById('co-address').value.trim(),
     };
+    if (!checkoutPayload.delivery_name || !checkoutPayload.delivery_phone || !checkoutPayload.delivery_address) {
+      toast('Delivery info needed', 'Enter your name, phone, and address before paying.', 'warn');
+      goCheckoutStep(1);
+      return;
+    }
 
     const secretComm = Math.round(rawProductTotal * PLATFORM_FEE_PCT);
     const hiddenTotalBillAmount = rawProductTotal + secretComm;
+    const wallet = await getSellerAvailableRevenue(currentUser.id);
+    if (wallet.available < hiddenTotalBillAmount) {
+      toast('Insufficient Funds', `Available revenue is ${fmtN(wallet.available)}.`, 'warn');
+      if (currentUser.profile) currentUser.profile.wallet_balance = wallet.available;
+      const wdAvailable = document.getElementById('wd-available');
+      if (wdAvailable) wdAvailable.textContent = fmtN(wallet.available);
+      return;
+    }
 
-    const result = await callEdge('verify-payment', {
-      reference: 'wal_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
-      ...checkoutPayload,
-      payment_method: 'wallet_revenue',
-      total_amount: hiddenTotalBillAmount
-    });
+    const walletRef = 'wal_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const result = await createWalletRevenueOrder(checkoutPayload, hiddenTotalBillAmount, walletRef);
 
     if (result.success) {
       const seller = cart[0]?.profiles;
@@ -2549,8 +2659,16 @@ async function loadSellerStats() {
   document.getElementById('st-trial').textContent = daysLeft > 0 ? `${daysLeft}d left` : 'Expired';
   document.getElementById('st-days').textContent = daysLeft > 0 ? 'Free Trial' : 'Pay Commission';
   // Withdrawal data
-  document.getElementById('wd-available').textContent = fmtN(Math.max(0, revenue * 0.92));
-  document.getElementById('wd-total').textContent = fmtN(0);
+  try {
+    const wallet = await getSellerAvailableRevenue(currentUser.id);
+    document.getElementById('wd-available').textContent = fmtN(wallet.available);
+    document.getElementById('wd-total').textContent = fmtN(wallet.paid);
+    if (currentUser.profile) currentUser.profile.wallet_balance = wallet.available;
+  } catch (err) {
+    console.warn('Could not refresh seller available revenue:', err);
+    document.getElementById('wd-available').textContent = fmtN(Math.max(0, revenue * 0.92));
+    document.getElementById('wd-total').textContent = fmtN(0);
+  }
   // Orders badge
   const pending = (orders||[]).filter(o=>o.status==='pending').length;
   const badge = document.getElementById('orders-badge');
@@ -3313,11 +3431,10 @@ async function loadWithdrawalData() {
   if (!currentUser) return;
   
   // Simultaneously pull profile configs, raw order vectors, standard bank payouts, and internal wallet purchases
-  const [{ data: profile }, { data: orders }, { data: withdrawals }, { data: walletTransactions }] = await Promise.all([
+  const [{ data: profile }, { data: withdrawals }, wallet] = await Promise.all([
     db.from('profiles').select('bank_name,account_number,account_name').eq('id', currentUser.id).maybeSingle(),
-    db.from('orders').select('total_amount,status').eq('seller_id', currentUser.id),
     db.from('withdrawals').select('amount,status,created_at,id').eq('seller_id', currentUser.id).order('created_at',{ascending:false}),
-    db.from('wallet_transactions').select('amount').eq('seller_id', currentUser.id).eq('type', 'debit_purchase')
+    getSellerAvailableRevenue(currentUser.id)
   ]);
 
   if (profile) {
@@ -3327,19 +3444,9 @@ async function loadWithdrawalData() {
     document.getElementById('wd-acct-name').textContent = profile.account_name || '—';
   }
 
-  // 1. Compute historical marketplace incoming streams (92% net merchant split)
-  const revenue = (orders || []).filter(o => o.status === 'delivered').reduce((s, o) => s + Number(o.total_amount || 0), 0);
-  
-  // 2. Compute classic outward bank wire transfers
-  const pendingAmt = (withdrawals || []).filter(w => w.status === 'pending').reduce((s, w) => s + Number(w.amount || 0), 0);
-  const totalPaid = (withdrawals || []).filter(w => w.status === 'paid').reduce((s, w) => s + Number(w.amount || 0), 0);
-  
-  // 3. Compute closed-loop internal purchase debits
-  const internalSpentAmt = (walletTransactions || []).reduce((s, t) => s + Number(t.amount || 0), 0);
-
-  // 4. UNIFIED LEDGER FORMULA PASS
-  // Net Funds Available = (Delivered GMV * 0.92) - Pending Bank Cashouts - Completed Bank Cashouts - Internal Purchases
-  const available = Math.max(0, (revenue * 0.92) - pendingAmt - totalPaid - internalSpentAmt);
+  const available = wallet.available;
+  const pendingAmt = wallet.pending;
+  const totalPaid = wallet.paid;
 
   // 5. Render exact calculated metrics cleanly to display viewport layout frames
   document.getElementById('wd-available').textContent = fmtN(available);
@@ -3358,6 +3465,13 @@ async function requestWithdrawal() {
   const amount = parseFloat(document.getElementById('wd-amount').value);
   if (!amount || amount < 5000) { toast('Minimum withdrawal is ₦5,000','','warn'); return; }
   try {
+    const wallet = await getSellerAvailableRevenue(currentUser.id);
+    if (amount > wallet.available) {
+      toast('Insufficient Balance', `You can withdraw up to ${fmtN(wallet.available)} after wallet purchases and pending withdrawals.`, 'warn');
+      document.getElementById('wd-available').textContent = fmtN(wallet.available);
+      if (currentUser.profile) currentUser.profile.wallet_balance = wallet.available;
+      return;
+    }
     await callEdge('request-withdrawal', {
       amount,
       bank_name:      currentUser.profile?.bank_name      || '',
@@ -3367,7 +3481,7 @@ async function requestWithdrawal() {
   } catch(e) { toast('Error', e.message, 'error'); return; }
   toast('Withdrawal Requested!', `₦${fmtNum(amount)} – processed within 24hrs`, 'success');
   document.getElementById('wd-amount').value = '';
-  document.getElementById('wd-pending').textContent = fmtN(amount);
+  await loadWithdrawalData();
 }
 
 // ====================================================
@@ -5364,7 +5478,10 @@ document.getElementById('sf-name').textContent = seller.name || 'Seller Store';
 function missingColumn(error) {
   if (!error) return "";
   const text = `${error.message || ""} ${error.details || ""} ${error.hint || ""}`;
-  const quoted = text.match(/'([^']+)' column/i) || text.match(/column "([^"]+)"/i);
+  const quoted =
+    text.match(/find the '([^']+)' column/i) ||
+    text.match(/'([^']+)' column/i) ||
+    text.match(/column "([^"]+)"/i);
   return quoted ? quoted[1] : "";
 }
 
