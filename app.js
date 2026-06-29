@@ -233,8 +233,10 @@ if (typeof supabase !== 'undefined') {
         console.warn("⚠️ Background profile parsing deferred:", e.message);
       }
 
-      // Keep passive session restores on the market landing. Only button clicks set this pass.
-      if (!appStorage.getItem('bs_manual_navigation_pass')) {
+      const shouldContinueAfterAuth = appStorage.getItem('bs_manual_navigation_pass') || hasAuthRedirectParams();
+
+      // Keep passive session restores on the market landing. OAuth callbacks and button clicks route into the app.
+      if (!shouldContinueAfterAuth) {
         console.log("Background session detected. Holding layout on market landing.");
         showMarketLandingPage();
       } else {
@@ -390,11 +392,36 @@ function profileHasSellerAccess(profile = currentUser?.profile) {
   return role === 'seller' || role === 'admin' || accounts === 'seller' || accounts === 'both';
 }
 
+function profileEntryRole(profile = currentUser?.profile) {
+  const role = profile?.role;
+  const accounts = profile?.accounts;
+  if (role === 'service_provider' || accounts === 'service_provider') return 'service_provider';
+  if (role === 'seller' || role === 'admin' || accounts === 'seller' || accounts === 'both') return 'seller';
+  return 'buyer';
+}
+
+function hasAuthRedirectParams() {
+  const params = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+  return params.has('code') ||
+    params.has('state') ||
+    hashParams.has('access_token') ||
+    hashParams.has('refresh_token') ||
+    hashParams.has('provider_token');
+}
+
+function cleanAuthRedirectUrl() {
+  if (!hasAuthRedirectParams() || !window.history?.replaceState) return;
+  window.history.replaceState({}, document.title, window.location.pathname);
+}
+
 function continuePendingEntry() {
   if (!currentUser) return;
-  const role = getPendingEntryRole();
+  const requestedRole = getPendingEntryRole();
+  const role = requestedRole === 'buyer' ? profileEntryRole() : requestedRole;
   appStorage.removeItem('bs_manual_navigation_pass');
   clearPendingEntryRole();
+  cleanAuthRedirectUrl();
 
   if (role === 'seller' || role === 'both') {
     if (profileHasSellerAccess()) {
@@ -695,7 +722,7 @@ async function checkSession() {
     if (event === 'SIGNED_IN' && session?.user) {
       if (!currentUser) {
         await onAuthSuccess(session.user);
-        if (appStorage.getItem('bs_manual_navigation_pass')) {
+        if (appStorage.getItem('bs_manual_navigation_pass') || hasAuthRedirectParams()) {
           continuePendingEntry();
         } else {
           showMarketLandingPage();
@@ -725,6 +752,7 @@ async function checkSession() {
   const { data: { session } } = await db.auth.getSession();
   if (session?.user) {
     await onAuthSuccess(session.user);
+    if (hasAuthRedirectParams()) continuePendingEntry();
   }
 }
 
@@ -1053,7 +1081,7 @@ function isKycApprovedStatus(status) {
 
 async function getSellerKycStatus(userId = currentUser?.id) {
   if (!userId) return { status: 'missing', row: null };
-  if (currentUser?.profile && isKycApprovedStatus(currentUser.profile.kyc_status || currentUser.profile.verification_status)) {
+  if (currentUser?.profile && (currentUser.profile.seller_verified || isKycApprovedStatus(currentUser.profile.kyc_status || currentUser.profile.verification_status))) {
     return { status: 'approved', row: null };
   }
   try {
@@ -1927,11 +1955,16 @@ async function startCheckout() {
     const gridContainer = methodGrid.querySelector('.payment-method-grid');
     if (gridContainer) {
       gridContainer.outerHTML = `
-        <div class="payment-method-grid" style="display:grid; grid-template-columns: ${isSeller ? '1fr 1fr' : '1fr'}; gap:0.7rem;">
+        <div class="payment-method-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap:0.7rem;">
           <div class="payment-method-card paystack-card selected" id="pm-paystack" onclick="selectCheckoutPaymentMethod('paystack')">
             <span class="payment-method-icon"><i class="fa-solid fa-credit-card" style="color:#0BA4DB"></i></span>
             <div class="payment-method-title">Paystack Checkout</div>
             <div class="payment-method-sub">Cards, USSD, Transfer</div>
+          </div>
+          <div class="payment-method-card" id="pm-transfer" onclick="selectCheckoutPaymentMethod('transfer')">
+            <span class="payment-method-icon"><i class="fa-solid fa-building-columns" style="color:var(--gold)"></i></span>
+            <div class="payment-method-title">Bank Transfer</div>
+            <div class="payment-method-sub">Upload receipt</div>
           </div>
           ${walletCardHtml}
         </div>`;
@@ -1949,10 +1982,16 @@ async function startCheckout() {
       <div class="font-bold text-sm">${fmtN(c.price*(c.qty||1))}</div>
     </div>`).join('');
     
-  // Explicitly strip bank account layout text nodes out of display trees completely
+  const sellerProfile = cart[0]?.profiles || {};
   const bankBox = document.getElementById('seller-bank-details-co');
   if (bankBox) {
-    bankBox.innerHTML = `<p class="text-xs color-text3 p-2">Secure electronic processing managed directly by Paystack.</p>`;
+    const hasBankDetails = sellerProfile.bank_name && sellerProfile.account_number && sellerProfile.account_name;
+    bankBox.innerHTML = hasBankDetails
+      ? `
+        <div class="pay-row"><span class="label">Bank</span><span class="value">${escHtml(sellerProfile.bank_name)}</span></div>
+        <div class="pay-row"><span class="label">Account No.</span><span class="value">${escHtml(sellerProfile.account_number)}</span></div>
+        <div class="pay-row"><span class="label">Account Name</span><span class="value">${escHtml(sellerProfile.account_name)}</span></div>`
+      : `<p class="text-xs color-text3 p-2">Seller bank details are not available. Please use Paystack checkout.</p>`;
   }
 }
 function goCheckoutStep(step) {
@@ -1973,17 +2012,7 @@ function goCheckoutStep(step) {
 }
 
 function selectPM(method) {
-  checkoutPaymentMethod = 'paystack'; // Enforce Paystack exclusively
-  
-  const pmPaystack = document.getElementById('pm-paystack');
-  const pmTransfer = document.getElementById('pm-transfer');
-  const pmPaystackPanel = document.getElementById('pm-paystack-panel');
-  const pmTransferPanel = document.getElementById('pm-transfer-panel');
-
-  if (pmPaystack) pmPaystack.classList.add('selected');
-  if (pmTransfer) pmTransfer.classList.remove('selected');
-  if (pmPaystackPanel) pmPaystackPanel.classList.remove('hidden');
-  if (pmTransferPanel) pmTransferPanel.classList.add('hidden');
+  selectCheckoutPaymentMethod(method);
 }
 
 function isPaystackReady() {
@@ -2150,15 +2179,24 @@ async function payWithPaystack() {
 
 // --- NEW WALLET SELECTION METHOD AND ENGINE CORES ---
 function selectCheckoutPaymentMethod(method) {
-  checkoutPaymentMethod = method;
-  document.getElementById('pm-paystack').classList.toggle('selected', method === 'paystack');
+  const nextMethod = ['paystack', 'transfer', 'wallet'].includes(method) ? method : 'paystack';
+  checkoutPaymentMethod = nextMethod;
+  const paystackCard = document.getElementById('pm-paystack');
+  const transferCard = document.getElementById('pm-transfer');
   const walletCard = document.getElementById('pm-wallet');
-  if (walletCard) walletCard.classList.toggle('selected', method === 'wallet');
+  const paystackPanel = document.getElementById('pm-paystack-panel');
+  const transferPanel = document.getElementById('pm-transfer-panel');
+
+  if (paystackCard) paystackCard.classList.toggle('selected', nextMethod === 'paystack');
+  if (transferCard) transferCard.classList.toggle('selected', nextMethod === 'transfer');
+  if (walletCard) walletCard.classList.toggle('selected', nextMethod === 'wallet');
+  if (paystackPanel) paystackPanel.classList.toggle('hidden', nextMethod === 'transfer');
+  if (transferPanel) transferPanel.classList.toggle('hidden', nextMethod !== 'transfer');
   
   // Dynamically flip the submit button execution routing target
   const payBtn = document.querySelector('#pm-paystack-panel .btn-paystack') || document.querySelector('#co-p2 .btn-primary');
   if (payBtn) {
-    if (method === 'wallet') {
+    if (nextMethod === 'wallet') {
       payBtn.setAttribute('onclick', 'payWithWalletRevenue()');
       payBtn.innerHTML = '<i class="fa-solid fa-wallet"></i> Pay with Wallet Balance';
       payBtn.className = 'btn btn-primary btn-full btn-lg';
@@ -2191,6 +2229,30 @@ async function insertWithMissingColumnRetry(tableName, row, selectCols = '*') {
   }
 
   throw new Error(`Could not insert into ${tableName}`);
+}
+
+async function updateWithMissingColumnRetry(tableName, row, match) {
+  const payload = { ...row };
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    let query = db.from(tableName).update(payload);
+    Object.entries(match || {}).forEach(([key, value]) => {
+      query = query.eq(key, value);
+    });
+    const { error } = await query;
+
+    if (!error) return;
+
+    const col = missingColumn(error);
+    if (col && Object.prototype.hasOwnProperty.call(payload, col)) {
+      delete payload[col];
+      continue;
+    }
+
+    throw error;
+  }
+
+  throw new Error(`Could not update ${tableName}`);
 }
 
 async function createWalletRevenueOrder(checkoutPayload, totalAmount, walletRef) {
@@ -2328,6 +2390,12 @@ async function submitTransferOrder() {
   if (!deliveryName || !deliveryPhone || !deliveryAddress) {
     toast('Delivery info needed', 'Enter your name, phone, and address before submitting.', 'warn');
     goCheckoutStep(1);
+    return;
+  }
+  const sellerProfile = cart[0]?.profiles || {};
+  if (!sellerProfile.bank_name || !sellerProfile.account_number || !sellerProfile.account_name) {
+    toast('Bank transfer unavailable', 'This seller has not added bank details. Please use Paystack checkout.', 'warn');
+    selectCheckoutPaymentMethod('paystack');
     return;
   }
   if (!fileInput.files?.[0]) { toast('Please upload payment proof','','warn'); return; }
@@ -3201,13 +3269,14 @@ function payCommissionViaWallet() {
   if (!currentUser) return;
   const availableBalText = document.getElementById('wd-available')?.textContent || '₦0';
   const availableBalance = parseFloat(availableBalText.replace(/[^\d.]/g, '')) || 0;
+  const commissionNaira = COMMISSION_AMOUNT / 100;
   
-  if (availableBalance < 5000) {
-    toast('Insufficient Funds', 'Your Wallet balance must be at least ₦5,000 to renew subscription.', 'warn');
+  if (availableBalance < commissionNaira) {
+    toast('Insufficient Funds', `Your Wallet balance must be at least ${fmtN(commissionNaira)} to renew subscription.`, 'warn');
     return;
   }
   
-  if (!confirm('Deduct ₦5,000 from your marketplace wallet revenue to instantly extend store validity for 30 days?')) return;
+  if (!confirm(`Deduct ${fmtN(commissionNaira)} from your marketplace wallet revenue to instantly extend store validity for 30 days?`)) return;
   
   const badge = document.getElementById('comm-status-badge');
   toast('Processing Ledger Adjustment...', '', 'info');
@@ -3258,7 +3327,7 @@ async function submitCommissionReceipt() {
       seller_id:       currentUser.id,
       receipt_url:     receiptUrl,
       transaction_ref: validateInput(ref),
-      amount:          5000,
+      amount:          COMMISSION_AMOUNT / 100,
       status:          'pending'
     });
 
@@ -6177,18 +6246,34 @@ function openHelpModal() { showModal('help-modal'); }
 // ====================================================
 //  ADMIN KYC MANAGEMENT
 // ====================================================
+function getAdminKycElement(id) {
+  return document.querySelector(`#admin-portal-view #${id}`) || document.getElementById(id);
+}
+
 async function loadAdminKyc() {
   if (!guardAdminPanel()) return;
-  const skeleton = document.getElementById('adm-kyc-skeleton');
-  const list = document.getElementById('adm-kyc-list');
-  const empty = document.getElementById('adm-kyc-empty');
+  const skeleton = getAdminKycElement('adm-kyc-skeleton');
+  const list = getAdminKycElement('adm-kyc-list');
+  const empty = getAdminKycElement('adm-kyc-empty');
   skeleton?.classList.remove('hidden'); list?.classList.add('hidden'); empty?.classList.add('hidden');
 
   try {
-    const filter = document.getElementById('adm-kyc-filter')?.value || 'pending';
-    let query = db.from('kyc_verifications').select('*, profiles(name, email, whatsapp)').order('created_at', { ascending: false });
+    const filter = getAdminKycElement('adm-kyc-filter')?.value || 'pending';
+    let query = db.from('kyc_verifications').select('*').order('created_at', { ascending: false });
     if (filter !== 'all') query = query.eq('status', filter);
-    const { data: rows } = await query;
+    const { data: rows, error } = await query;
+    if (error) throw error;
+
+    const userIds = [...new Set((rows || []).map(k => k.user_id).filter(Boolean))];
+    const profileMap = new Map();
+    if (userIds.length) {
+      const { data: profiles, error: profileError } = await db
+        .from('profiles')
+        .select('id,name,email,whatsapp')
+        .in('id', userIds);
+      if (profileError) console.warn('KYC profile lookup failed:', profileError);
+      (profiles || []).forEach(profile => profileMap.set(profile.id, profile));
+    }
 
     skeleton?.classList.add('hidden');
     if (!rows || !rows.length) { empty?.classList.remove('hidden'); return; }
@@ -6196,6 +6281,7 @@ async function loadAdminKyc() {
     list.style.display = 'flex';
 
     list.innerHTML = rows.map(k => {
+      const profile = profileMap.get(k.user_id) || {};
       const isPending = k.status === 'pending';
       const statusBadge = k.status === 'approved' ? '<span class="badge badge-green">Approved</span>'
         : k.status === 'rejected' ? '<span class="badge badge-red">Rejected</span>'
@@ -6204,8 +6290,8 @@ async function loadAdminKyc() {
         <div class="card card-pad">
           <div class="flex justify-between items-start gap-2 flex-wrap mb-2">
             <div>
-              <div class="font-bold">${escHtml(k.profiles?.name || 'Unknown')}</div>
-              <div class="text-xs color-text3">${escHtml(k.profiles?.email || '')}</div>
+              <div class="font-bold">${escHtml(profile.name || 'Unknown')}</div>
+              <div class="text-xs color-text3">${escHtml(profile.email || '')}</div>
             </div>
             <div class="flex items-center gap-2">${statusBadge}<span class="text-xs color-text3">${fmtDate(k.created_at)}</span></div>
           </div>
@@ -6227,7 +6313,7 @@ async function loadAdminKyc() {
     }).join('');
   } catch(e) {
     skeleton?.classList.add('hidden');
-    list.innerHTML = `<div class="text-center color-danger p-3">Error: ${e.message}</div>`;
+    if (list) list.innerHTML = `<div class="text-center color-danger p-3">Error: ${escHtml(e.message || 'Could not load KYC submissions')}</div>`;
     list?.classList.remove('hidden');
   }
 }
@@ -6239,9 +6325,15 @@ async function adminApproveKyc(kycId, userId) {
       await callEdge('admin-action', { action: 'approve_kyc', target_id: kycId, data: { user_id: userId } });
     } catch (edgeError) {
       console.warn('approve_kyc function failed, using scoped update:', edgeError);
-      const { error: kycError } = await db.from('kyc_verifications').update({ status: 'approved' }).eq('id', kycId);
-      if (kycError) throw kycError;
-      await db.from('profiles').update({ kyc_status: 'approved', seller_verified: true }).eq('id', userId);
+      await updateWithMissingColumnRetry('kyc_verifications', {
+        status: 'approved',
+        reviewed_at: new Date().toISOString(),
+      }, { id: kycId });
+      await updateWithMissingColumnRetry('profiles', {
+        kyc_status: 'approved',
+        verification_status: 'verified',
+        seller_verified: true,
+      }, { id: userId });
     }
     toast('KYC Approved ✅', 'Seller is now verified.', 'success');
     loadAdminKyc();
@@ -6255,9 +6347,16 @@ async function adminRejectKyc(kycId, userId) {
       await callEdge('admin-action', { action: 'reject_kyc', target_id: kycId, data: { user_id: userId, reason } });
     } catch (edgeError) {
       console.warn('reject_kyc function failed, using scoped update:', edgeError);
-      const { error: kycError } = await db.from('kyc_verifications').update({ status: 'rejected', admin_note: reason }).eq('id', kycId);
-      if (kycError) throw kycError;
-      await db.from('profiles').update({ kyc_status: 'rejected', seller_verified: false }).eq('id', userId);
+      await updateWithMissingColumnRetry('kyc_verifications', {
+        status: 'rejected',
+        admin_note: reason,
+        reviewed_at: new Date().toISOString(),
+      }, { id: kycId });
+      await updateWithMissingColumnRetry('profiles', {
+        kyc_status: 'rejected',
+        verification_status: 'rejected',
+        seller_verified: false,
+      }, { id: userId });
     }
     toast('KYC Rejected', 'Seller has been notified.', 'info');
     loadAdminKyc();
@@ -6267,7 +6366,7 @@ async function adminRejectKyc(kycId, userId) {
 // ====================================================
 //  SELLER KYC SUBMISSION
 // ====================================================
-async function submitKyc(event) {
+async function submitKycLegacy(event) {
   event.preventDefault();
   if (!currentUser) { showModal('auth-modal'); return; }
   const btn = document.getElementById('kyc-submit-btn');
@@ -6319,6 +6418,85 @@ async function submitKyc(event) {
     toast('Submission Error', e.message, 'error');
   }
   btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-shield-check"></i> Submit Verification';
+}
+
+async function submitKyc(event) {
+  event.preventDefault();
+  if (!currentUser) { showModal('auth-modal'); return; }
+  const btn = document.getElementById('kyc-submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Submitting...';
+
+  try {
+    const docType = document.getElementById('kyc-doc-type').value;
+    const docNum = document.getElementById('kyc-doc-number').value.trim();
+    const fullName = document.getElementById('kyc-full-name').value.trim();
+    const frontFile = document.getElementById('kyc-front').files[0];
+    const backFile = document.getElementById('kyc-back').files?.[0];
+    const selfieFile = document.getElementById('kyc-selfie').files[0];
+
+    if (!docType || !docNum || !fullName || !frontFile || !selfieFile) {
+      toast('Missing fields', 'Please fill all required fields', 'warn');
+      return;
+    }
+
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/pjpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/jfif', 'image/avif'];
+    const allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'jfif', 'avif'];
+    const maxSize = 10 * 1024 * 1024;
+    function validateKycFile(file, label) {
+      const rawName = file?.name || '';
+      const ext = rawName.includes('.') ? rawName.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+      const looksLikeImage = file?.type?.startsWith('image/') || allowedTypes.includes(file?.type) || allowedExts.includes(ext);
+      if (!looksLikeImage) throw new Error(`${label} must be an image file.`);
+      if (file.size > maxSize) throw new Error(`${label} must be 10MB or smaller.`);
+      return allowedExts.includes(ext) ? ext : 'jpg';
+    }
+
+    async function uploadKycFile(file, label) {
+      const ext = validateKycFile(file, label);
+      const path = `kyc/${currentUser.id}/${label}_${Date.now()}.${ext}`;
+      const uploaded = await uploadToFirstAvailableBucket(['kyc', 'uploads', 'products'], path, file, {
+        contentType: file.type || undefined,
+        upsert: false,
+      });
+      return uploaded.publicUrl;
+    }
+
+    const frontUrl = await uploadKycFile(frontFile, 'front');
+    const backUrl = backFile ? await uploadKycFile(backFile, 'back') : null;
+    const selfieUrl = await uploadKycFile(selfieFile, 'selfie');
+
+    await insertWithMissingColumnRetry('kyc_verifications', {
+      user_id: currentUser.id,
+      doc_type: docType,
+      doc_number: docNum,
+      full_name: fullName,
+      front_url: frontUrl,
+      back_url: backUrl,
+      selfie_url: selfieUrl,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+    }, false);
+
+    await updateWithMissingColumnRetry('profiles', {
+      kyc_status: 'pending',
+      verification_status: 'pending',
+      seller_verified: false,
+    }, { id: currentUser.id });
+    currentUser.profile = { ...(currentUser.profile || {}), kyc_status: 'pending' };
+    document.getElementById('kyc-form')?.reset();
+    document.getElementById('kyc-front-label').textContent = 'Tap to upload front of ID';
+    document.getElementById('kyc-back-label').textContent = 'Tap to upload back of ID';
+    const selfieLabel = document.getElementById('kyc-selfie-label');
+    if (selfieLabel) selfieLabel.textContent = 'Take a selfie holding your ID next to your face';
+    closeModal('kyc-modal');
+    toast('KYC Submitted!', 'Your documents are under review.', 'success');
+  } catch(e) {
+    toast('Submission Error', e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-shield-check"></i> Submit Verification';
+  }
 }
 
 // ====================================================
@@ -6507,6 +6685,79 @@ async function showCompareModal() {
 let currentChatPartner = null;
 let currentChatProductId = null;
 let messageChannel = null;
+let pendingMessageImage = null;
+
+function extractMessageImageUrl(message = {}) {
+  const direct = message.image_url || message.attachment_url || message.media_url || message.file_url;
+  if (direct) return sanitizeUrl(direct);
+  const meta = typeof message.metadata === 'string'
+    ? (() => { try { return JSON.parse(message.metadata); } catch { return {}; } })()
+    : (message.metadata || {});
+  const metaUrl = meta.image_url || meta.attachment_url || meta.media_url || meta.url;
+  if (metaUrl) return sanitizeUrl(metaUrl);
+  const content = String(message.content || '');
+  const match = content.match(/https?:\/\/[^\s]+?\.(?:jpg|jpeg|png|webp|gif|avif|heic|heif)(?:\?[^\s]*)?/i);
+  return match ? sanitizeUrl(match[0]) : '';
+}
+
+function messageTextWithoutImageUrl(message = {}) {
+  const imageUrl = extractMessageImageUrl(message);
+  const content = String(message.content || '').trim();
+  return imageUrl ? content.replace(imageUrl, '').trim() : content;
+}
+
+function renderMessageBubble(message) {
+  const isMine = message.sender_id === currentUser.id;
+  const imageUrl = extractMessageImageUrl(message);
+  const text = messageTextWithoutImageUrl(message);
+  const imageHtml = imageUrl
+    ? `<img src="${escAttr(imageUrl)}" alt="Chat image" class="msg-image" loading="lazy" onclick="window.open('${escAttr(imageUrl)}','_blank')">`
+    : '';
+  const textHtml = text ? escHtml(text) : '';
+  return `<div class="msg-bubble ${isMine ? 'mine' : 'theirs'}">${imageHtml}${textHtml}<div class="msg-time">${formatMsgTime(message.created_at)}${isMine ? ` <span>${message.is_read ? 'Read' : 'Sent'}</span>` : ''}</div></div>`;
+}
+
+function messagePreviewText(message = {}) {
+  const text = messageTextWithoutImageUrl(message);
+  return text || (extractMessageImageUrl(message) ? 'Image' : '');
+}
+
+function clearMessageImage() {
+  pendingMessageImage = null;
+  const input = document.getElementById('msg-image-input');
+  const preview = document.getElementById('msg-image-preview');
+  if (input) input.value = '';
+  if (preview) {
+    preview.classList.add('hidden');
+    preview.innerHTML = '';
+  }
+}
+
+function handleMessageImageSelect(input) {
+  const file = input?.files?.[0];
+  if (!file) { clearMessageImage(); return; }
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/pjpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'image/heic', 'image/heif'];
+  const allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'heic', 'heif'];
+  const ext = (file.name || '').includes('.') ? file.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+  const looksLikeImage = file.type?.startsWith('image/') || allowedTypes.includes(file.type) || allowedExts.includes(ext);
+  if (!looksLikeImage) {
+    toast('Invalid image', 'Please choose a JPG, PNG, WebP, GIF, AVIF, or HEIC image.', 'warn');
+    clearMessageImage();
+    return;
+  }
+  if (file.size > 8 * 1024 * 1024) {
+    toast('Image too large', 'Maximum chat image size is 8MB.', 'warn');
+    clearMessageImage();
+    return;
+  }
+  pendingMessageImage = file;
+  const preview = document.getElementById('msg-image-preview');
+  if (preview) {
+    const url = URL.createObjectURL(file);
+    preview.innerHTML = `<img src="${escAttr(url)}" alt=""><span>${escHtml(file.name || 'Selected image')}</span><button type="button" onclick="clearMessageImage()" title="Remove image"><i class="fa-solid fa-times"></i></button>`;
+    preview.classList.remove('hidden');
+  }
+}
 
 function openMessageModal(partnerId, partnerName = 'Seller', productId = null) {
   if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
@@ -6590,7 +6841,7 @@ async function showInbox() {
         partners[pid] = {
           id: pid,
           name: partnerNameFromProfile(profile),
-          lastMsg: m.content,
+          lastMsg: messagePreviewText(m),
           time: m.created_at,
           productId: m.product_id || '',
           unread: 0,
@@ -6644,7 +6895,7 @@ async function openConversation(partnerId, partnerName, productId = null) {
       const day = formatMsgDay(m.created_at);
       const divider = day !== lastDay ? `<div class="msg-day-divider">${escHtml(day)}</div>` : '';
       lastDay = day;
-      return `${divider}<div class="msg-bubble ${isMine ? 'mine' : 'theirs'}">${escHtml(m.content)}<div class="msg-time">${formatMsgTime(m.created_at)}${isMine ? ` <span>${m.is_read ? 'Read' : 'Sent'}</span>` : ''}</div></div>`;
+      return `${divider}${renderMessageBubble(m)}`;
     }).join('') || '<div class="msg-empty">No messages yet. Start with a quick question below.</div>';
     conv.scrollTop = conv.scrollHeight;
   } catch(e) { conv.innerHTML = '<p class="text-center color-text3 p-3">Could not load conversation.</p>'; }
@@ -6682,19 +6933,42 @@ async function sendMessage() {
   if (!currentUser || !currentChatPartner) return;
   const input = document.getElementById('msg-input');
   const text = input.value.trim();
-  if (!text) return;
+  const imageFile = pendingMessageImage;
+  if (!text && !imageFile) return;
   const sendBtn = document.getElementById('msg-send-btn');
   input.value = '';
   if (sendBtn) sendBtn.disabled = true;
   
 try {
+    let imageUrl = '';
+    if (imageFile) {
+      const ext = (imageFile.name || '').includes('.') ? imageFile.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') : 'jpg';
+      const path = `chat/${currentUser.id}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext || 'jpg'}`;
+      const uploaded = await uploadToFirstAvailableBucket(['chat', 'uploads', 'products'], path, imageFile, {
+        contentType: imageFile.type || undefined,
+        upsert: false,
+      });
+      imageUrl = uploaded.publicUrl;
+    }
+
+    const content = imageUrl
+      ? [text, imageUrl].filter(Boolean).join('\n')
+      : String(text);
+
     // Sanitize and structure the payload fields cleanly
     const payload = { 
       sender_id: currentUser.id, 
       receiver_id: currentChatPartner, 
-      content: String(text), // Enforce pure string primitive type explicitly
+      content, // Keep image URL in content as a compatibility fallback for older schemas.
       is_read: false 
     };
+
+    if (imageUrl) {
+      payload.image_url = imageUrl;
+      payload.attachment_url = imageUrl;
+      payload.attachment_type = 'image';
+      payload.metadata = { image_url: imageUrl, attachment_type: 'image' };
+    }
     
     if (currentChatProductId) {
       payload.product_id = currentChatProductId;
@@ -6704,24 +6978,32 @@ try {
     // it must be safely included or initialized as a valid JSON string structure like this:
     // payload.metadata = {}; 
     
-    let { error } = await db.from('messages').insert(payload);
-    
-    // Catch either a missing column schema mismatch or a foreign key relation error (deleted products)
-    const errText = (error?.message || '').toLowerCase();
-    const isForeignKeyViolation = errText.includes('foreign key') || errText.includes('fkey');
-    const isMissingColumn = missingColumn(error) === 'product_id';
-    
-    if (error && (isMissingColumn || isForeignKeyViolation)) {
-      console.warn('Product relationship context is invalid or missing in DB. Removing product_id context and retrying plain chat delivery...');
-      delete payload.product_id;
-      
-      // Retry query without product connection so the user chat still drops into the inbox
-      const retry = await db.from('messages').insert(payload);
-      if (retry.error) throw retry.error;
-    } else if (error) {
+    let delivered = false;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const { error } = await db.from('messages').insert(payload);
+      if (!error) {
+        delivered = true;
+        break;
+      }
+
+      const errText = (error?.message || '').toLowerCase();
+      const isForeignKeyViolation = errText.includes('foreign key') || errText.includes('fkey');
+      const missing = missingColumn(error);
+
+      if ((missing === 'product_id') || isForeignKeyViolation) {
+        console.warn('Product relationship context is invalid or missing in DB. Removing product_id context and retrying plain chat delivery...');
+        delete payload.product_id;
+        continue;
+      }
+      if (missing && Object.prototype.hasOwnProperty.call(payload, missing)) {
+        delete payload[missing];
+        continue;
+      }
       throw error;
     }
+    if (!delivered) throw new Error('Could not save message.');
     
+    clearMessageImage();
     openConversation(currentChatPartner, document.getElementById('msg-partner-name').textContent, currentChatProductId);
   } catch(e) {
     input.value = text; // Return text buffer to text input field if execution fails entirely
@@ -6946,7 +7228,7 @@ async function createFlashSale() {
 //  AD SYSTEM
 // ====================================================
 let adPopupAds = [], adPopupIndex = 0, adSkipTimer = null;
-const AD_PRICE_KOBO = 1000000;
+const AD_PRICE_KOBO = 500000;
 
 function normalizeAdUrl(url) {
   const raw = String(url || '').trim();
