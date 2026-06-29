@@ -1,7 +1,6 @@
 /* ====================================================
    DESIGN SYSTEM v3
 ==================================================== */
-
 :root {
   --forest:#0b1f14; --forest2:#122b1c; --forest3:#1a3a26;
   --green:#19a847; --green-lt:#22c55e; --green-xlt:#dcfce7;
@@ -574,6 +573,8 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .msg-bubble{max-width:78%;padding:.56rem .72rem;border-radius:14px;font-size:.86rem;line-height:1.35;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow-wrap:anywhere}
 .msg-bubble.mine{align-self:flex-end;background:var(--green);color:#fff;border-bottom-right-radius:4px}
 .msg-bubble.theirs{align-self:flex-start;background:#fff;color:var(--text);border-bottom-left-radius:4px}
+.msg-bubble .msg-image{display:block;width:100%;max-width:240px;max-height:280px;object-fit:cover;border-radius:10px;margin-bottom:.42rem;background:rgba(0,0,0,.08);cursor:pointer}
+.msg-bubble.mine .msg-image{box-shadow:0 0 0 1px rgba(255,255,255,.18)}
 .msg-time{font-size:.64rem;opacity:.62;margin-top:.22rem;display:flex;justify-content:flex-end;gap:.25rem}
 .msg-empty{margin:auto;text-align:center;color:var(--text3);font-size:.82rem;max-width:260px;line-height:1.45}
 .msg-quick-row{display:flex;gap:.4rem;overflow-x:auto;padding:.55rem .75rem;border-top:1px solid var(--border);background:#fff}
@@ -581,6 +582,12 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .msg-input-row{padding:.62rem .75rem;display:flex;gap:.45rem;border-top:1px solid var(--border);background:#fff;align-items:flex-end}
 .msg-input-row textarea{flex:1;resize:none;max-height:96px;line-height:1.35}
 .msg-input-row button{width:42px;height:42px;justify-content:center;flex-shrink:0}
+.msg-attach-btn{color:var(--green);border-color:var(--border)}
+.msg-image-preview{border-top:1px solid var(--border);background:#fff;padding:.5rem .75rem;display:flex;align-items:center;gap:.6rem}
+.msg-image-preview.hidden{display:none!important}
+.msg-image-preview img{width:48px;height:48px;border-radius:8px;object-fit:cover;border:1px solid var(--border)}
+.msg-image-preview span{font-size:.76rem;color:var(--text2);min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msg-image-preview button{width:30px;height:30px;border:0;border-radius:50%;background:#fee2e2;color:var(--danger);cursor:pointer}
 @media(max-width:600px){
   .inbox-box{max-width:calc(100vw - 1.5rem)}
   .message-box{height:88vh;max-width:calc(100vw - 1rem);border-radius:16px}
