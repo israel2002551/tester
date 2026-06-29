@@ -651,7 +651,7 @@
         
         <div class="card card-pad-lg mb-4" style="max-width:700px">
           <h3 class="mb-1"><i class="fa-solid fa-bullhorn color-green"></i> Create New Advertisement</h3>
-          <p class="text-xs color-text3 mb-3">Upload a 30-second video or an image. ₦10,000 for 30 days of premium visibility.</p>
+          <p class="text-xs color-text3 mb-3">Upload a 30-second video or an image. ₦5,000 for 30 days of premium visibility.</p>
           <div class="form-group">
             <label class="form-label">Ad Title <span class="req">*</span></label>
             <input type="text" id="ad-title" class="form-input" placeholder="Catchy title for your ad">
@@ -691,7 +691,7 @@
           </div>
           <div class="flex items-center gap-3 mt-4 pt-3" style="border-top:1px solid var(--border)">
             <div style="flex:1">
-              <div class="font-600">Total Price: <span class="color-green font-bold text-lg">₦10,000</span></div>
+              <div class="font-600">Total Price: <span class="color-green font-bold text-lg">₦5,000</span></div>
               <div class="text-xs color-text3">30 days placement after admin approval</div>
             </div>
             <button class="btn btn-primary" onclick="initiateAdPayment()" id="ad-pay-btn"><i class="fa-solid fa-credit-card"></i> Pay & Submit Ad</button>
@@ -753,7 +753,7 @@
       <!-- COMMISSION -->
       <div id="ds-commission" class="dash-section">
         <h1 class="dash-page-title">Platform Commission</h1>
-        <p class="dash-page-sub">₦5,000 after your 1-month free trial</p>
+        <p class="dash-page-sub">₦2,500 after your 1-month free trial</p>
         <div class="commission-box">
           <div class="commission-icon-wrap"><i class="fa-solid fa-dollar-sign"></i></div>
           <h2 style="text-align:center;margin-bottom:.28rem">Commission Payment</h2>
@@ -761,13 +761,13 @@
           <div class="bank-details-box" style="margin-bottom:1.1rem">
             <div class="bank-row"><span class="bk-label">Status</span><span id="comm-status-badge" class="badge badge-green">Active</span></div>
             <div class="bank-row"><span class="bk-label">Trial Ends</span><span class="bk-value" id="comm-trial-end">—</span></div>
-            <div class="bank-row"><span class="bk-label">Amount Due</span><span class="bk-value color-gold" style="font-size:1.05rem">₦5,000</span></div>
+            <div class="bank-row"><span class="bk-label">Amount Due</span><span class="bk-value color-gold" style="font-size:1.05rem">₦2,500</span></div>
             <hr class="divider">
             <div class="bank-row"><span class="bk-label">Bank</span><span class="bk-value">OPay</span></div>
             <div class="bank-row"><span class="bk-label">Account Number</span><span class="bk-value" style="color:var(--green);font-size:1rem">9061484256</span></div>
             <div class="bank-row"><span class="bk-label">Account Name</span><span class="bk-value">Efe Israel</span></div>
           </div>
-          <button class="btn btn-paystack btn-full mb-2" onclick="payCommissionPaystack()"><i class="fa-solid fa-credit-card"></i> Pay ₦5,000 via Paystack</button>
+          <button class="btn btn-paystack btn-full mb-2" onclick="payCommissionPaystack()"><i class="fa-solid fa-credit-card"></i> Pay ₦2,500 via Paystack</button>
           <button class="btn btn-outline btn-full" onclick="showModal('commission-modal')"><i class="fa-solid fa-upload"></i> Upload Bank Transfer Receipt</button>
         </div>
       </div>
@@ -1047,24 +1047,6 @@
                   <tbody id="rcpt-table-body"><tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3)">No receipts submitted yet</td></tr></tbody>
                 </table>
               </div>
-            </div>
-          </div>
-
-          <div id="adm-tab-kyc" class="adm-tab hidden">
-            <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
-              <select id="adm-kyc-filter" class="form-select" style="width:auto;padding:.4rem .7rem;font-size:.78rem" onchange="loadAdminKyc()">
-                <option value="pending">Pending Review</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-                <option value="all">All Submissions</option>
-              </select>
-              <button class="btn btn-outline btn-sm" onclick="loadAdminKyc()"><i class="fa-solid fa-sync"></i> Refresh</button>
-            </div>
-            <div id="adm-kyc-skeleton"><div class="skeleton mb-3" style="height:150px"></div></div>
-            <div id="adm-kyc-list" class="hidden" style="display:flex;flex-direction:column;gap:1rem"></div>
-            <div id="adm-kyc-empty" class="hidden text-center" style="padding:3rem">
-              <i class="fa-solid fa-shield-check" style="font-size:2.5rem;color:var(--green);display:block;margin-bottom:.75rem"></i>
-              <p class="color-text3">No KYC verifications found</p>
             </div>
           </div>
 
@@ -1381,7 +1363,7 @@
       <ul style="margin-bottom:.85rem;padding-left:1.1rem">
         <li>All listed products must be genuine and accurately described.</li>
         <li>Sellers must respond to orders within 24 hours.</li>
-        <li>After the free trial period, a monthly commission of <strong>₦5,000</strong> is required to maintain an active store.</li>
+        <li>After the free trial period, a monthly commission of <strong>₦2,500</strong> is required to maintain an active store.</li>
         <li>Failure to pay commission will result in automatic store suspension.</li>
         <li>Fraudulent or misleading listings will result in immediate account termination.</li>
       </ul>
@@ -1503,7 +1485,7 @@
         <label class="form-label">Selfie with ID <span class="req">*</span></label>
         <div class="upload-zone" style="border:2px dashed var(--border);border-radius:10px;padding:1rem;text-align:center;cursor:pointer" onclick="document.getElementById('kyc-selfie').click()">
           <i class="fa-solid fa-user-shield" style="font-size:1.3rem;color:var(--text3);display:block;margin-bottom:.3rem"></i>
-          <span class="text-xs color-text3">Take a selfie holding your ID next to your face</span>
+          <span class="text-xs color-text3" id="kyc-selfie-label">Take a selfie holding your ID next to your face</span>
           <input type="file" id="kyc-selfie" accept="image/*" capture="user" style="display:none" onchange="this.parentElement.querySelector('span').textContent=this.files[0]?.name||'Take selfie'" required>
         </div>
       </div>
@@ -1806,12 +1788,12 @@
   <div class="suspended-box">
     <div class="suspended-icon"><i class="fa-solid fa-ban"></i></div>
     <h2 class="mb-2">Store Suspended</h2>
-    <p class="color-text3 mb-3">Your store has been suspended. Pay the ₦5,000 monthly commission to reactivate.</p>
+    <p class="color-text3 mb-3">Your store has been suspended. Pay the ₦2,500 monthly commission to reactivate.</p>
     <div class="bank-details-box">
       <div class="bank-row"><span class="bk-label">Bank</span><span class="bk-value">OPay</span></div>
       <div class="bank-row"><span class="bk-label">Account</span><span class="bk-value accent">9061484256</span></div>
       <div class="bank-row"><span class="bk-label">Name</span><span class="bk-value">Efe Israel</span></div>
-      <div class="bank-row"><span class="bk-label">Amount</span><span class="bk-value" style="color:var(--gold);font-size:1.05rem">₦5,000</span></div>
+      <div class="bank-row"><span class="bk-label">Amount</span><span class="bk-value" style="color:var(--gold);font-size:1.05rem">₦2,500</span></div>
     </div>
     <button class="btn btn-paystack btn-full mb-2" onclick="payCommissionPaystack()"><i class="fa-solid fa-credit-card"></i> Pay via Paystack</button>
     <button class="btn btn-outline btn-full" onclick="showModal('commission-modal')">Upload Bank Transfer Receipt</button>
@@ -1823,7 +1805,7 @@
 <div id="commission-modal" class="modal-overlay">
   <div class="modal-box" style="max-width:450px;padding:1.65rem"><button class="modal-close" onclick="closeModal('commission-modal')"><i class="fa-solid fa-times"></i></button>
     <h2 class="mb-1"><i class="fa-solid fa-upload color-green"></i> Upload Commission Receipt</h2>
-    <p class="color-text3 text-sm mb-3">Submit proof of your ₦5,000 bank transfer. Admin will verify within 24hrs.</p>
+    <p class="color-text3 text-sm mb-3">Submit proof of your ₦2,500 bank transfer. Admin will verify within 24hrs.</p>
     <div class="form-group"><label class="form-label">Payment Screenshot <span class="req">*</span></label>
       <div class="upload-zone" onclick="document.getElementById('commission-file').click()"><i class="fa-solid fa-cloud-upload-alt"></i><div class="upload-label">Click to upload screenshot</div><div class="upload-sub">JPG or PNG</div></div>
       <input type="file" id="commission-file" accept="image/*" style="display:none">
@@ -1851,7 +1833,7 @@
       </div>
       <div class="faq-item mb-2">
         <div class="font-600 text-sm mb-1">🏪 How do I open a seller store?</div>
-        <p class="text-xs color-text3">Sign up as a Seller and get 1 month FREE. After trial, pay ₦5,000/month to keep your store active.</p>
+        <p class="text-xs color-text3">Sign up as a Seller and get 1 month FREE. After trial, pay ₦2,500/month to keep your store active.</p>
       </div>
       <div class="faq-item mb-2">
         <div class="font-600 text-sm mb-1">🚚 How long is delivery?</div>
@@ -2094,7 +2076,7 @@
         <!-- ═══ RECEIPTS TAB ═══ -->
         <div id="adm-tab-receipts" class="adm-tab hidden">
           <h2 class="mb-1"><i class="fa-solid fa-file-invoice color-green"></i> Commission Receipts</h2>
-          <p class="color-text3 text-sm mb-3">Review and approve seller commission payment proofs (₦5,000/month).</p>
+          <p class="color-text3 text-sm mb-3">Review and approve seller commission payment proofs (₦2,500/month).</p>
           <div class="stats-grid mb-4" style="grid-template-columns:repeat(3,1fr)">
             <div class="stat-card"><div class="stat-value color-gold" id="rcpt-pending">0</div><div class="stat-label">Pending</div></div>
             <div class="stat-card"><div class="stat-value color-green" id="rcpt-approved">0</div><div class="stat-label">Approved</div></div>
@@ -2497,9 +2479,12 @@
       <button type="button" onclick="insertQuickMessage('What is your best price?')">Best price</button>
     </div>
     <div class="msg-input-row">
+      <input type="file" id="msg-image-input" accept="image/*" style="display:none" onchange="handleMessageImageSelect(this)">
+      <button type="button" class="btn btn-outline msg-attach-btn" onclick="document.getElementById('msg-image-input').click()" title="Send image"><i class="fa-solid fa-image"></i></button>
       <textarea id="msg-input" class="form-input" placeholder="Type a message..." rows="1" onkeydown="handleMessageKey(event)"></textarea>
       <button class="btn btn-primary" onclick="sendMessage()" id="msg-send-btn"><i class="fa-solid fa-paper-plane"></i></button>
     </div>
+    <div id="msg-image-preview" class="msg-image-preview hidden"></div>
   </div>
 </div>
 
@@ -2559,8 +2544,8 @@
 -->
 
 <script src="https://js.paystack.co/v2/inline.js"></script>
-<script data-cfasync="false" src="config.js?v=3.2"></script>
-<script src="app.js?v=7.4"></script>
+<script data-cfasync="false" src="config.js?v=3.3"></script>
+<script src="app.js?v=7.5"></script>
   <script>
     (function() {
       'use strict';
