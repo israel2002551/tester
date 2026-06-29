@@ -7,29 +7,32 @@
 let chatHistory = []; 
 let adminAiHistory = [];
 let currentUser = null, currentRole = 'buyer', currentProd = null;
-const PUBLIC_SITE_URL = 'https://buysell-markerplace.com';
-function createSafeStorage() {
+const PUBLIC_SITE_URL = 'https://buysell-markerplace.com/';
+function createMemoryStorage() {
   const fallback = new Map();
-  const memoryStorage = {
+  return {
     getItem: key => fallback.has(key) ? fallback.get(key) : null,
     setItem: (key, value) => fallback.set(key, String(value)),
     removeItem: key => fallback.delete(key),
     clear: () => fallback.clear(),
   };
+}
 
+function createSafeStorage(storageName = 'localStorage') {
   try {
-    const storage = window.localStorage;
+    const storage = window[storageName];
     const testKey = '__bs_storage_test__';
     storage.setItem(testKey, '1');
     storage.removeItem(testKey);
     return storage;
   } catch {
-    console.info('Persistent browser storage is unavailable here; using temporary in-memory storage.');
-    return memoryStorage;
+    console.info(`${storageName} is unavailable here; using temporary in-memory storage.`);
+    return createMemoryStorage();
   }
 }
 
-const appStorage = createSafeStorage();
+const appStorage = createSafeStorage('localStorage');
+const appSessionStorage = createSafeStorage('sessionStorage');
 function readStoredJson(key, fallback) {
   try {
     return JSON.parse(appStorage.getItem(key) || JSON.stringify(fallback));
@@ -7401,7 +7404,7 @@ async function syncUserNotificationToken() {
 
 async function loadActiveAds() {
   try {
-    const dismissedUntil = Number(sessionStorage.getItem('bs_ads_dismissed_until') || 0);
+    const dismissedUntil = Number(appSessionStorage.getItem('bs_ads_dismissed_until') || 0);
     if (Date.now() < dismissedUntil) return;
     const { data, error } = await db.from('advertisements')
       .select('*')
@@ -7552,7 +7555,7 @@ async function initiateAdPayment() {
 }
 function closeAdPopup() {
   document.getElementById('ad-popup-overlay')?.classList.add('hidden');
-  sessionStorage.setItem('bs_ads_dismissed_until', String(Date.now() + 30 * 60 * 1000));
+  appSessionStorage.setItem('bs_ads_dismissed_until', String(Date.now() + 30 * 60 * 1000));
   if (adSkipTimer) { clearInterval(adSkipTimer); adSkipTimer = null; }
 }
 
