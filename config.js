@@ -21,5 +21,5 @@ const ADMIN_EMAILS = [
 const PAYSTACK_PUBLIC_KEY = 'pk_live_4fd75c570f7fb446f06b1ea5fc32c17683547fea'; // Replace with live key for production
 
 // ── Platform Fees ─────────────────────────────────────
-const COMMISSION_AMOUNT = 500000; // ₦5,000 in kobo
+const COMMISSION_AMOUNT = 250000; // ₦2,500 in kobo
 const PLATFORM_FEE_PCT  = 0.03;   // 3% platform fee
