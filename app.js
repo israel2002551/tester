@@ -6302,9 +6302,9 @@ async function loadAdminKyc() {
             <div class="flex items-center gap-2">${statusBadge}<span class="text-xs color-text3">${fmtDate(k.created_at)}</span></div>
           </div>
           <div class="flex gap-2 flex-wrap mb-2 text-xs">
-            <span class="badge badge-outline">${escHtml(k.doc_type || 'N/A')}</span>
-            <span class="color-text3">Doc #: <b>${escHtml(k.doc_number || 'N/A')}</b></span>
-            <span class="color-text3">Name on ID: <b>${escHtml(k.full_name || 'N/A')}</b></span>
+            <span class="badge badge-outline">${escHtml(k.doc_type || k.document_type || 'N/A')}</span>
+            <span class="color-text3">Doc #: <b>${escHtml(k.doc_number || k.document_number || 'N/A')}</b></span>
+            <span class="color-text3">Name on ID: <b>${escHtml(k.full_name || k.legal_name || 'N/A')}</b></span>
           </div>
           <div class="flex gap-2 flex-wrap mb-3">
             ${k.front_url ? `<a href="${k.front_url}" target="_blank" class="btn btn-ghost btn-sm" style="color:var(--blue)"><i class="fa-solid fa-image"></i> Front</a>` : ''}
@@ -6408,8 +6408,11 @@ async function submitKycLegacy(event) {
     await db.from('kyc_verifications').insert({
       user_id: currentUser.id,
       doc_type: docType,
+      document_type: docType,
       doc_number: docNum,
+      document_number: docNum,
       full_name: fullName,
+      legal_name: fullName,
       front_url: frontUrl,
       back_url: backUrl,
       selfie_url: selfieUrl,
@@ -6475,8 +6478,11 @@ async function submitKyc(event) {
     await insertWithMissingColumnRetry('kyc_verifications', {
       user_id: currentUser.id,
       doc_type: docType,
+      document_type: docType,
       doc_number: docNum,
+      document_number: docNum,
       full_name: fullName,
+      legal_name: fullName,
       front_url: frontUrl,
       back_url: backUrl,
       selfie_url: selfieUrl,
