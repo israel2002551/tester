@@ -452,14 +452,44 @@ function openEntryAuth(role = 'buyer', mode = 'login') {
 function profileHasSellerAccess(profile = currentUser?.profile) {
   const role = profile?.role;
   const accounts = profile?.accounts;
-  return role === 'seller' || role === 'admin' || accounts === 'seller' || accounts === 'both';
+  return role === 'seller' || role === 'admin' || role === 'both' || accounts === 'seller' || accounts === 'both';
+}
+
+async function ensureSellerProfileRole() {
+  if (!currentUser?.id) throw new Error('Not authenticated');
+
+  let profile = currentUser.profile || {};
+  if (!profile.role && !profile.accounts) {
+    const { data } = await db.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
+    if (data) {
+      currentUser.profile = data;
+      profile = data;
+    }
+  }
+
+  if (!profileHasSellerAccess(profile)) {
+    throw new Error('Seller account required. Please sign in with a seller account.');
+  }
+  if (profile.role === 'seller' || profile.role === 'admin') return true;
+
+  const { data, error } = await db
+    .from('profiles')
+    .update({ role: 'seller', accounts: profile.accounts || 'seller' })
+    .eq('id', currentUser.id)
+    .select('*')
+    .single();
+
+  if (error) throw new Error(error.message || 'Could not confirm seller access');
+  currentUser.profile = data || { ...profile, role: 'seller', accounts: profile.accounts || 'seller' };
+  currentRole = 'seller';
+  return true;
 }
 
 function profileEntryRole(profile = currentUser?.profile) {
   const role = profile?.role;
   const accounts = profile?.accounts;
   if (role === 'service_provider' || accounts === 'service_provider') return 'service_provider';
-  if (role === 'seller' || role === 'admin' || accounts === 'seller' || accounts === 'both') return 'seller';
+  if (role === 'seller' || role === 'admin' || role === 'both' || accounts === 'seller' || accounts === 'both') return 'seller';
   return 'buyer';
 }
 
@@ -1943,7 +1973,7 @@ function buyNow(prod) {
 function isSellerAccount(profile = currentUser?.profile || {}) {
   const role = profile.role || 'buyer';
   const accounts = profile.accounts || '';
-  return role === 'seller' || role === 'admin' || accounts === 'seller' || accounts === 'both';
+  return role === 'seller' || role === 'admin' || role === 'both' || accounts === 'seller' || accounts === 'both';
 }
 
 async function getSellerAvailableRevenue(sellerId = currentUser?.id) {
@@ -2982,6 +3012,8 @@ async function submitProduct(e) {
   document.getElementById('pub-spinner').classList.remove('hidden');
   try {
     // ── Input validation ──────────────────────────────────────
+    await ensureSellerProfileRole();
+
     const nameVal  = document.getElementById('p-name').value.trim();
     const priceVal = parseFloat(document.getElementById('p-price').value);
     const stockVal = parseInt(document.getElementById('p-stock').value) || 0;
@@ -3091,7 +3123,10 @@ if (nameVal.length > 300) {
 
 async function deleteProduct(id) {
   if (!confirm('Delete this product?')) return;
-  try { await callEdge('manage-product', { action: 'delete', product_id: id }); }
+  try {
+    await ensureSellerProfileRole();
+    await callEdge('manage-product', { action: 'delete', product_id: id });
+  }
   catch(e) { toast('Error', e.message, 'error'); return; }
   toast('Product Deleted', '', 'info');
   loadSellerProds();
@@ -3099,7 +3134,10 @@ async function deleteProduct(id) {
 
 async function toggleProductStatus(id, current) {
   const next = current === 'active' ? 'paused' : 'active';
-  try { await callEdge('manage-product', { action: 'toggle_status', product_id: id }); }
+  try {
+    await ensureSellerProfileRole();
+    await callEdge('manage-product', { action: 'toggle_status', product_id: id });
+  }
   catch(e) { toast('Error', e.message, 'error'); return; }
   loadSellerProds();
 }
