@@ -1079,6 +1079,10 @@ function isKycApprovedStatus(status) {
   return ['approved', 'verified', 'accepted'].includes(String(status || '').toLowerCase());
 }
 
+function isKycSubmittedStatus(status) {
+  return ['pending', 'submitted', 'in_review', 'review'].includes(String(status || '').toLowerCase());
+}
+
 async function getSellerKycStatus(userId = currentUser?.id) {
   if (!userId) return { status: 'missing', row: null };
   if (currentUser?.profile && (currentUser.profile.seller_verified || isKycApprovedStatus(currentUser.profile.kyc_status || currentUser.profile.verification_status))) {
@@ -1102,14 +1106,12 @@ async function getSellerKycStatus(userId = currentUser?.id) {
 async function requireSellerKyc() {
   if (!currentUser || isAdminEmail()) return true;
   const { status } = await getSellerKycStatus(currentUser.id);
-  if (isKycApprovedStatus(status)) return true;
+  if (isKycApprovedStatus(status) || isKycSubmittedStatus(status)) return true;
   showBuyerView();
-  const msg = status === 'pending'
-    ? 'Your KYC is pending admin review. Seller access opens after approval.'
-    : status === 'rejected'
+  const msg = status === 'rejected'
       ? 'Your KYC was rejected. Please resubmit clear documents before using the seller dashboard.'
       : 'Complete KYC before using your seller dashboard.';
-  toast('KYC Required', msg, status === 'pending' ? 'info' : 'warn', 7000);
+  toast('KYC Required', msg, 'warn', 7000);
   showModal('kyc-modal');
   return false;
 }
@@ -6260,7 +6262,11 @@ async function loadAdminKyc() {
   try {
     const filter = getAdminKycElement('adm-kyc-filter')?.value || 'pending';
     let query = db.from('kyc_verifications').select('*').order('created_at', { ascending: false });
-    if (filter !== 'all') query = query.eq('status', filter);
+    if (filter === 'pending') {
+      query = query.in('status', ['pending', 'submitted', 'in_review', 'review']);
+    } else if (filter !== 'all') {
+      query = query.eq('status', filter);
+    }
     const { data: rows, error } = await query;
     if (error) throw error;
 
@@ -6490,7 +6496,8 @@ async function submitKyc(event) {
     const selfieLabel = document.getElementById('kyc-selfie-label');
     if (selfieLabel) selfieLabel.textContent = 'Take a selfie holding your ID next to your face';
     closeModal('kyc-modal');
-    toast('KYC Submitted!', 'Your documents are under review.', 'success');
+    toast('KYC Submitted!', 'Seller dashboard access is now open while admin reviews your documents.', 'success');
+    await showSellerDashboard();
   } catch(e) {
     toast('Submission Error', e.message, 'error');
   } finally {
