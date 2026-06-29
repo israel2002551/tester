@@ -1437,6 +1437,7 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .bs-video-player { position: relative; border-radius: var(--bs-radius-lg); overflow: hidden; aspect-ratio: 16/9; background: #000; box-shadow: 0 25px 60px rgba(0,0,0,0.4); }
 .bs-video-player img, .bs-video-player video { width: 100%; height: 100%; object-fit: cover; opacity: 0.8; display: block; }
 .bs-video-player__overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: rgba(11,31,20,0.4); }
+.bs-video-player.is-playing .bs-video-player__overlay { opacity: 0; pointer-events: none; }
 .bs-video-play-btn { width: 72px; height: 72px; border-radius: 50%; background: var(--bs-gold); border: none; display: grid; place-items: center; cursor: pointer; color: #fff; transition: all 0.3s var(--bs-ease); box-shadow: 0 8px 30px var(--bs-gold-glow); }
 .bs-video-play-btn:hover { transform: scale(1.1); }
 .bs-video-play-btn svg { margin-left: 3px; }
