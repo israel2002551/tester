@@ -2560,6 +2560,7 @@
         .then(htmlContent => {
           document.getElementById('marketing-placeholder').innerHTML = htmlContent;
           if (typeof showMarketLandingPage === 'function') showMarketLandingPage();
+          if (typeof loadLandingMedia === 'function') loadLandingMedia();
 
           // Wire scrolling links local behavior anchors
           document.querySelectorAll('.bs-scroll-link').forEach(link => {
