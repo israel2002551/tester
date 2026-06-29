@@ -7,7 +7,7 @@
 let chatHistory = []; 
 let adminAiHistory = [];
 let currentUser = null, currentRole = 'buyer', currentProd = null;
-const PUBLIC_SITE_URL = 'https://buysell-markerplace.com/';
+const PUBLIC_SITE_URL = 'https://buysell-markerplace.com';
 function createMemoryStorage() {
   const fallback = new Map();
   return {
@@ -86,6 +86,64 @@ function showMarketLandingPage() {
     storefront.style.setProperty('display', 'none', 'important');
   }
   document.body.classList.remove('in-seller');
+}
+
+function landingMediaElement(row) {
+  const mediaUrl = sanitizeUrl(row?.media_url || '');
+  const posterUrl = sanitizeUrl(row?.poster_url || '');
+  const title = escAttr(row?.title || 'BUYSELL Nigeria video');
+  const isVideo = String(row?.media_type || '').toLowerCase() === 'video' || /\.(mp4|webm|ogg|mov)(\?|$)/i.test(mediaUrl);
+  if (!mediaUrl) return '';
+  if (isVideo) {
+    return `<video controls playsinline preload="metadata" ${posterUrl ? `poster="${escAttr(posterUrl)}"` : ''}><source src="${escAttr(mediaUrl)}" type="video/mp4"></video>`;
+  }
+  return `<img src="${escAttr(mediaUrl)}" alt="${title}" loading="lazy">`;
+}
+
+function applyLandingMediaRow(row) {
+  const slot = String(row?.slot || '').trim();
+  const target = slot
+    ? [...document.querySelectorAll('[data-landing-media-slot]')].find(el => el.dataset.landingMediaSlot === slot)
+    : null;
+  const mediaUrl = sanitizeUrl(row?.media_url || '');
+  if (!target || !mediaUrl) return;
+
+  const isVideo = String(row?.media_type || '').toLowerCase() === 'video' || /\.(mp4|webm|ogg|mov)(\?|$)/i.test(mediaUrl);
+  const posterUrl = sanitizeUrl(row?.poster_url || '');
+
+  if (slot === 'hero_video' && target.tagName === 'VIDEO') {
+    target.poster = posterUrl || target.poster || '';
+    target.innerHTML = `<source src="${escAttr(mediaUrl)}" type="video/mp4">`;
+    target.load();
+    target.play?.().catch(() => {});
+    return;
+  }
+
+  const overlay = target.querySelector('.bs-video-player__overlay, .bs-video-testimonial__overlay');
+  const mediaHtml = landingMediaElement(row);
+  if (!mediaHtml) return;
+  target.innerHTML = mediaHtml + (overlay ? overlay.outerHTML : '');
+  const video = target.querySelector('video');
+  if (video && target.classList.contains('bs-video-testimonial')) {
+    video.muted = true;
+    video.loop = true;
+  }
+  if (video && isVideo) video.load();
+}
+
+async function loadLandingMedia() {
+  if (!document.getElementById('marketing-landing') || !db) return;
+  try {
+    const { data, error } = await db
+      .from('landing_media')
+      .select('slot,media_type,media_url,poster_url,title,is_active,sort_order')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true });
+    if (error) throw error;
+    (data || []).forEach(applyLandingMediaRow);
+  } catch (err) {
+    console.warn('Landing media loading skipped:', err.message || err);
+  }
 }
 
 async function postAiRequest(body, endpoints = []) {
@@ -200,9 +258,10 @@ window.supabaseAppClient = window.supabaseClient;
 
 // Auth state listener keeps the visible header and active view in sync.
 if (typeof supabase !== 'undefined') {
-  supabase.auth.onAuthStateChange(async (event, session) => {
+  supabase.auth.onAuthStateChange((event, session) => {
     console.log(`⚡ Gatekeeper Auth Engine Event: ${event}`);
     
+    setTimeout(async () => {
     const authButton = document.querySelector('.nav-sign-in-btn') || 
                        document.getElementById('landing-auth-btn') ||
                        document.getElementById('nav-auth-inner-btn');
@@ -264,6 +323,7 @@ if (typeof supabase !== 'undefined') {
 
       showMarketLandingPage();
     }
+    }, 0);
   });
 }
 // ====================================================
@@ -543,6 +603,14 @@ function togglePasswordVisibility(inputId, btn) {
   btn.innerHTML = isPassword ? '<i class="fa-solid fa-eye-slash"></i>' : '<i class="fa-solid fa-eye"></i>';
 }
 
+function withTimeout(promise, ms, timeoutMessage) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
+}
+
 async function handleAuth(e) {
   e.preventDefault();
   const isLogin = document.getElementById('auth-tab-login').classList.contains('active');
@@ -559,7 +627,12 @@ async function handleAuth(e) {
   try {
     if (isLogin) {
       // ── SIGN IN ──────────────────────────────────────────────
-      const { data, error } = await db.auth.signInWithPassword({ email, password });
+      appStorage.setItem('bs_manual_navigation_pass', 'true');
+      const { data, error } = await withTimeout(
+        db.auth.signInWithPassword({ email, password }),
+        15000,
+        'Sign in timed out. Please refresh and try again.'
+      );
 
       if (error) {
         // Give a clear, actionable message for every common error
@@ -580,7 +653,7 @@ async function handleAuth(e) {
 
       // Use session.user (more reliable than data.user after token refresh)
       const user = data.session?.user || data.user;
-      await onAuthSuccess(user);
+      await withTimeout(onAuthSuccess(user), 10000, 'Profile loading timed out. Please refresh and try again.');
       closeModal('auth-modal');
       continuePendingEntry();
 
@@ -611,13 +684,18 @@ async function handleAuth(e) {
         if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('user already')) {
           // Account exists — just sign them in directly
           toast('Account exists — signing you in…', '', 'info', 3000);
-          const { data: loginData, error: loginError } = await db.auth.signInWithPassword({ email, password });
+          appStorage.setItem('bs_manual_navigation_pass', 'true');
+          const { data: loginData, error: loginError } = await withTimeout(
+            db.auth.signInWithPassword({ email, password }),
+            15000,
+            'Sign in timed out. Please refresh and try again.'
+          );
           if (loginError) {
             toast('Sign In Failed', 'Account exists but password is wrong. Try signing in.', 'error', 7000);
             return;
           }
           const user = loginData.session?.user || loginData.user;
-          await onAuthSuccess(user);
+          await withTimeout(onAuthSuccess(user), 10000, 'Profile loading timed out. Please refresh and try again.');
           closeModal('auth-modal');
           continuePendingEntry();
           return;
@@ -631,7 +709,12 @@ async function handleAuth(e) {
 
       // Step 2: Always immediately sign in after signup — guarantees a live session
       // regardless of whether email confirmation setting is truly off
-      const { data: loginData, error: loginError } = await db.auth.signInWithPassword({ email, password });
+      appStorage.setItem('bs_manual_navigation_pass', 'true');
+      const { data: loginData, error: loginError } = await withTimeout(
+        db.auth.signInWithPassword({ email, password }),
+        15000,
+        'Sign in timed out. Please refresh and try again.'
+      );
 
       if (loginError) {
         // Signup worked but auto-login failed — tell them to sign in manually
@@ -643,7 +726,7 @@ async function handleAuth(e) {
 
       const user = loginData.session?.user || loginData.user;
       await upsertProfile(user, { name, role, accounts, whatsapp: wa });
-      await onAuthSuccess(user);
+      await withTimeout(onAuthSuccess(user), 10000, 'Profile loading timed out. Please refresh and try again.');
       closeModal('auth-modal');
       continuePendingEntry();
 
@@ -721,7 +804,8 @@ async function onAuthSuccess(user) {
 
 async function checkSession() {
   // Subscribe to auth state changes FIRST so we don't miss the initial event
-  db.auth.onAuthStateChange(async (event, session) => {
+  db.auth.onAuthStateChange((event, session) => {
+    setTimeout(async () => {
     if (event === 'SIGNED_IN' && session?.user) {
       if (!currentUser) {
         await onAuthSuccess(session.user);
@@ -749,6 +833,7 @@ async function checkSession() {
     if (event === 'USER_UPDATED' && session?.user) {
       currentUser = session.user;
     }
+    }, 0);
   });
 
   // Then check for an existing persisted session
