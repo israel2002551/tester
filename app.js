@@ -100,6 +100,26 @@ function landingMediaElement(row) {
   return `<img src="${escAttr(mediaUrl)}" alt="${title}" loading="lazy">`;
 }
 
+function bindLandingVideoPlayer(target) {
+  const video = target?.querySelector('video');
+  const overlay = target?.querySelector('.bs-video-player__overlay, .bs-video-testimonial__overlay');
+  const playButton = target?.querySelector('.bs-video-play-btn');
+  if (!video || !overlay || !playButton || target.dataset.videoBound === 'true') return;
+
+  target.dataset.videoBound = 'true';
+  playButton.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    video.play().catch(error => {
+      console.warn('Landing video playback failed:', error);
+    });
+  });
+
+  video.addEventListener('play', () => target.classList.add('is-playing'));
+  video.addEventListener('pause', () => target.classList.remove('is-playing'));
+  video.addEventListener('ended', () => target.classList.remove('is-playing'));
+}
+
 function applyLandingMediaRow(row) {
   const slot = String(row?.slot || '').trim();
   const target = slot
@@ -128,6 +148,7 @@ function applyLandingMediaRow(row) {
     video.muted = true;
     video.loop = true;
   }
+  bindLandingVideoPlayer(target);
   if (video && isVideo) video.load();
 }
 
@@ -5709,9 +5730,13 @@ function escAttr(s) {
 }
 function sanitizeUrl(url) {
   if (!url) return '';
-  const u = String(url).trim().toLowerCase();
+  const rawUrl = String(url).trim();
+  if (/^obzhlmzswthnorkiqemh\.supabase\.co\//i.test(rawUrl)) {
+    return `https://${rawUrl}`;
+  }
+  const u = rawUrl.toLowerCase();
   if (u.startsWith('javascript:') || u.startsWith('data:text') || u.startsWith('vbscript:')) return '';
-  return String(url).trim();
+  return rawUrl;
 }
 
 // ====================================================
