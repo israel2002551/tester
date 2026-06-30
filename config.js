@@ -17,6 +17,7 @@ const ADMIN_EMAILS = [
   'peaceomomofe34@gmail.com'
 ];
 
+
 // ── Paystack ──────────────────────────────────────────
 const PAYSTACK_PUBLIC_KEY = 'pk_live_4fd75c570f7fb446f06b1ea5fc32c17683547fea'; // Replace with live key for production
 
