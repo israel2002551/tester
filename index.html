@@ -16,17 +16,33 @@
 <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script data-cfasync="false" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
+  window.bsCanUseBrowserStorage = function(storageName) {
+    try {
+      const storage = window[storageName || 'localStorage'];
+      const testKey = '__bs_storage_test__';
+      storage.setItem(testKey, '1');
+      storage.removeItem(testKey);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  };
+
   window.OneSignalDeferred = window.OneSignalDeferred || [];
-  if (location.protocol === 'http:' || location.protocol === 'https:') {
+  const canLoadOneSignal = (location.protocol === 'http:' || location.protocol === 'https:')
+    && window.bsCanUseBrowserStorage('localStorage');
+  if (canLoadOneSignal) {
     const oneSignalSdk = document.createElement('script');
     oneSignalSdk.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js';
     oneSignalSdk.defer = true;
     document.head.appendChild(oneSignalSdk);
+  } else {
+    console.info('OneSignal skipped in this browser context.');
   }
 </script>
 <script>
   window.OneSignalDeferred = window.OneSignalDeferred || [];
-  if (location.protocol === 'http:' || location.protocol === 'https:') {
+  if ((location.protocol === 'http:' || location.protocol === 'https:') && window.bsCanUseBrowserStorage('localStorage')) {
   OneSignalDeferred.push(async function(OneSignal) {
     try {
     
@@ -2556,7 +2572,10 @@
       }
       // Load the separate marketing presentation layouts live onto this canvas layout frame
       fetch('marketing.html')
-        .then(response => response.text())
+        .then(response => {
+          if (!response.ok) throw new Error(`marketing.html failed (${response.status})`);
+          return response.text();
+        })
         .then(htmlContent => {
           document.getElementById('marketing-placeholder').innerHTML = htmlContent;
           if (typeof showMarketLandingPage === 'function') showMarketLandingPage();
