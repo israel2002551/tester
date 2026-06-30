@@ -3,7 +3,6 @@
 //  Config loaded from config.js (secrets are .gitignored)
 // ====================================================
 
-
 let chatHistory = []; 
 let adminAiHistory = [];
 let currentUser = null, currentRole = 'buyer', currentProd = null;
