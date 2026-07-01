@@ -130,7 +130,7 @@
           <span class="portal-badge">Most Popular</span>
           <div class="portal-icon buyer-icon"><i class="fa-solid fa-shopping-bag" style="color:#fff"></i></div>
           <h2>I'm a Buyer</h2>
-          <p>Discover authentic products from verified Nigerian sellers. Pay securely via Paystack or bank transfer.</p>
+          <p>Discover authentic products from verified Nigerian sellers. Pay securely through Paystack checkout.</p>
           <div class="portal-features">
             <div class="portal-feat"><i class="fa-solid fa-shield-alt"></i> Buyer Protection</div>
             <div class="portal-feat"><i class="fa-solid fa-credit-card"></i> Paystack Secure</div>
@@ -247,7 +247,7 @@
           <div class="slide-content">
             <span class="slide-tag" style="background:#0BA4DB;color:#fff">💳 SECURE CHECKOUT</span>
             <h2>Pay with Paystack</h2>
-            <p>Cards, bank transfer, USSD & more. 100% secure.</p>
+            <p>Cards, USSD, bank checkout & more. 100% secure.</p>
             <button class="btn btn-ghost btn-sm" onclick="filterCat('all')">Browse All <i class="fa-solid fa-arrow-right"></i></button>
           </div>
         </div>
@@ -293,6 +293,7 @@
     <div class="buyer-tabs">
       <button class="buyer-tab active" id="tab-shop" onclick="switchBuyerTab('shop')">🛍️ Shop</button>
       <button class="buyer-tab" id="tab-orders" onclick="switchBuyerTab('orders')">📦 My Orders</button>
+      <button class="buyer-tab" id="tab-support" onclick="switchBuyerTab('support')"><i class="fa-solid fa-headset"></i> Support</button>
       <!-- <button class="buyer-tab" id="tab-services" onclick="switchBuyerTab('services')">🔧 Hire Services</button> -->
     </div>
 
@@ -1612,14 +1613,9 @@
       <h3 class="mb-3">Payment Method</h3>
       <div class="payment-method-grid">
         <div class="payment-method-card paystack-card selected" id="pm-paystack" onclick="selectPM('paystack')">
-          <span class="payment-method-icon">💳</span>
+          <span class="payment-method-icon"><i class="fa-solid fa-credit-card" style="color:#0BA4DB"></i></span>
           <div class="payment-method-title">Paystack</div>
-          <div class="payment-method-sub">Cards, USSD, Bank</div>
-        </div>
-        <div class="payment-method-card" id="pm-transfer" onclick="selectPM('transfer')">
-          <span class="payment-method-icon">🏦</span>
-          <div class="payment-method-title">Bank Transfer</div>
-          <div class="payment-method-sub">Direct to seller</div>
+          <div class="payment-method-sub">Cards, USSD, bank checkout</div>
         </div>
       </div>
       <!-- Paystack panel -->
@@ -1631,22 +1627,6 @@
           <div class="pay-row"><span class="label">Email</span><span class="value" id="co-pay-email"></span></div>
         </div>
         <button class="btn btn-paystack btn-full btn-lg" onclick="payWithPaystack()"><i class="fa-solid fa-credit-card"></i> Pay Now with Paystack</button>
-      </div>
-      <!-- Bank Transfer panel -->
-      <div id="pm-transfer-panel" class="hidden">
-        <div class="pay-info-box" id="transfer-details-box">
-          <h4><i class="fa-solid fa-university"></i> Transfer to Seller</h4>
-          <div id="seller-bank-details-co"></div>
-        </div>
-        <div class="form-group mt-3"><label class="form-label">Upload Payment Proof <span class="req">*</span></label>
-          <div class="upload-zone" onclick="document.getElementById('co-proof').click()" id="proof-upload-zone">
-            <i class="fa-solid fa-cloud-upload-alt"></i>
-            <div class="upload-label">Click to upload receipt</div>
-            <div class="upload-sub">JPG, PNG – Max 5MB</div>
-          </div>
-          <input type="file" id="co-proof" accept="image/*" onchange="handleProofUpload(this)" style="display:none">
-        </div>
-        <button class="btn btn-primary btn-full btn-lg" onclick="submitTransferOrder()" id="co-transfer-btn"><i class="fa-solid fa-paper-plane"></i> Submit Order</button>
       </div>
       <button class="btn btn-outline btn-sm mt-2" onclick="goCheckoutStep(1)"><i class="fa-solid fa-arrow-left"></i> Back</button>
     </div>
@@ -2561,7 +2541,7 @@
 
 <script src="https://js.paystack.co/v2/inline.js"></script>
 <script data-cfasync="false" src="config.js?v=3.3"></script>
-<script src="app.js?v=7.8"></script>
+<script src="app.js?v=7.9"></script>
   <script>
     (function() {
       'use strict';
