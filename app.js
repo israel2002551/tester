@@ -1294,6 +1294,7 @@ function showDash(section) {
     loadFlashSaleProducts();
 }
   if (section === 'analytics') loadSellerAnalytics();
+  if (section === 'support') loadBroadcastMessages('seller-broadcast-list');
 }
 
 function setMobActive(btn) {
@@ -2752,11 +2753,14 @@ function previewAdMedia(input) {
 function switchBuyerTab(tab) {
   document.getElementById('tab-shop')?.classList.toggle('active', tab==='shop');
   document.getElementById('tab-orders')?.classList.toggle('active', tab==='orders');
+  document.getElementById('tab-support')?.classList.toggle('active', tab==='support');
   document.getElementById('tab-services')?.classList.toggle('active', tab==='services');
   document.getElementById('buyer-shop-tab')?.classList.toggle('hidden', tab!=='shop');
   document.getElementById('buyer-orders-tab')?.classList.toggle('hidden', tab!=='orders');
+  document.getElementById('buyer-support-tab')?.classList.toggle('hidden', tab!=='support');
   document.getElementById('buyer-services-tab')?.classList.toggle('hidden', tab!=='services');
   if (tab==='orders') loadBuyerOrders();
+  if (tab==='support') loadBroadcastMessages('buyer-broadcast-list');
   if (tab==='services') loadServiceGigs();
 }
 
@@ -4909,6 +4913,39 @@ async function loadBroadcastHistory() {
 // ====================================================
 //  ADMIN — RECEIPTS MANAGEMENT
 // ====================================================
+function getBroadcastTargetsForProfile(profile = currentUser?.profile || {}) {
+  const role = profile.role || 'buyer';
+  const targets = new Set(['all']);
+  if (role === 'buyer' || role === 'both' || role === 'admin') targets.add('buyers');
+  if (isSellerAccount(profile)) targets.add('sellers');
+  if (role === 'service_provider' || profile.accounts === 'service_provider') targets.add('service_providers');
+  return [...targets];
+}
+
+async function loadBroadcastMessages(containerId, limit = 5) {
+  const el = document.getElementById(containerId);
+  if (!el || !currentUser) return;
+  el.innerHTML = '<div class="text-center p-2"><span class="spinner"></span></div>';
+  try {
+    const { data, error } = await db.from('broadcasts')
+      .select('*')
+      .in('target', getBroadcastTargetsForProfile())
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    el.innerHTML = (data || []).length
+      ? data.map(b => `
+        <div style="border-top:1px solid var(--border);padding:.55rem 0">
+          <div class="font-600 text-sm">${escHtml(b.title || 'Admin message')}</div>
+          <div class="text-xs color-text3">${escHtml(b.body || '')}</div>
+          <div class="text-xs color-text3" style="margin-top:.25rem">${fmtDate(b.created_at)}</div>
+        </div>`).join('')
+      : '<p class="text-xs color-text3">No admin messages yet.</p>';
+  } catch (_) {
+    el.innerHTML = '<p class="text-xs color-text3">Could not load admin messages.</p>';
+  }
+}
+
 async function loadAdminReceipts() {
   if (!guardAdminPanel()) return;
   try {
@@ -5210,8 +5247,7 @@ async function adminReactivateUser(userId) {
 }
 async function checkBroadcastForUser() {
   if (!currentUser) return;
-  const role = currentUser.profile?.role || 'buyer';
-  const targets = ['all', role === 'seller' ? 'sellers' : 'buyers'];
+  const targets = getBroadcastTargetsForProfile();
   const { data: bcs } = await db.from('broadcasts').select('*').in('target', targets).order('created_at',{ascending:false}).limit(2);
   (bcs||[]).forEach((b, i) => setTimeout(() => toast(b.title, b.body, b.type||'info', 7000), i * 2200));
 }
@@ -6900,6 +6936,28 @@ function clearMessageImage() {
   if (preview) {
     preview.classList.add('hidden');
     preview.innerHTML = '';
+  }
+}
+
+async function openAdminSupportChat(prefill = '') {
+  if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
+  try {
+    const { data, error } = await db.from('profiles')
+      .select('id,name,email')
+      .eq('role', 'admin')
+      .neq('id', currentUser.id)
+      .limit(1);
+    if (error) throw error;
+    const admin = data?.[0];
+    if (!admin?.id) throw new Error('Admin profile unavailable');
+    await openConversation(admin.id, admin.name || admin.email || 'Admin Support');
+    const input = document.getElementById('msg-input');
+    if (input && prefill && !input.value) {
+      input.value = prefill;
+      input.focus();
+    }
+  } catch (_) {
+    window.open('https://wa.me/2349061484256?text=Hello%20BUYSELL%20Support', '_blank');
   }
 }
 
