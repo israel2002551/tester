@@ -346,6 +346,33 @@
       </div>
     </div>
 
+    <!-- Support tab -->
+    <div id="buyer-support-tab" class="hidden">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Customer Support</h2>
+          <div class="section-meta">Help for buyers, sellers, payments, orders, and account issues</div>
+        </div>
+      </div>
+      <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-bottom:1rem">
+        <div class="card card-pad">
+          <h3 class="mb-1" style="font-size:.95rem"><i class="fa-solid fa-user-shield color-green"></i> Message Admin</h3>
+          <p class="text-xs color-text3 mb-3">Send order, payment, dispute, or seller-account questions to platform support.</p>
+          <button class="btn btn-primary btn-sm" onclick="openAdminSupportChat('Hello Admin Support, I need help with my BUYSELL account.')"><i class="fa-solid fa-comment-dots"></i> Start Chat</button>
+        </div>
+        <div class="card card-pad">
+          <h3 class="mb-1" style="font-size:.95rem"><i class="fa-brands fa-whatsapp color-green"></i> WhatsApp Support</h3>
+          <p class="text-xs color-text3 mb-3">Use WhatsApp for urgent checkout, delivery, or verification support.</p>
+          <a href="https://wa.me/2349061484256?text=Hello%20BUYSELL%20Support" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Open WhatsApp</a>
+        </div>
+        <div class="card card-pad">
+          <h3 class="mb-1" style="font-size:.95rem"><i class="fa-solid fa-bullhorn color-green"></i> Admin Messages</h3>
+          <p class="text-xs color-text3 mb-3">Latest platform notices for your account.</p>
+          <div id="buyer-broadcast-list"><p class="text-xs color-text3">No admin messages yet.</p></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Services tab
     <div id="buyer-services-tab" class="hidden">
       <div class="section-header mb-3">
@@ -471,6 +498,7 @@
         <div class="dash-nav-section">
           <div class="dash-nav-label">Account</div>
           <a class="dash-nav-item" onclick="showDash('settings');closeMobSidebar()"><i class="fa-solid fa-gear"></i> Store Settings</a>
+          <a class="dash-nav-item" onclick="showDash('support');closeMobSidebar()"><i class="fa-solid fa-headset"></i> Support</a>
           <a class="dash-nav-item admin-item hidden" id="admin-nav-item" onclick="showDash('admin');closeMobSidebar()"><i class="fa-solid fa-shield-alt"></i> Super Admin</a>
         </div>
       </nav>
@@ -881,6 +909,29 @@
             </div>
             <button type="submit" class="btn btn-primary btn-full" id="settings-save-btn"><i class="fa-solid fa-floppy-disk"></i> Save All Settings</button>
           </form>
+        </div>
+      </div>
+
+      <!-- SUPPORT -->
+      <div id="ds-support" class="dash-section">
+        <h1 class="dash-page-title">Seller Support</h1>
+        <p class="dash-page-sub">Contact admin support and view platform messages for your store.</p>
+        <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr));margin-bottom:1rem">
+          <div class="card card-pad">
+            <h3 class="mb-1" style="font-size:.95rem"><i class="fa-solid fa-user-shield color-green"></i> Message Admin</h3>
+            <p class="text-xs color-text3 mb-3">Get help with KYC, commission receipts, listings, orders, disputes, and payouts.</p>
+            <button class="btn btn-primary btn-sm" onclick="openAdminSupportChat('Hello Admin Support, I need help with my seller account.')"><i class="fa-solid fa-comment-dots"></i> Start Chat</button>
+          </div>
+          <div class="card card-pad">
+            <h3 class="mb-1" style="font-size:.95rem"><i class="fa-brands fa-whatsapp color-green"></i> WhatsApp Support</h3>
+            <p class="text-xs color-text3 mb-3">Use WhatsApp for urgent payment or verification issues.</p>
+            <a href="https://wa.me/2349061484256?text=Hello%20BUYSELL%20Seller%20Support" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Open WhatsApp</a>
+          </div>
+          <div class="card card-pad">
+            <h3 class="mb-1" style="font-size:.95rem"><i class="fa-solid fa-bullhorn color-green"></i> Admin Messages</h3>
+            <p class="text-xs color-text3 mb-3">Broadcasts sent to sellers appear here.</p>
+            <div id="seller-broadcast-list"><p class="text-xs color-text3">No admin messages yet.</p></div>
+          </div>
         </div>
       </div>
 
@@ -2541,7 +2592,7 @@
 
 <script src="https://js.paystack.co/v2/inline.js"></script>
 <script data-cfasync="false" src="config.js?v=3.3"></script>
-<script src="app.js?v=7.9"></script>
+<script src="app.js?v=8.0"></script>
   <script>
     (function() {
       'use strict';
