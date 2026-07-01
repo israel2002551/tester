@@ -3,6 +3,7 @@
 //  Config loaded from config.js (secrets are .gitignored)
 // ====================================================
 
+
 let chatHistory = []; 
 let adminAiHistory = [];
 let currentUser = null, currentRole = 'buyer', currentProd = null;
@@ -2099,12 +2100,7 @@ async function startCheckout() {
           <div class="payment-method-card paystack-card selected" id="pm-paystack" onclick="selectCheckoutPaymentMethod('paystack')">
             <span class="payment-method-icon"><i class="fa-solid fa-credit-card" style="color:#0BA4DB"></i></span>
             <div class="payment-method-title">Paystack Checkout</div>
-            <div class="payment-method-sub">Cards, USSD, Transfer</div>
-          </div>
-          <div class="payment-method-card" id="pm-transfer" onclick="selectCheckoutPaymentMethod('transfer')">
-            <span class="payment-method-icon"><i class="fa-solid fa-building-columns" style="color:var(--gold)"></i></span>
-            <div class="payment-method-title">Bank Transfer</div>
-            <div class="payment-method-sub">Upload receipt</div>
+            <div class="payment-method-sub">Cards, USSD, bank checkout</div>
           </div>
           ${walletCardHtml}
         </div>`;
@@ -2122,16 +2118,9 @@ async function startCheckout() {
       <div class="font-bold text-sm">${fmtN(c.price*(c.qty||1))}</div>
     </div>`).join('');
     
-  const sellerProfile = cart[0]?.profiles || {};
   const bankBox = document.getElementById('seller-bank-details-co');
   if (bankBox) {
-    const hasBankDetails = sellerProfile.bank_name && sellerProfile.account_number && sellerProfile.account_name;
-    bankBox.innerHTML = hasBankDetails
-      ? `
-        <div class="pay-row"><span class="label">Bank</span><span class="value">${escHtml(sellerProfile.bank_name)}</span></div>
-        <div class="pay-row"><span class="label">Account No.</span><span class="value">${escHtml(sellerProfile.account_number)}</span></div>
-        <div class="pay-row"><span class="label">Account Name</span><span class="value">${escHtml(sellerProfile.account_name)}</span></div>`
-      : `<p class="text-xs color-text3 p-2">Seller bank details are not available. Please use Paystack checkout.</p>`;
+    bankBox.innerHTML = `<p class="text-xs color-text3 p-2">Direct seller bank transfer is no longer available. Please use Paystack checkout.</p>`;
   }
 }
 function goCheckoutStep(step) {
@@ -2319,7 +2308,7 @@ async function payWithPaystack() {
 
 // --- NEW WALLET SELECTION METHOD AND ENGINE CORES ---
 function selectCheckoutPaymentMethod(method) {
-  const nextMethod = ['paystack', 'transfer', 'wallet'].includes(method) ? method : 'paystack';
+  const nextMethod = ['paystack', 'wallet'].includes(method) ? method : 'paystack';
   checkoutPaymentMethod = nextMethod;
   const paystackCard = document.getElementById('pm-paystack');
   const transferCard = document.getElementById('pm-transfer');
@@ -2328,10 +2317,10 @@ function selectCheckoutPaymentMethod(method) {
   const transferPanel = document.getElementById('pm-transfer-panel');
 
   if (paystackCard) paystackCard.classList.toggle('selected', nextMethod === 'paystack');
-  if (transferCard) transferCard.classList.toggle('selected', nextMethod === 'transfer');
+  if (transferCard) transferCard.classList.remove('selected');
   if (walletCard) walletCard.classList.toggle('selected', nextMethod === 'wallet');
-  if (paystackPanel) paystackPanel.classList.toggle('hidden', nextMethod === 'transfer');
-  if (transferPanel) transferPanel.classList.toggle('hidden', nextMethod !== 'transfer');
+  if (paystackPanel) paystackPanel.classList.remove('hidden');
+  if (transferPanel) transferPanel.classList.add('hidden');
   
   // Dynamically flip the submit button execution routing target
   const payBtn = document.querySelector('#pm-paystack-panel .btn-paystack') || document.querySelector('#co-p2 .btn-primary');
@@ -6646,13 +6635,31 @@ async function submitKyc(event) {
       seller_verified: false,
     }, { id: currentUser.id });
     currentUser.profile = { ...(currentUser.profile || {}), kyc_status: 'pending' };
+
+    let autoKycResult = null;
+    try {
+      autoKycResult = await callEdge('auto-verify-kyc', {});
+      currentUser.profile = {
+        ...(currentUser.profile || {}),
+        kyc_status: autoKycResult.status || currentUser.profile?.kyc_status || 'pending',
+        verification_status: autoKycResult.verified ? 'verified' : 'pending',
+        seller_verified: !!autoKycResult.verified,
+      };
+    } catch (autoError) {
+      console.warn('Automatic KYC verification unavailable:', autoError);
+    }
+
     document.getElementById('kyc-form')?.reset();
     document.getElementById('kyc-front-label').textContent = 'Tap to upload front of ID';
     document.getElementById('kyc-back-label').textContent = 'Tap to upload back of ID';
     const selfieLabel = document.getElementById('kyc-selfie-label');
     if (selfieLabel) selfieLabel.textContent = 'Take a selfie holding your ID next to your face';
     closeModal('kyc-modal');
-    toast('KYC Submitted!', 'Seller dashboard access is now open while admin reviews your documents.', 'success');
+    if (autoKycResult?.verified) {
+      toast('KYC Verified!', 'Your seller account is now verified.', 'success');
+    } else {
+      toast('KYC Submitted!', 'Seller dashboard access is now open while verification is reviewed.', 'success');
+    }
     await showSellerDashboard();
   } catch(e) {
     toast('Submission Error', e.message, 'error');
