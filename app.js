@@ -283,70 +283,76 @@ if (typeof supabase !== 'undefined') {
     console.log(`⚡ Gatekeeper Auth Engine Event: ${event}`);
     
     setTimeout(async () => {
-    const authButton = document.querySelector('.nav-sign-in-btn') || 
-                       document.getElementById('landing-auth-btn') ||
-                       document.getElementById('nav-auth-inner-btn');
+      const authButton = document.querySelector('.nav-sign-in-btn') || 
+                         document.getElementById('landing-auth-btn') ||
+                         document.getElementById('nav-auth-inner-btn');
 
-    if (session && session.user) {
-      await onAuthSuccess(session.user);
-      console.log("📥 Active user credentials cached securely in memory: " + currentUser.email);
+      if (session && session.user) {
+        await onAuthSuccess(session.user);
+        console.log("📥 Active user credentials cached securely in memory: " + currentUser.email);
 
-      if (authButton) {
-        authButton.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
-        authButton.onclick = async (e) => {
-          e.preventDefault();
-          appStorage.clear();
-          await supabase.auth.signOut();
-          window.location.reload(); 
-        };
-      }
-
-      try {
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .maybeSingle();
-
-        if (!error && profile) {
-          currentUser.profile = profile;
-          currentRole = profile.role || 'buyer';
+        if (authButton) {
+          authButton.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
+          authButton.onclick = async (e) => {
+            e.preventDefault();
+            appStorage.clear();
+            await supabase.auth.signOut();
+            window.location.reload(); 
+          };
         }
-      } catch (e) {
-        console.warn("⚠️ Background profile parsing deferred:", e.message);
-      }
 
-      const shouldContinueAfterAuth = appStorage.getItem('bs_manual_navigation_pass') || hasAuthRedirectParams();
+        try {
+          const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .maybeSingle();
 
-      // Keep passive session restores on the market landing. OAuth callbacks and button clicks route into the app.
-      if (!shouldContinueAfterAuth) {
-        console.log("Background session detected. Holding layout on market landing.");
-        showMarketLandingPage();
-      } else {
-        continuePendingEntry();
-      }
-
-    } else {
-      console.log("🔴 Guest View Matrix Active.");
-      currentUser = null;
-      currentRole = 'buyer';
-
-      if (authButton) {
-        authButton.innerHTML = `<i class="fas fa-sign-in-alt"></i> Sign In`;
-        authButton.onclick = (e) => {
-          e.preventDefault();
-          if (typeof showModal === 'function') {
-            showModal('auth-modal');
-            toggleAuth('login');
+          if (!error && profile) {
+            currentUser.profile = profile;
+            currentRole = profile.role || 'buyer';
           }
-        };
-      }
+        } catch (e) {
+          console.warn("⚠️ Background profile parsing deferred:", e.message);
+        }
 
-      showMarketLandingPage();
-    }
+        // 🚀 ROUTER INTEGRATION: Intercept inbound query parameters and pop chat UI if active
+        if (typeof processInboundChatRedirects === 'function') {
+          processInboundChatRedirects();
+        }
+
+        const shouldContinueAfterAuth = appStorage.getItem('bs_manual_navigation_pass') || hasAuthRedirectParams();
+
+        // Keep passive session restores on the market landing. OAuth callbacks and button clicks route into the app.
+        if (!shouldContinueAfterAuth) {
+          console.log("Background session detected. Holding layout on market landing.");
+          showMarketLandingPage();
+        } else {
+          continuePendingEntry();
+        }
+
+      } else {
+        console.log("🔴 Guest View Matrix Active.");
+        currentUser = null;
+        currentRole = 'buyer';
+
+        if (authButton) {
+          authButton.innerHTML = `<i class="fas fa-sign-in-alt"></i> Sign In`;
+          authButton.onclick = (e) => {
+            e.preventDefault();
+            if (typeof showModal === 'function') {
+              showModal('auth-modal');
+              toggleAuth('login');
+            }
+          };
+        }
+
+        showMarketLandingPage();
+      }
     }, 0);
   });
 }
+
 // ====================================================
 //  STATE
 // ====================================================
@@ -1080,21 +1086,26 @@ function enterSite(mode) {
 function processInboundChatRedirects() {
   const urlParameters = new URLSearchParams(window.location.search);
   const targetChatPartnerId = urlParameters.get('chat');
+  const targetProductId = urlParameters.get('product'); // 👈 Captures optional product context
   
   // Make sure we have a valid chat parameter and a logged-in user
   if (targetChatPartnerId && currentUser) {
     console.log('[INBOUND ROUTER] Direct chat intercept parameter caught. Partner ID:', targetChatPartnerId);
     
-    // Clear URL parameters cleanly so reloading the window doesn't keep opening the popup
+    // Clear URL parameters cleanly so reloading the window doesn't keep opening the popup loop
     window.history.replaceState({}, document.title, window.location.pathname);
     
     // Fetch user profile properties asynchronously out of database and toggle UI focus layout panels
-    db.from('profiles').select('name').eq('id', targetChatPartnerId).maybeSingle().then(({ data: partner }) => {
-      const companionName = partner ? partner.name : 'Verified Merchant';
-      
-      // Invoke your app's native messaging modal handler to pop open the chat window!
-      openConversation(targetChatPartnerId, companionName); 
-    });
+    db.from('profiles')
+      .select('name')
+      .eq('id', targetChatPartnerId)
+      .maybeSingle()
+      .then(({ data: partner }) => {
+        const companionName = partner ? partner.name : 'Verified Merchant';
+        
+        // Invoke your app's native messaging modal handler with the optional product context passed along!
+        openConversation(targetChatPartnerId, companionName, targetProductId); 
+      });
   }
 }
 
