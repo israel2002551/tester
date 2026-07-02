@@ -352,7 +352,31 @@ if (typeof supabase !== 'undefined') {
     }, 0);
   });
 }
-
+function processInboundChatRedirects() {
+  const urlParameters = new URLSearchParams(window.location.search);
+  const targetChatPartnerId = urlParameters.get('chat');
+  const targetProductId = urlParameters.get('product'); // 👈 Captures optional product context
+  
+  // Make sure we have a valid chat parameter and a logged-in user
+  if (targetChatPartnerId && currentUser) {
+    console.log('[INBOUND ROUTER] Direct chat intercept parameter caught. Partner ID:', targetChatPartnerId);
+    
+    // Clear URL parameters cleanly so reloading the window doesn't keep opening the popup loop
+    window.history.replaceState({}, document.title, window.location.pathname);
+    
+    // Fetch user profile properties asynchronously out of database and toggle UI focus layout panels
+    db.from('profiles')
+      .select('name')
+      .eq('id', targetChatPartnerId)
+      .maybeSingle()
+      .then(({ data: partner }) => {
+        const companionName = partner ? partner.name : 'Verified Merchant';
+        
+        // Invoke your app's native messaging modal handler with the optional product context passed along!
+        openConversation(targetChatPartnerId, companionName, targetProductId); 
+      });
+  }
+}
 // ====================================================
 //  STATE
 // ====================================================
@@ -1083,31 +1107,7 @@ function enterSite(mode) {
 // ==========================================
 // 1. Paste the Helper Function (Top Level or near your other UI functions)
 // ==========================================
-function processInboundChatRedirects() {
-  const urlParameters = new URLSearchParams(window.location.search);
-  const targetChatPartnerId = urlParameters.get('chat');
-  const targetProductId = urlParameters.get('product'); // 👈 Captures optional product context
-  
-  // Make sure we have a valid chat parameter and a logged-in user
-  if (targetChatPartnerId && currentUser) {
-    console.log('[INBOUND ROUTER] Direct chat intercept parameter caught. Partner ID:', targetChatPartnerId);
-    
-    // Clear URL parameters cleanly so reloading the window doesn't keep opening the popup loop
-    window.history.replaceState({}, document.title, window.location.pathname);
-    
-    // Fetch user profile properties asynchronously out of database and toggle UI focus layout panels
-    db.from('profiles')
-      .select('name')
-      .eq('id', targetChatPartnerId)
-      .maybeSingle()
-      .then(({ data: partner }) => {
-        const companionName = partner ? partner.name : 'Verified Merchant';
-        
-        // Invoke your app's native messaging modal handler with the optional product context passed along!
-        openConversation(targetChatPartnerId, companionName, targetProductId); 
-      });
-  }
-}
+
 
 // ==========================================
 // 2. Add it directly inside your existing Auth Listener
