@@ -2798,7 +2798,7 @@ async function loadBuyerOrders() {
       <div class="flex gap-1 flex-wrap mb-2">${(o.items||[]).map(i=>`<span class="text-xs badge badge-gray">${escHtml(i.name)} ×${i.qty}</span>`).join('')}</div>
       <div class="flex gap-2 flex-wrap">
         ${o.status==='delivered'?`<button class="btn btn-outline btn-sm" onclick="openDisputeModal('${o.id}')"><i class="fa-solid fa-exclamation-triangle"></i> Dispute</button>`:''}
-        <a href="https://wa.me/2349061484256?text=Order ${o.id}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Track</a>
+        <a href="https://wa.me/2348116833356?text=Order ${o.id}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Track</a>
       </div>
     </div>`).join('');
 }
@@ -6968,7 +6968,7 @@ async function openAdminSupportChat(prefill = '') {
       input.focus();
     }
   } catch (_) {
-    window.open('https://wa.me/2349061484256?text=Hello%20BUYSELL%20Support', '_blank');
+    window.open('https://wa.me/2348116833356?text=Hello%20BUYSELL%20Support', '_blank');
   }
 }
 
