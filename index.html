@@ -28,62 +28,6 @@
     }
   };
 
-  window.OneSignalDeferred = window.OneSignalDeferred || [];
-  const canLoadOneSignal = (location.protocol === 'http:' || location.protocol === 'https:')
-    && window.bsCanUseBrowserStorage('localStorage');
-  if (canLoadOneSignal) {
-    const oneSignalSdk = document.createElement('script');
-    oneSignalSdk.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js';
-    oneSignalSdk.defer = true;
-    document.head.appendChild(oneSignalSdk);
-  } else {
-    console.info('OneSignal skipped in this browser context.');
-  }
-</script>
-<script>
-  window.OneSignalDeferred = window.OneSignalDeferred || [];
-  if ((location.protocol === 'http:' || location.protocol === 'https:') && window.bsCanUseBrowserStorage('localStorage')) {
-  OneSignalDeferred.push(async function(OneSignal) {
-    try {
-    
-    await OneSignal.init({
-      appId: "a30fe2f5-9915-415b-a889-f768b0fa96cf",
-      allowLocalhostAsSecureOrigin: true,
-      
-      // 🚀 STRIPPED OVERRIDING SITEURL CHANNELS — Let the Dashboard handle it natively!
-      serviceWorker: {
-        path: "OneSignalSDKWorker.js",
-        scope: "/"
-      }
-    });
-
-    await OneSignal.Notifications.requestPermission();
-
-    // Check interval loop waiting for app.js instantiation
-    const syncSessionInterval = setInterval(() => {
-      if (window.supabaseAppClient) {
-        clearInterval(syncSessionInterval);
-        
-        window.supabaseAppClient.auth.onAuthStateChange(async (event, session) => {
-          try {
-          if (session?.user) {
-            console.log("🔗 Syncing user token registration...");
-            await OneSignal.login(session.user.id);
-          } else if (event === 'SIGNED_OUT') {
-            await OneSignal.logout();
-          }
-          } catch (error) {
-            console.warn('OneSignal session sync skipped.', error);
-          }
-        });
-      }
-    }, 100);
-
-    } catch (error) {
-      console.warn('OneSignal unavailable in this browser context.', error);
-    }
-  });
-  }
 </script>
   <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
 <meta name="referrer" content="strict-origin-when-cross-origin">
@@ -94,7 +38,7 @@
 <!-- PWA Banner -->
 <div id="pwa-banner">
   <div class="pwa-text">
-    <div class="pwa-title">📲 Install BUYSELL App</div>
+    <div class="pwa-title">ðŸ“² Install BUYSELL App</div>
     <div class="pwa-sub">Add to home screen for faster access</div>
   </div>
   <div class="pwa-actions">
@@ -106,7 +50,7 @@
 <div class="mob-sidebar-overlay" id="mob-overlay" onclick="closeMobSidebar()"></div>
 
 <!-- ==================== LANDING ==================== -->
-<!-- 🚀 CHANGE THIS LINE TO INCLUDE display: none; -->
+<!-- ðŸš€ CHANGE THIS LINE TO INCLUDE display: none; -->
   <div id="marketing-placeholder" style="display:none"></div>
 <div id="landing" style="display: flex;">
   <div class="landing-bg"></div>
@@ -115,14 +59,14 @@
       <div class="brand-icon">B</div>
       <div><div class="brand-text">BUY<span>SELL</span></div><div class="brand-tld">.nigeria</div></div>
     </a>
-<!-- 🚀 CHANGE TO THIS: -->
+<!-- ðŸš€ CHANGE TO THIS: -->
 <button class="btn btn-ghost btn-sm" id="landing-auth-btn" onclick="handleLandingAuthClick()"><i class="fa-solid fa-sign-in-alt" id="landing-auth-icon"></i> <span id="landing-auth-text">Sign In</span></button>
   </header>
   <main class="landing-main">
     <div class="landing-inner">
       <div class="landing-tagline">
         <div class="pre-badge"><i class="fa-solid fa-bolt"></i> Nigeria's #1 Seller-First Marketplace</div>
-        <h1>Buy, Sell & Earn —<br><em>The Nigerian Way</em></h1>
+        <h1>Buy, Sell & Earn â€”<br><em>The Nigerian Way</em></h1>
         <p>Authentic products, secure Paystack payments, dropshipping & affiliate income. All in one platform.</p>
       </div>
       <div class="portal-grid" id="portal-grid">
@@ -155,7 +99,7 @@
           <span class="portal-badge" style="background:var(--purple)">NEW</span>
           <div class="portal-icon" style="background:linear-gradient(135deg,var(--purple),#7c3aed)"><i class="fa-solid fa-tools" style="color:#fff"></i></div>
           <h2>I'm a Service Pro</h2>
-          <p>Offer your skills — tailoring, cleaning, plumbing, photography, design & more. Get hired by local clients.</p>
+          <p>Offer your skills â€” tailoring, cleaning, plumbing, photography, design & more. Get hired by local clients.</p>
           <div class="portal-features">
             <div class="portal-feat"><i class="fa-solid fa-briefcase"></i> Service Portfolio</div>
             <div class="portal-feat"><i class="fa-solid fa-naira-sign"></i> Set Your Rates</div>
@@ -185,7 +129,7 @@
     </a>
     <div class="nav-search">
       <i class="fa-solid fa-search search-icon"></i>
-      <input type="text" id="search-input" placeholder="Search products, brands…" onkeyup="if(event.key==='Enter')doSearch()">
+      <input type="text" id="search-input" placeholder="Search products, brandsâ€¦" onkeyup="if(event.key==='Enter')doSearch()">
       <button class="search-btn" onclick="doSearch()" aria-label="Search"><i class="fa-solid fa-search"></i></button>
     </div>
     <div class="nav-actions">
@@ -225,7 +169,7 @@
           <img src="https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1400&h=500&fit=crop" alt="Electronics" loading="lazy">
           <div class="slide-overlay"></div>
           <div class="slide-content">
-            <span class="slide-tag">⚡ HOT DEALS</span>
+            <span class="slide-tag">âš¡ HOT DEALS</span>
             <h2>Tech & Electronics</h2>
             <p>Up to 70% off on microcontrollers, sensors & laptops.</p>
             <button class="btn btn-gold btn-sm" onclick="filterCat('electronics')">Shop Now <i class="fa-solid fa-arrow-right"></i></button>
@@ -235,7 +179,7 @@
           <img src="https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?w=1400&h=500&fit=crop" alt="Fashion" loading="lazy">
           <div class="slide-overlay"></div>
           <div class="slide-content">
-            <span class="slide-tag" style="background:var(--green);color:#fff">🎨 NEW ARRIVALS</span>
+            <span class="slide-tag" style="background:var(--green);color:#fff">ðŸŽ¨ NEW ARRIVALS</span>
             <h2>African Fashion</h2>
             <p>Authentic Ankara, Aso-oke & contemporary styles.</p>
             <button class="btn btn-primary btn-sm" onclick="filterCat('fashion')">Explore <i class="fa-solid fa-arrow-right"></i></button>
@@ -245,7 +189,7 @@
           <img src="https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=1400&h=500&fit=crop" alt="Deals" loading="lazy">
           <div class="slide-overlay"></div>
           <div class="slide-content">
-            <span class="slide-tag" style="background:#0BA4DB;color:#fff">💳 SECURE CHECKOUT</span>
+            <span class="slide-tag" style="background:#0BA4DB;color:#fff">ðŸ’³ SECURE CHECKOUT</span>
             <h2>Pay with Paystack</h2>
             <p>Cards, USSD, bank checkout & more. 100% secure.</p>
             <button class="btn btn-ghost btn-sm" onclick="filterCat('all')">Browse All <i class="fa-solid fa-arrow-right"></i></button>
@@ -265,7 +209,7 @@
   <!-- Flash Sales Banner -->
   <div id="flash-sales-container" class="buyer-inner hidden" style="padding-top:.5rem">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem">
-      <h2 style="margin:0;font-size:1.05rem;display:flex;align-items:center;gap:.4rem"><span style="background:#ef4444;color:#fff;padding:.2rem .5rem;border-radius:6px;font-size:.75rem;font-weight:700">⚡ FLASH SALE</span> Deal of the Day</h2>
+      <h2 style="margin:0;font-size:1.05rem;display:flex;align-items:center;gap:.4rem"><span style="background:#ef4444;color:#fff;padding:.2rem .5rem;border-radius:6px;font-size:.75rem;font-weight:700">âš¡ FLASH SALE</span> Deal of the Day</h2>
     </div>
     <div id="flash-sales-list" style="display:flex;gap:.75rem;overflow-x:auto;padding-bottom:.5rem;-webkit-overflow-scrolling:touch"></div>
   </div>
@@ -291,10 +235,10 @@
   <div class="buyer-inner products-section">
     <!-- Buyer tabs (Shop / My Orders) -->
     <div class="buyer-tabs">
-      <button class="buyer-tab active" id="tab-shop" onclick="switchBuyerTab('shop')">🛍️ Shop</button>
-      <button class="buyer-tab" id="tab-orders" onclick="switchBuyerTab('orders')">📦 My Orders</button>
+      <button class="buyer-tab active" id="tab-shop" onclick="switchBuyerTab('shop')">ðŸ›ï¸ Shop</button>
+      <button class="buyer-tab" id="tab-orders" onclick="switchBuyerTab('orders')">ðŸ“¦ My Orders</button>
       <button class="buyer-tab" id="tab-support" onclick="switchBuyerTab('support')"><i class="fa-solid fa-headset"></i> Support</button>
-      <!-- <button class="buyer-tab" id="tab-services" onclick="switchBuyerTab('services')">🔧 Hire Services</button> -->
+      <!-- <button class="buyer-tab" id="tab-services" onclick="switchBuyerTab('services')">ðŸ”§ Hire Services</button> -->
     </div>
 
     <!-- Shop tab -->
@@ -304,8 +248,8 @@
         <button class="filter-chip" onclick="showModal('filters-modal')"><i class="fa-solid fa-sliders-h"></i> Filters <span class="filter-count" id="filter-count" style="display:none">0</span></button>
         <select id="sort-select" class="form-select" style="width:auto;padding:.38rem .72rem;font-size:.78rem" onchange="sortProds()">
           <option value="newest">Newest</option>
-          <option value="price-asc">Price ↑</option>
-          <option value="price-desc">Price ↓</option>
+          <option value="price-asc">Price â†‘</option>
+          <option value="price-desc">Price â†“</option>
           <option value="rating">Top Rated</option>
         </select>
         <div id="active-filters"></div>
@@ -314,7 +258,7 @@
       <div class="section-header">
         <div>
           <h2 class="section-title" id="section-title-text">Latest Products</h2>
-          <div class="section-meta">Live from BUYSELL • <span id="prod-count">0</span> items</div>
+          <div class="section-meta">Live from BUYSELL â€¢ <span id="prod-count">0</span> items</div>
         </div>
       </div>
 
@@ -378,7 +322,7 @@
       <div class="section-header mb-3">
         <div>
           <h2 class="section-title">Hire a Professional</h2>
-          <div class="section-meta">Verified local service providers on BUYSELL • <span id="svc-count">0</span> available</div>
+          <div class="section-meta">Verified local service providers on BUYSELL â€¢ <span id="svc-count">0</span> available</div>
         </div>
       </div>
       <div class="cats-strip mb-3">
@@ -416,7 +360,7 @@
       <div class="trust-grid">
         <div class="trust-card"><div class="trust-icon" style="background:#dcfce7"><i class="fa-solid fa-shield-alt" style="color:var(--green)"></i></div><h3>Buyer Protection</h3><p>Full refund guarantee</p></div>
         <div class="trust-card"><div class="trust-icon" style="background:#dbeafe"><i class="fa-solid fa-credit-card" style="color:#3b82f6"></i></div><h3>Paystack Secure</h3><p>Cards, bank, USSD & more</p></div>
-        <div class="trust-card"><div class="trust-icon" style="background:#fef9c3"><i class="fa-solid fa-shipping-fast" style="color:var(--gold)"></i></div><h3>Fast Delivery</h3><p>Nationwide in 2–5 days</p></div>
+        <div class="trust-card"><div class="trust-icon" style="background:#fef9c3"><i class="fa-solid fa-shipping-fast" style="color:var(--gold)"></i></div><h3>Fast Delivery</h3><p>Nationwide in 2â€“5 days</p></div>
         <div class="trust-card"><div class="trust-icon" style="background:#f3e8ff"><i class="fa-solid fa-star" style="color:var(--purple)"></i></div><h3>Verified Reviews</h3><p>Real buyer ratings</p></div>
       </div>
     </div>
@@ -434,7 +378,7 @@
           <h1 class="sf-name" id="sf-name">Store Name</h1>
           <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.65rem">
             <span class="badge badge-verified"><i class="fa-solid fa-check"></i> Verified Seller</span>
-            <div class="stars" id="sf-stars">★★★★★</div>
+            <div class="stars" id="sf-stars">â˜…â˜…â˜…â˜…â˜…</div>
             <span class="text-xs" style="color:rgba(255,255,255,.5)" id="sf-review-count">0 reviews</span>
           </div>
           <div class="sf-stats">
@@ -505,7 +449,7 @@
       <div class="dash-sidebar-footer">
         <div class="dash-user-card">
           <div class="nav-avatar" style="width:33px;height:33px;font-size:.75rem;flex-shrink:0"><i class="fa-solid fa-user"></i></div>
-          <div style="min-width:0"><div class="u-name" id="dash-user-name">Loading…</div><div class="u-email" id="dash-user-email">…</div></div>
+          <div style="min-width:0"><div class="u-name" id="dash-user-name">Loadingâ€¦</div><div class="u-email" id="dash-user-email">â€¦</div></div>
         </div>
         <div class="dash-logout" onclick="logoutUser()"><i class="fa-solid fa-sign-out-alt"></i> Sign Out</div>
       </div>
@@ -518,10 +462,10 @@
         <p class="dash-page-sub">Welcome back! Here's your store at a glance.</p>
         <div class="stats-grid">
           <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-box" style="color:var(--green)"></i></div><span class="stat-trend">+12%</span></div><div class="stat-value" id="st-products">0</div><div class="stat-label">Active Products</div></div>
-          <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-coins" style="color:var(--gold)"></i></div><span class="stat-trend">+8%</span></div><div class="stat-value" id="st-revenue">₦0</div><div class="stat-label">Total Revenue</div></div>
+          <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-coins" style="color:var(--gold)"></i></div><span class="stat-trend">+8%</span></div><div class="stat-value" id="st-revenue">â‚¦0</div><div class="stat-label">Total Revenue</div></div>
           <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#ede9fe"><i class="fa-solid fa-receipt" style="color:var(--purple)"></i></div><span class="stat-trend">+5%</span></div><div class="stat-value" id="st-orders">0</div><div class="stat-label">Total Orders</div></div>
-          <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dbeafe"><i class="fa-solid fa-star" style="color:var(--blue)"></i></div></div><div class="stat-value" id="st-rating">—</div><div class="stat-label">Avg Rating</div></div>
-          <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#ffedd5"><i class="fa-solid fa-calendar" style="color:#ea580c"></i></div></div><div class="stat-value" style="font-size:.95rem" id="st-trial">Free Trial</div><div class="stat-label" id="st-days">— days left</div></div>
+          <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dbeafe"><i class="fa-solid fa-star" style="color:var(--blue)"></i></div></div><div class="stat-value" id="st-rating">â€”</div><div class="stat-label">Avg Rating</div></div>
+          <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#ffedd5"><i class="fa-solid fa-calendar" style="color:#ea580c"></i></div></div><div class="stat-value" style="font-size:.95rem" id="st-trial">Free Trial</div><div class="stat-label" id="st-days">â€” days left</div></div>
         </div>
         <!-- Sales chart -->
         <div class="chart-card mb-4">
@@ -562,14 +506,15 @@
       <!-- ADD PRODUCT -->
       <div id="ds-add-product" class="dash-section">
         <h1 class="dash-page-title">Add New Product</h1>
-        <p class="dash-page-sub">Products with videos get 3× more sales! 🎬</p>
+        <p class="dash-page-sub">Products with videos get 3Ã— more sales! ðŸŽ¬</p>
         <div class="card card-pad-lg" style="max-width:650px">
           <form id="add-prod-form" onsubmit="submitProduct(event)">
             <div class="form-group"><label class="form-label">Product Name <span class="req">*</span></label><input type="text" id="p-name" class="form-input" required placeholder="e.g., iPhone 14 Pro Max"></div>
             <div class="form-grid form-grid-2">
-              <div class="form-group"><label class="form-label">Price (₦) <span class="req">*</span></label><input type="number" id="p-price" class="form-input" required placeholder="500000" inputmode="numeric"></div>
+              <div class="form-group"><label class="form-label">Price (â‚¦) <span class="req">*</span></label><input type="number" id="p-price" class="form-input" required placeholder="500000" inputmode="numeric"></div>
               <div class="form-group"><label class="form-label">Original Price</label><input type="number" id="p-orig-price" class="form-input" placeholder="Crossed-out price" inputmode="numeric"></div>
             </div>
+            <div class="form-group"><label class="form-label">Shipping Fee (â‚¦) <span class="req">*</span></label><input type="number" id="p-shipping-fee" class="form-input" required placeholder="e.g. 2500" inputmode="numeric" min="0"><div class="text-xs color-text3 mt-1">Set 0 only if you offer free delivery for this product.</div></div>
             <div class="form-grid form-grid-2">
               <div class="form-group"><label class="form-label">Stock Quantity <span class="req">*</span></label><input type="number" id="p-stock" class="form-input" required placeholder="e.g. 10" inputmode="numeric" min="0"></div>
               <div class="form-group"><label class="form-label">Low Stock Alert</label><input type="number" id="p-low-stock" class="form-input" placeholder="Alert at (e.g. 3)" inputmode="numeric" min="1"></div>
@@ -579,26 +524,26 @@
                 <select id="p-category" class="form-select" required><option value="electronics">Electronics</option><option value="fashion">Fashion</option><option value="home">Home & Kitchen</option><option value="phones">Phones & Tablets</option><option value="beauty">Beauty & Health</option><option value="sports">Sports</option><option value="dropship">Dropshipping</option></select>
               </div>
               <div class="form-group"><label class="form-label">Condition <span class="req">*</span></label>
-                <select id="p-condition" class="form-select" required><option value="new">Brand New</option><option value="used-like-new">Used – Like New</option><option value="used-good">Used – Good</option></select>
+                <select id="p-condition" class="form-select" required><option value="new">Brand New</option><option value="used-like-new">Used â€“ Like New</option><option value="used-good">Used â€“ Good</option></select>
               </div>
             </div>
             <div class="form-group">
   <label class="form-label">Description <span class="req">*</span></label>
-  <textarea id="p-desc" class="form-textarea" required placeholder="Describe your product in detail…"></textarea>
+  <textarea id="p-desc" class="form-textarea" required placeholder="Describe your product in detailâ€¦"></textarea>
   <button type="button" class="btn btn-outline btn-sm mt-1" onclick="generateDescription()">
     <i class="fa-solid fa-magic"></i> Generate with AI
   </button>
 </div>
             <div class="form-group"><label class="form-label">Location <span class="req">*</span></label><input type="text" id="p-location" class="form-input" required placeholder="e.g., Ikeja, Lagos"></div>
             <div class="form-group"><label class="form-label">Product Image <span class="req">*</span></label><input type="file" id="p-image" class="form-input" accept="image/*" style="background:var(--cream)"></div>
-            <div class="form-group"><label class="form-label">Product Video <span style="color:var(--text3);font-weight:400">(Recommended — 3× more sales)</span></label><input type="file" id="p-video" class="form-input" accept="video/*" style="background:var(--cream)"><div style="font-size:.74rem;color:var(--text3);margin-top:.28rem"><i class="fa-solid fa-info-circle"></i> Max 50MB.</div></div>
+            <div class="form-group"><label class="form-label">Product Video <span style="color:var(--text3);font-weight:400">(Recommended â€” 3Ã— more sales)</span></label><input type="file" id="p-video" class="form-input" accept="video/*" style="background:var(--cream)"><div style="font-size:.74rem;color:var(--text3);margin-top:.28rem"><i class="fa-solid fa-info-circle"></i> Max 50MB.</div></div>
             <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;margin-bottom:1.1rem"><input type="checkbox" id="p-negotiable" style="width:17px;height:17px;accent-color:var(--green)"><span class="text-sm">Price is Negotiable</span></label>
             <button type="submit" class="btn btn-primary btn-full btn-lg" id="pub-btn"><span id="pub-btn-text">Publish Product</span><span id="pub-spinner" class="spinner hidden"></span></button>
           </form>
         </div>
         <div class="card card-pad-lg" style="max-width:650px;margin-top:1.25rem">
           <h3 class="mb-1"><i class="fa-solid fa-file-alt color-green"></i> Bulk Upload via CSV</h3>
-          <p class="text-xs color-text3 mb-3">Upload multiple products at once. <a href="#" onclick="downloadCsvTemplate()" style="color:var(--green)">Download template →</a></p>
+          <p class="text-xs color-text3 mb-3">Upload multiple products at once. <a href="#" onclick="downloadCsvTemplate()" style="color:var(--green)">Download template â†’</a></p>
           <div class="upload-zone" id="csv-zone" onclick="document.getElementById('csv-file').click()">
             <i class="fa-solid fa-cloud-upload-alt"></i>
             <div class="upload-label">Click to upload CSV file</div>
@@ -624,25 +569,25 @@
       <!-- DROPSHIPPING -->
       <div id="ds-dropshipping" class="dash-section">
         <h1 class="dash-page-title">Global Dropshipping</h1>
-        <p class="dash-page-sub">Import from AliExpress & CJ Dropshipping – no inventory needed</p>
+        <p class="dash-page-sub">Import from AliExpress & CJ Dropshipping â€“ no inventory needed</p>
         <div class="card card-pad mb-4"><h3 class="mb-3">Connect Suppliers</h3>
           <div class="supplier-grid">
             <div class="supplier-card" onclick="connectSupplier('aliexpress')"><div class="flex items-center gap-3 mb-4"><div class="trust-icon" style="background:#fee2e2;font-size:1.1rem"><i class="fa-solid fa-globe" style="color:#e53e3e"></i></div><div><div class="font-600">AliExpress</div><div class="text-xs color-text3">Millions of products</div></div></div><button class="btn btn-primary btn-full btn-sm">Connect</button></div>
             <div class="supplier-card" onclick="connectSupplier('cj')"><div class="flex items-center gap-3 mb-4"><div class="trust-icon" style="background:#ffedd5;font-size:1.1rem"><i class="fa-solid fa-box" style="color:#ea580c"></i></div><div><div class="font-600">CJ Dropshipping</div><div class="text-xs color-text3">Fast shipping & QC</div></div></div><button class="btn btn-primary btn-full btn-sm">Connect</button></div>
           </div>
         </div>
-        <div class="card card-pad mb-4"><h3 class="mb-3">🔥 Hot Items for Nigeria</h3>
+        <div class="card card-pad mb-4"><h3 class="mb-3">ðŸ”¥ Hot Items for Nigeria</h3>
           <div class="hot-items-grid">
-            <div class="hot-item" onclick="importDropship('Mini Projector',45000,120000,'📽️')"><div class="hot-item-img">📽️</div><div class="font-600 text-sm">Mini Projector</div><div class="flex gap-2 mt-1"><span class="text-xs color-text3">₦45k</span><span class="text-xs font-bold color-green">→ ₦120k</span></div><div class="hot-profit">+₦75k (167%)</div></div>
-            <div class="hot-item" onclick="importDropship('Kitchen Gadget Set',8500,25000,'🍳')"><div class="hot-item-img">🍳</div><div class="font-600 text-sm">Kitchen Gadget Set</div><div class="flex gap-2 mt-1"><span class="text-xs color-text3">₦8.5k</span><span class="text-xs font-bold color-green">→ ₦25k</span></div><div class="hot-profit">+₦16.5k (194%)</div></div>
-            <div class="hot-item" onclick="importDropship('Wireless Earbuds',12000,35000,'🎧')"><div class="hot-item-img">🎧</div><div class="font-600 text-sm">Wireless Earbuds</div><div class="flex gap-2 mt-1"><span class="text-xs color-text3">₦12k</span><span class="text-xs font-bold color-green">→ ₦35k</span></div><div class="hot-profit">+₦23k (192%)</div></div>
-            <div class="hot-item" onclick="importDropship('Smart Watch',18000,55000,'⌚')"><div class="hot-item-img">⌚</div><div class="font-600 text-sm">Smart Watch</div><div class="flex gap-2 mt-1"><span class="text-xs color-text3">₦18k</span><span class="text-xs font-bold color-green">→ ₦55k</span></div><div class="hot-profit">+₦37k (206%)</div></div>
+            <div class="hot-item" onclick="importDropship('Mini Projector',45000,120000,'ðŸ“½ï¸')"><div class="hot-item-img">ðŸ“½ï¸</div><div class="font-600 text-sm">Mini Projector</div><div class="flex gap-2 mt-1"><span class="text-xs color-text3">â‚¦45k</span><span class="text-xs font-bold color-green">â†’ â‚¦120k</span></div><div class="hot-profit">+â‚¦75k (167%)</div></div>
+            <div class="hot-item" onclick="importDropship('Kitchen Gadget Set',8500,25000,'ðŸ³')"><div class="hot-item-img">ðŸ³</div><div class="font-600 text-sm">Kitchen Gadget Set</div><div class="flex gap-2 mt-1"><span class="text-xs color-text3">â‚¦8.5k</span><span class="text-xs font-bold color-green">â†’ â‚¦25k</span></div><div class="hot-profit">+â‚¦16.5k (194%)</div></div>
+            <div class="hot-item" onclick="importDropship('Wireless Earbuds',12000,35000,'ðŸŽ§')"><div class="hot-item-img">ðŸŽ§</div><div class="font-600 text-sm">Wireless Earbuds</div><div class="flex gap-2 mt-1"><span class="text-xs color-text3">â‚¦12k</span><span class="text-xs font-bold color-green">â†’ â‚¦35k</span></div><div class="hot-profit">+â‚¦23k (192%)</div></div>
+            <div class="hot-item" onclick="importDropship('Smart Watch',18000,55000,'âŒš')"><div class="hot-item-img">âŒš</div><div class="font-600 text-sm">Smart Watch</div><div class="flex gap-2 mt-1"><span class="text-xs color-text3">â‚¦18k</span><span class="text-xs font-bold color-green">â†’ â‚¦55k</span></div><div class="hot-profit">+â‚¦37k (206%)</div></div>
           </div>
         </div>
-        <div class="card card-pad"><h3 class="mb-3">📊 Dropship Analytics</h3>
+        <div class="card card-pad"><h3 class="mb-3">ðŸ“Š Dropship Analytics</h3>
           <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
             <div class="stat-card"><div class="stat-value color-green" id="ds-imported">0</div><div class="stat-label">Items Imported</div></div>
-            <div class="stat-card"><div class="stat-value" id="ds-sales">₦0</div><div class="stat-label">Dropship Sales</div></div>
+            <div class="stat-card"><div class="stat-value" id="ds-sales">â‚¦0</div><div class="stat-label">Dropship Sales</div></div>
             <div class="stat-card"><div class="stat-value color-text3" id="ds-pending">0</div><div class="stat-label">Pending</div></div>
           </div>
         </div>
@@ -653,25 +598,25 @@
         <h1 class="dash-page-title">Affiliate & Referral</h1>
         <p class="dash-page-sub">Earn commissions every time someone you refer makes a purchase</p>
         <div class="referral-box mb-4">
-          <h3 style="color:#fff;margin-bottom:.28rem">🎁 Refer & Earn ₦500</h3>
-          <p style="color:rgba(255,255,255,.6);font-size:.82rem">Invite new sellers and earn ₦500 for each successful referral!</p>
+          <h3 style="color:#fff;margin-bottom:.28rem">ðŸŽ Refer & Earn â‚¦500</h3>
+          <p style="color:rgba(255,255,255,.6);font-size:.82rem">Invite new sellers and earn â‚¦500 for each successful referral!</p>
           
         <div class="referral-input-row" style="margin-top:1.5rem">
           <input type="text" id="referral-link" readonly>
           <button class="btn btn-primary" onclick="copyReferralLink()">Copy Link <i class="fa-solid fa-copy"></i></button>
         </div>
         <p style="color:var(--text3); font-size:0.8rem; margin-top:0.5rem">
-          <i class="fa-solid fa-info-circle"></i> Share this link with friends. You earn ₦5,000 immediately when they subscribe as a Seller!
+          <i class="fa-solid fa-info-circle"></i> Share this link with friends. You earn â‚¦5,000 immediately when they subscribe as a Seller!
         </p>
 
         </div>
         <div class="affiliate-grid mb-4">
-          <div class="stat-card"><div class="stat-value color-green" id="aff-total">₦0</div><div class="stat-label">Total Earnings</div></div>
-          <div class="stat-card"><div class="stat-value" id="aff-pending">₦0</div><div class="stat-label">Pending</div></div>
+          <div class="stat-card"><div class="stat-value color-green" id="aff-total">â‚¦0</div><div class="stat-label">Total Earnings</div></div>
+          <div class="stat-card"><div class="stat-value" id="aff-pending">â‚¦0</div><div class="stat-label">Pending</div></div>
           <div class="stat-card"><div class="stat-value" id="aff-clicks">0</div><div class="stat-label">Clicks</div></div>
           <div class="stat-card"><div class="stat-value" id="aff-conversions">0</div><div class="stat-label">Conversions</div></div>
         </div>
-        <div class="card card-pad mb-4"><h3 class="mb-3">🔗 External Programs</h3>
+        <div class="card card-pad mb-4"><h3 class="mb-3">ðŸ”— External Programs</h3>
           <div class="flex gap-2 wrap">
             <button class="btn btn-outline btn-sm"><i class="fa-brands fa-amazon" style="color:#f90"></i> Amazon</button>
             <button class="btn btn-outline btn-sm"><i class="fa-brands fa-ebay" style="color:#0064d2"></i> eBay</button>
@@ -696,7 +641,7 @@
         
         <div class="card card-pad-lg mb-4" style="max-width:700px">
           <h3 class="mb-1"><i class="fa-solid fa-bullhorn color-green"></i> Create New Advertisement</h3>
-          <p class="text-xs color-text3 mb-3">Upload a 30-second video or an image. ₦5,000 for 30 days of premium visibility.</p>
+          <p class="text-xs color-text3 mb-3">Upload a 30-second video or an image. â‚¦5,000 for 30 days of premium visibility.</p>
           <div class="form-group">
             <label class="form-label">Ad Title <span class="req">*</span></label>
             <input type="text" id="ad-title" class="form-input" placeholder="Catchy title for your ad">
@@ -736,7 +681,7 @@
           </div>
           <div class="flex items-center gap-3 mt-4 pt-3" style="border-top:1px solid var(--border)">
             <div style="flex:1">
-              <div class="font-600">Total Price: <span class="color-green font-bold text-lg">₦5,000</span></div>
+              <div class="font-600">Total Price: <span class="color-green font-bold text-lg">â‚¦5,000</span></div>
               <div class="text-xs color-text3">30 days placement after admin approval</div>
             </div>
             <button class="btn btn-primary" onclick="initiateAdPayment()" id="ad-pay-btn"><i class="fa-solid fa-credit-card"></i> Pay & Submit Ad</button>
@@ -759,7 +704,7 @@
         <h1 class="dash-page-title">Product Reviews</h1>
         <p class="dash-page-sub">What buyers are saying about your products</p>
         <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:1.25rem">
-          <div class="stat-card"><div class="stat-value color-gold" id="rv-avg">—</div><div class="stat-label">Average Rating</div></div>
+          <div class="stat-card"><div class="stat-value color-gold" id="rv-avg">â€”</div><div class="stat-label">Average Rating</div></div>
           <div class="stat-card"><div class="stat-value" id="rv-total">0</div><div class="stat-label">Total Reviews</div></div>
           <div class="stat-card"><div class="stat-value color-green" id="rv-5star">0</div><div class="stat-label">5-Star Reviews</div></div>
         </div>
@@ -773,19 +718,19 @@
         <h1 class="dash-page-title">Withdrawals</h1>
         <p class="dash-page-sub">Request payouts from your sales balance</p>
         <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:1.5rem">
-          <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-wallet" style="color:var(--green)"></i></div></div><div class="stat-value color-green" id="wd-available">₦0</div><div class="stat-label">Available Balance</div></div>
-          <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-clock" style="color:var(--gold)"></i></div></div><div class="stat-value color-gold" id="wd-pending">₦0</div><div class="stat-label">Pending Payout</div></div>
-          <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dbeafe"><i class="fa-solid fa-check-circle" style="color:var(--blue)"></i></div></div><div class="stat-value" id="wd-total">₦0</div><div class="stat-label">Total Paid Out</div></div>
+          <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-wallet" style="color:var(--green)"></i></div></div><div class="stat-value color-green" id="wd-available">â‚¦0</div><div class="stat-label">Available Balance</div></div>
+          <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-clock" style="color:var(--gold)"></i></div></div><div class="stat-value color-gold" id="wd-pending">â‚¦0</div><div class="stat-label">Pending Payout</div></div>
+          <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dbeafe"><i class="fa-solid fa-check-circle" style="color:var(--blue)"></i></div></div><div class="stat-value" id="wd-total">â‚¦0</div><div class="stat-label">Total Paid Out</div></div>
         </div>
         <div class="card card-pad mb-4" style="max-width:500px">
           <h3 class="mb-1">Request Withdrawal</h3>
-          <p class="text-xs color-text3 mb-3">Minimum withdrawal: ₦5,000 • Processed within 24hrs</p>
-          <div class="form-group"><label class="form-label">Amount (₦)</label><input type="number" id="wd-amount" class="form-input" placeholder="Enter amount" inputmode="numeric" min="5000"></div>
+          <p class="text-xs color-text3 mb-3">Minimum withdrawal: â‚¦5,000 â€¢ Processed within 24hrs</p>
+          <div class="form-group"><label class="form-label">Amount (â‚¦)</label><input type="number" id="wd-amount" class="form-input" placeholder="Enter amount" inputmode="numeric" min="5000"></div>
           <div class="form-group"><label class="form-label">Bank Account</label>
             <div class="bank-details-box" style="margin:0">
               <div class="bank-row"><span class="bk-label">Bank</span><span class="bk-value" id="wd-bank-name">Not set</span></div>
-              <div class="bank-row"><span class="bk-label">Account</span><span class="bk-value accent" id="wd-acct-num">—</span></div>
-              <div class="bank-row"><span class="bk-label">Name</span><span class="bk-value" id="wd-acct-name">—</span></div>
+              <div class="bank-row"><span class="bk-label">Account</span><span class="bk-value accent" id="wd-acct-num">â€”</span></div>
+              <div class="bank-row"><span class="bk-label">Name</span><span class="bk-value" id="wd-acct-name">â€”</span></div>
             </div>
           </div>
           <button class="btn btn-primary btn-full" onclick="requestWithdrawal()"><i class="fa-solid fa-paper-plane"></i> Submit Withdrawal Request</button>
@@ -798,29 +743,29 @@
       <!-- COMMISSION -->
       <div id="ds-commission" class="dash-section">
         <h1 class="dash-page-title">Platform Commission</h1>
-        <p class="dash-page-sub">₦2,500 after your 1-month free trial</p>
+        <p class="dash-page-sub">â‚¦2,500 after your 1-month free trial</p>
         <div class="commission-box">
           <div class="commission-icon-wrap"><i class="fa-solid fa-dollar-sign"></i></div>
           <h2 style="text-align:center;margin-bottom:.28rem">Commission Payment</h2>
           <p style="text-align:center;color:var(--text3);margin-bottom:1.1rem">Keep your store active after the free trial</p>
           <div class="bank-details-box" style="margin-bottom:1.1rem">
             <div class="bank-row"><span class="bk-label">Status</span><span id="comm-status-badge" class="badge badge-green">Active</span></div>
-            <div class="bank-row"><span class="bk-label">Trial Ends</span><span class="bk-value" id="comm-trial-end">—</span></div>
-            <div class="bank-row"><span class="bk-label">Amount Due</span><span class="bk-value color-gold" style="font-size:1.05rem">₦2,500</span></div>
+            <div class="bank-row"><span class="bk-label">Trial Ends</span><span class="bk-value" id="comm-trial-end">â€”</span></div>
+            <div class="bank-row"><span class="bk-label">Amount Due</span><span class="bk-value color-gold" style="font-size:1.05rem">â‚¦2,500</span></div>
             <hr class="divider">
             <div class="bank-row"><span class="bk-label">Bank</span><span class="bk-value">OPay</span></div>
             <div class="bank-row"><span class="bk-label">Account Number</span><span class="bk-value" style="color:var(--green);font-size:1rem">9061484256</span></div>
             <div class="bank-row"><span class="bk-label">Account Name</span><span class="bk-value">Efe Israel</span></div>
           </div>
-          <button class="btn btn-paystack btn-full mb-2" onclick="payCommissionPaystack()"><i class="fa-solid fa-credit-card"></i> Pay ₦2,500 via Paystack</button>
+          <button class="btn btn-paystack btn-full mb-2" onclick="payCommissionPaystack()"><i class="fa-solid fa-credit-card"></i> Pay â‚¦2,500 via Paystack</button>
           <button class="btn btn-outline btn-full" onclick="showModal('commission-modal')"><i class="fa-solid fa-upload"></i> Upload Bank Transfer Receipt</button>
         </div>
       </div>
 
       <!-- ANALYTICS -->
       <div id="ds-analytics" class="dash-section">
-        <h1 class="dash-page-title">📊 Store Analytics</h1>
-        <p class="dash-page-sub">Understand your performance — views, conversions, and revenue</p>
+        <h1 class="dash-page-title">ðŸ“Š Store Analytics</h1>
+        <p class="dash-page-sub">Understand your performance â€” views, conversions, and revenue</p>
         <div id="seller-analytics-content">
           <div class="skeleton" style="height:200px"></div>
         </div>
@@ -828,19 +773,19 @@
 
       <!-- COUPONS -->
       <div id="ds-coupons" class="dash-section">
-        <h1 class="dash-page-title">🎫 Coupon Manager</h1>
+        <h1 class="dash-page-title">ðŸŽ« Coupon Manager</h1>
         <p class="dash-page-sub">Create discount codes to boost your sales</p>
         <div class="card card-pad-lg mb-4" style="max-width:600px">
           <h3 class="mb-3"><i class="fa-solid fa-plus-circle color-green"></i> Create New Coupon</h3>
           <div class="form-grid form-grid-2">
             <div class="form-group"><label class="form-label">Coupon Code <span class="req">*</span></label><input type="text" id="coupon-new-code" class="form-input" placeholder="e.g. SAVE20" style="text-transform:uppercase"></div>
             <div class="form-group"><label class="form-label">Discount Type</label>
-              <select id="coupon-type" class="form-select"><option value="percent">Percentage (%)</option><option value="fixed">Fixed Amount (₦)</option></select>
+              <select id="coupon-type" class="form-select"><option value="percent">Percentage (%)</option><option value="fixed">Fixed Amount (â‚¦)</option></select>
             </div>
           </div>
           <div class="form-grid form-grid-2">
             <div class="form-group"><label class="form-label">Discount Value <span class="req">*</span></label><input type="number" id="coupon-value" class="form-input" placeholder="e.g. 20" inputmode="numeric"></div>
-            <div class="form-group"><label class="form-label">Min Order (₦)</label><input type="number" id="coupon-min" class="form-input" placeholder="0" inputmode="numeric"></div>
+            <div class="form-group"><label class="form-label">Min Order (â‚¦)</label><input type="number" id="coupon-min" class="form-input" placeholder="0" inputmode="numeric"></div>
           </div>
           <div class="form-grid form-grid-2">
             <div class="form-group"><label class="form-label">Max Uses</label><input type="number" id="coupon-max" class="form-input" placeholder="100" inputmode="numeric"></div>
@@ -856,7 +801,7 @@
 
       <!-- FLASH SALES -->
       <div id="ds-flash" class="dash-section">
-        <h1 class="dash-page-title">⚡ Flash Sales</h1>
+        <h1 class="dash-page-title">âš¡ Flash Sales</h1>
         <p class="dash-page-sub">Create time-limited deals to drive urgency</p>
         <div class="card card-pad-lg" style="max-width:500px">
           <h3 class="mb-3"><i class="fa-solid fa-bolt color-gold"></i> Create Flash Sale</h3>
@@ -865,7 +810,7 @@
             <select id="flash-product" class="form-select"><option value="">Loading products...</option></select>
           </div>
           <div class="form-grid form-grid-2">
-            <div class="form-group"><label class="form-label">Sale Price (₦) <span class="req">*</span></label><input type="number" id="flash-price" class="form-input" placeholder="Discounted price" inputmode="numeric"></div>
+            <div class="form-group"><label class="form-label">Sale Price (â‚¦) <span class="req">*</span></label><input type="number" id="flash-price" class="form-input" placeholder="Discounted price" inputmode="numeric"></div>
             <div class="form-group"><label class="form-label">Duration (hours)</label><input type="number" id="flash-hours" class="form-input" placeholder="24" value="24" inputmode="numeric"></div>
           </div>
           <button class="btn btn-primary btn-full" onclick="createFlashSale()"><i class="fa-solid fa-bolt"></i> Launch Flash Sale</button>
@@ -884,13 +829,13 @@
                 <div class="form-group"><label class="form-label">Store Name</label><input type="text" id="s-store-name" class="form-input" placeholder="Your store name"></div>
                 <div class="form-group"><label class="form-label">Store Category</label><select id="s-store-cat" class="form-select"><option>Electronics</option><option>Fashion</option><option>Home & Kitchen</option><option>Beauty</option><option>General</option></select></div>
               </div>
-              <div class="form-group"><label class="form-label">Store Description</label><textarea id="s-store-desc" class="form-textarea" rows="3" placeholder="Tell buyers about your store…"></textarea></div>
+              <div class="form-group"><label class="form-label">Store Description</label><textarea id="s-store-desc" class="form-textarea" rows="3" placeholder="Tell buyers about your storeâ€¦"></textarea></div>
             </div>
             <div style="border-bottom:1px solid var(--border);padding-bottom:1.1rem;margin-bottom:1.1rem">
               <h3 class="mb-3">Contact</h3>
               <div class="form-grid form-grid-2">
                 <div class="form-group"><label class="form-label">WhatsApp Number <span class="req">*</span></label><input type="tel" id="s-whatsapp" class="form-input" required placeholder="0801 234 5678" inputmode="tel"></div>
-                <div class="form-group"><label class="form-label">Notification Email</label><input type="email" id="s-notif-email" class="form-input" placeholder="notifications@…"></div>
+                <div class="form-group"><label class="form-label">Notification Email</label><input type="email" id="s-notif-email" class="form-input" placeholder="notifications@â€¦"></div>
               </div>
             </div>
             <div style="margin-bottom:1.1rem">
@@ -943,30 +888,30 @@
           <div style="width:72px;height:72px;background:#fee2e2;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:2rem;color:var(--danger);margin-bottom:1rem"><i class="fa-solid fa-ban"></i></div>
           <h2 style="margin-bottom:.5rem">Access Denied</h2>
           <p class="color-text3">This panel is restricted to platform administrators only.</p>
-          <button class="btn btn-outline mt-3" onclick="showDash('overview')">← Back to Dashboard</button>
+          <button class="btn btn-outline mt-3" onclick="showDash('overview')">â† Back to Dashboard</button>
         </div>
 
         <!-- Real admin content (admin only) -->
         <div id="admin-content">
           <div class="flex items-center gap-3 mb-1 flex-wrap">
-            <h1 class="dash-page-title" style="margin:0">⚙️ Super Admin</h1>
+            <h1 class="dash-page-title" style="margin:0">âš™ï¸ Super Admin</h1>
             <span class="badge badge-red" style="font-size:.7rem;letter-spacing:.04em;padding:.28rem .7rem">RESTRICTED ACCESS</span>
           </div>
-          <p class="dash-page-sub mb-3">Full platform control — israelefe093@gmail.com</p>
+          <p class="dash-page-sub mb-3">Full platform control â€” israelefe093@gmail.com</p>
 
           <!-- Admin Tab Bar -->
           <div class="buyer-tabs-wrap admin-tab-bar" style="margin-bottom:1.5rem;overflow-x:auto;-webkit-overflow-scrolling:touch">
-    <button class="buyer-tab active" id="atab-overview" data-admin-tab="overview" onclick="switchAdminTab('overview')">📊 Overview</button>
-    <button class="buyer-tab"         id="atab-kyc"         data-admin-tab="kyc" onclick="switchAdminTab('kyc')">🪪 KYC Verify</button>
-    <button class="buyer-tab"         id="atab-accounts"    data-admin-tab="accounts" onclick="switchAdminTab('accounts')">👤 Account Management</button>
-    <button class="buyer-tab"         id="atab-sellers"     data-admin-tab="sellers" onclick="switchAdminTab('sellers')">🏪 Sellers</button>
-    <button class="buyer-tab"         id="atab-orders"      data-admin-tab="orders" onclick="switchAdminTab('orders')">📦 Orders</button>
-    <button class="buyer-tab"         id="atab-disputes"    data-admin-tab="disputes" onclick="switchAdminTab('disputes')">⚖️ Disputes</button>
-    <button class="buyer-tab"         id="atab-withdrawals" data-admin-tab="withdrawals" onclick="switchAdminTab('withdrawals')">💸 Payouts</button>
-    <button class="buyer-tab"         id="atab-receipts"    data-admin-tab="receipts" onclick="switchAdminTab('receipts')">🧾 Receipts</button>
-    <button class="buyer-tab"         id="atab-broadcast"   data-admin-tab="broadcast" onclick="switchAdminTab('broadcast')">📣 Broadcast</button>
-    <button class="buyer-tab"         id="atab-ai"          data-admin-tab="ai" onclick="switchAdminTab('ai')">🤖 AI Assistant</button>
-    <button class="buyer-tab"         id="atab-branding" data-admin-tab="branding" onclick="switchAdminTab('branding')">🎨 Branding</button>
+    <button class="buyer-tab active" id="atab-overview" data-admin-tab="overview" onclick="switchAdminTab('overview')">ðŸ“Š Overview</button>
+    <button class="buyer-tab"         id="atab-kyc"         data-admin-tab="kyc" onclick="switchAdminTab('kyc')">ðŸªª KYC Verify</button>
+    <button class="buyer-tab"         id="atab-accounts"    data-admin-tab="accounts" onclick="switchAdminTab('accounts')">ðŸ‘¤ Account Management</button>
+    <button class="buyer-tab"         id="atab-sellers"     data-admin-tab="sellers" onclick="switchAdminTab('sellers')">ðŸª Sellers</button>
+    <button class="buyer-tab"         id="atab-orders"      data-admin-tab="orders" onclick="switchAdminTab('orders')">ðŸ“¦ Orders</button>
+    <button class="buyer-tab"         id="atab-disputes"    data-admin-tab="disputes" onclick="switchAdminTab('disputes')">âš–ï¸ Disputes</button>
+    <button class="buyer-tab"         id="atab-withdrawals" data-admin-tab="withdrawals" onclick="switchAdminTab('withdrawals')">ðŸ’¸ Payouts</button>
+    <button class="buyer-tab"         id="atab-receipts"    data-admin-tab="receipts" onclick="switchAdminTab('receipts')">ðŸ§¾ Receipts</button>
+    <button class="buyer-tab"         id="atab-broadcast"   data-admin-tab="broadcast" onclick="switchAdminTab('broadcast')">ðŸ“£ Broadcast</button>
+    <button class="buyer-tab"         id="atab-ai"          data-admin-tab="ai" onclick="switchAdminTab('ai')">ðŸ¤– AI Assistant</button>
+    <button class="buyer-tab"         id="atab-branding" data-admin-tab="branding" onclick="switchAdminTab('branding')">ðŸŽ¨ Branding</button>
 </div>
 
 <div id="adm-tab-branding" class="adm-tab hidden">
@@ -995,36 +940,36 @@
   </div>
 </div>             
              
-             <!-- ═══ AI ASSISTANT TAB ═══ -->
+             <!-- â•â•â• AI ASSISTANT TAB â•â•â• -->
 <div id="adm-tab-ai" class="adm-tab hidden">
   <div class="card card-pad-lg" style="max-width:600px">
     <h3 class="mb-1"><i class="fa-solid fa-robot color-green"></i> Admin AI Assistant</h3>
-    <p class="text-xs color-text3 mb-3">Ask Claude anything about your platform — sales trends, seller issues, dispute advice, growth strategies.</p>
+    <p class="text-xs color-text3 mb-3">Ask Claude anything about your platform â€” sales trends, seller issues, dispute advice, growth strategies.</p>
     <div id="admin-ai-messages" style="height:280px;overflow-y:auto;background:var(--cream);border-radius:var(--radius-sm);border:1px solid var(--border);padding:.88rem;display:flex;flex-direction:column;gap:.58rem;margin-bottom:.75rem">
       <div class="cb-msg bot" style="display:flex;gap:.42rem">
         <div class="cb-avatar" style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-robot"></i></div>
-        <div class="cb-bubble" style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;line-height:1.5">Hello Admin! 👋 I have full context of your BUYSELL platform. Ask me about sales, disputes, seller performance, or growth strategies.</div>
+        <div class="cb-bubble" style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;line-height:1.5">Hello Admin! ðŸ‘‹ I have full context of your BUYSELL platform. Ask me about sales, disputes, seller performance, or growth strategies.</div>
       </div>
     </div>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.65rem">
-      <button class="cb-quick-btn" onclick="askAdminBot('Summarise platform performance this month')">📊 Performance</button>
-      <button class="cb-quick-btn" onclick="askAdminBot('How should I handle a seller dispute?')">⚖️ Disputes</button>
-      <button class="cb-quick-btn" onclick="askAdminBot('Give me 5 growth strategies for BUYSELL Nigeria')">🚀 Growth</button>
-      <button class="cb-quick-btn" onclick="askAdminBot('What commission pricing is best for Nigerian marketplaces?')">💰 Pricing</button>
+      <button class="cb-quick-btn" onclick="askAdminBot('Summarise platform performance this month')">ðŸ“Š Performance</button>
+      <button class="cb-quick-btn" onclick="askAdminBot('How should I handle a seller dispute?')">âš–ï¸ Disputes</button>
+      <button class="cb-quick-btn" onclick="askAdminBot('Give me 5 growth strategies for BUYSELL Nigeria')">ðŸš€ Growth</button>
+      <button class="cb-quick-btn" onclick="askAdminBot('What commission pricing is best for Nigerian marketplaces?')">ðŸ’° Pricing</button>
     </div>
     <div style="display:flex;gap:.5rem">
-      <input type="text" id="admin-ai-input" class="form-input" placeholder="Ask anything about your platform…" onkeypress="if(event.key==='Enter')askAdminBot()">
+      <input type="text" id="admin-ai-input" class="form-input" placeholder="Ask anything about your platformâ€¦" onkeypress="if(event.key==='Enter')askAdminBot()">
       <button class="btn btn-primary" onclick="askAdminBot()" style="flex-shrink:0"><i class="fa-solid fa-paper-plane"></i></button>
     </div>
   </div>
 </div>
-          <!-- ═══ OVERVIEW TAB ═══ -->
+          <!-- â•â•â• OVERVIEW TAB â•â•â• -->
           <div id="adm-tab-overview" class="adm-tab">
             <div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(148px,1fr));margin-bottom:1.25rem">
               <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-store" style="color:var(--green)"></i></div></div><div class="stat-value" id="adm-total-sellers">0</div><div class="stat-label">Total Sellers</div></div>
               <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dbeafe"><i class="fa-solid fa-users" style="color:var(--blue)"></i></div></div><div class="stat-value" id="adm-total-buyers">0</div><div class="stat-label">Total Buyers</div></div>
-              <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-coins" style="color:var(--gold)"></i></div></div><div class="stat-value color-green" id="adm-revenue">₦0</div><div class="stat-label">Total GMV</div></div>
-              <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#ede9fe"><i class="fa-solid fa-percent" style="color:var(--purple)"></i></div></div><div class="stat-value" style="color:var(--purple)" id="adm-commission-due">₦0</div><div class="stat-label">Platform Earnings</div></div>
+              <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-coins" style="color:var(--gold)"></i></div></div><div class="stat-value color-green" id="adm-revenue">â‚¦0</div><div class="stat-label">Total GMV</div></div>
+              <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#ede9fe"><i class="fa-solid fa-percent" style="color:var(--purple)"></i></div></div><div class="stat-value" style="color:var(--purple)" id="adm-commission-due">â‚¦0</div><div class="stat-label">Platform Earnings</div></div>
               <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i></div></div><div class="stat-value color-green" id="adm-paid">0</div><div class="stat-label">Active (Paid)</div></div>
               <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-clock" style="color:var(--gold)"></i></div></div><div class="stat-value color-gold" id="adm-trial">0</div><div class="stat-label">On Free Trial</div></div>
               <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fee2e2"><i class="fa-solid fa-ban" style="color:var(--danger)"></i></div></div><div class="stat-value color-danger" id="adm-suspended">0</div><div class="stat-label">Suspended</div></div>
@@ -1039,7 +984,7 @@
             </div>
           </div>
 
-          <!-- ═══ SELLERS TAB ═══ -->
+          <!-- â•â•â• SELLERS TAB â•â•â• -->
           <div id="adm-tab-sellers" class="adm-tab hidden">
             <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
               <div class="flex gap-2 flex-wrap">
@@ -1049,16 +994,16 @@
                   <option value="trial">On Trial</option>
                   <option value="suspended">Suspended</option>
                 </select>
-                <input type="text" id="adm-seller-search" class="form-input" placeholder="Name / email…" style="width:160px;font-size:.78rem;padding:.4rem .7rem" oninput="filterAdminSellers()">
+                <input type="text" id="adm-seller-search" class="form-input" placeholder="Name / emailâ€¦" style="width:160px;font-size:.78rem;padding:.4rem .7rem" oninput="filterAdminSellers()">
               </div>
-              <span class="text-xs color-text3" id="adm-seller-count">—</span>
+              <span class="text-xs color-text3" id="adm-seller-count">â€”</span>
             </div>
             <div id="admin-skeleton"><div class="skeleton mb-3" style="height:82px"></div><div class="skeleton mb-3" style="height:82px"></div><div class="skeleton" style="height:82px"></div></div>
             <div id="admin-list" class="hidden"></div>
             <div id="admin-empty" class="hidden text-center" style="padding:2.5rem"><p class="color-text3">No sellers found</p></div>
           </div>
 
-          <!-- ═══ ORDERS TAB ═══ -->
+          <!-- â•â•â• ORDERS TAB â•â•â• -->
           <div id="adm-tab-orders" class="adm-tab hidden">
             <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
               <select id="adm-order-filter" class="form-select" style="width:auto;padding:.4rem .7rem;font-size:.78rem" onchange="loadAdminOrders()">
@@ -1069,14 +1014,14 @@
                 <option value="delivered">Delivered</option>
                 <option value="cancelled">Cancelled</option>
               </select>
-              <span class="text-xs color-text3" id="adm-order-count">—</span>
+              <span class="text-xs color-text3" id="adm-order-count">â€”</span>
             </div>
             <div id="adm-orders-skeleton"><div class="skeleton mb-3" style="height:110px"></div><div class="skeleton" style="height:110px"></div></div>
             <div id="adm-orders-list" class="hidden"></div>
             <div id="adm-orders-empty" class="hidden text-center" style="padding:2.5rem"><p class="color-text3">No orders found</p></div>
           </div>
 
-          <!-- ═══ DISPUTES TAB ═══ -->
+          <!-- â•â•â• DISPUTES TAB â•â•â• -->
           <div id="adm-tab-disputes" class="adm-tab hidden">
             <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
               <h3 style="margin:0">All Disputes</h3>
@@ -1085,7 +1030,7 @@
             <div id="admin-disputes-list"><div class="skeleton" style="height:90px"></div></div>
           </div>
 
-          <!-- ═══ WITHDRAWALS TAB ═══ -->
+          <!-- â•â•â• WITHDRAWALS TAB â•â•â• -->
           <div id="adm-tab-withdrawals" class="adm-tab hidden">
             <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
               <h3 style="margin:0">Seller Payouts</h3>
@@ -1099,7 +1044,7 @@
             </div>
           </div>
 
-          <!-- ═══ BROADCAST TAB ═══ -->
+          <!-- â•â•â• BROADCAST TAB â•â•â• -->
           <div id="adm-tab-receipts" class="adm-tab hidden">
             <h2 class="mb-1"><i class="fa-solid fa-file-invoice color-green"></i> Commission Receipts</h2>
             <p class="color-text3 text-sm mb-3">Review seller commission payment proofs, approve valid receipts, or reject bad uploads.</p>
@@ -1159,15 +1104,15 @@
               </div>
               <div class="form-group">
                 <label class="form-label">Message</label>
-                <textarea id="bc-body" class="form-textarea" rows="4" placeholder="Write your message here…"></textarea>
+                <textarea id="bc-body" class="form-textarea" rows="4" placeholder="Write your message hereâ€¦"></textarea>
               </div>
               <div class="form-group">
                 <label class="form-label">Type</label>
                 <div class="flex gap-2 flex-wrap">
-                  <label class="filter-chip"><input type="radio" name="bc-type" value="info" checked style="display:none"> ℹ️ Info</label>
-                  <label class="filter-chip"><input type="radio" name="bc-type" value="success" style="display:none"> ✅ Good News</label>
-                  <label class="filter-chip"><input type="radio" name="bc-type" value="warn" style="display:none"> ⚠️ Warning</label>
-                  <label class="filter-chip"><input type="radio" name="bc-type" value="error" style="display:none"> 🚨 Urgent</label>
+                  <label class="filter-chip"><input type="radio" name="bc-type" value="info" checked style="display:none"> â„¹ï¸ Info</label>
+                  <label class="filter-chip"><input type="radio" name="bc-type" value="success" style="display:none"> âœ… Good News</label>
+                  <label class="filter-chip"><input type="radio" name="bc-type" value="warn" style="display:none"> âš ï¸ Warning</label>
+                  <label class="filter-chip"><input type="radio" name="bc-type" value="error" style="display:none"> ðŸš¨ Urgent</label>
                 </div>
               </div>
               <button class="btn btn-primary btn-full" onclick="sendBroadcast()"><i class="fa-solid fa-paper-plane"></i> Send Broadcast</button>
@@ -1224,17 +1169,17 @@
     <button onclick="toggleChat()" style="background:none;border:none;color:rgba(255,255,255,.7);cursor:pointer;font-size:.95rem"><i class="fa-solid fa-times"></i></button>
   </div>
   <div class="chatbot-messages" id="chat-messages">
-    <div class="cb-msg bot"><div class="cb-avatar" style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0"><i class="fa-solid fa-robot"></i></div><div class="cb-bubble">Hello! 👋 I'm your BUYSELL assistant. How can I help?</div></div>
+    <div class="cb-msg bot"><div class="cb-avatar" style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0"><i class="fa-solid fa-robot"></i></div><div class="cb-bubble">Hello! ðŸ‘‹ I'm your BUYSELL assistant. How can I help?</div></div>
   </div>
   <div class="cb-quick-wrap">
-  <button class="cb-quick-btn" onclick="askBot('How do I buy safely on BUYSELL?')">🛒 Buy</button>
-  <button class="cb-quick-btn" onclick="askBot('How do I open a seller store?')">🏪 Sell</button>
-  <button class="cb-quick-btn" onclick="askBot('What payment methods are available?')">💳 Pay</button>
-  <button class="cb-quick-btn" onclick="askBot('How long does delivery take in Nigeria?')">🚚 Deliver</button>
-  <button class="cb-quick-btn" onclick="askBot('How does the affiliate program work?')">💸 Earn</button>
+  <button class="cb-quick-btn" onclick="askBot('How do I buy safely on BUYSELL?')">ðŸ›’ Buy</button>
+  <button class="cb-quick-btn" onclick="askBot('How do I open a seller store?')">ðŸª Sell</button>
+  <button class="cb-quick-btn" onclick="askBot('What payment methods are available?')">ðŸ’³ Pay</button>
+  <button class="cb-quick-btn" onclick="askBot('How long does delivery take in Nigeria?')">ðŸšš Deliver</button>
+  <button class="cb-quick-btn" onclick="askBot('How does the affiliate program work?')">ðŸ’¸ Earn</button>
 </div>
   <div class="chatbot-input-row">
-    <input type="text" id="chat-input" placeholder="Type a message…" onkeypress="if(event.key==='Enter')sendChat()">
+    <input type="text" id="chat-input" placeholder="Type a messageâ€¦" onkeypress="if(event.key==='Enter')sendChat()">
     <button onclick="sendChat()" aria-label="Send"><i class="fa-solid fa-paper-plane"></i></button>
   </div>
 </div>
@@ -1270,16 +1215,16 @@
           <span id="forgot-spinner" class="spinner hidden"></span>
         </button>
         <button class="btn btn-ghost btn-full btn-sm" style="margin-top:.5rem;color:var(--text3)" onclick="toggleAuth('login')">
-          ← Back to Sign In
+          â† Back to Sign In
         </button>
       </div>
       <div id="forgot-step-2" class="hidden" style="text-align:center;padding:1rem 0">
-        <div style="font-size:2.5rem;margin-bottom:.75rem">📧</div>
+        <div style="font-size:2.5rem;margin-bottom:.75rem">ðŸ“§</div>
         <div style="font-weight:700;font-size:1rem;color:var(--text);margin-bottom:.4rem">Check your email</div>
         <div id="forgot-sent-to" style="font-size:.82rem;color:var(--text3);margin-bottom:.75rem"></div>
         <p style="font-size:.82rem;color:var(--text2);line-height:1.6">Click the link in the email to reset your password. The link expires in <strong>1 hour</strong>.</p>
         <button class="btn btn-ghost btn-full btn-sm" style="margin-top:1rem;color:var(--text3)" onclick="toggleAuth('login')">
-          ← Back to Sign In
+          â† Back to Sign In
         </button>
       </div>
     </div>
@@ -1287,31 +1232,31 @@
     <form id="auth-form" onsubmit="handleAuth(event)">
       <div id="auth-name-group" class="form-group hidden"><label class="form-label">Full Name <span class="req">*</span></label><input type="text" id="auth-name" class="form-input" placeholder="Your full name" autocomplete="name"></div>
       <div id="auth-role-group" class="form-group hidden">
-        <label class="form-label">I want to… <span class="req">*</span></label>
+        <label class="form-label">I want toâ€¦ <span class="req">*</span></label>
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;margin-top:.35rem">
           <label id="role-card-buyer" class="role-card active" onclick="selectRole('buyer')">
             <input type="radio" name="auth-role-radio" value="buyer" checked style="display:none">
-            <div class="role-card-icon">🛍️</div>
+            <div class="role-card-icon">ðŸ›ï¸</div>
             <div class="role-card-label">Buyer</div>
             <div class="role-card-sub">Shop products</div>
           </label>
           <label id="role-card-seller" class="role-card" onclick="selectRole('seller')">
             <input type="radio" name="auth-role-radio" value="seller" style="display:none">
-            <div class="role-card-icon">🏪</div>
+            <div class="role-card-icon">ðŸª</div>
             <div class="role-card-label">Seller</div>
             <div class="role-card-sub">List & sell</div>
           </label>
           <!--
           <label id="role-card-service_provider" class="role-card" onclick="selectRole('service_provider')">
             <input type="radio" name="auth-role-radio" value="service_provider" style="display:none">
-            <div class="role-card-icon">🔧</div>
+            <div class="role-card-icon">ðŸ”§</div>
             <div class="role-card-label">Service Pro</div>
             <div class="role-card-sub">Offer skills</div>
           </label>
           -->
           <label id="role-card-both" class="role-card" onclick="selectRole('both')">
             <input type="radio" name="auth-role-radio" value="both" style="display:none">
-            <div class="role-card-icon">🔄</div>
+            <div class="role-card-icon">ðŸ”„</div>
             <div class="role-card-label">Both</div>
             <div class="role-card-sub">Buy & sell</div>
           </label>
@@ -1355,7 +1300,7 @@
         <div class="prod-flags mb-2" id="modal-flags"></div>
         <h2 style="font-size:1.2rem;margin-bottom:.25rem" id="modal-prod-name"></h2>
         <div class="flex items-center gap-2 mb-2">
-          <div class="stars" id="modal-stars">★★★★★</div>
+          <div class="stars" id="modal-stars">â˜…â˜…â˜…â˜…â˜…</div>
           <span class="text-xs color-text3" id="modal-review-count">0 reviews</span>
         </div>
         <div class="flex items-baseline gap-2 mb-2">
@@ -1368,6 +1313,7 @@
           <span class="badge badge-gray" id="modal-condition"></span>
           <span class="badge badge-blue" id="modal-location"></span>
           <span class="badge badge-gold" id="modal-stock-badge"></span>
+          <span class="badge badge-green" id="modal-shipping-fee"></span>
         </div>
         <div class="product-seller-card">
           <div class="seller-avatar" id="modal-seller-avatar"></div>
@@ -1388,7 +1334,7 @@
             <button class="btn btn-outline btn-sm" onclick="shareCurrentProduct()" title="Share"><i class="fa-solid fa-share-alt"></i></button>
           </div>
         </div>
-        <div id="modal-negotiable-note" class="hidden"><div style="background:var(--green-xlt);border:1px solid rgba(25,168,71,.2);border-radius:var(--radius-sm);padding:.55rem .85rem;font-size:.77rem;color:#15803d;margin-bottom:.75rem"><i class="fa-solid fa-handshake"></i> Negotiable – WhatsApp the seller to discuss price!</div></div>
+        <div id="modal-negotiable-note" class="hidden"><div style="background:var(--green-xlt);border:1px solid rgba(25,168,71,.2);border-radius:var(--radius-sm);padding:.55rem .85rem;font-size:.77rem;color:#15803d;margin-bottom:.75rem"><i class="fa-solid fa-handshake"></i> Negotiable â€“ WhatsApp the seller to discuss price!</div></div>
         <!-- Review Summary Bar (shown before buy buttons like Jumia) -->
         <div id="modal-review-summary" style="background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border:1px solid rgba(25,168,71,.15);border-radius:12px;padding:.85rem 1rem;margin-bottom:.75rem">
           <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem">
@@ -1425,13 +1371,13 @@
     </div>
     <div style="font-size:.82rem;color:var(--text2);line-height:1.7">
       <h4 style="color:var(--text);margin-bottom:.4rem"><i class="fa-solid fa-handshake color-green"></i> 1. General Terms</h4>
-      <p style="margin-bottom:.85rem">By creating an account on BUYSELL Nigeria, you agree to be bound by these Terms of Service. BUYSELL operates as a marketplace platform connecting buyers, sellers, and service providers. We do not directly sell products or services — we provide the platform infrastructure.</p>
+      <p style="margin-bottom:.85rem">By creating an account on BUYSELL Nigeria, you agree to be bound by these Terms of Service. BUYSELL operates as a marketplace platform connecting buyers, sellers, and service providers. We do not directly sell products or services â€” we provide the platform infrastructure.</p>
 
       <h4 style="color:var(--text);margin-bottom:.4rem"><i class="fa-solid fa-store color-green"></i> 2. Seller Obligations</h4>
       <ul style="margin-bottom:.85rem;padding-left:1.1rem">
         <li>All listed products must be genuine and accurately described.</li>
         <li>Sellers must respond to orders within 24 hours.</li>
-        <li>After the free trial period, a monthly commission of <strong>₦2,500</strong> is required to maintain an active store.</li>
+        <li>After the free trial period, a monthly commission of <strong>â‚¦2,500</strong> is required to maintain an active store.</li>
         <li>Failure to pay commission will result in automatic store suspension.</li>
         <li>Fraudulent or misleading listings will result in immediate account termination.</li>
       </ul>
@@ -1440,7 +1386,7 @@
       <ul style="margin-bottom:.85rem;padding-left:1.1rem">
         <li>All purchases via Paystack are protected by BUYSELL's Buyer Protection policy.</li>
         <li>If a product doesn't match its description, buyers can open a dispute within 7 days of delivery.</li>
-        <li>Bank transfer payments — buyers must upload payment proof. Disputes are resolved by admin review.</li>
+        <li>Bank transfer payments â€” buyers must upload payment proof. Disputes are resolved by admin review.</li>
         <li>Reviews must reflect genuine purchasing experiences. Fake reviews will be removed.</li>
       </ul>
 
@@ -1577,6 +1523,7 @@
     <div id="cart-summary" class="hidden">
       <div class="cart-summary-box">
         <div class="cart-total-row"><span class="font-600">Subtotal</span><span id="cart-subtotal"></span></div>
+        <div class="cart-total-row"><span class="font-600">Shipping</span><span id="cart-shipping"></span></div>
         <div class="cart-total-row" style="font-size:1.05rem"><span class="font-bold">Total</span><span id="cart-total" class="font-bold color-green"></span></div>
       </div>
       <button class="btn btn-primary btn-full btn-lg mt-3" onclick="closeModal('cart-modal');startCheckout()"><i class="fa-solid fa-lock"></i> Secure Checkout</button>
@@ -1593,7 +1540,7 @@
       <div class="checkout-step-line" id="cl1"></div>
       <div class="checkout-step-dot" id="cp2">2</div>
       <div class="checkout-step-line" id="cl2"></div>
-      <div class="checkout-step-dot" id="cp3">✓</div>
+      <div class="checkout-step-dot" id="cp3">âœ“</div>
     </div>
     <!-- Panel 1: Delivery -->
     <div class="checkout-panel active" id="co-p1">
@@ -1685,12 +1632,12 @@
     <div class="checkout-panel" id="co-p3">
       <div class="success-panel">
         <div class="success-icon-wrap"><i class="fa-solid fa-check"></i></div>
-        <h2 class="mb-2">Order Placed! 🎉</h2>
+        <h2 class="mb-2">Order Placed! ðŸŽ‰</h2>
         <p class="color-text3 mb-3">Your order is confirmed. The seller will be notified.</p>
         <div class="success-order-box">
           <div class="flex justify-between mb-2"><span class="text-sm color-text3">Order ID</span><span class="font-bold text-sm" id="co-order-id"></span></div>
           <div class="flex justify-between mb-2"><span class="text-sm color-text3">Total Paid</span><span class="font-bold text-sm color-green" id="co-order-total"></span></div>
-          <div class="flex justify-between"><span class="text-sm color-text3">Est. Delivery</span><span class="font-bold text-sm">2–5 business days</span></div>
+          <div class="flex justify-between"><span class="text-sm color-text3">Est. Delivery</span><span class="font-bold text-sm">2â€“5 business days</span></div>
         </div>
         <div class="flex gap-2 justify-center flex-wrap">
           <button class="btn btn-outline btn-sm" onclick="closeModal('checkout-modal');switchBuyerTab('orders')"><i class="fa-solid fa-receipt"></i> View Orders</button>
@@ -1707,11 +1654,11 @@
     <h2 class="mb-1">Write a Review</h2>
     <p class="color-text3 text-sm mb-3" id="review-product-name"></p>
     <div class="review-star-row" id="star-row">
-      <button class="star-btn" data-val="1" onclick="setRating(1)">★</button>
-      <button class="star-btn" data-val="2" onclick="setRating(2)">★</button>
-      <button class="star-btn" data-val="3" onclick="setRating(3)">★</button>
-      <button class="star-btn" data-val="4" onclick="setRating(4)">★</button>
-      <button class="star-btn" data-val="5" onclick="setRating(5)">★</button>
+      <button class="star-btn" data-val="1" onclick="setRating(1)">â˜…</button>
+      <button class="star-btn" data-val="2" onclick="setRating(2)">â˜…</button>
+      <button class="star-btn" data-val="3" onclick="setRating(3)">â˜…</button>
+      <button class="star-btn" data-val="4" onclick="setRating(4)">â˜…</button>
+      <button class="star-btn" data-val="5" onclick="setRating(5)">â˜…</button>
     </div>
     <div class="form-group"><label class="form-label">Your Review</label><textarea id="review-text" class="form-textarea" rows="4" placeholder="What did you think about this product?"></textarea></div>
     <!-- Review Photo Upload -->
@@ -1720,7 +1667,7 @@
       <div class="review-upload-zone" id="review-upload-zone" onclick="document.getElementById('review-images-input').click()">
         <i class="fa-solid fa-cloud-arrow-up" style="font-size:1.5rem;color:var(--green-lt);margin-bottom:.35rem"></i>
         <div style="font-size:.78rem;color:var(--text2)">Tap to add photos of your purchase</div>
-        <div style="font-size:.65rem;color:var(--text3)">JPG, PNG • Max 5MB each</div>
+        <div style="font-size:.65rem;color:var(--text3)">JPG, PNG â€¢ Max 5MB each</div>
       </div>
       <input type="file" id="review-images-input" accept="image/jpeg,image/png,image/webp" multiple style="display:none" onchange="previewReviewImages(this)">
       <div class="review-img-previews" id="review-img-previews"></div>
@@ -1735,10 +1682,10 @@
   <div class="modal-box"><button class="modal-close" onclick="closeModal('filters-modal')"><i class="fa-solid fa-times"></i></button>
     <h2 class="mb-3"><i class="fa-solid fa-sliders-h color-green"></i> Filter Products</h2>
     <div class="filter-section-title"><i class="fa-solid fa-tag"></i> Price Range</div>
-    <div class="price-range-display" id="price-range-display">₦0 – ₦500,000</div>
+    <div class="price-range-display" id="price-range-display">â‚¦0 â€“ â‚¦500,000</div>
     <div class="form-grid form-grid-2 mb-3">
-      <div><label class="form-label">Min ₦</label><input type="number" id="flt-min" class="form-input" placeholder="0" oninput="updatePriceDisplay()" inputmode="numeric"></div>
-      <div><label class="form-label">Max ₦</label><input type="number" id="flt-max" class="form-input" placeholder="500000" oninput="updatePriceDisplay()" inputmode="numeric"></div>
+      <div><label class="form-label">Min â‚¦</label><input type="number" id="flt-min" class="form-input" placeholder="0" oninput="updatePriceDisplay()" inputmode="numeric"></div>
+      <div><label class="form-label">Max â‚¦</label><input type="number" id="flt-max" class="form-input" placeholder="500000" oninput="updatePriceDisplay()" inputmode="numeric"></div>
     </div>
     <div class="filter-section-title"><i class="fa-solid fa-star"></i> Minimum Rating</div>
     <select id="flt-rating" class="form-select mb-3"><option value="">Any Rating</option><option value="4">4+ Stars</option><option value="4.5">4.5+ Stars</option><option value="5">5 Stars</option></select>
@@ -1761,9 +1708,9 @@
     <h2 class="mb-1"><i class="fa-solid fa-exclamation-triangle color-danger"></i> File a Dispute</h2>
     <p class="color-text3 text-sm mb-3">Order ID: <span id="dispute-order-id" class="font-600"></span></p>
     <div class="form-group"><label class="form-label">Issue Type <span class="req">*</span></label>
-      <select id="dispute-type" class="form-select" required><option value="">Select issue…</option><option value="not-received">Item not received</option><option value="wrong-item">Wrong item sent</option><option value="damaged">Item is damaged</option><option value="not-as-described">Not as described</option><option value="refund-requested">Requesting refund</option></select>
+      <select id="dispute-type" class="form-select" required><option value="">Select issueâ€¦</option><option value="not-received">Item not received</option><option value="wrong-item">Wrong item sent</option><option value="damaged">Item is damaged</option><option value="not-as-described">Not as described</option><option value="refund-requested">Requesting refund</option></select>
     </div>
-    <div class="form-group"><label class="form-label">Description <span class="req">*</span></label><textarea id="dispute-desc" class="form-textarea" required rows="4" placeholder="Describe the issue in detail…"></textarea></div>
+    <div class="form-group"><label class="form-label">Description <span class="req">*</span></label><textarea id="dispute-desc" class="form-textarea" required rows="4" placeholder="Describe the issue in detailâ€¦"></textarea></div>
     <button class="btn btn-danger btn-full" onclick="submitDispute()"><i class="fa-solid fa-paper-plane"></i> File Dispute</button>
   </div>
 </div>
@@ -1835,12 +1782,12 @@
   <div class="suspended-box">
     <div class="suspended-icon"><i class="fa-solid fa-ban"></i></div>
     <h2 class="mb-2">Store Suspended</h2>
-    <p class="color-text3 mb-3">Your store has been suspended. Pay the ₦2,500 monthly commission to reactivate.</p>
+    <p class="color-text3 mb-3">Your store has been suspended. Pay the â‚¦2,500 monthly commission to reactivate.</p>
     <div class="bank-details-box">
       <div class="bank-row"><span class="bk-label">Bank</span><span class="bk-value">OPay</span></div>
       <div class="bank-row"><span class="bk-label">Account</span><span class="bk-value accent">9061484256</span></div>
       <div class="bank-row"><span class="bk-label">Name</span><span class="bk-value">Efe Israel</span></div>
-      <div class="bank-row"><span class="bk-label">Amount</span><span class="bk-value" style="color:var(--gold);font-size:1.05rem">₦2,500</span></div>
+      <div class="bank-row"><span class="bk-label">Amount</span><span class="bk-value" style="color:var(--gold);font-size:1.05rem">â‚¦2,500</span></div>
     </div>
     <button class="btn btn-paystack btn-full mb-2" onclick="payCommissionPaystack()"><i class="fa-solid fa-credit-card"></i> Pay via Paystack</button>
     <button class="btn btn-outline btn-full" onclick="showModal('commission-modal')">Upload Bank Transfer Receipt</button>
@@ -1852,7 +1799,7 @@
 <div id="commission-modal" class="modal-overlay">
   <div class="modal-box" style="max-width:450px;padding:1.65rem"><button class="modal-close" onclick="closeModal('commission-modal')"><i class="fa-solid fa-times"></i></button>
     <h2 class="mb-1"><i class="fa-solid fa-upload color-green"></i> Upload Commission Receipt</h2>
-    <p class="color-text3 text-sm mb-3">Submit proof of your ₦2,500 bank transfer. Admin will verify within 24hrs.</p>
+    <p class="color-text3 text-sm mb-3">Submit proof of your â‚¦2,500 bank transfer. Admin will verify within 24hrs.</p>
     <div class="form-group"><label class="form-label">Payment Screenshot <span class="req">*</span></label>
       <div class="upload-zone" onclick="document.getElementById('commission-file').click()"><i class="fa-solid fa-cloud-upload-alt"></i><div class="upload-label">Click to upload screenshot</div><div class="upload-sub">JPG or PNG</div></div>
       <input type="file" id="commission-file" accept="image/*" style="display:none">
@@ -1869,26 +1816,26 @@
     <h2 class="mb-3"><i class="fa-solid fa-question-circle color-green"></i> Help & Support</h2>
     <div class="card card-pad mb-3" style="background:var(--green-xlt);border-color:rgba(25,168,71,.3)">
       <h3 class="mb-1" style="font-size:.95rem"><i class="fa-brands fa-whatsapp color-green"></i> WhatsApp Support</h3>
-      <p class="text-sm color-text3 mb-2">Chat with us instantly on WhatsApp — 24/7 support</p>
+      <p class="text-sm color-text3 mb-2">Chat with us instantly on WhatsApp â€” 24/7 support</p>
       <a href="https://wa.me/2349061484256?text=Hello%20BUYSELL%20Support" target="_blank" class="btn btn-primary btn-sm"><i class="fa-brands fa-whatsapp"></i> Chat on WhatsApp</a>
     </div>
     <div class="card card-pad mb-3">
       <h3 class="mb-2" style="font-size:.9rem">Common Questions</h3>
       <div class="faq-item mb-2">
-        <div class="font-600 text-sm mb-1">🛒 How do I buy safely?</div>
+        <div class="font-600 text-sm mb-1">ðŸ›’ How do I buy safely?</div>
         <p class="text-xs color-text3">All sellers are verified. Pay via Paystack for 100% buyer protection. For bank transfers, always upload your receipt.</p>
       </div>
       <div class="faq-item mb-2">
-        <div class="font-600 text-sm mb-1">🏪 How do I open a seller store?</div>
-        <p class="text-xs color-text3">Sign up as a Seller and get 1 month FREE. After trial, pay ₦2,500/month to keep your store active.</p>
+        <div class="font-600 text-sm mb-1">ðŸª How do I open a seller store?</div>
+        <p class="text-xs color-text3">Sign up as a Seller and get 1 month FREE. After trial, pay â‚¦2,500/month to keep your store active.</p>
       </div>
       <div class="faq-item mb-2">
-        <div class="font-600 text-sm mb-1">🚚 How long is delivery?</div>
-        <p class="text-xs color-text3">Nationwide delivery takes 2–5 business days. Use Safe Pickup hubs for same-day collection.</p>
+        <div class="font-600 text-sm mb-1">ðŸšš How long is delivery?</div>
+        <p class="text-xs color-text3">Nationwide delivery takes 2â€“5 business days. Use Safe Pickup hubs for same-day collection.</p>
       </div>
       <div class="faq-item">
-        <div class="font-600 text-sm mb-1">💸 How does the affiliate program work?</div>
-        <p class="text-xs color-text3">Share your referral link. Earn ₦5,000 for every new seller who subscribes through your link.</p>
+        <div class="font-600 text-sm mb-1">ðŸ’¸ How does the affiliate program work?</div>
+        <p class="text-xs color-text3">Share your referral link. Earn â‚¦5,000 for every new seller who subscribes through your link.</p>
       </div>
     </div>
     <button class="btn btn-outline btn-full" onclick="closeModal('help-modal')">Close</button>
@@ -1925,33 +1872,33 @@
     <div style="flex:1;overflow-y:auto;background:var(--cream);">
       <div style="padding:1.65rem;max-width:1100px">
         <div class="flex items-center gap-3 mb-1 flex-wrap">
-          <h1 class="dash-page-title" style="margin:0">⚙️ Super Admin</h1>
+          <h1 class="dash-page-title" style="margin:0">âš™ï¸ Super Admin</h1>
           <span class="badge badge-red" style="font-size:.7rem;letter-spacing:.04em;padding:.28rem .7rem">RESTRICTED ACCESS</span>
         </div>
-        <p class="dash-page-sub mb-3">Full platform control — israelefe093@gmail.com</p>
+        <p class="dash-page-sub mb-3">Full platform control â€” israelefe093@gmail.com</p>
 
         <!-- Admin Tab Bar (mobile fallback) -->
         <div class="buyer-tabs-wrap admin-mobile-tabs" style="margin-bottom:1.5rem;overflow-x:auto;-webkit-overflow-scrolling:touch;display:none" id="ap-mobile-tabs">
-          <button class="buyer-tab active" data-admin-tab="overview" onclick="switchAdminTab('overview')">📊 Overview</button>
-          <button class="buyer-tab" data-admin-tab="kyc" onclick="switchAdminTab('kyc')">🪪 KYC</button>
-          <button class="buyer-tab" data-admin-tab="accounts" onclick="switchAdminTab('accounts')">👤 Accounts</button>
-          <button class="buyer-tab" data-admin-tab="sellers" onclick="switchAdminTab('sellers')">🏪 Sellers</button>
-          <button class="buyer-tab" data-admin-tab="orders" onclick="switchAdminTab('orders')">📦 Orders</button>
-          <button class="buyer-tab" data-admin-tab="disputes" onclick="switchAdminTab('disputes')">⚖️ Disputes</button>
-          <button class="buyer-tab" data-admin-tab="withdrawals" onclick="switchAdminTab('withdrawals')">💸 Payouts</button>
-          <button class="buyer-tab" data-admin-tab="receipts" onclick="switchAdminTab('receipts')">🧾 Receipts</button>
-          <button class="buyer-tab" data-admin-tab="broadcast" onclick="switchAdminTab('broadcast')">📣 Broadcast</button>
-          <button class="buyer-tab" data-admin-tab="ai" onclick="switchAdminTab('ai')">🤖 AI</button>
-          <button class="buyer-tab" data-admin-tab="branding" onclick="switchAdminTab('branding')">🎨 Branding</button>
+          <button class="buyer-tab active" data-admin-tab="overview" onclick="switchAdminTab('overview')">ðŸ“Š Overview</button>
+          <button class="buyer-tab" data-admin-tab="kyc" onclick="switchAdminTab('kyc')">ðŸªª KYC</button>
+          <button class="buyer-tab" data-admin-tab="accounts" onclick="switchAdminTab('accounts')">ðŸ‘¤ Accounts</button>
+          <button class="buyer-tab" data-admin-tab="sellers" onclick="switchAdminTab('sellers')">ðŸª Sellers</button>
+          <button class="buyer-tab" data-admin-tab="orders" onclick="switchAdminTab('orders')">ðŸ“¦ Orders</button>
+          <button class="buyer-tab" data-admin-tab="disputes" onclick="switchAdminTab('disputes')">âš–ï¸ Disputes</button>
+          <button class="buyer-tab" data-admin-tab="withdrawals" onclick="switchAdminTab('withdrawals')">ðŸ’¸ Payouts</button>
+          <button class="buyer-tab" data-admin-tab="receipts" onclick="switchAdminTab('receipts')">ðŸ§¾ Receipts</button>
+          <button class="buyer-tab" data-admin-tab="broadcast" onclick="switchAdminTab('broadcast')">ðŸ“£ Broadcast</button>
+          <button class="buyer-tab" data-admin-tab="ai" onclick="switchAdminTab('ai')">ðŸ¤– AI</button>
+          <button class="buyer-tab" data-admin-tab="branding" onclick="switchAdminTab('branding')">ðŸŽ¨ Branding</button>
         </div>
 
-        <!-- ═══ OVERVIEW TAB ═══ -->
+        <!-- â•â•â• OVERVIEW TAB â•â•â• -->
         <div id="adm-tab-overview" class="adm-tab">
           <div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(148px,1fr));margin-bottom:1.25rem">
             <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-store" style="color:var(--green)"></i></div></div><div class="stat-value" id="adm-total-sellers">0</div><div class="stat-label">Total Sellers</div></div>
             <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dbeafe"><i class="fa-solid fa-users" style="color:var(--blue)"></i></div></div><div class="stat-value" id="adm-total-buyers">0</div><div class="stat-label">Total Buyers</div></div>
-            <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-coins" style="color:var(--gold)"></i></div></div><div class="stat-value color-green" id="adm-revenue">₦0</div><div class="stat-label">Total GMV</div></div>
-            <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#ede9fe"><i class="fa-solid fa-percent" style="color:var(--purple)"></i></div></div><div class="stat-value" style="color:var(--purple)" id="adm-commission-due">₦0</div><div class="stat-label">Platform Earnings</div></div>
+            <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-coins" style="color:var(--gold)"></i></div></div><div class="stat-value color-green" id="adm-revenue">â‚¦0</div><div class="stat-label">Total GMV</div></div>
+            <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#ede9fe"><i class="fa-solid fa-percent" style="color:var(--purple)"></i></div></div><div class="stat-value" style="color:var(--purple)" id="adm-commission-due">â‚¦0</div><div class="stat-label">Platform Earnings</div></div>
             <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i></div></div><div class="stat-value color-green" id="adm-paid">0</div><div class="stat-label">Active (Paid)</div></div>
             <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-clock" style="color:var(--gold)"></i></div></div><div class="stat-value color-gold" id="adm-trial">0</div><div class="stat-label">On Free Trial</div></div>
             <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fee2e2"><i class="fa-solid fa-ban" style="color:var(--danger)"></i></div></div><div class="stat-value color-danger" id="adm-suspended">0</div><div class="stat-label">Suspended</div></div>
@@ -1975,7 +1922,7 @@
           </div>
         </div>
 
-        <!-- ═══ SELLERS TAB ═══ -->
+        <!-- â•â•â• SELLERS TAB â•â•â• -->
         <div id="adm-tab-sellers" class="adm-tab hidden">
           <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
             <div class="flex gap-2 flex-wrap">
@@ -1985,16 +1932,16 @@
                 <option value="trial">On Trial</option>
                 <option value="suspended">Suspended</option>
               </select>
-              <input type="text" id="adm-seller-search" class="form-input" placeholder="Name / email…" style="width:160px;font-size:.78rem;padding:.4rem .7rem" oninput="filterAdminSellers()">
+              <input type="text" id="adm-seller-search" class="form-input" placeholder="Name / emailâ€¦" style="width:160px;font-size:.78rem;padding:.4rem .7rem" oninput="filterAdminSellers()">
             </div>
-            <span class="text-xs color-text3" id="adm-seller-count">—</span>
+            <span class="text-xs color-text3" id="adm-seller-count">â€”</span>
           </div>
           <div id="admin-skeleton"><div class="skeleton mb-3" style="height:82px"></div><div class="skeleton mb-3" style="height:82px"></div><div class="skeleton" style="height:82px"></div></div>
           <div id="admin-list" class="hidden"></div>
           <div id="admin-empty" class="hidden text-center" style="padding:2.5rem"><p class="color-text3">No sellers found</p></div>
         </div>
 
-        <!-- ═══ ORDERS TAB ═══ -->
+        <!-- â•â•â• ORDERS TAB â•â•â• -->
         <div id="adm-tab-orders" class="adm-tab hidden">
           <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
             <select id="adm-order-filter" class="form-select" style="width:auto;padding:.4rem .7rem;font-size:.78rem" onchange="loadAdminOrders()">
@@ -2005,14 +1952,14 @@
               <option value="delivered">Delivered</option>
               <option value="cancelled">Cancelled</option>
             </select>
-            <span class="text-xs color-text3" id="adm-order-count">—</span>
+            <span class="text-xs color-text3" id="adm-order-count">â€”</span>
           </div>
           <div id="adm-orders-skeleton"><div class="skeleton mb-3" style="height:110px"></div><div class="skeleton" style="height:110px"></div></div>
           <div id="adm-orders-list" class="hidden"></div>
           <div id="adm-orders-empty" class="hidden text-center" style="padding:2.5rem"><p class="color-text3">No orders found</p></div>
         </div>
 
-        <!-- ═══ DISPUTES TAB ═══ -->
+        <!-- â•â•â• DISPUTES TAB â•â•â• -->
         <div id="adm-tab-disputes" class="adm-tab hidden">
           <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
             <h3 style="margin:0">All Disputes</h3>
@@ -2021,7 +1968,7 @@
           <div id="admin-disputes-list"><div class="skeleton" style="height:90px"></div></div>
         </div>
 
-        <!-- ═══ WITHDRAWALS TAB ═══ -->
+        <!-- â•â•â• WITHDRAWALS TAB â•â•â• -->
         <div id="adm-tab-withdrawals" class="adm-tab hidden">
           <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
             <h3 style="margin:0">Seller Payouts</h3>
@@ -2035,7 +1982,7 @@
           </div>
         </div>
 
-        <!-- ═══ KYC VERIFICATION TAB ═══ -->
+        <!-- â•â•â• KYC VERIFICATION TAB â•â•â• -->
         <div id="adm-tab-kyc" class="adm-tab hidden">
           <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
             <div class="flex gap-2 flex-wrap">
@@ -2056,7 +2003,7 @@
           </div>
         </div>
 
-        <!-- ═══ BROADCAST TAB ═══ -->
+        <!-- â•â•â• BROADCAST TAB â•â•â• -->
         <div id="adm-tab-broadcast" class="adm-tab hidden">
           <div class="card card-pad-lg" style="max-width:600px">
             <h3 class="mb-1"><i class="fa-solid fa-bullhorn color-green"></i> Send Platform Broadcast</h3>
@@ -2076,15 +2023,15 @@
             </div>
             <div class="form-group">
               <label class="form-label">Message</label>
-              <textarea id="bc-body" class="form-textarea" rows="4" placeholder="Write your message here…"></textarea>
+              <textarea id="bc-body" class="form-textarea" rows="4" placeholder="Write your message hereâ€¦"></textarea>
             </div>
             <div class="form-group">
               <label class="form-label">Type</label>
               <div class="flex gap-2 flex-wrap">
-                <label class="filter-chip"><input type="radio" name="bc-type" value="info" checked style="display:none"> ℹ️ Info</label>
-                <label class="filter-chip"><input type="radio" name="bc-type" value="success" style="display:none"> ✅ Good News</label>
-                <label class="filter-chip"><input type="radio" name="bc-type" value="warn" style="display:none"> ⚠️ Warning</label>
-                <label class="filter-chip"><input type="radio" name="bc-type" value="error" style="display:none"> 🚨 Urgent</label>
+                <label class="filter-chip"><input type="radio" name="bc-type" value="info" checked style="display:none"> â„¹ï¸ Info</label>
+                <label class="filter-chip"><input type="radio" name="bc-type" value="success" style="display:none"> âœ… Good News</label>
+                <label class="filter-chip"><input type="radio" name="bc-type" value="warn" style="display:none"> âš ï¸ Warning</label>
+                <label class="filter-chip"><input type="radio" name="bc-type" value="error" style="display:none"> ðŸš¨ Urgent</label>
               </div>
             </div>
             <button class="btn btn-primary btn-full" onclick="sendBroadcast()"><i class="fa-solid fa-paper-plane"></i> Send Broadcast</button>
@@ -2094,36 +2041,36 @@
           </div>
         </div>
 
-        <!-- ═══ AI ASSISTANT TAB ═══ -->
+        <!-- â•â•â• AI ASSISTANT TAB â•â•â• -->
         <div id="adm-tab-ai" class="adm-tab hidden">
           <div class="card card-pad-lg" style="max-width:600px">
             <h3 class="mb-1"><i class="fa-solid fa-robot color-green"></i> Admin AI Assistant</h3>
-            <p class="text-xs color-text3 mb-3">AI COO with <b>live database access</b> — reads disputes, sellers, orders, and can suspend/approve users on command.</p>
+            <p class="text-xs color-text3 mb-3">AI COO with <b>live database access</b> â€” reads disputes, sellers, orders, and can suspend/approve users on command.</p>
             <div id="admin-ai-messages" style="height:280px;overflow-y:auto;background:var(--cream);border-radius:var(--radius-sm);border:1px solid var(--border);padding:.88rem;display:flex;flex-direction:column;gap:.58rem;margin-bottom:.75rem">
               <div class="cb-msg bot" style="display:flex;gap:.42rem">
                 <div class="cb-avatar" style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-robot"></i></div>
-                <div class="cb-bubble" style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;line-height:1.5">Hello Admin! 👋 I have <b>live database access</b> to your BUYSELL platform. I can read disputes, check seller statuses, approve receipts, and suspend unpaid users. Try asking me to review open disputes or enforce commission payments.</div>
+                <div class="cb-bubble" style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;line-height:1.5">Hello Admin! ðŸ‘‹ I have <b>live database access</b> to your BUYSELL platform. I can read disputes, check seller statuses, approve receipts, and suspend unpaid users. Try asking me to review open disputes or enforce commission payments.</div>
               </div>
             </div>
             <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.65rem">
-              <button class="cb-quick-btn" onclick="askAdminBot('Read all open disputes and give me a summary with recommendations')">⚖️ Read Disputes</button>
-              <button class="cb-quick-btn" onclick="askAdminBot('Show me all unpaid sellers and service providers with expired trials')">🔍 Unpaid Users</button>
-              <button class="cb-quick-btn" onclick="askAdminBot('Suspend all sellers who have not paid and their trial has expired')">⛔ Enforce Sellers</button>
-              <button class="cb-quick-btn" onclick="askAdminBot('Suspend all service providers who have not paid and their trial has expired')">⛔ Enforce Providers</button>
-              <button class="cb-quick-btn" onclick="askAdminBot('Summarise platform performance this month')">📊 Performance</button>
-              <button class="cb-quick-btn" onclick="askAdminBot('Give me 5 growth strategies for BUYSELL Nigeria')">🚀 Growth</button>
+              <button class="cb-quick-btn" onclick="askAdminBot('Read all open disputes and give me a summary with recommendations')">âš–ï¸ Read Disputes</button>
+              <button class="cb-quick-btn" onclick="askAdminBot('Show me all unpaid sellers and service providers with expired trials')">ðŸ” Unpaid Users</button>
+              <button class="cb-quick-btn" onclick="askAdminBot('Suspend all sellers who have not paid and their trial has expired')">â›” Enforce Sellers</button>
+              <button class="cb-quick-btn" onclick="askAdminBot('Suspend all service providers who have not paid and their trial has expired')">â›” Enforce Providers</button>
+              <button class="cb-quick-btn" onclick="askAdminBot('Summarise platform performance this month')">ðŸ“Š Performance</button>
+              <button class="cb-quick-btn" onclick="askAdminBot('Give me 5 growth strategies for BUYSELL Nigeria')">ðŸš€ Growth</button>
             </div>
             <div style="display:flex;gap:.5rem">
-              <input type="text" id="admin-ai-input" class="form-input" placeholder="Ask anything about your platform…" onkeypress="if(event.key==='Enter')askAdminBot()">
+              <input type="text" id="admin-ai-input" class="form-input" placeholder="Ask anything about your platformâ€¦" onkeypress="if(event.key==='Enter')askAdminBot()">
               <button class="btn btn-primary" onclick="askAdminBot()" style="flex-shrink:0"><i class="fa-solid fa-paper-plane"></i></button>
             </div>
           </div>
         </div>
 
-        <!-- ═══ RECEIPTS TAB ═══ -->
+        <!-- â•â•â• RECEIPTS TAB â•â•â• -->
         <div id="adm-tab-receipts" class="adm-tab hidden">
           <h2 class="mb-1"><i class="fa-solid fa-file-invoice color-green"></i> Commission Receipts</h2>
-          <p class="color-text3 text-sm mb-3">Review and approve seller commission payment proofs (₦2,500/month).</p>
+          <p class="color-text3 text-sm mb-3">Review and approve seller commission payment proofs (â‚¦2,500/month).</p>
           <div class="stats-grid mb-4" style="grid-template-columns:repeat(3,1fr)">
             <div class="stat-card"><div class="stat-value color-gold" id="rcpt-pending">0</div><div class="stat-label">Pending</div></div>
             <div class="stat-card"><div class="stat-value color-green" id="rcpt-approved">0</div><div class="stat-label">Approved</div></div>
@@ -2143,7 +2090,7 @@
           </div>
         </div>
 
-        <!-- ═══ PREDICTIVE TAB ═══ -->
+        <!-- â•â•â• PREDICTIVE TAB â•â•â• -->
         <div id="adm-tab-predictive" class="adm-tab hidden">
           <div class="card card-pad mb-3">
             <h3 class="mb-1"><i class="fa-solid fa-crystal-ball color-purple"></i> Predictive Analytics</h3>
@@ -2164,17 +2111,17 @@
             </div>
             <div id="predictive-analytics"></div>
             <div class="mt-3">
-              <h4 class="mb-2">📊 Trend Analysis</h4>
+              <h4 class="mb-2">ðŸ“Š Trend Analysis</h4>
               <div id="trend-analysis"></div>
             </div>
             <div class="mt-3">
-              <h4 class="mb-2">👥 Customer Segments</h4>
+              <h4 class="mb-2">ðŸ‘¥ Customer Segments</h4>
               <div id="customer-segments"></div>
             </div>
           </div>
         </div>
 
-        <!-- ═══ COMPETITORS TAB ═══ -->
+        <!-- â•â•â• COMPETITORS TAB â•â•â• -->
         <div id="adm-tab-competitors" class="adm-tab hidden">
           <div class="card card-pad mb-3">
             <h3 class="mb-1"><i class="fa-solid fa-users color-purple"></i> Competitor Analysis</h3>
@@ -2188,7 +2135,7 @@
           </div>
         </div>
 
-        <!-- ═══ ACCOUNTS TAB ═══ -->
+        <!-- â•â•â• ACCOUNTS TAB â•â•â• -->
         <div id="adm-tab-accounts" class="adm-tab hidden">
           <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
             <h3 style="margin:0">Account Management</h3>
@@ -2235,7 +2182,7 @@
           </div>
         </div>
 
-        <!-- ═══ NOTIFICATIONS TAB ═══ -->
+        <!-- â•â•â• NOTIFICATIONS TAB â•â•â• -->
         <div id="adm-tab-notifications" class="adm-tab hidden">
           <div id="notification-settings"></div>
           <div class="card card-pad mt-3">
@@ -2246,7 +2193,7 @@
           </div>
         </div>
 
-        <!-- ═══ BRANDING TAB ═══ -->
+        <!-- â•â•â• BRANDING TAB â•â•â• -->
         <div id="adm-tab-branding" class="adm-tab hidden">
           <div class="card card-pad-lg" style="max-width:500px">
             <h3 class="mb-1"><i class="fa-solid fa-paint-brush color-green"></i> Platform Branding</h3>
@@ -2289,7 +2236,7 @@
         <div class="nav-avatar" style="border-radius:12px;background:var(--purple);color:#fff;flex-shrink:0"><i class="fa-solid fa-tools"></i></div>
         <div>
           <div class="u-name" id="spd-user-name">Service Pro</div>
-          <div class="u-email" id="spd-user-email">—</div>
+          <div class="u-email" id="spd-user-email">â€”</div>
         </div>
       </div>
       <div style="padding:.5rem .6rem;border-bottom:1px solid rgba(255,255,255,.06)">
@@ -2365,10 +2312,10 @@
                 <option>Design</option><option>Tailoring</option><option>Catering</option><option>Other</option>
               </select>
             </div>
-            <div class="form-group"><label class="form-label">Starting Rate (₦) <span class="req">*</span></label><input type="number" id="spd-rate" class="form-input" placeholder="5000" inputmode="numeric"></div>
+            <div class="form-group"><label class="form-label">Starting Rate (â‚¦) <span class="req">*</span></label><input type="number" id="spd-rate" class="form-input" placeholder="5000" inputmode="numeric"></div>
           </div>
           <div class="form-group"><label class="form-label">Location <span class="req">*</span></label><input type="text" id="spd-location" class="form-input" placeholder="e.g., Ikeja, Lagos"></div>
-          <div class="form-group"><label class="form-label">Description <span class="req">*</span></label><textarea id="spd-desc" class="form-textarea" rows="3" placeholder="Describe your experience, skills, and what makes you the best choice…"></textarea></div>
+          <div class="form-group"><label class="form-label">Description <span class="req">*</span></label><textarea id="spd-desc" class="form-textarea" rows="3" placeholder="Describe your experience, skills, and what makes you the best choiceâ€¦"></textarea></div>
           <div class="form-group"><label class="form-label">WhatsApp Number <span class="req">*</span></label><input type="tel" id="spd-wa" class="form-input" placeholder="0801 234 5678" inputmode="tel"></div>
           <div class="form-group">
             <label class="form-label"><i class="fa-solid fa-images" style="color:var(--purple)"></i> Portfolio Images <span class="text-xs color-text3">(up to 4 images)</span></label>
@@ -2432,7 +2379,7 @@
           <h3 class="mb-3"><i class="fa-solid fa-cog"></i> Profile Settings</h3>
           <div class="form-group"><label class="form-label">Display Name</label><input type="text" id="spd-s-name" class="form-input" placeholder="Your full name"></div>
           <div class="form-group"><label class="form-label">WhatsApp Number</label><input type="tel" id="spd-s-wa" class="form-input" placeholder="0801 234 5678" inputmode="tel"></div>
-          <div class="form-group"><label class="form-label">Bio / About</label><textarea id="spd-s-bio" class="form-textarea" rows="3" placeholder="Tell buyers about yourself…"></textarea></div>
+          <div class="form-group"><label class="form-label">Bio / About</label><textarea id="spd-s-bio" class="form-textarea" rows="3" placeholder="Tell buyers about yourselfâ€¦"></textarea></div>
           <button class="btn btn-primary btn-full" onclick="saveServiceProfile()"><i class="fa-solid fa-save"></i> Save Profile</button>
         </div>
       </div>
@@ -2462,11 +2409,11 @@
 <!-- LEFT SIDE: Language Selector (floating) -->
 <div style="position:fixed;bottom:16px;left:16px;z-index:997">
   <select onchange="setLanguage(this.value)" style="font-size:.7rem;padding:.3rem .5rem;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
-    <option value="en">🇬🇧 English</option>
-    <option value="pcm">🇳🇬 Pidgin</option>
-    <option value="ha">🇳🇬 Hausa</option>
-    <option value="yo">🇳🇬 Yoruba</option>
-    <option value="ig">🇳🇬 Igbo</option>
+    <option value="en">ðŸ‡¬ðŸ‡§ English</option>
+    <option value="pcm">ðŸ‡³ðŸ‡¬ Pidgin</option>
+    <option value="ha">ðŸ‡³ðŸ‡¬ Hausa</option>
+    <option value="yo">ðŸ‡³ðŸ‡¬ Yoruba</option>
+    <option value="ig">ðŸ‡³ðŸ‡¬ Igbo</option>
   </select>
 </div>
 
@@ -2578,11 +2525,11 @@
     <p class="color-text3 text-sm mb-3" id="svc-review-provider"></p>
     <input type="hidden" id="svc-review-booking-id">
     <div class="review-star-row" id="svc-star-row" style="margin-bottom:1rem">
-      <button class="star-btn" data-val="1" onclick="setSvcRating(1)">★</button>
-      <button class="star-btn" data-val="2" onclick="setSvcRating(2)">★</button>
-      <button class="star-btn" data-val="3" onclick="setSvcRating(3)">★</button>
-      <button class="star-btn" data-val="4" onclick="setSvcRating(4)">★</button>
-      <button class="star-btn" data-val="5" onclick="setSvcRating(5)">★</button>
+      <button class="star-btn" data-val="1" onclick="setSvcRating(1)">â˜…</button>
+      <button class="star-btn" data-val="2" onclick="setSvcRating(2)">â˜…</button>
+      <button class="star-btn" data-val="3" onclick="setSvcRating(3)">â˜…</button>
+      <button class="star-btn" data-val="4" onclick="setSvcRating(4)">â˜…</button>
+      <button class="star-btn" data-val="5" onclick="setSvcRating(5)">â˜…</button>
     </div>
     <div class="form-group"><label class="form-label">Your Review</label><textarea id="svc-review-text" class="form-textarea" rows="3" placeholder="How was your experience?"></textarea></div>
     <button class="btn btn-primary btn-full" onclick="submitServiceReview()"><i class="fa-solid fa-star"></i> Submit Review</button>
@@ -2592,7 +2539,7 @@
 
 <script src="https://js.paystack.co/v2/inline.js"></script>
 <script data-cfasync="false" src="config.js?v=3.3"></script>
-<script src="app.js?v=8.2"></script>
+<script src="app.js?v=8.3"></script>
   <script>
     (function() {
       'use strict';
@@ -2618,12 +2565,28 @@
               const target = document.querySelector(this.getAttribute('href'));
               if (target?.id === 'landing') {
                 e.preventDefault();
-                document.getElementById('marketing-placeholder')?.style.setProperty('display', 'none', 'important');
-                target.classList.remove('hidden');
-                target.style.setProperty('display', 'flex', 'important');
+                if (typeof enterSite === 'function') enterSite('buyer');
                 return;
               }
               if (target) { e.preventDefault(); target.scrollIntoView({ behavior: 'smooth' }); }
+            });
+          });
+
+          document.querySelectorAll('.bs-how__tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+              const activeTab = this.dataset.tab;
+              document.querySelectorAll('.bs-how__tab').forEach(btn => btn.classList.toggle('bs-active', btn === this));
+              document.querySelectorAll('.bs-how__flow').forEach(flow => {
+                flow.classList.toggle('bs-active', flow.dataset.flow === activeTab);
+              });
+            });
+          });
+
+          document.querySelectorAll('.bs-faq__trigger').forEach(trigger => {
+            trigger.addEventListener('click', function() {
+              const item = this.closest('.bs-faq__item');
+              const isOpen = item?.classList.toggle('is-open');
+              this.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
             });
           });
 
