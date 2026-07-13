@@ -31,7 +31,7 @@
 </script>
   <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<link rel="stylesheet" href="styles.css?v=6.6">
+<link rel="stylesheet" href="styles.css?v=7.0">
 </head>
 <body>
 
@@ -129,7 +129,7 @@
     </a>
     <div class="nav-search">
       <i class="fa-solid fa-search search-icon"></i>
-      <input type="text" id="search-input" placeholder="Search products, brandsâ€¦" onkeyup="if(event.key==='Enter')doSearch()">
+      <input type="text" id="search-input" placeholder="Search products, brands..." onkeyup="if(event.key==='Enter')doSearch()">
       <button class="search-btn" onclick="doSearch()" aria-label="Search"><i class="fa-solid fa-search"></i></button>
     </div>
     <div class="nav-actions">
@@ -169,7 +169,7 @@
           <img src="https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1400&h=500&fit=crop" alt="Electronics" loading="lazy">
           <div class="slide-overlay"></div>
           <div class="slide-content">
-            <span class="slide-tag">âš¡ HOT DEALS</span>
+            <span class="slide-tag"><i class="fa-solid fa-bolt"></i> HOT DEALS</span>
             <h2>Tech & Electronics</h2>
             <p>Up to 70% off on microcontrollers, sensors & laptops.</p>
             <button class="btn btn-gold btn-sm" onclick="filterCat('electronics')">Shop Now <i class="fa-solid fa-arrow-right"></i></button>
@@ -179,7 +179,7 @@
           <img src="https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?w=1400&h=500&fit=crop" alt="Fashion" loading="lazy">
           <div class="slide-overlay"></div>
           <div class="slide-content">
-            <span class="slide-tag" style="background:var(--green);color:#fff">ðŸŽ¨ NEW ARRIVALS</span>
+            <span class="slide-tag" style="background:var(--green);color:#fff"><i class="fa-solid fa-palette"></i> NEW ARRIVALS</span>
             <h2>African Fashion</h2>
             <p>Authentic Ankara, Aso-oke & contemporary styles.</p>
             <button class="btn btn-primary btn-sm" onclick="filterCat('fashion')">Explore <i class="fa-solid fa-arrow-right"></i></button>
@@ -189,7 +189,7 @@
           <img src="https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=1400&h=500&fit=crop" alt="Deals" loading="lazy">
           <div class="slide-overlay"></div>
           <div class="slide-content">
-            <span class="slide-tag" style="background:#0BA4DB;color:#fff">ðŸ’³ SECURE CHECKOUT</span>
+            <span class="slide-tag" style="background:#0BA4DB;color:#fff"><i class="fa-solid fa-credit-card"></i> SECURE CHECKOUT</span>
             <h2>Pay with Paystack</h2>
             <p>Cards, USSD, bank checkout & more. 100% secure.</p>
             <button class="btn btn-ghost btn-sm" onclick="filterCat('all')">Browse All <i class="fa-solid fa-arrow-right"></i></button>
@@ -235,8 +235,8 @@
   <div class="buyer-inner products-section">
     <!-- Buyer tabs (Shop / My Orders) -->
     <div class="buyer-tabs">
-      <button class="buyer-tab active" id="tab-shop" onclick="switchBuyerTab('shop')">ðŸ›ï¸ Shop</button>
-      <button class="buyer-tab" id="tab-orders" onclick="switchBuyerTab('orders')">ðŸ“¦ My Orders</button>
+      <button class="buyer-tab active" id="tab-shop" onclick="switchBuyerTab('shop')"><i class="fa-solid fa-bag-shopping"></i> Shop</button>
+      <button class="buyer-tab" id="tab-orders" onclick="switchBuyerTab('orders')"><i class="fa-solid fa-box"></i> My Orders</button>
       <button class="buyer-tab" id="tab-support" onclick="switchBuyerTab('support')"><i class="fa-solid fa-headset"></i> Support</button>
       <!-- <button class="buyer-tab" id="tab-services" onclick="switchBuyerTab('services')">ðŸ”§ Hire Services</button> -->
     </div>
@@ -258,7 +258,7 @@
       <div class="section-header">
         <div>
           <h2 class="section-title" id="section-title-text">Latest Products</h2>
-          <div class="section-meta">Live from BUYSELL â€¢ <span id="prod-count">0</span> items</div>
+          <div class="section-meta">Live from BUYSELL - <span id="prod-count">0</span> items</div>
         </div>
       </div>
 
@@ -2409,11 +2409,11 @@
 <!-- LEFT SIDE: Language Selector (floating) -->
 <div style="position:fixed;bottom:16px;left:16px;z-index:997">
   <select onchange="setLanguage(this.value)" style="font-size:.7rem;padding:.3rem .5rem;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
-    <option value="en">ðŸ‡¬ðŸ‡§ English</option>
-    <option value="pcm">ðŸ‡³ðŸ‡¬ Pidgin</option>
-    <option value="ha">ðŸ‡³ðŸ‡¬ Hausa</option>
-    <option value="yo">ðŸ‡³ðŸ‡¬ Yoruba</option>
-    <option value="ig">ðŸ‡³ðŸ‡¬ Igbo</option>
+    <option value="en">English</option>
+    <option value="pcm">Pidgin</option>
+    <option value="ha">Hausa</option>
+    <option value="yo">Yoruba</option>
+    <option value="ig">Igbo</option>
   </select>
 </div>
 
@@ -2539,7 +2539,7 @@
 
 <script src="https://js.paystack.co/v2/inline.js"></script>
 <script data-cfasync="false" src="config.js?v=3.3"></script>
-<script src="app.js?v=8.3"></script>
+<script src="app.js?v=8.4"></script>
   <script>
     (function() {
       'use strict';
