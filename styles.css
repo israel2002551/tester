@@ -1580,3 +1580,134 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
   .bs-reveal { opacity: 1; transform: none; transition: none; }
   .bs-marquee__track { animation: none; }
 }
+
+/* ====================================================
+   RESPONSIVE HARDENING PASS
+   Keeps landing, marketplace, dashboards, and chat usable
+   across small phones, tablets, and desktop without JS changes.
+   ==================================================== */
+html, body { max-width: 100%; overflow-x: hidden; }
+img, video, canvas, svg { max-width: 100%; }
+button, a, input, textarea, select { touch-action: manipulation; }
+.btn, .bs-btn { min-height: 42px; max-width: 100%; }
+.bs-landing * { box-sizing: border-box; }
+.bs-hero__inner, .bs-hero__ctas, .bs-final-cta__alt { pointer-events: auto; }
+.bs-hero__video-wrap, .bs-hero__bg, .bs-hero__grid-lines, .bs-hero__video-overlay { pointer-events: none; }
+.bs-btn { position: relative; z-index: 5; justify-content: center; line-height: 1.2; text-align: center; }
+.bs-section-title, .bs-hero__title, .bs-showcase__content h3, .bs-why__card h3 { overflow-wrap: anywhere; }
+.bs-showcase__content p, .bs-why__card p, .bs-section-sub, .bs-hero__subtitle { overflow-wrap: break-word; }
+.modal-box { width: min(100%, var(--modal-max, 560px)); max-height: calc(100dvh - 2rem); overflow-y: auto; }
+.data-table { min-width: 720px; }
+.overflow-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+@media (min-width: 641px) and (max-width: 1100px) {
+  .bs-container { padding-inline: 28px; }
+  .bs-hero { min-height: auto; }
+  .bs-hero__inner { padding: 112px 0 92px; }
+  .bs-video-showcase__inner, .bs-impact__inner { gap: 36px; }
+  .products-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .nav-inner { flex-wrap: wrap; height: auto; min-height: 58px; padding-block: .45rem; }
+  .nav-search { max-width: none; }
+}
+
+@media (max-width: 900px) {
+  #main-nav { position: sticky; }
+  .nav-inner { height: auto; min-height: 58px; flex-wrap: wrap; align-items: center; padding-block: .48rem; }
+  .nav-brand-sm { min-width: 0; }
+  .nav-search { order: 5; flex: 0 0 100%; max-width: 100%; padding-bottom: 0; }
+  .nav-actions { margin-left: auto; }
+  #nav-user-btns { flex-wrap: wrap; justify-content: flex-end; gap: .35rem; }
+  #toggle-view-btn { max-width: 44px; padding-inline: .6rem; overflow: hidden; }
+  #toggle-view-text { display: none; }
+  .buyer-inner, .sf-inner { padding-inline: .75rem; }
+  .hero-section { padding-top: .75rem; }
+  .dash-layout { min-height: 100dvh; }
+  .dash-main { width: 100%; min-width: 0; }
+  .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  .bs-container { padding-inline: 16px; }
+  .bs-hero { min-height: auto; align-items: flex-start; }
+  .bs-hero__inner { padding: 72px 0 56px; }
+  .bs-hero__badge { margin-bottom: 20px; max-width: 100%; }
+  .bs-hero__title { font-size: 2.35rem; line-height: 1.08; margin-bottom: 18px; }
+  .bs-hero__subtitle { font-size: 1rem; line-height: 1.55; margin-bottom: 28px; }
+  .bs-hero__ctas { gap: 10px; margin-bottom: 34px; }
+  .bs-btn { width: 100%; white-space: normal; padding: 14px 18px; border-radius: 14px; }
+  .bs-hero__proof { border-radius: 18px; }
+  .bs-trust, .bs-how, .bs-video-showcase, .bs-showcase, .bs-impact, .bs-video-testimonials, .bs-why, .bs-faq { padding: 56px 0; }
+  .bs-payments { padding: 48px 0; }
+  .bs-section-head { margin-bottom: 30px; }
+  .bs-section-title { font-size: 1.85rem; line-height: 1.15; }
+  .bs-section-sub { font-size: .98rem; }
+  .bs-trust__item { align-items: flex-start; }
+  .bs-how__toggle { border-radius: 14px; }
+  .bs-how__tab { border-radius: 10px; white-space: normal; }
+  .bs-step__arrow { display: none; }
+  .bs-video-showcase__inner { gap: 28px; }
+  .bs-video-showcase__content h2 { font-size: 1.85rem; }
+  .bs-video-showcase__feature { align-items: flex-start; }
+  .bs-video-player { border-radius: 18px; }
+  .bs-video-play-btn { width: 58px; height: 58px; }
+  .bs-showcase__content { padding: 22px; }
+  .bs-impact__chart { padding: 16px; border-radius: 18px; }
+  .bs-impact__floating-card { position: static; margin-top: 12px; width: fit-content; }
+  .bs-impact__numbers { grid-template-columns: 1fr; gap: 16px; }
+  .bs-video-testimonial__overlay { padding: 20px; }
+  .bs-why__card { padding: 28px 22px; }
+  .bs-why__card-badge { position: static; display: inline-flex; margin-bottom: 16px; }
+  .bs-payments__grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  .bs-payments__item { width: 100%; padding: 14px 16px; overflow-wrap: anywhere; }
+  .bs-faq__trigger { gap: 14px; padding: 20px 0; }
+  .bs-faq__trigger h3 { font-size: 1rem; }
+  .bs-final-cta { padding: 48px 0 72px; }
+  .bs-final-cta__inner { border-radius: 20px; padding: 42px 18px; }
+  .bs-final-cta__alt { width: 100%; }
+
+  #landing { position: fixed; overflow-y: auto; }
+  .landing-header { padding: .9rem 1rem; }
+  .landing-main { align-items: flex-start; padding: 1rem; }
+  .landing-tagline { margin-bottom: 1.1rem; }
+  .landing-tagline h1 { font-size: 2rem; }
+  .portal-grid { grid-template-columns: 1fr; max-width: 420px; }
+  .portal-card { border-radius: 14px; padding: 1.1rem; }
+  .landing-footer { padding: .8rem 1rem; gap: .45rem; }
+
+  .products-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; }
+  .prod-card { min-width: 0; }
+  .prod-title { min-height: auto; }
+  .product-actions { flex-direction: column; }
+  .product-actions .btn { width: 100%; justify-content: center; white-space: normal; }
+  .modal-overlay { padding: .5rem; align-items: flex-end; }
+  .modal-box { border-radius: 16px 16px 0 0; max-height: calc(100dvh - .75rem); }
+  .message-box { width: 100%; max-width: 100%; height: min(92dvh, 720px); border-radius: 16px 16px 0 0; }
+  .message-head { grid-template-columns: 32px 38px minmax(0,1fr) 32px; gap: .5rem; }
+  .msg-product-card { align-items: flex-start; flex-wrap: wrap; }
+  .msg-product-card .btn { width: 100%; justify-content: center; }
+  .msg-conversation { padding: .7rem; }
+  .msg-bubble { max-width: 90%; font-size: .84rem; }
+  .msg-bubble .msg-image { max-width: min(260px, 72vw); }
+  .msg-quick-row { padding: .5rem; }
+  .msg-input-row { padding: .55rem; gap: .35rem; }
+  .msg-input-row textarea { min-height: 42px; }
+  .msg-input-row button { width: 40px; height: 40px; padding: 0; }
+  .inbox-box { width: 100%; max-width: 100%; border-radius: 16px 16px 0 0; }
+  #chatbot-window { left: .75rem; right: .75rem; bottom: calc(var(--mob-nav-h) + .75rem); width: auto; max-width: none; border-radius: 16px; }
+  #chatbot-fab { right: .85rem; bottom: calc(var(--mob-nav-h) + 1rem); }
+  .chatbot-messages { height: min(44dvh, 260px); }
+}
+
+@media (max-width: 420px) {
+  .bs-container { padding-inline: 12px; }
+  .bs-hero__title { font-size: 2rem; }
+  .bs-hero__subtitle { font-size: .94rem; }
+  .bs-section-title { font-size: 1.55rem; }
+  .bs-showcase__content h3, .bs-why__card h3, .bs-step h3 { font-size: 1.12rem; }
+  .products-grid { grid-template-columns: 1fr; }
+  .nav-inner { padding-inline: .65rem; }
+  .nav-brand-text-full { display: none; }
+  .cart-btn, .nav-avatar { width: 36px; height: 36px; }
+  .message-box { height: 94dvh; }
+  .msg-bubble { max-width: 94%; }
+}
