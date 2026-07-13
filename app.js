@@ -1,5 +1,5 @@
 // ====================================================
-//  BUYSELL Nigeria â€” Main Application
+//  BUYSELL Nigeria  -  Main Application
 //  Config loaded from config.js (secrets are .gitignored)
 // ====================================================
 
@@ -763,8 +763,8 @@ async function handleAuth(e) {
       if (signUpError) {
         const msg = signUpError.message?.toLowerCase() || '';
         if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('user already')) {
-          // Account exists â€” just sign them in directly
-          toast('Account exists â€” signing you inâ€¦', '', 'info', 3000);
+          // Account exists  -  just sign them in directly
+          toast('Account exists  -  signing you inâ€¦', '', 'info', 3000);
           appStorage.setItem('bs_manual_navigation_pass', 'true');
           const { data: loginData, error: loginError } = await withTimeout(
             db.auth.signInWithPassword({ email, password }),
@@ -788,7 +788,7 @@ async function handleAuth(e) {
         return;
       }
 
-      // Step 2: Always immediately sign in after signup â€” guarantees a live session
+      // Step 2: Always immediately sign in after signup  -  guarantees a live session
       // regardless of whether email confirmation setting is truly off
       appStorage.setItem('bs_manual_navigation_pass', 'true');
       const { data: loginData, error: loginError } = await withTimeout(
@@ -798,7 +798,7 @@ async function handleAuth(e) {
       );
 
       if (loginError) {
-        // Signup worked but auto-login failed â€” tell them to sign in manually
+        // Signup worked but auto-login failed  -  tell them to sign in manually
         toast('Account Created!', 'Now sign in with your email and password', 'success', 6000);
         toggleAuth('login');
         document.getElementById('auth-email').value = email;
@@ -864,7 +864,7 @@ async function onAuthSuccess(user) {
   const { data: profile, error } = await db.from('profiles').select('*').eq('id', user.id).single();
 
   if (error || !profile) {
-    // Profile not yet created (trigger may still be running) â€” create it now
+    // Profile not yet created (trigger may still be running)  -  create it now
     await upsertProfile(user, { ...(user.user_metadata || {}), ...googleProfileHint });
     const { data: retryProfile } = await db.from('profiles').select('*').eq('id', user.id).single();
     currentUser.profile = retryProfile || {
@@ -935,7 +935,7 @@ function updateNavForUser() {
   document.getElementById('dash-user-name').textContent = currentUser.profile?.name || 'Seller';
   document.getElementById('dash-user-email').textContent = currentUser.email || '';
   // Admin check
-  // DB-backed admin check â€” email alone is not sufficient
+  // DB-backed admin check  -  email alone is not sufficient
   const isAdmin = isAdminEmail();
   if (isAdmin) {
     document.getElementById('admin-nav-item')?.classList.remove('hidden');
@@ -1027,10 +1027,10 @@ async function generateDescription() {
                     Product: ${name}
                     Category: ${category}
                     Condition: ${condition}
-                    Price: â‚¦${price}
+                    Price: \u20A6${price}
                     
                     Requirements:
-                    - 2â€“3 sentences max
+                    - 2 - 3 sentences max
                     - Highlight key benefits
                     - Mention it's available in Nigeria
                     - No bullet points, plain text only
@@ -1319,7 +1319,7 @@ function renderWithdrawalHistory(withdrawals) {
       <td>${fmtDate(w.created_at)}</td>
       <td class="font-bold">${fmtN(w.amount)}</td>
       <td><span class="badge ${w.status === 'paid' ? 'badge-green' : 'badge-gold'}">${w.status}</span></td>
-      <td class="text-xs color-text3">${w.id?.substr(0,8) || 'â€”'}</td>
+      <td class="text-xs color-text3">${w.id?.substr(0,8) || ' - '}</td>
     </tr>
   `).join('');
 }
@@ -1428,15 +1428,15 @@ function prodCard(p) {
   const videoCount = Array.isArray(p.videos) ? p.videos.length : (p.video_url || p.has_video ? 1 : 0);
 
   const badges = [
-    isFlashActive ? `<span class="prod-badge" style="background:var(--red); color:#fff;">âš¡ Flash</span>` : '',
+    isFlashActive ? `<span class="prod-badge" style="background:var(--red); color:#fff;"><i class="fa-solid fa-bolt"></i> Flash</span>` : '',
     discount && !isFlashActive ? `<span class="prod-badge prod-badge-discount">-${discount}%</span>` : '',
-    videoCount > 0 ? `<span class="prod-badge prod-badge-video">ðŸŽ¬ Video (${videoCount})</span>` : '',
-    imageCount > 1 ? `<span class="prod-badge" style="background:var(--blue); color:#fff;">ðŸ“¸ Photos (${imageCount})</span>` : '',
+    videoCount > 0 ? `<span class="prod-badge prod-badge-video"><i class="fa-solid fa-video"></i> Video (${videoCount})</span>` : '',
+    imageCount > 1 ? `<span class="prod-badge" style="background:var(--blue); color:#fff;"><i class="fa-solid fa-camera"></i> Photos (${imageCount})</span>` : '',
     p.category === 'dropship' ? `<span class="prod-badge prod-badge-drop">Dropship</span>` : '',
-    p.seller_verified ? `<span class="prod-badge prod-badge-verified">âœ“ Verified</span>` : ''
+    p.seller_verified ? `<span class="prod-badge prod-badge-verified"><i class="fa-solid fa-check"></i> Verified</span>` : ''
   ].filter(Boolean).join('');
 
-  const stars = p.avg_rating ? 'â˜…'.repeat(Math.round(p.avg_rating)) + 'â˜†'.repeat(5 - Math.round(p.avg_rating)) : 'â˜…â˜…â˜…â˜…â˜…';
+  const stars = starIcons(p.avg_rating || 5);
 
   const serializedCartData = JSON.stringify(cartItem)
     .replace(/&/g, '&amp;')
@@ -1461,7 +1461,7 @@ function prodCard(p) {
         <span class="prod-price">${fmtN(displayPrice)}</span>
         ${p.original_price > displayPrice ? `<span class="prod-orig">${fmtN(p.original_price)}</span>` : ''}
       </div>
-      <div class="text-xs color-text3" style="margin-top:.15rem"><i class="fa-solid fa-truck"></i> Shipping: ${fmtN(itemShippingFee(p))}</div>
+      <div class="prod-shipping text-xs color-text3" style="margin-top:.15rem"><i class="fa-solid fa-truck"></i> Shipping: ${fmtN(itemShippingFee(p))}</div>
       <div class="prod-rating-row"><span class="stars sm">${stars}</span><span class="text-xs color-text3">${p.avg_rating ? p.avg_rating.toFixed(1) : '5.0'} (${p.review_count||0})</span></div>
       <div class="prod-location"><i class="fa-solid fa-map-marker-alt" style="font-size:.6rem"></i>${escHtml(p.location||'Nigeria')}</div>
       <a class="prod-store-link" onclick="event.stopPropagation();viewStorefront('${p.seller_id}')"><i class="fa-solid fa-store" style="font-size:.6rem"></i>${escHtml(p.profiles?.name||'Seller')}</a>
@@ -1544,8 +1544,8 @@ function applyFilters() {
 function renderActiveFilters() {
   const container = document.getElementById('active-filters');
   const pills = [];
-  if (activeFilters.priceMin||activeFilters.priceMax) pills.push({key:'price',label:`â‚¦${fmtNum(activeFilters.priceMin||0)} â€“ â‚¦${fmtNum(activeFilters.priceMax||'âˆž')}`});
-  if (activeFilters.minRating) pills.push({key:'minRating',label:`${activeFilters.minRating}+ â˜…`});
+  if (activeFilters.priceMin||activeFilters.priceMax) pills.push({key:'price',label:`${fmtN(activeFilters.priceMin||0)} - ${activeFilters.priceMax ? fmtN(activeFilters.priceMax) : 'Any'}`});
+  if (activeFilters.minRating) pills.push({key:'minRating',label:`${activeFilters.minRating}+ ${starText(1)}`});
   if (activeFilters.condition) pills.push({key:'condition',label:activeFilters.condition});
   container.innerHTML = pills.map(p => `<span class="active-filter-pill">${p.label}<button onclick="removeFilter('${p.key}')"><i class="fa-solid fa-times"></i></button></span>`).join('');
 }
@@ -1614,17 +1614,17 @@ function sortProds() {
 function updatePriceDisplay() {
   const min = document.getElementById('flt-min').value || 0;
   const max = document.getElementById('flt-max').value || '500,000';
-  document.getElementById('price-range-display').textContent = `â‚¦${fmtNum(min)} â€“ â‚¦${fmtNum(max)}`;
+  document.getElementById('price-range-display').textContent = `${fmtN(min)} - ${fmtN(max)}`;
 }
 
 // ====================================================
 //  PRODUCT DETAIL
 // ====================================================
 // ====================================================
-//  PRODUCT DETAIL â€” MULTI-MEDIA GALLERY ENHANCED
+//  PRODUCT DETAIL  -  MULTI-MEDIA GALLERY ENHANCED
 // ====================================================
 // ====================================================
-//  PRODUCT DETAIL â€” FLUID MULTI-MEDIA GALLERY UNIFIED
+//  PRODUCT DETAIL  -  FLUID MULTI-MEDIA GALLERY UNIFIED
 // ====================================================
 async function openProduct(id) {
   currentProd = products.find(p => p.id === id);
@@ -1818,7 +1818,7 @@ async function loadProductReviews(productId) {
   // Calculate average and star distribution
   const avg = count ? (reviews.reduce((s,r)=>s+r.rating,0)/count) : 0;
   document.getElementById('modal-avg-rating').textContent = avg.toFixed(1);
-  document.getElementById('modal-stars').textContent = 'â˜…'.repeat(Math.round(avg)) + 'â˜†'.repeat(5-Math.round(avg));
+  document.getElementById('modal-stars').textContent = starText(avg);
 
   // Star distribution bars (5â†’1)
   const barsEl = document.getElementById('modal-rating-bars');
@@ -1844,10 +1844,10 @@ async function loadProductReviews(productId) {
           <div style="width:26px;height:26px;border-radius:50%;background:var(--green-xlt);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:var(--green)">${(r.profiles?.name||'B')[0].toUpperCase()}</div>
           <span class="reviewer-name">${escHtml(r.profiles?.name||'Verified Buyer')}</span>
         </div>
-        <div class="stars sm">${'â˜…'.repeat(r.rating)+'â˜†'.repeat(5-r.rating)}</div>
+        <div class="stars sm">${starIcons(r.rating)}</div>
       </div>
       <p class="review-text">${escHtml(r.review_text || r.comment || '')}</p>
-      <span class="text-xs color-text3"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i> Verified Purchase Â· ${fmtDate(r.created_at)}</span>
+      <span class="text-xs color-text3"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i> Verified Purchase  -  ${fmtDate(r.created_at)}</span>
     </div>`).join('');
 }
 
@@ -1862,7 +1862,7 @@ async function loadProductReviews(productId) {
   document.getElementById('modal-verified-count').textContent = reviews.filter(r => r.verified_purchase !== false).length;
   const avg = count ? (reviews.reduce((s,r)=>s+Number(r.rating || 0),0)/count) : 0;
   document.getElementById('modal-avg-rating').textContent = avg.toFixed(1);
-  document.getElementById('modal-stars').textContent = '*'.repeat(Math.round(avg)) + 'â˜†'.repeat(5-Math.round(avg));
+  document.getElementById('modal-stars').textContent = starText(avg);
   const barsEl = document.getElementById('modal-rating-bars');
   barsEl.innerHTML = [5,4,3,2,1].map(star => {
     const starCount = reviews.filter(r => Number(r.rating) === star).length;
@@ -1873,7 +1873,7 @@ async function loadProductReviews(productId) {
   if (!count) { list.innerHTML = '<p class="color-text3 text-sm" style="padding:.5rem 0">No reviews yet. Be the first to share your experience!</p>'; return; }
   list.innerHTML = reviews.map(r => {
     const imgs = Array.isArray(r.image_urls) ? r.image_urls : [];
-    return `<div class="review-card"><div class="flex justify-between items-center"><div style="display:flex;align-items:center;gap:.4rem"><div style="width:26px;height:26px;border-radius:50%;background:var(--green-xlt);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:var(--green)">${(r.profiles?.name||'B')[0].toUpperCase()}</div><span class="reviewer-name">${escHtml(r.profiles?.name||'Verified Buyer')}</span></div><div class="stars sm">${'*'.repeat(Number(r.rating)||0)}${'â˜†'.repeat(5-(Number(r.rating)||0))}</div></div><p class="review-text">${escHtml(r.review_text || r.comment || '')}</p>${imgs.length ? `<div class="review-images-gallery">${imgs.map(url => `<img src="${escAttr(url)}" alt="Review photo" onclick="openReviewImage('${escAttr(url)}')">`).join('')}</div>` : ''}<span class="text-xs color-text3"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i> ${r.verified_purchase === false ? 'Buyer Review' : 'Verified Purchase'} Â· ${fmtDate(r.created_at)}</span></div>`;
+    return `<div class="review-card"><div class="flex justify-between items-center"><div style="display:flex;align-items:center;gap:.4rem"><div style="width:26px;height:26px;border-radius:50%;background:var(--green-xlt);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:var(--green)">${(r.profiles?.name||'B')[0].toUpperCase()}</div><span class="reviewer-name">${escHtml(r.profiles?.name||'Verified Buyer')}</span></div><div class="stars sm">${starIcons(r.rating)}</div></div><p class="review-text">${escHtml(r.review_text || r.comment || '')}</p>${imgs.length ? `<div class="review-images-gallery">${imgs.map(url => `<img src="${escAttr(url)}" alt="Review photo" onclick="openReviewImage('${escAttr(url)}')">`).join('')}</div>` : ''}<span class="text-xs color-text3"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i> ${r.verified_purchase === false ? 'Buyer Review' : 'Verified Purchase'} - ${fmtDate(r.created_at)}</span></div>`;
   }).join('');
 }
 
@@ -1915,12 +1915,51 @@ function itemShippingFee(item = {}) {
   return Math.max(0, Number(item.shipping_fee ?? item.shipping_cost ?? item.shipping ?? 0) || 0);
 }
 
+function cartSellerKey(item = {}) {
+  return String(item.seller_id || item.profiles?.id || item.store_id || item.id || 'unknown');
+}
+
 function cartProductTotal() {
   return cart.reduce((sum, item) => sum + (Number(item.price || 0) * (item.qty || 1)), 0);
 }
 
+function cartSellerShippingGroups() {
+  const groups = new Map();
+  cart.forEach(item => {
+    const sellerKey = cartSellerKey(item);
+    const existing = groups.get(sellerKey) || { sellerKey, sellerName: item.profiles?.name || 'Seller', fee: 0, count: 0 };
+    existing.fee = Math.max(existing.fee, itemShippingFee(item));
+    existing.count += item.qty || 1;
+    groups.set(sellerKey, existing);
+  });
+  return [...groups.values()];
+}
+
 function cartShippingTotal() {
-  return cart.reduce((sum, item) => sum + (itemShippingFee(item) * (item.qty || 1)), 0);
+  return cartSellerShippingGroups().reduce((sum, group) => sum + group.fee, 0);
+}
+
+function checkoutCartItems(includeDetails = false) {
+  const groupFees = new Map(cartSellerShippingGroups().map(group => [group.sellerKey, group.fee]));
+  const feeApplied = new Set();
+  return cart.map(item => {
+    const sellerKey = cartSellerKey(item);
+    const chargedShipping = feeApplied.has(sellerKey) ? 0 : (groupFees.get(sellerKey) || 0);
+    feeApplied.add(sellerKey);
+    const base = {
+      id: item.id,
+      qty: item.qty || 1,
+      shipping_fee: chargedShipping,
+      shipping_cost: chargedShipping,
+    };
+    if (!includeDetails) return base;
+    return {
+      ...base,
+      name: item.name,
+      price: item.price,
+      image_url: item.image_url || '',
+    };
+  });
 }
 
 function cartPayableSubtotal() {
@@ -1996,7 +2035,7 @@ function renderCartItems() {
       <div style="flex:1;min-width:0">
         <div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px">${escHtml(c.name)}</div>
         <div class="color-green font-bold">${fmtN(c.price)}</div>
-        <div class="text-xs color-text3">Shipping: ${fmtN(itemShippingFee(c))}</div>
+        <div class="text-xs color-text3">Store shipping: ${fmtN(itemShippingFee(c))}</div>
         <div class="flex items-center gap-2 mt-1">
           <button onclick="changeCartQty('${c.id}',-1)" class="btn btn-outline btn-sm" style="padding:.2rem .5rem">-</button>
           <span class="text-sm font-bold">${c.qty||1}</span>
@@ -2004,7 +2043,7 @@ function renderCartItems() {
         </div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.4rem">
-        <span class="font-bold text-sm">${fmtN((c.price*(c.qty||1)) + (itemShippingFee(c)*(c.qty||1)))}</span>
+        <span class="font-bold text-sm">${fmtN(c.price*(c.qty||1))}</span>
         <button onclick="removeFromCart('${c.id}')" class="btn btn-sm" style="background:#fee2e2;color:var(--danger);padding:.28rem .62rem"><i class="fa-solid fa-trash"></i></button>
       </div>
     </div>`).join('');
@@ -2147,8 +2186,8 @@ async function startCheckout() {
   document.getElementById('co-items').innerHTML = cart.map(c=>`
     <div class="order-item">
       <img src="${c.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=100'}" alt="" loading="lazy">
-      <div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(c.name)}</div><div class="color-text3 text-xs">Qty: ${c.qty||1} Â· Shipping: ${fmtN(itemShippingFee(c)*(c.qty||1))}</div></div>
-      <div class="font-bold text-sm">${fmtN((c.price*(c.qty||1)) + (itemShippingFee(c)*(c.qty||1)))}</div>
+      <div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(c.name)}</div><div class="color-text3 text-xs">Qty: ${c.qty||1} - Store shipping: ${fmtN(itemShippingFee(c))}</div></div>
+      <div class="font-bold text-sm">${fmtN(c.price*(c.qty||1))}</div>
     </div>`).join('');
     
   const bankBox = document.getElementById('seller-bank-details-co');
@@ -2265,7 +2304,9 @@ async function payWithPaystack() {
 
   try {
     const checkoutPayload = {
-      cart: cart.map(c => ({ id: c.id, qty: c.qty || 1, shipping_fee: itemShippingFee(c), shipping_cost: itemShippingFee(c) })),
+      cart: checkoutCartItems(),
+      shipping_total: cartShippingTotal(),
+      shipping_groups: cartSellerShippingGroups(),
       delivery_name: document.getElementById('co-name').value.trim(),
       delivery_phone: document.getElementById('co-phone').value.trim(),
       delivery_address: document.getElementById('co-address').value.trim(),
@@ -2426,15 +2467,7 @@ async function createWalletRevenueOrder(checkoutPayload, totalAmount, walletRef)
     id: orderId,
     buyer_id: currentUser.id,
     seller_id: productSellerId,
-    items: cart.map(c => ({
-      id: c.id,
-      name: c.name,
-      qty: c.qty || 1,
-      price: c.price,
-      shipping_fee: itemShippingFee(c),
-      shipping_cost: itemShippingFee(c),
-      image_url: c.image_url || ''
-    })),
+    items: checkoutCartItems(true),
     total_amount: totalAmount,
     status: 'pending',
     payment_method: 'wallet_revenue',
@@ -2485,7 +2518,9 @@ async function payWithWalletRevenue() {
 
   try {
     const checkoutPayload = {
-      cart: cart.map(c => ({ id: c.id, qty: c.qty || 1, shipping_fee: itemShippingFee(c), shipping_cost: itemShippingFee(c) })),
+      cart: checkoutCartItems(),
+      shipping_total: cartShippingTotal(),
+      shipping_groups: cartSellerShippingGroups(),
       delivery_name: document.getElementById('co-name').value.trim(),
       delivery_phone: document.getElementById('co-phone').value.trim(),
       delivery_address: document.getElementById('co-address').value.trim(),
@@ -2849,7 +2884,7 @@ async function loadBuyerOrders() {
         ? orderItems.map(i => `<span class="text-xs badge badge-gray">${escHtml(i.name || 'Item')} Ã—${i.qty || 1}</span>`).join('')
         : '<span class="text-xs color-text3">Order item history is still saved for newer orders; this older order may not include item details.</span>';
       const proofUrl = o.proof_url || o.payment_proof_url || '';
-      const paymentMethod = o.payment_method ? ` Â· ${escHtml(o.payment_method)}` : '';
+      const paymentMethod = o.payment_method ? `  -  ${escHtml(o.payment_method)}` : '';
       return `
     <div class="order-history-item buyer-order-card">
       <div class="buyer-order-head">
@@ -2892,7 +2927,7 @@ async function loadSellerStats() {
   const { data: revs } = await db.from('reviews').select('rating').in('product_id', (prods||[]).map(p=>p.id));
   const active = (prods||[]).filter(p=>p.status==='active').length;
   const revenue = (orders||[]).filter(o=>o.status!=='cancelled').reduce((s,o)=>s+o.total_amount,0);
-  const avgR = (revs||[]).length ? ((revs.reduce((s,r)=>s+r.rating,0)/revs.length).toFixed(1)) : 'â€”';
+  const avgR = (revs||[]).length ? ((revs.reduce((s,r)=>s+r.rating,0)/revs.length).toFixed(1)) : ' - ';
   document.getElementById('st-products').textContent = active;
   document.getElementById('st-revenue').textContent = fmtN(revenue);
   document.getElementById('st-orders').textContent = (orders||[]).length;
@@ -2950,8 +2985,8 @@ async function renderChart() {
   if (salesChart) salesChart.destroy();
   salesChart = new Chart(ctx, {
     type: 'line',
-    data: { labels, datasets: [{ label: 'Revenue (â‚¦)', data, borderColor: '#19a847', backgroundColor: 'rgba(25,168,71,.08)', tension: 0.4, fill: true, pointBackgroundColor: '#19a847', pointRadius: 3 }] },
-    options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => 'â‚¦' + fmtNum(ctx.raw) } } }, scales: { y: { beginAtZero: true, ticks: { callback: v => 'â‚¦'+fmtNum(v) } }, x: { ticks: { maxTicksLimit: days>14?7:days } } } }
+    data: { labels, datasets: [{ label: 'Revenue (NGN)', data, borderColor: '#19a847', backgroundColor: 'rgba(25,168,71,.08)', tension: 0.4, fill: true, pointBackgroundColor: '#19a847', pointRadius: 3 }] },
+    options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtN(ctx.raw) } } }, scales: { y: { beginAtZero: true, ticks: { callback: v => fmtN(v) } }, x: { ticks: { maxTicksLimit: days>14?7:days } } } }
   });
 }
 
@@ -3003,7 +3038,7 @@ async function loadSellerAnalytics() {
           interaction: { mode: 'index', intersect: false },
           scales: {
             count: { type: 'linear', position: 'left', beginAtZero: true },
-            money: { type: 'linear', position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { callback: v => 'â‚¦' + fmtNum(v) } },
+            money: { type: 'linear', position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { callback: v => fmtN(v) } },
           },
         },
       });
@@ -3080,9 +3115,9 @@ if (nameVal.length > 300) {
   return; 
 }
     if (isNaN(priceVal) || priceVal <= 0)        { toast('Invalid price','Enter a price greater than 0','warn'); return; }
-    if (priceVal > 100000000)                    { toast('Price too high','Maximum price is â‚¦100,000,000','warn'); return; }
+    if (priceVal > 100000000)                    { toast('Price too high','Maximum price is \u20A6100,000,000','warn'); return; }
     if (isNaN(shippingFeeVal) || shippingFeeVal < 0) { toast('Invalid shipping fee','Enter 0 or a valid shipping fee','warn'); return; }
-    if (shippingFeeVal > 10000000)               { toast('Shipping fee too high','Maximum shipping fee is â‚¦10,000,000','warn'); return; }
+    if (shippingFeeVal > 10000000)               { toast('Shipping fee too high','Maximum shipping fee is \u20A610,000,000','warn'); return; }
     if (stockVal < 0 || stockVal > 100000)       { toast('Invalid stock','Stock must be between 0 and 100,000','warn'); return; }
     if (descVal.length > 2000)                   { toast('Description too long','Max 2,000 characters','warn'); return; }
     if (!VALID_CATS.includes(catVal))            { toast('Invalid category','Please select a valid category','warn'); return; }
@@ -3160,7 +3195,7 @@ if (nameVal.length > 300) {
       document.querySelector('#ds-add-product .dash-page-title').textContent = 'Add New Product';
       document.querySelector('#ds-add-product .dash-page-sub').textContent = 'Products with videos get 3Ã— more sales! ðŸŽ¬';
     } else {
-      // INSERT mode â€” server-side via Edge Function
+      // INSERT mode  -  server-side via Edge Function
       await callEdge('manage-product', {
         action: 'create',
         data: { ...prodData, image_url: imgUrl, video_url: vidUrl }
@@ -3348,7 +3383,7 @@ function renderTrackingTimeline(order, events) {
       <div class="tracking-card">
         <strong>${escHtml(trackingLabel(e.status))}</strong>
         ${e.note ? `<p>${escHtml(e.note)}</p>` : ''}
-        <span>${fmtDate(e.created_at)} Â· ${formatMsgTime(e.created_at)}</span>
+        <span>${fmtDate(e.created_at)}  -  ${formatMsgTime(e.created_at)}</span>
       </div>
     </div>`).join('');
 }
@@ -3393,7 +3428,7 @@ async function loadSellerReviews() {
     <div class="review-card">
       <div class="flex justify-between">
         <span class="reviewer-name">${escHtml(r.profiles?.name||'Buyer')}</span>
-        <div class="stars sm">${'â˜…'.repeat(r.rating)+'â˜†'.repeat(5-r.rating)}</div>
+        <div class="stars sm">${starIcons(r.rating)}</div>
       </div>
       <p class="review-text">${escHtml(r.review_text || r.comment || '')}</p>
       <span class="text-xs color-text3">${fmtDate(r.created_at)}</span>
@@ -3429,7 +3464,7 @@ function payCommissionPaystack() {
     currency: 'NGN',
     reference: 'comm_' + Date.now(),
     onSuccess: async (response) => {
-      // Commission confirmed via Paystack â€” direct update for immediate UI response
+      // Commission confirmed via Paystack  -  direct update for immediate UI response
       try {
       await callEdge('admin-action', {
         action: 'toggle_commission',
@@ -3453,7 +3488,7 @@ function payCommissionPaystack() {
 
 function payCommissionViaWallet() {
   if (!currentUser) return;
-  const availableBalText = document.getElementById('wd-available')?.textContent || 'â‚¦0';
+  const availableBalText = document.getElementById('wd-available')?.textContent || '\u20A60';
   const availableBalance = parseFloat(availableBalText.replace(/[^\d.]/g, '')) || 0;
   const commissionNaira = COMMISSION_AMOUNT / 100;
   
@@ -3550,8 +3585,8 @@ async function loadSettings() {
   
   // Withdrawal panel indicators
   document.getElementById('wd-bank-name').textContent = p.bank_name || 'Not set';
-  document.getElementById('wd-acct-num').textContent = p.account_number || 'â€”';
-  document.getElementById('wd-acct-name').textContent = p.account_name || 'â€”';
+  document.getElementById('wd-acct-num').textContent = p.account_number || ' - ';
+  document.getElementById('wd-acct-name').textContent = p.account_name || ' - ';
 
   // --- NEW: BRAND CUSTOMIZATION LIVE DOM INJECTIONS ---
   const settingsSection = document.getElementById('ds-settings');
@@ -3705,8 +3740,8 @@ async function loadWithdrawalData() {
   if (profile) {
     currentUser.profile = { ...(currentUser.profile || {}), ...profile };
     document.getElementById('wd-bank-name').textContent = profile.bank_name || 'Not set';
-    document.getElementById('wd-acct-num').textContent = profile.account_number || 'â€”';
-    document.getElementById('wd-acct-name').textContent = profile.account_name || 'â€”';
+    document.getElementById('wd-acct-num').textContent = profile.account_number || ' - ';
+    document.getElementById('wd-acct-name').textContent = profile.account_name || ' - ';
   }
 
   const available = wallet.available;
@@ -3728,7 +3763,7 @@ async function loadWithdrawalData() {
 
 async function requestWithdrawal() {
   const amount = parseFloat(document.getElementById('wd-amount').value);
-  if (!amount || amount < 5000) { toast('Minimum withdrawal is â‚¦5,000','','warn'); return; }
+  if (!amount || amount < 5000) { toast('Minimum withdrawal is \u20A65,000','','warn'); return; }
   try {
     const wallet = await getSellerAvailableRevenue(currentUser.id);
     if (amount > wallet.available) {
@@ -3744,7 +3779,7 @@ async function requestWithdrawal() {
       account_name:   currentUser.profile?.account_name   || ''
     });
   } catch(e) { toast('Error', e.message, 'error'); return; }
-  toast('Withdrawal Requested!', `â‚¦${fmtNum(amount)} â€“ processed within 24hrs`, 'success');
+  toast('Withdrawal Requested!', `${fmtN(amount)} - processed within 24hrs`, 'success');
   document.getElementById('wd-amount').value = '';
   await loadWithdrawalData();
 }
@@ -3801,8 +3836,8 @@ function renderDropshipSection() {
 
     <div class="dropship-stats mb-4">
       <div class="stat-card"><div class="stat-value color-green" id="ds-imported">0</div><div class="stat-label">Imported Listings</div></div>
-      <div class="stat-card"><div class="stat-value" id="ds-sales">â‚¦0</div><div class="stat-label">Dropship Sales</div></div>
-      <div class="stat-card"><div class="stat-value color-gold" id="ds-profit">â‚¦0</div><div class="stat-label">Estimated Profit</div></div>
+      <div class="stat-card"><div class="stat-value" id="ds-sales">\u20A60</div><div class="stat-label">Dropship Sales</div></div>
+      <div class="stat-card"><div class="stat-value color-gold" id="ds-profit">\u20A60</div><div class="stat-label">Estimated Profit</div></div>
       <div class="stat-card"><div class="stat-value color-text3" id="ds-pending">0</div><div class="stat-label">Orders Pending</div></div>
     </div>
 
@@ -3843,14 +3878,14 @@ function renderDropshipSection() {
       <div class="card card-pad">
         <h3 class="mb-3">Profit Calculator</h3>
         <div class="form-grid form-grid-2">
-          <div class="form-group"><label class="form-label">Supplier Cost (â‚¦)</label><input type="number" id="ds-calc-cost" class="form-input" value="12000" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
-          <div class="form-group"><label class="form-label">Selling Price (â‚¦)</label><input type="number" id="ds-calc-price" class="form-input" value="35000" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
+          <div class="form-group"><label class="form-label">Supplier Cost (\u20A6)</label><input type="number" id="ds-calc-cost" class="form-input" value="12000" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
+          <div class="form-group"><label class="form-label">Selling Price (\u20A6)</label><input type="number" id="ds-calc-price" class="form-input" value="35000" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
         </div>
         <div class="form-grid form-grid-2">
-          <div class="form-group"><label class="form-label">Shipping (â‚¦)</label><input type="number" id="ds-calc-ship" class="form-input" value="3500" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
+          <div class="form-group"><label class="form-label">Shipping (\u20A6)</label><input type="number" id="ds-calc-ship" class="form-input" value="3500" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
           <div class="form-group"><label class="form-label">Marketplace Fee (%)</label><input type="number" id="ds-calc-fee" class="form-input" value="3" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
         </div>
-        <div class="profit-result"><span>Net Profit</span><strong id="ds-calc-profit">â‚¦0</strong><small id="ds-calc-margin">0% margin</small></div>
+        <div class="profit-result"><span>Net Profit</span><strong id="ds-calc-profit">\u20A60</strong><small id="ds-calc-margin">0% margin</small></div>
       </div>
     </div>
 
@@ -3939,9 +3974,9 @@ async function renderDropshipCatalog() {
       <img src="${p.image}" alt="${escAttr(p.name)}" loading="lazy">
       <div class="hot-item-body">
         <div class="flex justify-between gap-2"><div class="font-600 text-sm">${escHtml(p.name)}</div><span class="badge badge-green">${p.demand}</span></div>
-        <div class="text-xs color-text3 mt-1">${escHtml(p.supplier)} Â· ${escHtml(p.delivery)}</div>
+        <div class="text-xs color-text3 mt-1">${escHtml(p.supplier)}  -  ${escHtml(p.delivery)}</div>
         <div class="dropship-price-row"><span>Cost ${fmtN(p.cost)}</span><strong>${fmtN(p.price)}</strong></div>
-        <div class="hot-profit">Profit ${fmtN(profit)} Â· ${margin}% margin</div>
+        <div class="hot-profit">Profit ${fmtN(profit)}  -  ${margin}% margin</div>
         <button class="btn btn-primary btn-full btn-sm mt-2" onclick="importDropshipById('${p.id}')"><i class="fa-solid fa-download"></i> Import Listing</button>
       </div>
     </div>`;
@@ -4083,7 +4118,7 @@ function renderAffiliateSection() {
     <p class="dash-page-sub">Invite sellers, track conversions, and prepare payout-ready referral earnings.</p>
     <div class="referral-box mb-4">
       <div class="flex justify-between items-start gap-3 wrap">
-        <div><h3 style="color:#fff;margin-bottom:.28rem">Refer sellers and earn â‚¦5,000</h3><p style="color:rgba(255,255,255,.68);font-size:.84rem;max-width:620px">Share your link with business owners. You earn when a referred seller activates their store.</p></div>
+        <div><h3 style="color:#fff;margin-bottom:.28rem">Refer sellers and earn \u20A65,000</h3><p style="color:rgba(255,255,255,.68);font-size:.84rem;max-width:620px">Share your link with business owners. You earn when a referred seller activates their store.</p></div>
         <span class="badge badge-gold">Seller activation reward</span>
       </div>
       <div class="referral-input-row" style="margin-top:1.25rem">
@@ -4099,14 +4134,14 @@ function renderAffiliateSection() {
       </div>
     </div>
     <div class="affiliate-grid mb-4">
-      <div class="stat-card"><div class="stat-value color-green" id="aff-total">â‚¦0</div><div class="stat-label">Total Earnings</div></div>
-      <div class="stat-card"><div class="stat-value" id="aff-pending">â‚¦0</div><div class="stat-label">Pending</div></div>
+      <div class="stat-card"><div class="stat-value color-green" id="aff-total">\u20A60</div><div class="stat-label">Total Earnings</div></div>
+      <div class="stat-card"><div class="stat-value" id="aff-pending">\u20A60</div><div class="stat-label">Pending</div></div>
       <div class="stat-card"><div class="stat-value" id="aff-clicks">0</div><div class="stat-label">Clicks</div></div>
       <div class="stat-card"><div class="stat-value" id="aff-conversions">0</div><div class="stat-label">Conversions</div></div>
     </div>
     <div class="dash-two-col mb-4">
       <div class="card card-pad"><h3 class="mb-3">Referral Toolkit</h3><div class="affiliate-tool-list"><button onclick="copyReferralMessage()"><i class="fa-solid fa-copy"></i><span>Copy invite message</span></button><button onclick="downloadReferralQr()"><i class="fa-solid fa-qrcode"></i><span>Open QR code</span></button><button onclick="showDash('advertise')"><i class="fa-solid fa-bullhorn"></i><span>Promote your offer</span></button></div></div>
-      <div class="card card-pad"><h3 class="mb-3">Payout Readiness</h3><div class="affiliate-payout-box"><div><span>Minimum payout</span><strong>â‚¦5,000</strong></div><div><span>Bank account</span><strong id="aff-bank-status">Not set</strong></div></div><button class="btn btn-primary btn-full mt-3" onclick="requestAffiliatePayout()"><i class="fa-solid fa-wallet"></i> Request Affiliate Payout</button></div>
+      <div class="card card-pad"><h3 class="mb-3">Payout Readiness</h3><div class="affiliate-payout-box"><div><span>Minimum payout</span><strong>\u20A65,000</strong></div><div><span>Bank account</span><strong id="aff-bank-status">Not set</strong></div></div><button class="btn btn-primary btn-full mt-3" onclick="requestAffiliatePayout()"><i class="fa-solid fa-wallet"></i> Request Affiliate Payout</button></div>
     </div>
     <div class="card card-pad mb-4"><h3 class="mb-3">External Programs</h3><div class="affiliate-program-grid">
       <div class="affiliate-program-card"><i class="fa-brands fa-amazon" style="color:#f90"></i><strong>Amazon</strong><span>Track imported product links manually.</span><button class="btn btn-outline btn-sm" onclick="connectAffiliateProgram('Amazon')">Add Program</button></div>
@@ -4119,7 +4154,7 @@ function renderAffiliateSection() {
 
 function copyRef() {
   const link = document.getElementById('referral-link').value;
-  navigator.clipboard.writeText(link).then(()=>toast('Referral Link Copied!','Share to earn â‚¦500 per referral','success'));
+  navigator.clipboard.writeText(link).then(()=>toast('Referral Link Copied!','Share to earn \u20A6500 per referral','success'));
 }
 
 async function loadFlashSaleProducts() {
@@ -4250,7 +4285,7 @@ function requestAffiliatePayout() {
   
   // REMOVED: Legacy account_number validation block to allow pure Paystack processing
   if (pending < 5000) { 
-    toast('Not Ready Yet', 'Minimum affiliate payout is â‚¦5,000.', 'warn'); 
+    toast('Not Ready Yet', 'Minimum affiliate payout is \u20A65,000.', 'warn'); 
     return; 
   }
   
@@ -4270,7 +4305,7 @@ async function loadWithdrawalHistory() {
   const pendingAmt = wds.filter(w=>w.status==='pending').reduce((s,w)=>s+w.amount,0);
   document.getElementById('wd-pending').textContent = fmtN(pendingAmt);
   document.getElementById('wd-total').textContent = fmtN(totalPaid);
-  tbody.innerHTML = wds.map(w=>`<tr><td>${fmtDate(w.created_at)}</td><td class="font-bold">${fmtN(w.amount)}</td><td><span class="badge ${w.status==='paid'?'badge-green':w.status==='rejected'?'badge-red':'badge-gold'}">${w.status}</span></td><td class="text-xs color-text3">${w.id?.substr(0,8)||'â€”'}</td></tr>`).join('');
+  tbody.innerHTML = wds.map(w=>`<tr><td>${fmtDate(w.created_at)}</td><td class="font-bold">${fmtN(w.amount)}</td><td><span class="badge ${w.status==='paid'?'badge-green':w.status==='rejected'?'badge-red':'badge-gold'}">${w.status}</span></td><td class="text-xs color-text3">${w.id?.substr(0,8)||' - '}</td></tr>`).join('');
 }
 
 // ====================================================
@@ -4348,13 +4383,13 @@ async function submitDispute() {
 }
 
 // ====================================================
-//  SUPER ADMIN â€” full gated panel
+//  SUPER ADMIN  -  full gated panel
 // ====================================================
 let _adminSellersCache = [];
 let _adminRevenueChart = null;
 
 function isAdmin() {
-  // Both email AND database role must match â€” prevents email spoofing
+  // Both email AND database role must match  -  prevents email spoofing
   return isAdminEmail();
 }
 
@@ -4743,7 +4778,7 @@ async function loadAdminOrders() {
       <div class="flex justify-between items-start flex-wrap gap-2 mb-2">
         <div>
           <div class="font-bold text-sm">${o.id}</div>
-          <div class="text-xs color-text3">${fmtDate(o.created_at)} Â· ${o.payment_method||''}</div>
+          <div class="text-xs color-text3">${fmtDate(o.created_at)}  -  ${o.payment_method||''}</div>
           <div class="text-xs mt-1">${(o.items||[]).map(i=>`${escHtml(i.name)} Ã—${i.qty}`).join(', ')}</div>
         </div>
         <div class="text-right">
@@ -4751,7 +4786,7 @@ async function loadAdminOrders() {
           <span class="badge ${sc[o.status]||'badge-gray'}">${o.status}</span>
         </div>
       </div>
-      <div class="text-xs color-text3 mb-2"><i class="fa-solid fa-user"></i> ${escHtml(o.delivery_name||'â€”')} &nbsp;|&nbsp; <i class="fa-solid fa-map-marker-alt"></i> ${escHtml((o.delivery_address||'').substr(0,50))}</div>
+      <div class="text-xs color-text3 mb-2"><i class="fa-solid fa-user"></i> ${escHtml(o.delivery_name||' - ')} &nbsp;|&nbsp; <i class="fa-solid fa-map-marker-alt"></i> ${escHtml((o.delivery_address||'').substr(0,50))}</div>
       <div class="flex gap-2 flex-wrap">
         ${o.status==='pending'   ? `<button onclick="adminUpdateOrder('${o.id}','confirmed')"  class="btn btn-primary btn-sm">Confirm</button>` : ''}
         ${o.status==='confirmed' ? `<button onclick="adminUpdateOrder('${o.id}','shipped')"    class="btn btn-sm" style="background:#ede9fe;color:var(--purple)">Mark Shipped</button>` : ''}
@@ -4832,7 +4867,7 @@ async function loadAdminWithdrawals() {
           <div class="font-bold" style="font-size:1.05rem;color:var(--green)">${fmtN(w.amount)}</div>
           <div class="font-600 text-sm">${escHtml(w.profiles?.name||'Seller')}</div>
           <div class="text-xs color-text3">${escHtml(w.profiles?.email||'')}</div>
-          <div class="text-xs mt-1"><b>${escHtml(w.bank_name||'')}</b> Â· ${escHtml(w.account_number||'')} Â· ${escHtml(w.account_name||'')}</div>
+          <div class="text-xs mt-1"><b>${escHtml(w.bank_name||'')}</b>  -  ${escHtml(w.account_number||'')}  -  ${escHtml(w.account_name||'')}</div>
           <div class="text-xs color-text3">${fmtDate(w.created_at)}</div>
         </div>
         <div class="flex flex-col items-end gap-2">
@@ -4956,7 +4991,7 @@ async function loadBroadcastHistory() {
 }
 
 // ====================================================
-//  ADMIN â€” RECEIPTS MANAGEMENT
+//  ADMIN  -  RECEIPTS MANAGEMENT
 // ====================================================
 function getBroadcastTargetsForProfile(profile = currentUser?.profile || {}) {
   const role = profile.role || 'buyer';
@@ -5313,8 +5348,8 @@ function _renderAdminRevenueChart(orders) {
   if (_adminRevenueChart) _adminRevenueChart.destroy();
   _adminRevenueChart = new Chart(ctx, {
     type: 'bar',
-    data: { labels, datasets:[{ label:'Revenue (â‚¦)', data, backgroundColor:'rgba(25,168,71,.2)', borderColor:'#19a847', borderWidth:1.5, borderRadius:4 }] },
-    options: { responsive:true, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>'â‚¦'+fmtNum(c.raw)}} }, scales:{ y:{ beginAtZero:true, ticks:{callback:v=>'â‚¦'+fmtNum(v)} }, x:{ ticks:{maxTicksLimit:8} } } }
+    data: { labels, datasets:[{ label:'Revenue (NGN)', data, backgroundColor:'rgba(25,168,71,.2)', borderColor:'#19a847', borderWidth:1.5, borderRadius:4 }] },
+    options: { responsive:true, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>fmtN(c.raw)}} }, scales:{ y:{ beginAtZero:true, ticks:{callback:v=>fmtN(v)} }, x:{ ticks:{maxTicksLimit:8} } } }
   });
 }
 
@@ -5371,7 +5406,7 @@ async function sendChat() {
   }
 }
 
-// Helper â€” detect which "page" user is on
+// Helper  -  detect which "page" user is on
 function getChatSystemPrompt(context) {
   return `You are BUYSELL Nigeria's marketplace assistant. Help buyers, sellers, and service providers with shopping, payments, delivery, orders, reviews, ads, KYC, and dashboard steps. Be concise, friendly, and practical. Current page: ${context.current_page}. User role: ${context.user_role}.`;
 }
@@ -5409,7 +5444,7 @@ function getCurrentPage() {
   return 'buyer-marketplace';
 }
 
-// Updated addChatMsg â€” accepts optional id for typing indicator replacement
+// Updated addChatMsg  -  accepts optional id for typing indicator replacement
 function addChatMsg(text, sender, id = null) {
   const container = document.getElementById('chat-messages');
   const div       = document.createElement('div');
@@ -5427,7 +5462,7 @@ function addChatMsg(text, sender, id = null) {
   container.scrollTop = container.scrollHeight;
 }
 
-// Clear history when chat is closed (optional â€” remove to keep memory)
+// Clear history when chat is closed (optional  -  remove to keep memory)
 function toggleChat() {
   const win = document.getElementById('chatbot-window');
   const wasOpen = win.classList.contains('open');
@@ -5590,7 +5625,9 @@ function sendWhatsAppOrderNotification(order, sellerWa) {
 async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
   try {
     const payload = {
-      cart: cart.map(c => ({ id: c.id, name: c.name, qty: c.qty||1, price: c.price, shipping_fee: itemShippingFee(c), shipping_cost: itemShippingFee(c), image_url: c.image_url })),
+      cart: checkoutCartItems(true),
+      shipping_total: cartShippingTotal(),
+      shipping_groups: cartSellerShippingGroups(),
       delivery_name:    document.getElementById('co-name').value.trim(),
       delivery_phone:   document.getElementById('co-phone').value.trim(),
       delivery_address: document.getElementById('co-address').value.trim(),
@@ -5682,7 +5719,7 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
 // ====================================================
 //  STOREFRONT SALES COUNT
 // ====================================================
-// viewStorefront â€” full implementation with order count + reviews
+// viewStorefront  -  full implementation with order count + reviews
 async function viewStorefront(sellerId) {
   if (!sellerId) return;
   closeModal('product-modal');
@@ -5750,7 +5787,7 @@ document.getElementById('sf-name').textContent = seller.name || 'Seller Store';
   const avgRating = allRevs.length ? (allRevs.reduce((s,r)=>s+r.rating,0)/allRevs.length).toFixed(1) : '5.0';
   document.getElementById('sf-rating').textContent = avgRating;
   document.getElementById('sf-review-count').textContent = `${allRevs.length} reviews`;
-  document.getElementById('sf-stars').textContent = 'â˜…'.repeat(Math.round(+avgRating))+'â˜†'.repeat(5-Math.round(+avgRating));
+  document.getElementById('sf-stars').textContent = starText(avgRating);
   // Share button URL
 // Share button URL setup
   const sfUrl = `${window.location.origin}${window.location.pathname}?store=${sellerId}`;
@@ -5765,7 +5802,7 @@ document.getElementById('sf-name').textContent = seller.name || 'Seller Store';
   if (!sfProds.length) { grid.innerHTML=''; empty.classList.remove('hidden'); }
   else { empty.classList.add('hidden'); grid.innerHTML = sfProds.map(p=>prodCard(p)).join(''); }
   // Update page title
-  document.title = `${seller.name} â€” BUYSELL Nigeria`;
+  document.title = `${seller.name}  -  BUYSELL Nigeria`;
   history.pushState(null,'',`?store=${sellerId}`);
 }
 
@@ -5783,9 +5820,20 @@ function missingColumn(error) {
   return quoted ? quoted[1] : "";
 }
 
-function fmtN(n) { return 'â‚¦' + fmtNum(n); }
+function fmtN(n) { return '\u20A6' + fmtNum(n); }
 function fmtNum(n) { if (!n && n!==0) return '0'; return Math.round(n).toLocaleString('en-NG'); }
 function fmtDate(d) { if (!d) return ''; return new Date(d).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'}); }
+function starValue(rating = 5) {
+  return Math.max(0, Math.min(5, Math.round(Number(rating) || 0)));
+}
+function starText(rating = 5) {
+  const value = starValue(rating);
+  return '\u2605'.repeat(value) + '\u2606'.repeat(5 - value);
+}
+function starIcons(rating = 5) {
+  const value = starValue(rating);
+  return '<i class="fa-solid fa-star"></i>'.repeat(value) + '<i class="fa-regular fa-star"></i>'.repeat(5 - value);
+}
 function escHtml(s) {
   return String(s||'')
     .replace(/&/g,'&amp;')
@@ -6076,7 +6124,7 @@ function showSpdDash(section) {
 }
 
 // ====================================================
-//  SERVICE ECONOMY â€” Browse & Filter (Buyer Side)
+//  SERVICE ECONOMY  -  Browse & Filter (Buyer Side)
 // ====================================================
 let _allServiceGigs = [];
 
@@ -6153,14 +6201,14 @@ function renderServiceCards(gigs) {
           </div>
           <div>
             <div style="font-weight:700;font-size:.88rem;line-height:1.3">${escHtml(g.title)}</div>
-            <div style="font-size:.7rem;color:var(--text3)">${escHtml(g.category)} Â· ${escHtml(g.location || 'â€”')}</div>
+            <div style="font-size:.7rem;color:var(--text3)">${escHtml(g.category)} - ${escHtml(g.location || '-')}</div>
           </div>
         </div>
         <p style="font-size:.78rem;color:var(--text2);line-height:1.55;margin-bottom:.65rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escHtml(g.description || 'No description provided.')}</p>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
           <div>
             <div style="font-size:.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Starting from</div>
-            <div style="font-size:1.1rem;font-weight:800;color:var(--green)">â‚¦${(g.starting_rate || g.price || 0).toLocaleString()}</div>
+            <div style="font-size:1.1rem;font-weight:800;color:var(--green)">${fmtN(g.starting_rate || g.price || 0)}</div>
           </div>
           <div style="display:flex;align-items:center;gap:.35rem">
             <div style="width:24px;height:24px;border-radius:50%;background:var(--green-xlt);display:flex;align-items:center;justify-content:center">
@@ -6183,7 +6231,7 @@ function renderServiceCards(gigs) {
 }
 
 // ====================================================
-//  SERVICE PROVIDER â€” Overview Stats
+//  SERVICE PROVIDER  -  Overview Stats
 // ====================================================
 async function loadSpdOverview() {
   if (!currentUser) return;
@@ -6210,7 +6258,7 @@ async function loadSpdOverview() {
             ${thumb ? `<img src="${thumb}" style="width:48px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0">` : `<div style="width:48px;height:48px;border-radius:8px;background:var(--green-xlt);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="fa-solid fa-tools" style="color:var(--green)"></i></div>`}
             <div style="flex:1;min-width:0">
               <div style="font-weight:700;font-size:.85rem">${escHtml(g.title)}</div>
-              <div style="font-size:.72rem;color:var(--text3)">${escHtml(g.category)} Â· â‚¦${(g.starting_rate||0).toLocaleString()}</div>
+              <div style="font-size:.72rem;color:var(--text3)">${escHtml(g.category)} - ${fmtN(g.starting_rate||0)}</div>
             </div>
             <span class="badge ${g.status==='active'?'badge-green':'badge-red'}">${g.status}</span>
           </div>`;
@@ -6220,7 +6268,7 @@ async function loadSpdOverview() {
 }
 
 // ====================================================
-//  SERVICE PROVIDER â€” Settings
+//  SERVICE PROVIDER  -  Settings
 // ====================================================
 async function loadSpdSettings() {
   if (!currentUser?.profile) return;
@@ -6265,7 +6313,7 @@ async function saveServiceProfile() {
 }
 
 // ====================================================
-//  SERVICE PROVIDER â€” Load My Gigs (Portfolio)
+//  SERVICE PROVIDER  -  Load My Gigs (Portfolio)
 // ====================================================
 async function loadMyGigs() {
   if (!currentUser) return;
@@ -6297,14 +6345,14 @@ async function loadMyGigs() {
             <div style="display:flex;justify-content:space-between;align-items:start;gap:.5rem">
               <div>
                 <div style="font-weight:700;font-size:.92rem">${escHtml(g.title)}</div>
-                <div style="font-size:.72rem;color:var(--text3);margin-top:.15rem">${escHtml(g.category)} Â· ${escHtml(g.location || 'â€”')}</div>
+                <div style="font-size:.72rem;color:var(--text3);margin-top:.15rem">${escHtml(g.category)} - ${escHtml(g.location || '-')}</div>
               </div>
               <span class="badge ${g.status==='active'?'badge-green':'badge-red'}">${g.status}</span>
             </div>
             <p style="font-size:.78rem;color:var(--text2);margin-top:.4rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45">${escHtml(g.description || 'No description')}</p>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:.6rem">
               <div style="display:flex;align-items:center;gap:.75rem">
-                <span style="font-weight:800;color:var(--green);font-size:.95rem">â‚¦${(g.starting_rate||0).toLocaleString()}</span>
+                <span style="font-weight:800;color:var(--green);font-size:.95rem">${fmtN(g.starting_rate||0)}</span>
                 ${imgCount > 0 ? `<span style="font-size:.7rem;color:var(--text3)"><i class="fa-solid fa-images"></i> ${imgCount} photo${imgCount>1?'s':''}</span>` : ''}
               </div>
               <button class="btn btn-ghost btn-sm" style="color:var(--red);font-size:.72rem" onclick="deleteGig('${g.id}')">
@@ -6332,7 +6380,7 @@ async function deleteGig(gigId) {
 }
 
 // ====================================================
-//  SERVICE PROVIDER â€” Publish Gig (with Image Upload)
+//  SERVICE PROVIDER  -  Publish Gig (with Image Upload)
 // ====================================================
 async function publishServiceGig() {
   if (!currentUser) { showModal('auth-modal'); return; }
@@ -6393,7 +6441,7 @@ async function publishServiceGig() {
 }
 
 // ====================================================
-//  SERVICE PROVIDER â€” Image Preview
+//  SERVICE PROVIDER  -  Image Preview
 // ====================================================
 document.addEventListener('DOMContentLoaded', () => {
   const imgInput = document.getElementById('spd-images');
@@ -6879,7 +6927,7 @@ async function showWishlistModal() {
           <div class="font-600 text-sm">${escHtml(p.name)}</div>
           <div class="color-green font-bold text-sm">
              ${isFlashActive ? `<span style="color:var(--red); font-size:0.7rem">âš¡</span> ` : ''}
-             â‚¦${fmtN(displayPrice)}
+             \u20A6${fmtN(displayPrice)}
           </div>
         </div>
         <div style="display:flex; gap:5px">
@@ -6924,7 +6972,7 @@ async function showCompareModal() {
     html += '</tr></thead><tbody>';
     fields.forEach(f => {
       html += `<tr><td class="font-bold text-xs">${f.charAt(0).toUpperCase()+f.slice(1)}</td>`;
-      items.forEach(p => { html += `<td class="text-sm">${f==='price' ? 'â‚¦'+fmtN(p[f]) : escHtml(String(p[f]||'N/A'))}</td>`; });
+      items.forEach(p => { html += `<td class="text-sm">${f==='price' ? fmtN(p[f]) : escHtml(String(p[f]||'N/A'))}</td>`; });
       html += '</tr>';
     });
     html += '</tbody></table>';
@@ -7564,7 +7612,7 @@ async function loadFlashSaleProducts() {
     // Build the dropdown options
     selectEl.innerHTML = '<option value="">Select a product...</option>' + 
       products.map(p => 
-        `<option value="${p.id}">${escHtml(p.name)} (â‚¦${fmtNum(p.price)})</option>`
+        `<option value="${p.id}">${escHtml(p.name)} (${fmtN(p.price)})</option>`
       ).join('');
       
   } catch(e) {
