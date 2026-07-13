@@ -7688,7 +7688,7 @@ async function syncUserNotificationToken() {
  await navigator.serviceWorker.register('/sw.js', { scope: '/' });
  const registration = await navigator.serviceWorker.ready;
  let subscription = await registration.pushManager.getSubscription();
- const VAPID_PUBLIC_KEY = "BHy42JVEzqL40I-Mhvu9dRK8Ewov4GSFKy5IIcsOKgerR-Z8DE_9WNc1N1GPShB0XF3fnjOwz2XpNtf4fdoOn50";
+ const VAPID_PUBLIC_KEY = "BCG8HOWX8Aqahxj9Uo-2zRdTD3YAMsyaYhbKdWyj0bJnDsNJAU-Z-pOdR6NOdLbFcPB3r5_0zebkzm6N7aiQDCY";
  const vapidKeyBytes = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
 
  if (subscription && !pushSubscriptionUsesKey(subscription, vapidKeyBytes)) {
