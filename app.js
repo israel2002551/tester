@@ -95,7 +95,7 @@ function landingMediaElement(row) {
   const isVideo = String(row?.media_type || '').toLowerCase() === 'video' || /\.(mp4|webm|ogg|mov)(\?|$)/i.test(mediaUrl);
   if (!mediaUrl) return '';
   if (isVideo) {
-    return `<video controls playsinline preload="metadata" ${posterUrl ? `poster="${escAttr(posterUrl)}"` : ''}><source src="${escAttr(mediaUrl)}" type="video/mp4"></video>`;
+    return `<video playsinline preload="metadata" ${posterUrl ? `poster="${escAttr(posterUrl)}"` : ''}><source src="${escAttr(mediaUrl)}" type="video/mp4"></video>`;
   }
   return `<img src="${escAttr(mediaUrl)}" alt="${title}" loading="lazy">`;
 }
@@ -6967,7 +6967,7 @@ function renderMessageBubble(message) {
     ? `<img src="${escAttr(imageUrl)}" alt="Chat image" class="msg-image" loading="lazy" onclick="window.open('${escAttr(imageUrl)}','_blank')">`
     : '';
   const textHtml = text ? escHtml(text) : '';
-  return `<div class="msg-bubble ${isMine ? 'mine' : 'theirs'}">${imageHtml}${textHtml}<div class="msg-time">${formatMsgTime(message.created_at)}${isMine ? ` <span>${message.is_read ? 'Read' : 'Sent'}</span>` : ''}</div></div>`;
+  return `<div class="msg-bubble ${isMine ? 'mine' : 'theirs'}${imageUrl ? ' has-image' : ''}">${imageHtml}${textHtml}<div class="msg-time">${formatMsgTime(message.created_at)}${isMine ? ` <span>${message.is_read ? 'Read' : 'Sent'}</span>` : ''}</div></div>`;
 }
 
 function messagePreviewText(message = {}) {
