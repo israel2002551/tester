@@ -1,5 +1,5 @@
 // ====================================================
-//  BUYSELL Nigeria — Main Application
+//  BUYSELL Nigeria â€” Main Application
 //  Config loaded from config.js (secrets are .gitignored)
 // ====================================================
 
@@ -49,7 +49,7 @@ let selectedRating = 0, checkoutPaymentMethod = 'paystack';
 let deferredInstallPrompt = null, salesChart = null;
 let sellerAnalyticsChart = null;
 let carouselStartX = 0;
-// 🚀 MOVE THESE TWO LINES HERE (TO THE TOP VARIABLES AREA):
+// ðŸš€ MOVE THESE TWO LINES HERE (TO THE TOP VARIABLES AREA):
 let wishlist = readStoredJson('bs_wishlist', []);
 let compareList = readStoredJson('bs_compare', []);
 const analyticsSessionId = appStorage.getItem('bs_analytics_session') || ('sess_' + Date.now() + '_' + Math.random().toString(36).slice(2));
@@ -256,7 +256,7 @@ async function trackAnalytics(event) {
   }
 }
 
-// 🔐 SAFE SUPABASE INITIALIZATION & VARIABLES
+// ðŸ” SAFE SUPABASE INITIALIZATION & VARIABLES
 if (typeof window.supabaseClient === 'undefined') {
   window.supabaseClient = window.supabase.createClient(SB_URL, SB_KEY, {
     auth: {
@@ -268,7 +268,7 @@ if (typeof window.supabaseClient === 'undefined') {
   });
 }
 
-// 🚀 FIX: Re-assign globally without re-declaring 'const' or 'let'
+// ðŸš€ FIX: Re-assign globally without re-declaring 'const' or 'let'
 db = window.supabaseClient;
 supabase = window.supabaseClient;
 
@@ -280,7 +280,7 @@ window.supabaseAppClient = window.supabaseClient;
 // Auth state listener keeps the visible header and active view in sync.
 if (typeof supabase !== 'undefined') {
   supabase.auth.onAuthStateChange((event, session) => {
-    console.log(`⚡ Gatekeeper Auth Engine Event: ${event}`);
+    console.log(`âš¡ Gatekeeper Auth Engine Event: ${event}`);
     
     setTimeout(async () => {
       const authButton = document.querySelector('.nav-sign-in-btn') || 
@@ -289,7 +289,7 @@ if (typeof supabase !== 'undefined') {
 
       if (session && session.user) {
         await onAuthSuccess(session.user);
-        console.log("📥 Active user credentials cached securely in memory: " + currentUser.email);
+        console.log("ðŸ“¥ Active user credentials cached securely in memory: " + currentUser.email);
 
         if (authButton) {
           authButton.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
@@ -313,10 +313,10 @@ if (typeof supabase !== 'undefined') {
             currentRole = profile.role || 'buyer';
           }
         } catch (e) {
-          console.warn("⚠️ Background profile parsing deferred:", e.message);
+          console.warn("âš ï¸ Background profile parsing deferred:", e.message);
         }
 
-        // 🚀 ROUTER INTEGRATION: Intercept inbound query parameters and pop chat UI if active
+        // ðŸš€ ROUTER INTEGRATION: Intercept inbound query parameters and pop chat UI if active
         if (typeof processInboundChatRedirects === 'function') {
           processInboundChatRedirects();
         }
@@ -332,7 +332,7 @@ if (typeof supabase !== 'undefined') {
         }
 
       } else {
-        console.log("🔴 Guest View Matrix Active.");
+        console.log("ðŸ”´ Guest View Matrix Active.");
         currentUser = null;
         currentRole = 'buyer';
 
@@ -355,7 +355,7 @@ if (typeof supabase !== 'undefined') {
 function processInboundChatRedirects() {
   const urlParameters = new URLSearchParams(window.location.search);
   const targetChatPartnerId = urlParameters.get('chat');
-  const targetProductId = urlParameters.get('product'); // 👈 Captures optional product context
+  const targetProductId = urlParameters.get('product'); // ðŸ‘ˆ Captures optional product context
   
   // Make sure we have a valid chat parameter and a logged-in user
   if (targetChatPartnerId && currentUser) {
@@ -392,7 +392,7 @@ function processInboundChatRedirects() {
 function toast(title, msg='', type='success', dur=3500) {
   let tc = document.getElementById('toast-container');
   
-  // 🚀 AUTOMATIC FALLBACK GUARD: If the HTML div isn't parsed yet, build it dynamically!
+  // ðŸš€ AUTOMATIC FALLBACK GUARD: If the HTML div isn't parsed yet, build it dynamically!
   if (!tc) {
     tc = document.createElement('div');
     tc.id = 'toast-container';
@@ -707,7 +707,7 @@ async function handleAuth(e) {
 
   try {
     if (isLogin) {
-      // ── SIGN IN ──────────────────────────────────────────────
+      // â”€â”€ SIGN IN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       appStorage.setItem('bs_manual_navigation_pass', 'true');
       const { data, error } = await withTimeout(
         db.auth.signInWithPassword({ email, password }),
@@ -720,7 +720,7 @@ async function handleAuth(e) {
         const msg = error.message?.toLowerCase() || '';
         if (msg.includes('email not confirmed')) {
           toast('Email Not Confirmed',
-            'Supabase Dashboard → Auth → Providers → Email → turn OFF "Confirm email"',
+            'Supabase Dashboard â†’ Auth â†’ Providers â†’ Email â†’ turn OFF "Confirm email"',
             'error', 9000);
         } else if (msg.includes('invalid login') || msg.includes('invalid credentials')) {
           toast('Wrong Email or Password', 'Check your details and try again', 'error');
@@ -739,7 +739,7 @@ async function handleAuth(e) {
       continuePendingEntry();
 
     } else {
-      // ── SIGN UP ──────────────────────────────────────────────
+      // â”€â”€ SIGN UP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const name    = validateInput(document.getElementById('auth-name').value.trim());
       const rawRole = validateInput(document.querySelector('input[name="auth-role-radio"]:checked')?.value || 'buyer');
       const wa      = document.getElementById('auth-wa').value.trim();
@@ -763,8 +763,8 @@ async function handleAuth(e) {
       if (signUpError) {
         const msg = signUpError.message?.toLowerCase() || '';
         if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('user already')) {
-          // Account exists — just sign them in directly
-          toast('Account exists — signing you in…', '', 'info', 3000);
+          // Account exists â€” just sign them in directly
+          toast('Account exists â€” signing you inâ€¦', '', 'info', 3000);
           appStorage.setItem('bs_manual_navigation_pass', 'true');
           const { data: loginData, error: loginError } = await withTimeout(
             db.auth.signInWithPassword({ email, password }),
@@ -788,7 +788,7 @@ async function handleAuth(e) {
         return;
       }
 
-      // Step 2: Always immediately sign in after signup — guarantees a live session
+      // Step 2: Always immediately sign in after signup â€” guarantees a live session
       // regardless of whether email confirmation setting is truly off
       appStorage.setItem('bs_manual_navigation_pass', 'true');
       const { data: loginData, error: loginError } = await withTimeout(
@@ -798,7 +798,7 @@ async function handleAuth(e) {
       );
 
       if (loginError) {
-        // Signup worked but auto-login failed — tell them to sign in manually
+        // Signup worked but auto-login failed â€” tell them to sign in manually
         toast('Account Created!', 'Now sign in with your email and password', 'success', 6000);
         toggleAuth('login');
         document.getElementById('auth-email').value = email;
@@ -812,12 +812,12 @@ async function handleAuth(e) {
       continuePendingEntry();
 
       const msgs = {
-        buyer:            '🛍️ Welcome! Browse thousands of products.',
-        seller:           '🏪 Welcome Seller! First month is FREE.',
-        both:             '🔄 Welcome! You can shop and sell on BUYSELL.',
-        service_provider: '🔧 Welcome Service Pro! Set up your portfolio and start getting hired.'
+        buyer:            'ðŸ›ï¸ Welcome! Browse thousands of products.',
+        seller:           'ðŸª Welcome Seller! First month is FREE.',
+        both:             'ðŸ”„ Welcome! You can shop and sell on BUYSELL.',
+        service_provider: 'ðŸ”§ Welcome Service Pro! Set up your portfolio and start getting hired.'
       };
-      setTimeout(() => toast('Account Created! 🎉', msgs[rawRole] || '', 'success', 5000), 400);
+      setTimeout(() => toast('Account Created! ðŸŽ‰', msgs[rawRole] || '', 'success', 5000), 400);
     }
 
   } catch(err) {
@@ -864,7 +864,7 @@ async function onAuthSuccess(user) {
   const { data: profile, error } = await db.from('profiles').select('*').eq('id', user.id).single();
 
   if (error || !profile) {
-    // Profile not yet created (trigger may still be running) — create it now
+    // Profile not yet created (trigger may still be running) â€” create it now
     await upsertProfile(user, { ...(user.user_metadata || {}), ...googleProfileHint });
     const { data: retryProfile } = await db.from('profiles').select('*').eq('id', user.id).single();
     currentUser.profile = retryProfile || {
@@ -935,7 +935,7 @@ function updateNavForUser() {
   document.getElementById('dash-user-name').textContent = currentUser.profile?.name || 'Seller';
   document.getElementById('dash-user-email').textContent = currentUser.email || '';
   // Admin check
-  // DB-backed admin check — email alone is not sufficient
+  // DB-backed admin check â€” email alone is not sufficient
   const isAdmin = isAdminEmail();
   if (isAdmin) {
     document.getElementById('admin-nav-item')?.classList.remove('hidden');
@@ -973,7 +973,7 @@ async function sendPasswordReset() {
     document.getElementById('forgot-step-1').classList.add('hidden');
     document.getElementById('forgot-step-2').classList.remove('hidden');
     document.getElementById('forgot-sent-to').textContent = 'Reset link sent to ' + email;
-    toast('Reset link sent! 📧', 'Check your email inbox', 'success', 6000);
+    toast('Reset link sent! ðŸ“§', 'Check your email inbox', 'success', 6000);
 
   } catch(e) {
     toast('Error', e.message || 'Please try again', 'error');
@@ -984,19 +984,11 @@ async function sendPasswordReset() {
   }
 }
 
-// ✅ REPLACE WITH THIS:
+// âœ… REPLACE WITH THIS:
 async function logoutUser() {
   // 1. Log out of active Supabase database session
   await db.auth.signOut();
   
-  // 2. Unlink the active browser session from OneSignal Push alerts
-  if (window.OneSignalDeferred) {
-    window.OneSignalDeferred.push(async function(OneSignal) {
-      console.log("[ONESIGNAL] Unlinking session token on user sign out.");
-      await OneSignal.logout();
-    });
-  }
-
   if (messageChannel) {
     db.removeChannel(messageChannel);
     messageChannel = null;
@@ -1035,10 +1027,10 @@ async function generateDescription() {
                     Product: ${name}
                     Category: ${category}
                     Condition: ${condition}
-                    Price: ₦${price}
+                    Price: â‚¦${price}
                     
                     Requirements:
-                    - 2–3 sentences max
+                    - 2â€“3 sentences max
                     - Highlight key benefits
                     - Mention it's available in Nigeria
                     - No bullet points, plain text only
@@ -1051,7 +1043,7 @@ async function generateDescription() {
     const data = await res.json();
     if (data.reply) {
       document.getElementById('p-desc').value = data.reply;
-      toast('Description Generated! ✨', 'Edit it to your liking', 'success');
+      toast('Description Generated! âœ¨', 'Edit it to your liking', 'success');
     }
   } catch(e) {
     toast('AI unavailable', 'Write description manually', 'warn');
@@ -1078,7 +1070,7 @@ function handleLandingAuthClick() {
 
 function enterSite(mode) {
   const entryRole = setPendingEntryRole(mode);
-  console.log("🚀 Manual selection pass triggered for role:", mode);
+  console.log("ðŸš€ Manual selection pass triggered for role:", mode);
   
   appStorage.setItem('bs_manual_navigation_pass', 'true');
 
@@ -1091,7 +1083,7 @@ function enterSite(mode) {
     }
     openEntryAuth(entryRole, 'login');
     return;
-  } // 👈 Closes: if (!currentUser)
+  } // ðŸ‘ˆ Closes: if (!currentUser)
 
   if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').style.setProperty('display', 'none', 'important');
   if (document.getElementById('landing')) document.getElementById('landing').style.setProperty('display', 'none', 'important');
@@ -1101,7 +1093,7 @@ function enterSite(mode) {
   } else {
     if (typeof showBuyerView === 'function') showBuyerView();
   }
-} // 👈 Closes: function enterSite(mode)
+} // ðŸ‘ˆ Closes: function enterSite(mode)
 
 
 // ==========================================
@@ -1123,7 +1115,7 @@ function showBuyerView() {
   const landingPortal = document.getElementById('landing');
   const marketingPlaceholder = document.getElementById('marketing-placeholder');
 
-  // 🚀 Direct Inline Override: Force reveal using style properties to bypass stylesheet conflicts
+  // ðŸš€ Direct Inline Override: Force reveal using style properties to bypass stylesheet conflicts
   if (buyerView) {
     buyerView.classList.remove('hidden');
     buyerView.style.setProperty('display', 'block', 'important');
@@ -1170,7 +1162,7 @@ async function showSellerDashboard() {
   const landingPortal = document.getElementById('landing');
   const marketingPlaceholder = document.getElementById('marketing-placeholder');
 
-  // 🚀 Direct Inline Override: Force layout display block for the merchant workspace panel
+  // ðŸš€ Direct Inline Override: Force layout display block for the merchant workspace panel
   if (sellerDash) {
     sellerDash.classList.remove('hidden');
     sellerDash.style.setProperty('display', 'block', 'important');
@@ -1327,7 +1319,7 @@ function renderWithdrawalHistory(withdrawals) {
       <td>${fmtDate(w.created_at)}</td>
       <td class="font-bold">${fmtN(w.amount)}</td>
       <td><span class="badge ${w.status === 'paid' ? 'badge-green' : 'badge-gold'}">${w.status}</span></td>
-      <td class="text-xs color-text3">${w.id?.substr(0,8) || '—'}</td>
+      <td class="text-xs color-text3">${w.id?.substr(0,8) || 'â€”'}</td>
     </tr>
   `).join('');
 }
@@ -1421,6 +1413,8 @@ function prodCard(p) {
     id: p.id,
     name: p.name,
     price: displayPrice,
+    shipping_fee: itemShippingFee(p),
+    shipping_cost: itemShippingFee(p),
     image_url: resolvedCardThumbnail, 
     seller_id: p.seller_id,
     profiles: p.profiles,
@@ -1434,15 +1428,15 @@ function prodCard(p) {
   const videoCount = Array.isArray(p.videos) ? p.videos.length : (p.video_url || p.has_video ? 1 : 0);
 
   const badges = [
-    isFlashActive ? `<span class="prod-badge" style="background:var(--red); color:#fff;">⚡ Flash</span>` : '',
+    isFlashActive ? `<span class="prod-badge" style="background:var(--red); color:#fff;">âš¡ Flash</span>` : '',
     discount && !isFlashActive ? `<span class="prod-badge prod-badge-discount">-${discount}%</span>` : '',
-    videoCount > 0 ? `<span class="prod-badge prod-badge-video">🎬 Video (${videoCount})</span>` : '',
-    imageCount > 1 ? `<span class="prod-badge" style="background:var(--blue); color:#fff;">📸 Photos (${imageCount})</span>` : '',
+    videoCount > 0 ? `<span class="prod-badge prod-badge-video">ðŸŽ¬ Video (${videoCount})</span>` : '',
+    imageCount > 1 ? `<span class="prod-badge" style="background:var(--blue); color:#fff;">ðŸ“¸ Photos (${imageCount})</span>` : '',
     p.category === 'dropship' ? `<span class="prod-badge prod-badge-drop">Dropship</span>` : '',
-    p.seller_verified ? `<span class="prod-badge prod-badge-verified">✓ Verified</span>` : ''
+    p.seller_verified ? `<span class="prod-badge prod-badge-verified">âœ“ Verified</span>` : ''
   ].filter(Boolean).join('');
 
-  const stars = p.avg_rating ? '★'.repeat(Math.round(p.avg_rating)) + '☆'.repeat(5 - Math.round(p.avg_rating)) : '★★★★★';
+  const stars = p.avg_rating ? 'â˜…'.repeat(Math.round(p.avg_rating)) + 'â˜†'.repeat(5 - Math.round(p.avg_rating)) : 'â˜…â˜…â˜…â˜…â˜…';
 
   const serializedCartData = JSON.stringify(cartItem)
     .replace(/&/g, '&amp;')
@@ -1467,6 +1461,7 @@ function prodCard(p) {
         <span class="prod-price">${fmtN(displayPrice)}</span>
         ${p.original_price > displayPrice ? `<span class="prod-orig">${fmtN(p.original_price)}</span>` : ''}
       </div>
+      <div class="text-xs color-text3" style="margin-top:.15rem"><i class="fa-solid fa-truck"></i> Shipping: ${fmtN(itemShippingFee(p))}</div>
       <div class="prod-rating-row"><span class="stars sm">${stars}</span><span class="text-xs color-text3">${p.avg_rating ? p.avg_rating.toFixed(1) : '5.0'} (${p.review_count||0})</span></div>
       <div class="prod-location"><i class="fa-solid fa-map-marker-alt" style="font-size:.6rem"></i>${escHtml(p.location||'Nigeria')}</div>
       <a class="prod-store-link" onclick="event.stopPropagation();viewStorefront('${p.seller_id}')"><i class="fa-solid fa-store" style="font-size:.6rem"></i>${escHtml(p.profiles?.name||'Seller')}</a>
@@ -1518,7 +1513,7 @@ async function doSearch() {
         const suggestions = data.reply.split(',').map(s => s.trim()).filter(Boolean);
         if (suggestions.length) {
           toast(
-            `💡 Try searching: ${suggestions.slice(0,2).join(', ')}`,
+            `ðŸ’¡ Try searching: ${suggestions.slice(0,2).join(', ')}`,
             'Showing closest matches',
             'info',
             4000
@@ -1549,8 +1544,8 @@ function applyFilters() {
 function renderActiveFilters() {
   const container = document.getElementById('active-filters');
   const pills = [];
-  if (activeFilters.priceMin||activeFilters.priceMax) pills.push({key:'price',label:`₦${fmtNum(activeFilters.priceMin||0)} – ₦${fmtNum(activeFilters.priceMax||'∞')}`});
-  if (activeFilters.minRating) pills.push({key:'minRating',label:`${activeFilters.minRating}+ ★`});
+  if (activeFilters.priceMin||activeFilters.priceMax) pills.push({key:'price',label:`â‚¦${fmtNum(activeFilters.priceMin||0)} â€“ â‚¦${fmtNum(activeFilters.priceMax||'âˆž')}`});
+  if (activeFilters.minRating) pills.push({key:'minRating',label:`${activeFilters.minRating}+ â˜…`});
   if (activeFilters.condition) pills.push({key:'condition',label:activeFilters.condition});
   container.innerHTML = pills.map(p => `<span class="active-filter-pill">${p.label}<button onclick="removeFilter('${p.key}')"><i class="fa-solid fa-times"></i></button></span>`).join('');
 }
@@ -1619,17 +1614,17 @@ function sortProds() {
 function updatePriceDisplay() {
   const min = document.getElementById('flt-min').value || 0;
   const max = document.getElementById('flt-max').value || '500,000';
-  document.getElementById('price-range-display').textContent = `₦${fmtNum(min)} – ₦${fmtNum(max)}`;
+  document.getElementById('price-range-display').textContent = `â‚¦${fmtNum(min)} â€“ â‚¦${fmtNum(max)}`;
 }
 
 // ====================================================
 //  PRODUCT DETAIL
 // ====================================================
 // ====================================================
-//  PRODUCT DETAIL — MULTI-MEDIA GALLERY ENHANCED
+//  PRODUCT DETAIL â€” MULTI-MEDIA GALLERY ENHANCED
 // ====================================================
 // ====================================================
-//  PRODUCT DETAIL — FLUID MULTI-MEDIA GALLERY UNIFIED
+//  PRODUCT DETAIL â€” FLUID MULTI-MEDIA GALLERY UNIFIED
 // ====================================================
 async function openProduct(id) {
   currentProd = products.find(p => p.id === id);
@@ -1753,6 +1748,8 @@ async function openProduct(id) {
 
   document.getElementById('modal-condition').textContent = p.condition || 'New';
   document.getElementById('modal-location').textContent = p.location || 'Nigeria';
+  const modalShippingEl = document.getElementById('modal-shipping-fee');
+  if (modalShippingEl) modalShippingEl.textContent = `Shipping: ${fmtN(itemShippingFee(p))}`;
   
   const stock = p.stock_quantity;
   const sb = document.getElementById('modal-stock-badge');
@@ -1798,9 +1795,9 @@ async function openProduct(id) {
   
   // Flags Layout Array Injections
   const flags = [];
-  if (isFlashActive) flags.push('<span class="prod-badge" style="background:var(--red);color:#fff">⚡ Flash Sale</span>');
-  if (vidArray.length > 0) flags.push('<span class="prod-badge prod-badge-video">🎬 Video Available</span>');
-  if (p.seller_verified) flags.push('<span class="prod-badge prod-badge-verified">✓ Verified</span>');
+  if (isFlashActive) flags.push('<span class="prod-badge" style="background:var(--red);color:#fff">âš¡ Flash Sale</span>');
+  if (vidArray.length > 0) flags.push('<span class="prod-badge prod-badge-video">ðŸŽ¬ Video Available</span>');
+  if (p.seller_verified) flags.push('<span class="prod-badge prod-badge-verified">âœ“ Verified</span>');
   document.getElementById('modal-flags').innerHTML = flags.join('');
   
   updateModalWishBtn();
@@ -1821,9 +1818,9 @@ async function loadProductReviews(productId) {
   // Calculate average and star distribution
   const avg = count ? (reviews.reduce((s,r)=>s+r.rating,0)/count) : 0;
   document.getElementById('modal-avg-rating').textContent = avg.toFixed(1);
-  document.getElementById('modal-stars').textContent = '★'.repeat(Math.round(avg)) + '☆'.repeat(5-Math.round(avg));
+  document.getElementById('modal-stars').textContent = 'â˜…'.repeat(Math.round(avg)) + 'â˜†'.repeat(5-Math.round(avg));
 
-  // Star distribution bars (5→1)
+  // Star distribution bars (5â†’1)
   const barsEl = document.getElementById('modal-rating-bars');
   barsEl.innerHTML = [5,4,3,2,1].map(star => {
     const starCount = reviews.filter(r => r.rating === star).length;
@@ -1847,10 +1844,10 @@ async function loadProductReviews(productId) {
           <div style="width:26px;height:26px;border-radius:50%;background:var(--green-xlt);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:var(--green)">${(r.profiles?.name||'B')[0].toUpperCase()}</div>
           <span class="reviewer-name">${escHtml(r.profiles?.name||'Verified Buyer')}</span>
         </div>
-        <div class="stars sm">${'★'.repeat(r.rating)+'☆'.repeat(5-r.rating)}</div>
+        <div class="stars sm">${'â˜…'.repeat(r.rating)+'â˜†'.repeat(5-r.rating)}</div>
       </div>
       <p class="review-text">${escHtml(r.review_text || r.comment || '')}</p>
-      <span class="text-xs color-text3"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i> Verified Purchase · ${fmtDate(r.created_at)}</span>
+      <span class="text-xs color-text3"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i> Verified Purchase Â· ${fmtDate(r.created_at)}</span>
     </div>`).join('');
 }
 
@@ -1865,7 +1862,7 @@ async function loadProductReviews(productId) {
   document.getElementById('modal-verified-count').textContent = reviews.filter(r => r.verified_purchase !== false).length;
   const avg = count ? (reviews.reduce((s,r)=>s+Number(r.rating || 0),0)/count) : 0;
   document.getElementById('modal-avg-rating').textContent = avg.toFixed(1);
-  document.getElementById('modal-stars').textContent = '*'.repeat(Math.round(avg)) + '☆'.repeat(5-Math.round(avg));
+  document.getElementById('modal-stars').textContent = '*'.repeat(Math.round(avg)) + 'â˜†'.repeat(5-Math.round(avg));
   const barsEl = document.getElementById('modal-rating-bars');
   barsEl.innerHTML = [5,4,3,2,1].map(star => {
     const starCount = reviews.filter(r => Number(r.rating) === star).length;
@@ -1876,7 +1873,7 @@ async function loadProductReviews(productId) {
   if (!count) { list.innerHTML = '<p class="color-text3 text-sm" style="padding:.5rem 0">No reviews yet. Be the first to share your experience!</p>'; return; }
   list.innerHTML = reviews.map(r => {
     const imgs = Array.isArray(r.image_urls) ? r.image_urls : [];
-    return `<div class="review-card"><div class="flex justify-between items-center"><div style="display:flex;align-items:center;gap:.4rem"><div style="width:26px;height:26px;border-radius:50%;background:var(--green-xlt);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:var(--green)">${(r.profiles?.name||'B')[0].toUpperCase()}</div><span class="reviewer-name">${escHtml(r.profiles?.name||'Verified Buyer')}</span></div><div class="stars sm">${'*'.repeat(Number(r.rating)||0)}${'☆'.repeat(5-(Number(r.rating)||0))}</div></div><p class="review-text">${escHtml(r.review_text || r.comment || '')}</p>${imgs.length ? `<div class="review-images-gallery">${imgs.map(url => `<img src="${escAttr(url)}" alt="Review photo" onclick="openReviewImage('${escAttr(url)}')">`).join('')}</div>` : ''}<span class="text-xs color-text3"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i> ${r.verified_purchase === false ? 'Buyer Review' : 'Verified Purchase'} · ${fmtDate(r.created_at)}</span></div>`;
+    return `<div class="review-card"><div class="flex justify-between items-center"><div style="display:flex;align-items:center;gap:.4rem"><div style="width:26px;height:26px;border-radius:50%;background:var(--green-xlt);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:var(--green)">${(r.profiles?.name||'B')[0].toUpperCase()}</div><span class="reviewer-name">${escHtml(r.profiles?.name||'Verified Buyer')}</span></div><div class="stars sm">${'*'.repeat(Number(r.rating)||0)}${'â˜†'.repeat(5-(Number(r.rating)||0))}</div></div><p class="review-text">${escHtml(r.review_text || r.comment || '')}</p>${imgs.length ? `<div class="review-images-gallery">${imgs.map(url => `<img src="${escAttr(url)}" alt="Review photo" onclick="openReviewImage('${escAttr(url)}')">`).join('')}</div>` : ''}<span class="text-xs color-text3"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i> ${r.verified_purchase === false ? 'Buyer Review' : 'Verified Purchase'} Â· ${fmtDate(r.created_at)}</span></div>`;
   }).join('');
 }
 
@@ -1914,8 +1911,25 @@ function copyStoreLink() {
 // ====================================================
 function saveCart() { appStorage.setItem('bs_cart', JSON.stringify(cart)); updateCartCount(); }
 
+function itemShippingFee(item = {}) {
+  return Math.max(0, Number(item.shipping_fee ?? item.shipping_cost ?? item.shipping ?? 0) || 0);
+}
+
+function cartProductTotal() {
+  return cart.reduce((sum, item) => sum + (Number(item.price || 0) * (item.qty || 1)), 0);
+}
+
+function cartShippingTotal() {
+  return cart.reduce((sum, item) => sum + (itemShippingFee(item) * (item.qty || 1)), 0);
+}
+
+function cartPayableSubtotal() {
+  return cartProductTotal() + cartShippingTotal();
+}
+
 function addToCart(prod) {
   if (!prod?.id) return;
+  const shippingFee = itemShippingFee(prod);
 
   const existing = cart.find(c => c.id === prod.id);
 
@@ -1926,10 +1940,12 @@ function addToCart(prod) {
     // IMPORTANT: Update the price to the current one passed in (in case it changed)
     // This ensures if a user adds a flash sale item, the price is locked correctly.
     existing.price = prod.price; 
+    existing.shipping_fee = shippingFee;
+    existing.shipping_cost = shippingFee;
     existing.is_flash = prod.is_flash; 
   } else {
     // Add new item with the provided price (which is the flash price if active)
-    cart.push({ ...prod, qty: 1 });
+    cart.push({ ...prod, shipping_fee: shippingFee, shipping_cost: shippingFee, qty: 1 });
   }
 
   saveCart();
@@ -1971,13 +1987,16 @@ function renderCartItems() {
   const summary = document.getElementById('cart-summary');
   if (!cart.length) { list.innerHTML=''; empty.classList.remove('hidden'); summary.classList.add('hidden'); return; }
   empty.classList.add('hidden'); summary.classList.remove('hidden');
-  const total = cart.reduce((s,c)=>s+(c.price*(c.qty||1)),0);
+  const productTotal = cartProductTotal();
+  const shippingTotal = cartShippingTotal();
+  const total = productTotal + shippingTotal;
   list.innerHTML = cart.map(c => `
     <div class="cart-item">
       <img src="${c.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=200'}" alt="${escHtml(c.name)}" loading="lazy">
       <div style="flex:1;min-width:0">
         <div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px">${escHtml(c.name)}</div>
         <div class="color-green font-bold">${fmtN(c.price)}</div>
+        <div class="text-xs color-text3">Shipping: ${fmtN(itemShippingFee(c))}</div>
         <div class="flex items-center gap-2 mt-1">
           <button onclick="changeCartQty('${c.id}',-1)" class="btn btn-outline btn-sm" style="padding:.2rem .5rem">-</button>
           <span class="text-sm font-bold">${c.qty||1}</span>
@@ -1985,11 +2004,13 @@ function renderCartItems() {
         </div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.4rem">
-        <span class="font-bold text-sm">${fmtN(c.price*(c.qty||1))}</span>
+        <span class="font-bold text-sm">${fmtN((c.price*(c.qty||1)) + (itemShippingFee(c)*(c.qty||1)))}</span>
         <button onclick="removeFromCart('${c.id}')" class="btn btn-sm" style="background:#fee2e2;color:var(--danger);padding:.28rem .62rem"><i class="fa-solid fa-trash"></i></button>
       </div>
     </div>`).join('');
-  document.getElementById('cart-subtotal').textContent = fmtN(total);
+  document.getElementById('cart-subtotal').textContent = fmtN(productTotal);
+  const shippingEl = document.getElementById('cart-shipping');
+  if (shippingEl) shippingEl.textContent = fmtN(shippingTotal);
   document.getElementById('cart-total').textContent = fmtN(total);
 }
 
@@ -2054,14 +2075,14 @@ async function startCheckout() {
     }
   }
   
-  const rawProductTotal = cart.reduce((sum,c)=>sum+(c.price*(c.qty||1)),0);
+  const rawProductTotal = cartPayableSubtotal();
   
   trackAnalytics({
     event_type: 'checkout_started',
     seller_id: cart[0]?.seller_id,
     quantity: cart.reduce((sum,c)=>sum+(c.qty||1),0),
-    amount: rawProductTotal,
-    metadata: { item_count: cart.length },
+        amount: rawProductTotal,
+        metadata: { item_count: cart.length, shipping_total: cartShippingTotal() },
   });
   
   goCheckoutStep(1);
@@ -2099,7 +2120,7 @@ async function startCheckout() {
         <span class="payment-method-icon"><i class="fa-solid fa-wallet" style="color:var(--green)"></i></span>
         <div class="payment-method-title">Wallet Revenue</div>
         <div class="payment-method-sub">Available: ${fmtN(availableBalance)}</div>
-        ${isUnderfunded ? `<div style="color:var(--danger); font-size:0.65rem; font-weight:700; margin-top:4px;">❌ Insufficient Funds</div>` : ''}
+        ${isUnderfunded ? `<div style="color:var(--danger); font-size:0.65rem; font-weight:700; margin-top:4px;">âŒ Insufficient Funds</div>` : ''}
       </div>`;
   }
 
@@ -2126,8 +2147,8 @@ async function startCheckout() {
   document.getElementById('co-items').innerHTML = cart.map(c=>`
     <div class="order-item">
       <img src="${c.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=100'}" alt="" loading="lazy">
-      <div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(c.name)}</div><div class="color-text3 text-xs">Qty: ${c.qty||1}</div></div>
-      <div class="font-bold text-sm">${fmtN(c.price*(c.qty||1))}</div>
+      <div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(c.name)}</div><div class="color-text3 text-xs">Qty: ${c.qty||1} Â· Shipping: ${fmtN(itemShippingFee(c)*(c.qty||1))}</div></div>
+      <div class="font-bold text-sm">${fmtN((c.price*(c.qty||1)) + (itemShippingFee(c)*(c.qty||1)))}</div>
     </div>`).join('');
     
   const bankBox = document.getElementById('seller-bank-details-co');
@@ -2233,7 +2254,7 @@ async function resolvePaystackReference(response, fallback = '') {
 
 async function payWithPaystack() {
   if (cart.length === 0) { toast('Cart is empty', '', 'warn'); return; }
-  const rawProductTotal = cart.reduce((s, c) => s + (c.price * (c.qty || 1)), 0);
+  const rawProductTotal = cartPayableSubtotal();
   if (rawProductTotal <= 0) { toast('Invalid total amount', '', 'error'); return; }
   if (!currentUser) { showModal('auth-modal'); return; }
   if (!isPaystackReady()) return;
@@ -2244,7 +2265,7 @@ async function payWithPaystack() {
 
   try {
     const checkoutPayload = {
-      cart: cart.map(c => ({ id: c.id, qty: c.qty || 1 })),
+      cart: cart.map(c => ({ id: c.id, qty: c.qty || 1, shipping_fee: itemShippingFee(c), shipping_cost: itemShippingFee(c) })),
       delivery_name: document.getElementById('co-name').value.trim(),
       delivery_phone: document.getElementById('co-phone').value.trim(),
       delivery_address: document.getElementById('co-address').value.trim(),
@@ -2410,6 +2431,8 @@ async function createWalletRevenueOrder(checkoutPayload, totalAmount, walletRef)
       name: c.name,
       qty: c.qty || 1,
       price: c.price,
+      shipping_fee: itemShippingFee(c),
+      shipping_cost: itemShippingFee(c),
       image_url: c.image_url || ''
     })),
     total_amount: totalAmount,
@@ -2449,7 +2472,7 @@ async function createWalletRevenueOrder(checkoutPayload, totalAmount, walletRef)
 
 async function payWithWalletRevenue() {
   if (cart.length === 0) { toast('Cart is empty', '', 'warn'); return; }
-  const rawProductTotal = cart.reduce((s, c) => s + (c.price * (c.qty || 1)), 0);
+  const rawProductTotal = cartPayableSubtotal();
   if (!currentUser) { showModal('auth-modal'); return; }
   if (!isSellerAccount()) {
     toast('Seller wallet required', 'Only sellers can pay from available revenue.', 'warn');
@@ -2462,7 +2485,7 @@ async function payWithWalletRevenue() {
 
   try {
     const checkoutPayload = {
-      cart: cart.map(c => ({ id: c.id, qty: c.qty || 1 })),
+      cart: cart.map(c => ({ id: c.id, qty: c.qty || 1, shipping_fee: itemShippingFee(c), shipping_cost: itemShippingFee(c) })),
       delivery_name: document.getElementById('co-name').value.trim(),
       delivery_phone: document.getElementById('co-phone').value.trim(),
       delivery_address: document.getElementById('co-address').value.trim(),
@@ -2553,7 +2576,7 @@ async function submitTransferOrder() {
   if (!looksLikeImage) { toast('Invalid file','Please upload an image receipt: JPG, PNG, WebP, HEIC, JFIF, or AVIF','warn'); return; }
   if (proofFile.size > MAX_PROOF_SIZE)         { toast('File too large','Maximum proof image size is 10MB','warn'); return; }
   const btn = document.getElementById('co-transfer-btn');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting…';
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submittingâ€¦';
   try {
     const file = fileInput.files[0];
     const path = `proofs/${currentUser.id}/${Date.now()}.${proofExt}`;
@@ -2610,7 +2633,7 @@ async function submitReview() {
   const text = document.getElementById('review-text').value.trim();
   if (!text) { toast('Please write a review','','warn'); return; }
   const btn = document.getElementById('review-submit-btn');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting…';
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submittingâ€¦';
 
   try {
     // Upload review images if any
@@ -2637,7 +2660,7 @@ async function submitReview() {
       image_urls:  imageUrls,
       verified_purchase: verifiedPurchase
     });
-    toast('Review Submitted! ⭐', 'Thanks for your feedback!', 'success');
+    toast('Review Submitted! â­', 'Thanks for your feedback!', 'success');
     closeModal('review-modal');
     loadProductReviews(reviewProductId);
     loadProducts();
@@ -2795,7 +2818,7 @@ async function loadBuyerOrders() {
           <span class="font-bold color-green">${fmtN(o.total_amount)}</span>
         </div>
       </div>
-      <div class="flex gap-1 flex-wrap mb-2">${(o.items||[]).map(i=>`<span class="text-xs badge badge-gray">${escHtml(i.name)} ×${i.qty}</span>`).join('')}</div>
+      <div class="flex gap-1 flex-wrap mb-2">${(o.items||[]).map(i=>`<span class="text-xs badge badge-gray">${escHtml(i.name)} Ã—${i.qty}</span>`).join('')}</div>
       <div class="flex gap-2 flex-wrap">
         ${o.status==='delivered'?`<button class="btn btn-outline btn-sm" onclick="openDisputeModal('${o.id}')"><i class="fa-solid fa-exclamation-triangle"></i> Dispute</button>`:''}
         <a href="https://wa.me/2348116833356?text=Order ${o.id}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Track</a>
@@ -2823,10 +2846,10 @@ async function loadBuyerOrders() {
       const firstItem = orderItems[0] || {};
       const productId = firstItem.id || firstItem.product_id || '';
       const itemHtml = orderItems.length
-        ? orderItems.map(i => `<span class="text-xs badge badge-gray">${escHtml(i.name || 'Item')} ×${i.qty || 1}</span>`).join('')
+        ? orderItems.map(i => `<span class="text-xs badge badge-gray">${escHtml(i.name || 'Item')} Ã—${i.qty || 1}</span>`).join('')
         : '<span class="text-xs color-text3">Order item history is still saved for newer orders; this older order may not include item details.</span>';
       const proofUrl = o.proof_url || o.payment_proof_url || '';
-      const paymentMethod = o.payment_method ? ` · ${escHtml(o.payment_method)}` : '';
+      const paymentMethod = o.payment_method ? ` Â· ${escHtml(o.payment_method)}` : '';
       return `
     <div class="order-history-item buyer-order-card">
       <div class="buyer-order-head">
@@ -2869,7 +2892,7 @@ async function loadSellerStats() {
   const { data: revs } = await db.from('reviews').select('rating').in('product_id', (prods||[]).map(p=>p.id));
   const active = (prods||[]).filter(p=>p.status==='active').length;
   const revenue = (orders||[]).filter(o=>o.status!=='cancelled').reduce((s,o)=>s+o.total_amount,0);
-  const avgR = (revs||[]).length ? ((revs.reduce((s,r)=>s+r.rating,0)/revs.length).toFixed(1)) : '—';
+  const avgR = (revs||[]).length ? ((revs.reduce((s,r)=>s+r.rating,0)/revs.length).toFixed(1)) : 'â€”';
   document.getElementById('st-products').textContent = active;
   document.getElementById('st-revenue').textContent = fmtN(revenue);
   document.getElementById('st-orders').textContent = (orders||[]).length;
@@ -2927,8 +2950,8 @@ async function renderChart() {
   if (salesChart) salesChart.destroy();
   salesChart = new Chart(ctx, {
     type: 'line',
-    data: { labels, datasets: [{ label: 'Revenue (₦)', data, borderColor: '#19a847', backgroundColor: 'rgba(25,168,71,.08)', tension: 0.4, fill: true, pointBackgroundColor: '#19a847', pointRadius: 3 }] },
-    options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '₦' + fmtNum(ctx.raw) } } }, scales: { y: { beginAtZero: true, ticks: { callback: v => '₦'+fmtNum(v) } }, x: { ticks: { maxTicksLimit: days>14?7:days } } } }
+    data: { labels, datasets: [{ label: 'Revenue (â‚¦)', data, borderColor: '#19a847', backgroundColor: 'rgba(25,168,71,.08)', tension: 0.4, fill: true, pointBackgroundColor: '#19a847', pointRadius: 3 }] },
+    options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => 'â‚¦' + fmtNum(ctx.raw) } } }, scales: { y: { beginAtZero: true, ticks: { callback: v => 'â‚¦'+fmtNum(v) } }, x: { ticks: { maxTicksLimit: days>14?7:days } } } }
   });
 }
 
@@ -2980,7 +3003,7 @@ async function loadSellerAnalytics() {
           interaction: { mode: 'index', intersect: false },
           scales: {
             count: { type: 'linear', position: 'left', beginAtZero: true },
-            money: { type: 'linear', position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { callback: v => '₦' + fmtNum(v) } },
+            money: { type: 'linear', position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { callback: v => 'â‚¦' + fmtNum(v) } },
           },
         },
       });
@@ -3011,10 +3034,11 @@ async function loadSellerProds() {
       <div class="prod-list-info">
         <div class="prod-list-name">${escHtml(p.name)}</div>
         <div class="prod-list-price">${fmtN(p.price)}</div>
+        <div class="text-xs color-text3">Shipping: ${fmtN(itemShippingFee(p))}</div>
         <div class="prod-list-meta">
           <span class="badge badge-${p.status==='active'?'green':'gray'}">${p.status}</span>
           <span class="stock-pill ${p.stock_quantity===0?'stock-out':p.stock_quantity<=5?'stock-low':'stock-high'}">Stock: ${p.stock_quantity??'N/A'}</span>
-          ${p.has_video?'<span class="badge badge-purple">🎬 Video</span>':''}
+          ${p.has_video?'<span class="badge badge-purple">ðŸŽ¬ Video</span>':''}
         </div>
       </div>
       <div class="prod-list-actions">
@@ -3035,11 +3059,12 @@ async function submitProduct(e) {
   document.getElementById('pub-btn-text').textContent = '';
   document.getElementById('pub-spinner').classList.remove('hidden');
   try {
-    // ── Input validation ──────────────────────────────────────
+    // â”€â”€ Input validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     await ensureSellerProfileRole();
 
     const nameVal  = document.getElementById('p-name').value.trim();
     const priceVal = parseFloat(document.getElementById('p-price').value);
+    const shippingFeeVal = parseFloat(document.getElementById('p-shipping-fee').value);
     const stockVal = parseInt(document.getElementById('p-stock').value) || 0;
     const descVal  = document.getElementById('p-desc').value.trim();
     const catVal   = document.getElementById('p-category').value;
@@ -3055,13 +3080,15 @@ if (nameVal.length > 300) {
   return; 
 }
     if (isNaN(priceVal) || priceVal <= 0)        { toast('Invalid price','Enter a price greater than 0','warn'); return; }
-    if (priceVal > 100000000)                    { toast('Price too high','Maximum price is ₦100,000,000','warn'); return; }
+    if (priceVal > 100000000)                    { toast('Price too high','Maximum price is â‚¦100,000,000','warn'); return; }
+    if (isNaN(shippingFeeVal) || shippingFeeVal < 0) { toast('Invalid shipping fee','Enter 0 or a valid shipping fee','warn'); return; }
+    if (shippingFeeVal > 10000000)               { toast('Shipping fee too high','Maximum shipping fee is â‚¦10,000,000','warn'); return; }
     if (stockVal < 0 || stockVal > 100000)       { toast('Invalid stock','Stock must be between 0 and 100,000','warn'); return; }
     if (descVal.length > 2000)                   { toast('Description too long','Max 2,000 characters','warn'); return; }
     if (!VALID_CATS.includes(catVal))            { toast('Invalid category','Please select a valid category','warn'); return; }
     if (!VALID_CONDS.includes(condVal))          { toast('Invalid condition','Please select a valid condition','warn'); return; }
 
-    // ── File upload security ───────────────────────────────────
+    // â”€â”€ File upload security â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const ALLOWED_IMG_TYPES = ['image/jpeg','image/png','image/webp','image/gif'];
     const ALLOWED_VID_TYPES = ['video/mp4','video/webm','video/ogg','video/quicktime'];
     const MAX_IMG_SIZE = 5 * 1024 * 1024;   // 5MB
@@ -3093,11 +3120,14 @@ if (nameVal.length > 300) {
 
     const price    = priceVal;
     const origPrice= parseFloat(document.getElementById('p-orig-price').value) || price;
+    const shippingFee = shippingFeeVal;
     const stock    = stockVal;
     const prodData = {
       name: nameVal,
       description: descVal,
       price, original_price: Math.max(origPrice, price),
+      shipping_fee: shippingFee,
+      shipping_cost: shippingFee,
       category: catVal,
       condition: condVal,
       location: locVal.substring(0, 100),
@@ -3124,25 +3154,28 @@ if (nameVal.length > 300) {
         data: updateData
       });
       editingProductId = null;
-      toast('Product Updated! ✅', 'Changes saved successfully', 'success');
+      toast('Product Updated! âœ…', 'Changes saved successfully', 'success');
       const cancelBtn = document.getElementById('edit-cancel-btn');
       if (cancelBtn) cancelBtn.style.display = 'none';
       document.querySelector('#ds-add-product .dash-page-title').textContent = 'Add New Product';
-      document.querySelector('#ds-add-product .dash-page-sub').textContent = 'Products with videos get 3× more sales! 🎬';
+      document.querySelector('#ds-add-product .dash-page-sub').textContent = 'Products with videos get 3Ã— more sales! ðŸŽ¬';
     } else {
-      // INSERT mode — server-side via Edge Function
+      // INSERT mode â€” server-side via Edge Function
       await callEdge('manage-product', {
         action: 'create',
         data: { ...prodData, image_url: imgUrl, video_url: vidUrl }
       });
-      toast('Product Published! 🎉', 'Your product is now live', 'success');
+      toast('Product Published! ðŸŽ‰', 'Your product is now live', 'success');
     }
     document.getElementById('add-prod-form').reset();
     showDash('products');
-  } catch(err) { toast('Error', err.message, 'error'); }
-  btn.disabled = false;
-  document.getElementById('pub-btn-text').textContent = editingProductId ? 'Update Product' : 'Publish Product';
-  document.getElementById('pub-spinner').classList.add('hidden');
+  } catch(err) {
+    toast('Error', err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    document.getElementById('pub-btn-text').textContent = editingProductId ? 'Update Product' : 'Publish Product';
+    document.getElementById('pub-spinner').classList.add('hidden');
+  }
 }
 
 async function deleteProduct(id) {
@@ -3178,6 +3211,7 @@ async function editProduct(id) {
   document.getElementById('p-name').value = p.name || '';
   document.getElementById('p-price').value = p.price || '';
   document.getElementById('p-orig-price').value = p.original_price || '';
+  document.getElementById('p-shipping-fee').value = p.shipping_fee ?? p.shipping_cost ?? 0;
   document.getElementById('p-stock').value = p.stock_quantity ?? '';
   document.getElementById('p-low-stock').value = p.low_stock_alert || '';
   document.getElementById('p-category').value = p.category || 'electronics';
@@ -3209,7 +3243,7 @@ function cancelEditProduct() {
   document.getElementById('add-prod-form').reset();
   document.getElementById('pub-btn-text').textContent = 'Publish Product';
   document.querySelector('#ds-add-product .dash-page-title').textContent = 'Add New Product';
-  document.querySelector('#ds-add-product .dash-page-sub').textContent = 'Products with videos get 3× more sales! 🎬';
+  document.querySelector('#ds-add-product .dash-page-sub').textContent = 'Products with videos get 3Ã— more sales! ðŸŽ¬';
   const cancelBtn = document.getElementById('edit-cancel-btn');
   if (cancelBtn) cancelBtn.style.display = 'none';
   showDash('products');
@@ -3237,7 +3271,7 @@ async function loadSellerOrders() {
         <div><div class="font-bold">${o.id}</div><div class="text-xs color-text3">${fmtDate(o.created_at)}</div></div>
         <span class="badge ${statusColors[o.status]||'badge-gray'}">${o.status}</span>
       </div>
-      <div class="mb-2">${(o.items||[]).map(i=>`<span class="text-sm">${escHtml(i.name)} ×${i.qty}</span>`).join(', ')}</div>
+      <div class="mb-2">${(o.items||[]).map(i=>`<span class="text-sm">${escHtml(i.name)} Ã—${i.qty}</span>`).join(', ')}</div>
       <div class="flex justify-between items-center flex-wrap gap-2">
         <div>
           <div class="text-sm"><i class="fa-solid fa-user color-text3"></i> ${escHtml(o.delivery_name||'Buyer')}</div>
@@ -3314,7 +3348,7 @@ function renderTrackingTimeline(order, events) {
       <div class="tracking-card">
         <strong>${escHtml(trackingLabel(e.status))}</strong>
         ${e.note ? `<p>${escHtml(e.note)}</p>` : ''}
-        <span>${fmtDate(e.created_at)} · ${formatMsgTime(e.created_at)}</span>
+        <span>${fmtDate(e.created_at)} Â· ${formatMsgTime(e.created_at)}</span>
       </div>
     </div>`).join('');
 }
@@ -3359,7 +3393,7 @@ async function loadSellerReviews() {
     <div class="review-card">
       <div class="flex justify-between">
         <span class="reviewer-name">${escHtml(r.profiles?.name||'Buyer')}</span>
-        <div class="stars sm">${'★'.repeat(r.rating)+'☆'.repeat(5-r.rating)}</div>
+        <div class="stars sm">${'â˜…'.repeat(r.rating)+'â˜†'.repeat(5-r.rating)}</div>
       </div>
       <p class="review-text">${escHtml(r.review_text || r.comment || '')}</p>
       <span class="text-xs color-text3">${fmtDate(r.created_at)}</span>
@@ -3395,7 +3429,7 @@ function payCommissionPaystack() {
     currency: 'NGN',
     reference: 'comm_' + Date.now(),
     onSuccess: async (response) => {
-      // Commission confirmed via Paystack — direct update for immediate UI response
+      // Commission confirmed via Paystack â€” direct update for immediate UI response
       try {
       await callEdge('admin-action', {
         action: 'toggle_commission',
@@ -3407,7 +3441,7 @@ function payCommissionPaystack() {
       currentUser.profile.trial_end = new Date(Date.now() + 30*86400000).toISOString();
       document.getElementById('suspended-modal').classList.remove('open');
       document.body.classList.remove('modal-open');
-      toast('Commission Paid! ✅', 'Your store is now active', 'success');
+      toast('Commission Paid! âœ…', 'Your store is now active', 'success');
       checkSellerCommission();
       } catch (err) {
         toast('Verification Failed', err.message || 'Please contact support with your payment reference.', 'error');
@@ -3419,7 +3453,7 @@ function payCommissionPaystack() {
 
 function payCommissionViaWallet() {
   if (!currentUser) return;
-  const availableBalText = document.getElementById('wd-available')?.textContent || '₦0';
+  const availableBalText = document.getElementById('wd-available')?.textContent || 'â‚¦0';
   const availableBalance = parseFloat(availableBalText.replace(/[^\d.]/g, '')) || 0;
   const commissionNaira = COMMISSION_AMOUNT / 100;
   
@@ -3443,7 +3477,7 @@ function payCommissionViaWallet() {
     
     document.getElementById('suspended-modal').classList.remove('open');
     document.body.classList.remove('modal-open');
-    toast('Hosting Extended! 🏪', 'Store subscription activated successfully.', 'success');
+    toast('Hosting Extended! ðŸª', 'Store subscription activated successfully.', 'success');
     
     loadWithdrawalData();
     checkSellerCommission();
@@ -3485,7 +3519,7 @@ async function submitCommissionReceipt() {
 
     if (insertErr) throw insertErr;
 
-    toast('Receipt Submitted! ✅', 'Admin will verify within 24hrs.', 'success', 6000);
+    toast('Receipt Submitted! âœ…', 'Admin will verify within 24hrs.', 'success', 6000);
     closeModal('commission-modal');
     
     // Clear form
@@ -3516,8 +3550,8 @@ async function loadSettings() {
   
   // Withdrawal panel indicators
   document.getElementById('wd-bank-name').textContent = p.bank_name || 'Not set';
-  document.getElementById('wd-acct-num').textContent = p.account_number || '—';
-  document.getElementById('wd-acct-name').textContent = p.account_name || '—';
+  document.getElementById('wd-acct-num').textContent = p.account_number || 'â€”';
+  document.getElementById('wd-acct-name').textContent = p.account_name || 'â€”';
 
   // --- NEW: BRAND CUSTOMIZATION LIVE DOM INJECTIONS ---
   const settingsSection = document.getElementById('ds-settings');
@@ -3645,7 +3679,7 @@ async function saveSettings(e) {
     
     // Synced properties updates locally
     if (currentUser.profile) Object.assign(currentUser.profile, cleanUpdates);    
-    toast('Profile Brand Saved! 🎨', 'Your store profile parameters are updated.', 'success');
+    toast('Profile Brand Saved! ðŸŽ¨', 'Your store profile parameters are updated.', 'success');
     loadWithdrawalData();
   } catch (err) {
     toast('Save Failed', err.message || 'Could not update your store profile.', 'error');
@@ -3671,8 +3705,8 @@ async function loadWithdrawalData() {
   if (profile) {
     currentUser.profile = { ...(currentUser.profile || {}), ...profile };
     document.getElementById('wd-bank-name').textContent = profile.bank_name || 'Not set';
-    document.getElementById('wd-acct-num').textContent = profile.account_number || '—';
-    document.getElementById('wd-acct-name').textContent = profile.account_name || '—';
+    document.getElementById('wd-acct-num').textContent = profile.account_number || 'â€”';
+    document.getElementById('wd-acct-name').textContent = profile.account_name || 'â€”';
   }
 
   const available = wallet.available;
@@ -3694,7 +3728,7 @@ async function loadWithdrawalData() {
 
 async function requestWithdrawal() {
   const amount = parseFloat(document.getElementById('wd-amount').value);
-  if (!amount || amount < 5000) { toast('Minimum withdrawal is ₦5,000','','warn'); return; }
+  if (!amount || amount < 5000) { toast('Minimum withdrawal is â‚¦5,000','','warn'); return; }
   try {
     const wallet = await getSellerAvailableRevenue(currentUser.id);
     if (amount > wallet.available) {
@@ -3710,7 +3744,7 @@ async function requestWithdrawal() {
       account_name:   currentUser.profile?.account_name   || ''
     });
   } catch(e) { toast('Error', e.message, 'error'); return; }
-  toast('Withdrawal Requested!', `₦${fmtNum(amount)} – processed within 24hrs`, 'success');
+  toast('Withdrawal Requested!', `â‚¦${fmtNum(amount)} â€“ processed within 24hrs`, 'success');
   document.getElementById('wd-amount').value = '';
   await loadWithdrawalData();
 }
@@ -3767,8 +3801,8 @@ function renderDropshipSection() {
 
     <div class="dropship-stats mb-4">
       <div class="stat-card"><div class="stat-value color-green" id="ds-imported">0</div><div class="stat-label">Imported Listings</div></div>
-      <div class="stat-card"><div class="stat-value" id="ds-sales">₦0</div><div class="stat-label">Dropship Sales</div></div>
-      <div class="stat-card"><div class="stat-value color-gold" id="ds-profit">₦0</div><div class="stat-label">Estimated Profit</div></div>
+      <div class="stat-card"><div class="stat-value" id="ds-sales">â‚¦0</div><div class="stat-label">Dropship Sales</div></div>
+      <div class="stat-card"><div class="stat-value color-gold" id="ds-profit">â‚¦0</div><div class="stat-label">Estimated Profit</div></div>
       <div class="stat-card"><div class="stat-value color-text3" id="ds-pending">0</div><div class="stat-label">Orders Pending</div></div>
     </div>
 
@@ -3809,14 +3843,14 @@ function renderDropshipSection() {
       <div class="card card-pad">
         <h3 class="mb-3">Profit Calculator</h3>
         <div class="form-grid form-grid-2">
-          <div class="form-group"><label class="form-label">Supplier Cost (₦)</label><input type="number" id="ds-calc-cost" class="form-input" value="12000" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
-          <div class="form-group"><label class="form-label">Selling Price (₦)</label><input type="number" id="ds-calc-price" class="form-input" value="35000" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
+          <div class="form-group"><label class="form-label">Supplier Cost (â‚¦)</label><input type="number" id="ds-calc-cost" class="form-input" value="12000" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
+          <div class="form-group"><label class="form-label">Selling Price (â‚¦)</label><input type="number" id="ds-calc-price" class="form-input" value="35000" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
         </div>
         <div class="form-grid form-grid-2">
-          <div class="form-group"><label class="form-label">Shipping (₦)</label><input type="number" id="ds-calc-ship" class="form-input" value="3500" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
+          <div class="form-group"><label class="form-label">Shipping (â‚¦)</label><input type="number" id="ds-calc-ship" class="form-input" value="3500" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
           <div class="form-group"><label class="form-label">Marketplace Fee (%)</label><input type="number" id="ds-calc-fee" class="form-input" value="3" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
         </div>
-        <div class="profit-result"><span>Net Profit</span><strong id="ds-calc-profit">₦0</strong><small id="ds-calc-margin">0% margin</small></div>
+        <div class="profit-result"><span>Net Profit</span><strong id="ds-calc-profit">â‚¦0</strong><small id="ds-calc-margin">0% margin</small></div>
       </div>
     </div>
 
@@ -3905,9 +3939,9 @@ async function renderDropshipCatalog() {
       <img src="${p.image}" alt="${escAttr(p.name)}" loading="lazy">
       <div class="hot-item-body">
         <div class="flex justify-between gap-2"><div class="font-600 text-sm">${escHtml(p.name)}</div><span class="badge badge-green">${p.demand}</span></div>
-        <div class="text-xs color-text3 mt-1">${escHtml(p.supplier)} · ${escHtml(p.delivery)}</div>
+        <div class="text-xs color-text3 mt-1">${escHtml(p.supplier)} Â· ${escHtml(p.delivery)}</div>
         <div class="dropship-price-row"><span>Cost ${fmtN(p.cost)}</span><strong>${fmtN(p.price)}</strong></div>
-        <div class="hot-profit">Profit ${fmtN(profit)} · ${margin}% margin</div>
+        <div class="hot-profit">Profit ${fmtN(profit)} Â· ${margin}% margin</div>
         <button class="btn btn-primary btn-full btn-sm mt-2" onclick="importDropshipById('${p.id}')"><i class="fa-solid fa-download"></i> Import Listing</button>
       </div>
     </div>`;
@@ -3938,7 +3972,7 @@ async function importFromUrl(event) {
       seller_id: currentUser.id
     });
 
-    toast('Product Imported! 🎉', `${result.name || 'Item'} added to your store`, 'success');
+    toast('Product Imported! ðŸŽ‰', `${result.name || 'Item'} added to your store`, 'success');
     urlInput.value = ''; // Clear the input
     
     // Refresh the dashboard tables to show the new product
@@ -4049,7 +4083,7 @@ function renderAffiliateSection() {
     <p class="dash-page-sub">Invite sellers, track conversions, and prepare payout-ready referral earnings.</p>
     <div class="referral-box mb-4">
       <div class="flex justify-between items-start gap-3 wrap">
-        <div><h3 style="color:#fff;margin-bottom:.28rem">Refer sellers and earn ₦5,000</h3><p style="color:rgba(255,255,255,.68);font-size:.84rem;max-width:620px">Share your link with business owners. You earn when a referred seller activates their store.</p></div>
+        <div><h3 style="color:#fff;margin-bottom:.28rem">Refer sellers and earn â‚¦5,000</h3><p style="color:rgba(255,255,255,.68);font-size:.84rem;max-width:620px">Share your link with business owners. You earn when a referred seller activates their store.</p></div>
         <span class="badge badge-gold">Seller activation reward</span>
       </div>
       <div class="referral-input-row" style="margin-top:1.25rem">
@@ -4065,14 +4099,14 @@ function renderAffiliateSection() {
       </div>
     </div>
     <div class="affiliate-grid mb-4">
-      <div class="stat-card"><div class="stat-value color-green" id="aff-total">₦0</div><div class="stat-label">Total Earnings</div></div>
-      <div class="stat-card"><div class="stat-value" id="aff-pending">₦0</div><div class="stat-label">Pending</div></div>
+      <div class="stat-card"><div class="stat-value color-green" id="aff-total">â‚¦0</div><div class="stat-label">Total Earnings</div></div>
+      <div class="stat-card"><div class="stat-value" id="aff-pending">â‚¦0</div><div class="stat-label">Pending</div></div>
       <div class="stat-card"><div class="stat-value" id="aff-clicks">0</div><div class="stat-label">Clicks</div></div>
       <div class="stat-card"><div class="stat-value" id="aff-conversions">0</div><div class="stat-label">Conversions</div></div>
     </div>
     <div class="dash-two-col mb-4">
       <div class="card card-pad"><h3 class="mb-3">Referral Toolkit</h3><div class="affiliate-tool-list"><button onclick="copyReferralMessage()"><i class="fa-solid fa-copy"></i><span>Copy invite message</span></button><button onclick="downloadReferralQr()"><i class="fa-solid fa-qrcode"></i><span>Open QR code</span></button><button onclick="showDash('advertise')"><i class="fa-solid fa-bullhorn"></i><span>Promote your offer</span></button></div></div>
-      <div class="card card-pad"><h3 class="mb-3">Payout Readiness</h3><div class="affiliate-payout-box"><div><span>Minimum payout</span><strong>₦5,000</strong></div><div><span>Bank account</span><strong id="aff-bank-status">Not set</strong></div></div><button class="btn btn-primary btn-full mt-3" onclick="requestAffiliatePayout()"><i class="fa-solid fa-wallet"></i> Request Affiliate Payout</button></div>
+      <div class="card card-pad"><h3 class="mb-3">Payout Readiness</h3><div class="affiliate-payout-box"><div><span>Minimum payout</span><strong>â‚¦5,000</strong></div><div><span>Bank account</span><strong id="aff-bank-status">Not set</strong></div></div><button class="btn btn-primary btn-full mt-3" onclick="requestAffiliatePayout()"><i class="fa-solid fa-wallet"></i> Request Affiliate Payout</button></div>
     </div>
     <div class="card card-pad mb-4"><h3 class="mb-3">External Programs</h3><div class="affiliate-program-grid">
       <div class="affiliate-program-card"><i class="fa-brands fa-amazon" style="color:#f90"></i><strong>Amazon</strong><span>Track imported product links manually.</span><button class="btn btn-outline btn-sm" onclick="connectAffiliateProgram('Amazon')">Add Program</button></div>
@@ -4085,7 +4119,7 @@ function renderAffiliateSection() {
 
 function copyRef() {
   const link = document.getElementById('referral-link').value;
-  navigator.clipboard.writeText(link).then(()=>toast('Referral Link Copied!','Share to earn ₦500 per referral','success'));
+  navigator.clipboard.writeText(link).then(()=>toast('Referral Link Copied!','Share to earn â‚¦500 per referral','success'));
 }
 
 async function loadFlashSaleProducts() {
@@ -4216,7 +4250,7 @@ function requestAffiliatePayout() {
   
   // REMOVED: Legacy account_number validation block to allow pure Paystack processing
   if (pending < 5000) { 
-    toast('Not Ready Yet', 'Minimum affiliate payout is ₦5,000.', 'warn'); 
+    toast('Not Ready Yet', 'Minimum affiliate payout is â‚¦5,000.', 'warn'); 
     return; 
   }
   
@@ -4236,7 +4270,7 @@ async function loadWithdrawalHistory() {
   const pendingAmt = wds.filter(w=>w.status==='pending').reduce((s,w)=>s+w.amount,0);
   document.getElementById('wd-pending').textContent = fmtN(pendingAmt);
   document.getElementById('wd-total').textContent = fmtN(totalPaid);
-  tbody.innerHTML = wds.map(w=>`<tr><td>${fmtDate(w.created_at)}</td><td class="font-bold">${fmtN(w.amount)}</td><td><span class="badge ${w.status==='paid'?'badge-green':w.status==='rejected'?'badge-red':'badge-gold'}">${w.status}</span></td><td class="text-xs color-text3">${w.id?.substr(0,8)||'—'}</td></tr>`).join('');
+  tbody.innerHTML = wds.map(w=>`<tr><td>${fmtDate(w.created_at)}</td><td class="font-bold">${fmtN(w.amount)}</td><td><span class="badge ${w.status==='paid'?'badge-green':w.status==='rejected'?'badge-red':'badge-gold'}">${w.status}</span></td><td class="text-xs color-text3">${w.id?.substr(0,8)||'â€”'}</td></tr>`).join('');
 }
 
 // ====================================================
@@ -4314,13 +4348,13 @@ async function submitDispute() {
 }
 
 // ====================================================
-//  SUPER ADMIN — full gated panel
+//  SUPER ADMIN â€” full gated panel
 // ====================================================
 let _adminSellersCache = [];
 let _adminRevenueChart = null;
 
 function isAdmin() {
-  // Both email AND database role must match — prevents email spoofing
+  // Both email AND database role must match â€” prevents email spoofing
   return isAdminEmail();
 }
 
@@ -4383,7 +4417,7 @@ async function saveAdminLogo() {
     // 4. Apply globally to the DOM right now
     applySiteLogo(logoUrl);
     
-    toast('Logo Updated! 🎨', 'Your new branding is live', 'success');
+    toast('Logo Updated! ðŸŽ¨', 'Your new branding is live', 'success');
   } catch(e) {
     console.error("Logo upload error:", e);
     toast('Upload Failed', 'Check your Supabase storage permissions', 'error');
@@ -4430,7 +4464,7 @@ function switchAdminTab(tab) {
   if (tab === 'kyc')          loadAdminKyc();
 }
 
-/* ── OVERVIEW ── */
+/* â”€â”€ OVERVIEW â”€â”€ */
 async function loadAdminOverview() {
   if (!guardAdminPanel()) return;
   const [{ data: sellers }, { data: buyers }, { data: orders }] = await Promise.all([
@@ -4483,7 +4517,7 @@ async function askAdminBot(preset) {
   const typingDiv = document.createElement('div');
   typingDiv.id = 'admin-typing';
   typingDiv.style.cssText = 'display:flex;gap:.42rem;align-items:center';
-  typingDiv.innerHTML = `<div style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-robot"></i></div><div style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;color:var(--text3)">Thinking…</div>`;
+  typingDiv.innerHTML = `<div style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-robot"></i></div><div style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;color:var(--text3)">Thinkingâ€¦</div>`;
   container.appendChild(typingDiv);
   container.scrollTop = container.scrollHeight;
 
@@ -4628,10 +4662,10 @@ function _renderAdminSellerList(sellers) {
     const trialEnd = s.trial_end ? new Date(s.trial_end) : null;
     const daysLeft = trialEnd ? Math.ceil((trialEnd - now) / 86400000) : 0;
     const badge = s.commission_paid
-      ? `<span class="badge badge-green">✓ Active</span>`
+      ? `<span class="badge badge-green">âœ“ Active</span>`
       : daysLeft > 0
         ? `<span class="badge badge-gold">Trial: ${daysLeft}d</span>`
-        : `<span class="badge badge-red">⚠ Overdue</span>`;
+        : `<span class="badge badge-red">âš  Overdue</span>`;
     const approveBtn = s.commission_paid
       ? `<button onclick="adminToggleCommission('${s.id}',false)" class="btn btn-sm btn-outline"><i class="fa-solid fa-ban"></i> Revoke</button>`
       : `<button onclick="adminToggleCommission('${s.id}',true)"  class="btn btn-sm btn-primary"><i class="fa-solid fa-check"></i> Approve</button>`;
@@ -4648,7 +4682,7 @@ function _renderAdminSellerList(sellers) {
         <div style="min-width:0">
           <div class="font-600" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(s.name||'Unknown')}</div>
           <div class="text-xs color-text3">${escHtml(s.email||'')}</div>
-          ${s.store_name ? `<div class="text-xs color-text3">🏪 ${escHtml(s.store_name)}</div>` : ''}
+          ${s.store_name ? `<div class="text-xs color-text3">ðŸª ${escHtml(s.store_name)}</div>` : ''}
           ${s.accounts ? `<div class="text-xs color-text3">Accounts: ${escHtml(s.accounts)}</div>` : ''}
           <div class="text-xs color-text3">Joined: ${fmtDate(s.created_at)}</div>
           <div class="flex gap-1 mt-1 flex-wrap">${badge}</div>
@@ -4672,9 +4706,9 @@ async function adminToggleCommission(id, paid) {
   const card = document.getElementById('asc-' + id);
   if (card) {
     const badge = card.querySelector('.badge');
-    if (badge) { badge.className = 'badge ' + (paid ? 'badge-green' : 'badge-red'); badge.textContent = paid ? '✓ Active' : '⚠ Overdue'; }
+    if (badge) { badge.className = 'badge ' + (paid ? 'badge-green' : 'badge-red'); badge.textContent = paid ? 'âœ“ Active' : 'âš  Overdue'; }
   }
-  toast(paid ? '✅ Seller Activated' : '⛔ Access Revoked', '', paid ? 'success' : 'warn');
+  toast(paid ? 'âœ… Seller Activated' : 'â›” Access Revoked', '', paid ? 'success' : 'warn');
   loadAdminSellers();
 }
 
@@ -4688,7 +4722,7 @@ async function adminDeleteSeller(id) {
   loadAdminSellers();
 }
 
-/* ── ORDERS ── */
+/* â”€â”€ ORDERS â”€â”€ */
 async function loadAdminOrders() {
   if (!isAdmin()) return;
   document.getElementById('adm-orders-skeleton').classList.remove('hidden');
@@ -4709,15 +4743,15 @@ async function loadAdminOrders() {
       <div class="flex justify-between items-start flex-wrap gap-2 mb-2">
         <div>
           <div class="font-bold text-sm">${o.id}</div>
-          <div class="text-xs color-text3">${fmtDate(o.created_at)} · ${o.payment_method||''}</div>
-          <div class="text-xs mt-1">${(o.items||[]).map(i=>`${escHtml(i.name)} ×${i.qty}`).join(', ')}</div>
+          <div class="text-xs color-text3">${fmtDate(o.created_at)} Â· ${o.payment_method||''}</div>
+          <div class="text-xs mt-1">${(o.items||[]).map(i=>`${escHtml(i.name)} Ã—${i.qty}`).join(', ')}</div>
         </div>
         <div class="text-right">
           <div class="font-bold color-green">${fmtN(o.total_amount)}</div>
           <span class="badge ${sc[o.status]||'badge-gray'}">${o.status}</span>
         </div>
       </div>
-      <div class="text-xs color-text3 mb-2"><i class="fa-solid fa-user"></i> ${escHtml(o.delivery_name||'—')} &nbsp;|&nbsp; <i class="fa-solid fa-map-marker-alt"></i> ${escHtml((o.delivery_address||'').substr(0,50))}</div>
+      <div class="text-xs color-text3 mb-2"><i class="fa-solid fa-user"></i> ${escHtml(o.delivery_name||'â€”')} &nbsp;|&nbsp; <i class="fa-solid fa-map-marker-alt"></i> ${escHtml((o.delivery_address||'').substr(0,50))}</div>
       <div class="flex gap-2 flex-wrap">
         ${o.status==='pending'   ? `<button onclick="adminUpdateOrder('${o.id}','confirmed')"  class="btn btn-primary btn-sm">Confirm</button>` : ''}
         ${o.status==='confirmed' ? `<button onclick="adminUpdateOrder('${o.id}','shipped')"    class="btn btn-sm" style="background:#ede9fe;color:var(--purple)">Mark Shipped</button>` : ''}
@@ -4736,7 +4770,7 @@ async function adminUpdateOrder(id, status) {
   } catch(e) { toast('Error', e.message, 'error'); }
 }
 
-/* ── DISPUTES ── */
+/* â”€â”€ DISPUTES â”€â”€ */
 async function loadAdminDisputes() {
   if (!isAdmin()) return;
   const { data: disputes } = await db.from('disputes').select('*').order('created_at',{ascending:false}).limit(60);
@@ -4751,7 +4785,7 @@ async function loadAdminDisputes() {
           <div class="font-600 text-sm">Order: ${d.order_id}</div>
           <div class="text-xs color-text3">${fmtDate(d.created_at)}</div>
           <div class="text-sm mt-1"><strong>${(d.dispute_type||'').replace(/-/g,' ')}</strong></div>
-          <div class="text-xs color-text3 mt-1">${escHtml((d.description||'').substr(0,200))}${(d.description?.length||0)>200?'…':''}</div>
+          <div class="text-xs color-text3 mt-1">${escHtml((d.description||'').substr(0,200))}${(d.description?.length||0)>200?'â€¦':''}</div>
         </div>
         <span class="badge ${d.status==='open'?'badge-red':d.status==='resolved'?'badge-green':'badge-orange'}">${d.status}</span>
       </div>
@@ -4767,7 +4801,7 @@ async function loadAdminDisputes() {
 async function resolveDispute(id) {
   try { await callEdge('admin-action', { action: 'resolve_dispute', target_id: id }); }
   catch(e) { toast('Error', e.message, 'error'); return; }
-  toast('Dispute Resolved ✅', '', 'success');
+  toast('Dispute Resolved âœ…', '', 'success');
   loadAdminDisputes();
 }
 
@@ -4778,7 +4812,7 @@ async function refundDispute(disputeId, orderId) {
   loadAdminDisputes();
 }
 
-/* ── WITHDRAWALS ── */
+/* â”€â”€ WITHDRAWALS â”€â”€ */
 async function loadAdminWithdrawals() {
   if (!isAdmin()) return;
   document.getElementById('adm-wd-skeleton').classList.remove('hidden');
@@ -4798,7 +4832,7 @@ async function loadAdminWithdrawals() {
           <div class="font-bold" style="font-size:1.05rem;color:var(--green)">${fmtN(w.amount)}</div>
           <div class="font-600 text-sm">${escHtml(w.profiles?.name||'Seller')}</div>
           <div class="text-xs color-text3">${escHtml(w.profiles?.email||'')}</div>
-          <div class="text-xs mt-1"><b>${escHtml(w.bank_name||'')}</b> · ${escHtml(w.account_number||'')} · ${escHtml(w.account_name||'')}</div>
+          <div class="text-xs mt-1"><b>${escHtml(w.bank_name||'')}</b> Â· ${escHtml(w.account_number||'')} Â· ${escHtml(w.account_name||'')}</div>
           <div class="text-xs color-text3">${fmtDate(w.created_at)}</div>
         </div>
         <div class="flex flex-col items-end gap-2">
@@ -4836,7 +4870,7 @@ async function adminPayWithdrawal(id) {
     }
   }
   catch(e) { toast('Error', e.message, 'error'); return; }
-  toast('Withdrawal Marked Paid ✅', '', 'success');
+  toast('Withdrawal Marked Paid âœ…', '', 'success');
   loadAdminWithdrawals();
 }
 
@@ -4879,7 +4913,7 @@ async function adminRejectWithdrawal(id) {
   loadAdminWithdrawals();
 }
 
-/* ── BROADCAST ── */
+/* â”€â”€ BROADCAST â”€â”€ */
 async function sendBroadcast() {
   if (!isAdmin()) return;
   const title  = document.getElementById('bc-title').value.trim();
@@ -4898,7 +4932,7 @@ async function sendBroadcast() {
     return; 
   }
   
-  toast('📣 Broadcast Sent!', 'To: ' + target, 'success');
+  toast('ðŸ“£ Broadcast Sent!', 'To: ' + target, 'success');
   document.getElementById('bc-title').value = '';
   document.getElementById('bc-body').value  = '';
   loadBroadcastHistory();
@@ -4908,11 +4942,11 @@ async function loadBroadcastHistory() {
   const { data: bcs } = await db.from('broadcasts').select('*').order('created_at',{ascending:false}).limit(10);
   const el = document.getElementById('bc-history');
   if (!el) return;
-  const icons = { info:'ℹ️', success:'✅', warn:'⚠️', error:'🚨' };
+  const icons = { info:'â„¹ï¸', success:'âœ…', warn:'âš ï¸', error:'ðŸš¨' };
   el.innerHTML = (bcs||[]).length
     ? bcs.map(b => `<div class="card card-pad mb-2" style="border-left:3px solid var(--green)">
         <div class="flex justify-between items-center mb-1">
-          <span class="font-600 text-sm">${icons[b.type]||'📢'} ${escHtml(b.title)}</span>
+          <span class="font-600 text-sm">${icons[b.type]||'ðŸ“¢'} ${escHtml(b.title)}</span>
           <span class="text-xs color-text3">${fmtDate(b.created_at)}</span>
         </div>
         <div class="text-xs color-text3 mb-1">To: <b>${b.target}</b></div>
@@ -4922,7 +4956,7 @@ async function loadBroadcastHistory() {
 }
 
 // ====================================================
-//  ADMIN — RECEIPTS MANAGEMENT
+//  ADMIN â€” RECEIPTS MANAGEMENT
 // ====================================================
 function getBroadcastTargetsForProfile(profile = currentUser?.profile || {}) {
   const role = profile.role || 'buyer';
@@ -5023,7 +5057,7 @@ async function rejectReceipt(receiptId) {
     toast('Error', e.message, 'error');
   }
 }
-/* ── ACCOUNT MANAGEMENT ── */
+/* â”€â”€ ACCOUNT MANAGEMENT â”€â”€ */
 async function loadAdminAccounts() {
   if (!guardAdminPanel()) return;
   loadCommissionActivations();
@@ -5263,7 +5297,7 @@ async function checkBroadcastForUser() {
   (bcs||[]).forEach((b, i) => setTimeout(() => toast(b.title, b.body, b.type||'info', 7000), i * 2200));
 }
 
-/* ── REVENUE CHART ── */
+/* â”€â”€ REVENUE CHART â”€â”€ */
 function _renderAdminRevenueChart(orders) {
   const ctx = document.getElementById('admin-revenue-chart');
   if (!ctx) return;
@@ -5279,8 +5313,8 @@ function _renderAdminRevenueChart(orders) {
   if (_adminRevenueChart) _adminRevenueChart.destroy();
   _adminRevenueChart = new Chart(ctx, {
     type: 'bar',
-    data: { labels, datasets:[{ label:'Revenue (₦)', data, backgroundColor:'rgba(25,168,71,.2)', borderColor:'#19a847', borderWidth:1.5, borderRadius:4 }] },
-    options: { responsive:true, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>'₦'+fmtNum(c.raw)}} }, scales:{ y:{ beginAtZero:true, ticks:{callback:v=>'₦'+fmtNum(v)} }, x:{ ticks:{maxTicksLimit:8} } } }
+    data: { labels, datasets:[{ label:'Revenue (â‚¦)', data, backgroundColor:'rgba(25,168,71,.2)', borderColor:'#19a847', borderWidth:1.5, borderRadius:4 }] },
+    options: { responsive:true, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>'â‚¦'+fmtNum(c.raw)}} }, scales:{ y:{ beginAtZero:true, ticks:{callback:v=>'â‚¦'+fmtNum(v)} }, x:{ ticks:{maxTicksLimit:8} } } }
   });
 }
 
@@ -5309,7 +5343,7 @@ async function sendChat() {
     current_page:      getCurrentPage(),
     user_role:         currentRole || 'visitor',
     cart_item_count:   cart.length,
-    cart_total:        cart.reduce((s, c) => s + c.price * (c.qty || 1), 0),
+    cart_total:        cartPayableSubtotal(),
     current_product:   currentProd
       ? { name: currentProd.name, price: currentProd.price, category: currentProd.category }
       : null,
@@ -5337,7 +5371,7 @@ async function sendChat() {
   }
 }
 
-// Helper — detect which "page" user is on
+// Helper â€” detect which "page" user is on
 function getChatSystemPrompt(context) {
   return `You are BUYSELL Nigeria's marketplace assistant. Help buyers, sellers, and service providers with shopping, payments, delivery, orders, reviews, ads, KYC, and dashboard steps. Be concise, friendly, and practical. Current page: ${context.current_page}. User role: ${context.user_role}.`;
 }
@@ -5375,7 +5409,7 @@ function getCurrentPage() {
   return 'buyer-marketplace';
 }
 
-// Updated addChatMsg — accepts optional id for typing indicator replacement
+// Updated addChatMsg â€” accepts optional id for typing indicator replacement
 function addChatMsg(text, sender, id = null) {
   const container = document.getElementById('chat-messages');
   const div       = document.createElement('div');
@@ -5393,7 +5427,7 @@ function addChatMsg(text, sender, id = null) {
   container.scrollTop = container.scrollHeight;
 }
 
-// Clear history when chat is closed (optional — remove to keep memory)
+// Clear history when chat is closed (optional â€” remove to keep memory)
 function toggleChat() {
   const win = document.getElementById('chatbot-window');
   const wasOpen = win.classList.contains('open');
@@ -5412,8 +5446,8 @@ function askBot(q) {
 let csvRows = [];
 
 function downloadCsvTemplate() {
-  const headers = ['name','price','original_price','category','condition','description','location','stock_quantity','negotiable'];
-  const example = ['iPhone 14 Pro Max','450000','550000','phones','new','Brand new sealed iPhone 14 Pro Max 256GB','Ikeja Lagos','5','false'];
+  const headers = ['name','price','original_price','shipping_fee','category','condition','description','location','stock_quantity','negotiable'];
+  const example = ['iPhone 14 Pro Max','450000','550000','2500','phones','new','Brand new sealed iPhone 14 Pro Max 256GB','Ikeja Lagos','5','false'];
   const csv = [headers.join(','), example.join(',')].join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
@@ -5449,7 +5483,7 @@ function handleCsvUpload(input) {
         </div>
         <div style="max-height:130px;overflow-y:auto">
           ${csvRows.slice(0,5).map(r => `<div class="flex justify-between text-xs py-1 border-b border-border"><span>${escHtml(r.name)}</span><span class="font-bold color-green">${fmtN(parseFloat(r.price)||0)}</span></div>`).join('')}
-          ${csvRows.length>5 ? `<div class="text-xs color-text3 mt-1 text-center">+${csvRows.length-5} more…</div>` : ''}
+          ${csvRows.length>5 ? `<div class="text-xs color-text3 mt-1 text-center">+${csvRows.length-5} moreâ€¦</div>` : ''}
         </div>
       </div>`;
     document.getElementById('csv-import-btn').classList.remove('hidden');
@@ -5460,12 +5494,14 @@ function handleCsvUpload(input) {
 async function importCsvProducts() {
   if (!csvRows.length || !currentUser) return;
   const btn = document.getElementById('csv-import-btn');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Importing…';
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Importingâ€¦';
   const toInsert = csvRows.map(r => ({
     seller_id: currentUser.id,
     name: r.name, description: r.description||r.name,
     price: parseFloat(r.price)||0,
     original_price: parseFloat(r.original_price)||parseFloat(r.price)||0,
+    shipping_fee: Math.max(0, parseFloat(r.shipping_fee ?? r.shipping_cost ?? 0)||0),
+    shipping_cost: Math.max(0, parseFloat(r.shipping_fee ?? r.shipping_cost ?? 0)||0),
     category: r.category||'electronics',
     condition: r.condition||'new',
     location: r.location||'Nigeria',
@@ -5481,7 +5517,7 @@ async function importCsvProducts() {
     const { error } = await db.from('products').insert(toInsert.slice(i, i+BATCH));
     if (!error) imported += Math.min(BATCH, toInsert.length - i);
   }
-  toast(`${imported} Products Imported! 🎉`, 'All products are now live', 'success');
+  toast(`${imported} Products Imported! ðŸŽ‰`, 'All products are now live', 'success');
   csvRows = [];
   document.getElementById('csv-file').value = '';
   document.getElementById('csv-preview').classList.add('hidden');
@@ -5531,9 +5567,9 @@ async function handleDeepLink() {
 function sendWhatsAppOrderNotification(order, sellerWa) {
   if (!sellerWa) return;
   const phone = sellerWa.replace(/\D/g,'');
-  const items = (order.items||[]).map(i=>`${i.name} ×${i.qty}`).join(', ');
+  const items = (order.items||[]).map(i=>`${i.name} Ã—${i.qty}`).join(', ');
   const msg = encodeURIComponent(
-    `🛍️ NEW ORDER on BUYSELL!\n\n` +
+    `ðŸ›ï¸ NEW ORDER on BUYSELL!\n\n` +
     `Order ID: ${order.id}\n` +
     `Items: ${items}\n` +
     `Total: ${fmtN(order.total_amount)}\n` +
@@ -5554,7 +5590,7 @@ function sendWhatsAppOrderNotification(order, sellerWa) {
 async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
   try {
     const payload = {
-      cart: cart.map(c => ({ id: c.id, name: c.name, qty: c.qty||1, price: c.price, image_url: c.image_url })),
+      cart: cart.map(c => ({ id: c.id, name: c.name, qty: c.qty||1, price: c.price, shipping_fee: itemShippingFee(c), shipping_cost: itemShippingFee(c), image_url: c.image_url })),
       delivery_name:    document.getElementById('co-name').value.trim(),
       delivery_phone:   document.getElementById('co-phone').value.trim(),
       delivery_address: document.getElementById('co-address').value.trim(),
@@ -5565,7 +5601,7 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
     };
 
     let orderId;
-    let totalAmount = cart.reduce((sum, c) => sum + (c.price * (c.qty || 1)), 0);
+    let totalAmount = cartPayableSubtotal();
 
     try {
       // ATTEMPT 1: Route through the Edge Function
@@ -5634,7 +5670,7 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
     document.getElementById('co-order-total').textContent = fmtN(totalAmount);
     goCheckoutStep(3);
     
-    toast('Order Placed! 🎉', `Order ${orderId} confirmed`, 'success', 5000);
+    toast('Order Placed! ðŸŽ‰', `Order ${orderId} confirmed`, 'success', 5000);
 
     return { success: true, order_id: orderId, total: totalAmount };
 
@@ -5646,7 +5682,7 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
 // ====================================================
 //  STOREFRONT SALES COUNT
 // ====================================================
-// viewStorefront — full implementation with order count + reviews
+// viewStorefront â€” full implementation with order count + reviews
 async function viewStorefront(sellerId) {
   if (!sellerId) return;
   closeModal('product-modal');
@@ -5714,7 +5750,7 @@ document.getElementById('sf-name').textContent = seller.name || 'Seller Store';
   const avgRating = allRevs.length ? (allRevs.reduce((s,r)=>s+r.rating,0)/allRevs.length).toFixed(1) : '5.0';
   document.getElementById('sf-rating').textContent = avgRating;
   document.getElementById('sf-review-count').textContent = `${allRevs.length} reviews`;
-  document.getElementById('sf-stars').textContent = '★'.repeat(Math.round(+avgRating))+'☆'.repeat(5-Math.round(+avgRating));
+  document.getElementById('sf-stars').textContent = 'â˜…'.repeat(Math.round(+avgRating))+'â˜†'.repeat(5-Math.round(+avgRating));
   // Share button URL
 // Share button URL setup
   const sfUrl = `${window.location.origin}${window.location.pathname}?store=${sellerId}`;
@@ -5729,7 +5765,7 @@ document.getElementById('sf-name').textContent = seller.name || 'Seller Store';
   if (!sfProds.length) { grid.innerHTML=''; empty.classList.remove('hidden'); }
   else { empty.classList.add('hidden'); grid.innerHTML = sfProds.map(p=>prodCard(p)).join(''); }
   // Update page title
-  document.title = `${seller.name} — BUYSELL Nigeria`;
+  document.title = `${seller.name} â€” BUYSELL Nigeria`;
   history.pushState(null,'',`?store=${sellerId}`);
 }
 
@@ -5747,7 +5783,7 @@ function missingColumn(error) {
   return quoted ? quoted[1] : "";
 }
 
-function fmtN(n) { return '₦' + fmtNum(n); }
+function fmtN(n) { return 'â‚¦' + fmtNum(n); }
 function fmtNum(n) { if (!n && n!==0) return '0'; return Math.round(n).toLocaleString('en-NG'); }
 function fmtDate(d) { if (!d) return ''; return new Date(d).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'}); }
 function escHtml(s) {
@@ -5824,7 +5860,7 @@ function initLeaflet() {
       // Initialize map centered on Nigeria
       pickupMap = L.map('map').setView([9.0820, 8.6753], 6); 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap'
+        attribution: 'Â© OpenStreetMap'
       }).addTo(pickupMap);
     }
     
@@ -5894,16 +5930,16 @@ function shareCurrentProduct() {
 //  INIT
 // ====================================================
 // ====================================================
-// 🚀 UNIFIED SINGLE-PAGE RUNTIME INITIALIZATION
+// ðŸš€ UNIFIED SINGLE-PAGE RUNTIME INITIALIZATION
 // ====================================================
 // ====================================================
-// 🚀 UNIFIED SINGLE-PAGE RUNTIME INITIALIZATION
+// ðŸš€ UNIFIED SINGLE-PAGE RUNTIME INITIALIZATION
 // ====================================================
 // ====================================================
-// 🚀 UNIFIED SINGLE-PAGE RUNTIME INITIALIZATION
+// ðŸš€ UNIFIED SINGLE-PAGE RUNTIME INITIALIZATION
 // ====================================================
 (async function init() {
-  console.log("🎬 Launching single-page application lifecycle...");
+  console.log("ðŸŽ¬ Launching single-page application lifecycle...");
   
   const savedLogo = appStorage.getItem('buysell_custom_logo');
   if (savedLogo) applySiteLogo(savedLogo);
@@ -5920,7 +5956,7 @@ function shareCurrentProduct() {
     table: 'orders' 
   }, payload => {
     if (currentRole === 'seller' && payload.new?.seller_id === currentUser?.id) {
-      toast('New Order! 🛍️', 'Check your orders panel', 'success', 6000);
+      toast('New Order! ðŸ›ï¸', 'Check your orders panel', 'success', 6000);
       if (typeof loadSellerOrders === 'function') loadSellerOrders();
       if (typeof loadSellerStats === 'function') loadSellerStats();
     }
@@ -5937,11 +5973,11 @@ function shareCurrentProduct() {
     
     if (isTargetMerchant && p?.stock_quantity !== undefined && p?.low_stock_alert) {
       if (p.stock_quantity <= p.low_stock_alert && p.stock_quantity > 0) {
-        toast(`⚠️ Low Stock: ${p.name}`, `Only ${p.stock_quantity} left inside inventory`, 'warn', 7000);
+        toast(`âš ï¸ Low Stock: ${p.name}`, `Only ${p.stock_quantity} left inside inventory`, 'warn', 7000);
       }
     }
   }).subscribe();
-})(); // 👈 This explicitly shuts down the self-invoking function thread cleanly.
+})(); // ðŸ‘ˆ This explicitly shuts down the self-invoking function thread cleanly.
 // --- PHASE 1-4 INJECTIONS ---
 function validateInput(str) {
   if (typeof str !== 'string') return '';
@@ -5967,7 +6003,7 @@ function showAdminPortal() {
       const dash = document.getElementById('dash-user-name');
       if (dash) dash.textContent = currentUser.profile?.name || 'Admin';
     }
-    toast('🔐 Admin Portal', 'Welcome back, Commander', 'info', 4000);
+    toast('ðŸ” Admin Portal', 'Welcome back, Commander', 'info', 4000);
   }, 80);
 }
 
@@ -6003,7 +6039,7 @@ function copyReferralLink() {
   const link = document.getElementById('referral-link')?.value;
   if(!link) return;
   navigator.clipboard.writeText(link).then(() => {
-    toast('Referral Link Copied! 🔗', 'Share it to start earning.', 'success');
+    toast('Referral Link Copied! ðŸ”—', 'Share it to start earning.', 'success');
   });
 }
 
@@ -6040,7 +6076,7 @@ function showSpdDash(section) {
 }
 
 // ====================================================
-//  SERVICE ECONOMY — Browse & Filter (Buyer Side)
+//  SERVICE ECONOMY â€” Browse & Filter (Buyer Side)
 // ====================================================
 let _allServiceGigs = [];
 
@@ -6117,14 +6153,14 @@ function renderServiceCards(gigs) {
           </div>
           <div>
             <div style="font-weight:700;font-size:.88rem;line-height:1.3">${escHtml(g.title)}</div>
-            <div style="font-size:.7rem;color:var(--text3)">${escHtml(g.category)} · ${escHtml(g.location || '—')}</div>
+            <div style="font-size:.7rem;color:var(--text3)">${escHtml(g.category)} Â· ${escHtml(g.location || 'â€”')}</div>
           </div>
         </div>
         <p style="font-size:.78rem;color:var(--text2);line-height:1.55;margin-bottom:.65rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escHtml(g.description || 'No description provided.')}</p>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
           <div>
             <div style="font-size:.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Starting from</div>
-            <div style="font-size:1.1rem;font-weight:800;color:var(--green)">₦${(g.starting_rate || g.price || 0).toLocaleString()}</div>
+            <div style="font-size:1.1rem;font-weight:800;color:var(--green)">â‚¦${(g.starting_rate || g.price || 0).toLocaleString()}</div>
           </div>
           <div style="display:flex;align-items:center;gap:.35rem">
             <div style="width:24px;height:24px;border-radius:50%;background:var(--green-xlt);display:flex;align-items:center;justify-content:center">
@@ -6147,7 +6183,7 @@ function renderServiceCards(gigs) {
 }
 
 // ====================================================
-//  SERVICE PROVIDER — Overview Stats
+//  SERVICE PROVIDER â€” Overview Stats
 // ====================================================
 async function loadSpdOverview() {
   if (!currentUser) return;
@@ -6174,7 +6210,7 @@ async function loadSpdOverview() {
             ${thumb ? `<img src="${thumb}" style="width:48px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0">` : `<div style="width:48px;height:48px;border-radius:8px;background:var(--green-xlt);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="fa-solid fa-tools" style="color:var(--green)"></i></div>`}
             <div style="flex:1;min-width:0">
               <div style="font-weight:700;font-size:.85rem">${escHtml(g.title)}</div>
-              <div style="font-size:.72rem;color:var(--text3)">${escHtml(g.category)} · ₦${(g.starting_rate||0).toLocaleString()}</div>
+              <div style="font-size:.72rem;color:var(--text3)">${escHtml(g.category)} Â· â‚¦${(g.starting_rate||0).toLocaleString()}</div>
             </div>
             <span class="badge ${g.status==='active'?'badge-green':'badge-red'}">${g.status}</span>
           </div>`;
@@ -6184,7 +6220,7 @@ async function loadSpdOverview() {
 }
 
 // ====================================================
-//  SERVICE PROVIDER — Settings
+//  SERVICE PROVIDER â€” Settings
 // ====================================================
 async function loadSpdSettings() {
   if (!currentUser?.profile) return;
@@ -6222,14 +6258,14 @@ async function saveServiceProfile() {
     // Update sidebar display
     document.getElementById('spd-user-name').textContent = name;
     
-    toast('Profile Saved! ✅', 'Your changes are now live.', 'success');
+    toast('Profile Saved! âœ…', 'Your changes are now live.', 'success');
   } catch(e) {
     toast('Save Failed', e.message, 'error');
   }
 }
 
 // ====================================================
-//  SERVICE PROVIDER — Load My Gigs (Portfolio)
+//  SERVICE PROVIDER â€” Load My Gigs (Portfolio)
 // ====================================================
 async function loadMyGigs() {
   if (!currentUser) return;
@@ -6261,14 +6297,14 @@ async function loadMyGigs() {
             <div style="display:flex;justify-content:space-between;align-items:start;gap:.5rem">
               <div>
                 <div style="font-weight:700;font-size:.92rem">${escHtml(g.title)}</div>
-                <div style="font-size:.72rem;color:var(--text3);margin-top:.15rem">${escHtml(g.category)} · ${escHtml(g.location || '—')}</div>
+                <div style="font-size:.72rem;color:var(--text3);margin-top:.15rem">${escHtml(g.category)} Â· ${escHtml(g.location || 'â€”')}</div>
               </div>
               <span class="badge ${g.status==='active'?'badge-green':'badge-red'}">${g.status}</span>
             </div>
             <p style="font-size:.78rem;color:var(--text2);margin-top:.4rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45">${escHtml(g.description || 'No description')}</p>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:.6rem">
               <div style="display:flex;align-items:center;gap:.75rem">
-                <span style="font-weight:800;color:var(--green);font-size:.95rem">₦${(g.starting_rate||0).toLocaleString()}</span>
+                <span style="font-weight:800;color:var(--green);font-size:.95rem">â‚¦${(g.starting_rate||0).toLocaleString()}</span>
                 ${imgCount > 0 ? `<span style="font-size:.7rem;color:var(--text3)"><i class="fa-solid fa-images"></i> ${imgCount} photo${imgCount>1?'s':''}</span>` : ''}
               </div>
               <button class="btn btn-ghost btn-sm" style="color:var(--red);font-size:.72rem" onclick="deleteGig('${g.id}')">
@@ -6296,7 +6332,7 @@ async function deleteGig(gigId) {
 }
 
 // ====================================================
-//  SERVICE PROVIDER — Publish Gig (with Image Upload)
+//  SERVICE PROVIDER â€” Publish Gig (with Image Upload)
 // ====================================================
 async function publishServiceGig() {
   if (!currentUser) { showModal('auth-modal'); return; }
@@ -6342,7 +6378,7 @@ async function publishServiceGig() {
     });
     if (error) throw error;
 
-    toast('Service Published! 🎉', 'Your gig is now live on BUYSELL', 'success');
+    toast('Service Published! ðŸŽ‰', 'Your gig is now live on BUYSELL', 'success');
     ['spd-title','spd-rate','spd-location','spd-desc','spd-wa'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
@@ -6357,7 +6393,7 @@ async function publishServiceGig() {
 }
 
 // ====================================================
-//  SERVICE PROVIDER — Image Preview
+//  SERVICE PROVIDER â€” Image Preview
 // ====================================================
 document.addEventListener('DOMContentLoaded', () => {
   const imgInput = document.getElementById('spd-images');
@@ -6527,7 +6563,7 @@ async function adminApproveKyc(kycId, userId) {
         seller_verified: true,
       }, { id: userId });
     }
-    toast('KYC Approved ✅', 'Seller is now verified.', 'success');
+    toast('KYC Approved âœ…', 'Seller is now verified.', 'success');
     loadAdminKyc();
   } catch(e) { toast('Error', e.message, 'error'); }
 }
@@ -6562,7 +6598,7 @@ async function submitKycLegacy(event) {
   event.preventDefault();
   if (!currentUser) { showModal('auth-modal'); return; }
   const btn = document.getElementById('kyc-submit-btn');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting…';
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submittingâ€¦';
 
   try {
     const docType = document.getElementById('kyc-doc-type').value;
@@ -6605,7 +6641,7 @@ async function submitKycLegacy(event) {
       status: 'pending'
     });
 
-    toast('KYC Submitted! 🎉', 'Your documents are under review.', 'success');
+    toast('KYC Submitted! ðŸŽ‰', 'Your documents are under review.', 'success');
     await db.from('profiles').update({ kyc_status: 'pending' }).eq('id', currentUser.id).then(() => {}).catch(() => {});
     currentUser.profile = { ...(currentUser.profile || {}), kyc_status: 'pending' };
     closeModal('kyc-modal');
@@ -6721,7 +6757,7 @@ async function submitKyc(event) {
 // ====================================================
 async function exportAdminReport() {
   if (!guardAdminPanel()) return;
-  toast('Generating…', 'Preparing your CSV report', 'info');
+  toast('Generatingâ€¦', 'Preparing your CSV report', 'info');
   try {
     const [{ data: sellers }, { data: orders }] = await Promise.all([
       db.from('profiles').select('*').eq('role', 'seller'),
@@ -6742,7 +6778,7 @@ async function exportAdminReport() {
     const a = document.createElement('a');
     a.href = url; a.download = `buysell_report_${new Date().toISOString().slice(0,10)}.csv`;
     a.click(); URL.revokeObjectURL(url);
-    toast('Report Downloaded ✅', '', 'success');
+    toast('Report Downloaded âœ…', '', 'success');
   } catch(e) { toast('Export Error', e.message, 'error'); }
 }
 
@@ -6789,7 +6825,7 @@ function toggleWishlist(productId, event) {
     toast('Removed', 'Removed from wishlist', 'info');
   } else {
     wishlist.push(productId);
-    toast('Added ❤️', 'Saved to wishlist', 'success');
+    toast('Added â¤ï¸', 'Saved to wishlist', 'success');
   }
   
   saveWishlist();
@@ -6842,8 +6878,8 @@ async function showWishlistModal() {
         <div style="flex:1">
           <div class="font-600 text-sm">${escHtml(p.name)}</div>
           <div class="color-green font-bold text-sm">
-             ${isFlashActive ? `<span style="color:var(--red); font-size:0.7rem">⚡</span> ` : ''}
-             ₦${fmtN(displayPrice)}
+             ${isFlashActive ? `<span style="color:var(--red); font-size:0.7rem">âš¡</span> ` : ''}
+             â‚¦${fmtN(displayPrice)}
           </div>
         </div>
         <div style="display:flex; gap:5px">
@@ -6888,7 +6924,7 @@ async function showCompareModal() {
     html += '</tr></thead><tbody>';
     fields.forEach(f => {
       html += `<tr><td class="font-bold text-xs">${f.charAt(0).toUpperCase()+f.slice(1)}</td>`;
-      items.forEach(p => { html += `<td class="text-sm">${f==='price' ? '₦'+fmtN(p[f]) : escHtml(String(p[f]||'N/A'))}</td>`; });
+      items.forEach(p => { html += `<td class="text-sm">${f==='price' ? 'â‚¦'+fmtN(p[f]) : escHtml(String(p[f]||'N/A'))}</td>`; });
       html += '</tr>';
     });
     html += '</tbody></table>';
@@ -7316,7 +7352,7 @@ async function createCoupon() {
         expires_at: expires,
       },
     });
-    toast('Coupon Created! 🎫', `Code: ${code}`, 'success');
+    toast('Coupon Created! ðŸŽ«', `Code: ${code}`, 'success');
     loadSellerCoupons();
     document.getElementById('coupon-new-code').value = '';
     document.getElementById('coupon-value').value = '';
@@ -7446,7 +7482,7 @@ async function createFlashSale() {
 
     if (error) throw error;
 
-    toast('Flash Sale Live! ⚡', `Sale ends in ${hours} hours`, 'success');
+    toast('Flash Sale Live! âš¡', `Sale ends in ${hours} hours`, 'success');
     
     // 3. Clear the form
     document.getElementById('flash-price').value = '';
@@ -7528,7 +7564,7 @@ async function loadFlashSaleProducts() {
     // Build the dropdown options
     selectEl.innerHTML = '<option value="">Select a product...</option>' + 
       products.map(p => 
-        `<option value="${p.id}">${escHtml(p.name)} (₦${fmtNum(p.price)})</option>`
+        `<option value="${p.id}">${escHtml(p.name)} (â‚¦${fmtNum(p.price)})</option>`
       ).join('');
       
   } catch(e) {
@@ -7594,22 +7630,28 @@ function renderSellerAdsTable(ads) {
 }
 
 async function syncUserNotificationToken() {
-  if (!currentUser || !('Notification' in window) || !('PushManager' in window)) return;
+  if (!currentUser || !('Notification' in window) || !('PushManager' in window) || !('serviceWorker' in navigator)) return;
 
   try {
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') return;
 
+    await navigator.serviceWorker.register('/sw.js', { scope: '/' });
     const registration = await navigator.serviceWorker.ready;
     let subscription = await registration.pushManager.getSubscription();
+    const VAPID_PUBLIC_KEY = "BHy42JVEzqL40I-Mhvu9dRK8Ewov4GSFKy5IIcsOKgerR-Z8DE_9WNc1N1GPShB0XF3fnjOwz2XpNtf4fdoOn50";
+    const vapidKeyBytes = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+
+    if (subscription && !pushSubscriptionUsesKey(subscription, vapidKeyBytes)) {
+      await subscription.unsubscribe();
+      subscription = null;
+    }
 
     // If no active device subscription vector exists, create a new one
     if (!subscription) {
-      // NOTE: You can generate a custom VAPID public key via online generator lines
-      const VAPID_PUBLIC_KEY = "BHy42JVEzqL40I-Mhvu9dRK8Ewov4GSFKy5IIcsOKgerR-Z8DE_9WNc1N1GPShB0XF3fnjOwz2XpNtf4fdoOn50"; 
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: VAPID_PUBLIC_KEY
+        applicationServerKey: vapidKeyBytes
       });
     }
 
@@ -7619,10 +7661,49 @@ async function syncUserNotificationToken() {
       updated_at: new Date().toISOString()
     }).eq('id', currentUser.id);
 
+    try {
+      await db.from('push_subscriptions').upsert({
+        user_id: currentUser.id,
+        endpoint: subscription.endpoint,
+        subscription: subscription.toJSON ? subscription.toJSON() : JSON.parse(JSON.stringify(subscription)),
+        user_agent: navigator.userAgent,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'endpoint' });
+    } catch (tableErr) {
+      console.warn('[PUSH ENGINE] Multi-device subscription table unavailable:', tableErr.message || tableErr);
+    }
+
     console.log('[PUSH ENGINE] Device token synchronized securely with database schema keys.');
   } catch (err) {
     console.warn('[PUSH ENGINE] Registration token sync bypassed: ', err.message);
   }
+}
+
+function pushSubscriptionUsesKey(subscription, expectedKey) {
+  const currentKey = subscription?.options?.applicationServerKey;
+  if (!currentKey) return true;
+
+  const currentBytes = new Uint8Array(currentKey);
+  if (currentBytes.length !== expectedKey.length) return false;
+
+  for (let i = 0; i < currentBytes.length; i++) {
+    if (currentBytes[i] !== expectedKey[i]) return false;
+  }
+
+  return true;
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+
+  return outputArray;
 }
 
 async function loadActiveAds() {
@@ -7699,7 +7780,7 @@ async function initiateAdPayment() {
   // -------------------------
 
   const btn = document.getElementById('ad-pay-btn');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processing…';
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processingâ€¦';
 
   try {
     let mediaUrl = '';
@@ -7841,12 +7922,15 @@ function renderAdPopup() {
 // ====================================================
 //  NOTIFICATIONS
 // ====================================================
-function requestNotificationPermission() {
-  if (!('Notification' in window)) { toast('Not Supported', 'Your browser doesn\'t support notifications', 'warn'); return; }
-  Notification.requestPermission().then(perm => {
-    if (perm === 'granted') toast('Notifications Enabled 🔔', 'You will receive alerts', 'success');
-    else toast('Denied', 'Notifications were blocked', 'warn');
-  });
+async function requestNotificationPermission() {
+  if (!('Notification' in window)) { toast('Not Supported', "Your browser doesn't support notifications", 'warn'); return; }
+  const perm = await Notification.requestPermission();
+  if (perm === 'granted') {
+    await syncUserNotificationToken();
+    toast('Notifications Enabled', 'This device will receive alerts', 'success');
+  } else {
+    toast('Denied', 'Notifications were blocked on this device', 'warn');
+  }
 }
 
 function testNotification() {
@@ -7883,7 +7967,7 @@ async function submitServiceReview() {
       comment: text,
       type: 'service'
     });
-    toast('Review Submitted! ⭐', 'Thank you for your feedback', 'success');
+    toast('Review Submitted! â­', 'Thank you for your feedback', 'success');
     closeModal('service-review-modal');
     svcRating = 0;
   } catch(e) { toast('Error', e.message, 'error'); }
@@ -7932,6 +8016,5 @@ function setLanguage(lang) {
 // BULLETPROOF AUTH HEADER SYNC
 // ==========================================
 // =================================================================
-// 🚀 BUYSELL NIGERIA UNIFIED AUTH HEADER SYNCHRONIZATION ENGINE
+// ðŸš€ BUYSELL NIGERIA UNIFIED AUTH HEADER SYNCHRONIZATION ENGINE
 // =================================================================
-
