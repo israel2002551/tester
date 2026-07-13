@@ -29,11 +29,11 @@
       </p>
       
       <div class="bs-hero__ctas bs-reveal">
-        <a href="#landing" class="bs-btn bs-btn--primary bs-scroll-link">
+        <button type="button" class="bs-btn bs-btn--primary" onclick="enterSite('buyer')">
           <span>Enter Marketplace</span>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-        </a>
-        <button class="bs-btn bs-btn--ghost" onclick="showModal('auth-modal'); toggleAuth('signup'); selectRole('seller');">
+        </button>
+        <button type="button" class="bs-btn bs-btn--ghost" onclick="showModal('auth-modal'); toggleAuth('signup'); selectRole('seller');">
           <span>Open Your Store — Free</span>
         </button>
       </div>
@@ -88,8 +88,8 @@
         <p class="bs-section-sub">Whether you're buying your next fit or launching your brand — we made transactions swift and simple.</p>
       </div>
       <div class="bs-how__toggle bs-reveal">
-        <button class="bs-how__tab bs-active" data-tab="buyer">I'm a Buyer</button>
-        <button class="bs-how__tab" data-tab="seller">I'm a Seller</button>
+        <button type="button" class="bs-how__tab bs-active" data-tab="buyer">I'm a Buyer</button>
+        <button type="button" class="bs-how__tab" data-tab="seller">I'm a Seller</button>
       </div>
       <div class="bs-how__flow bs-active" data-flow="buyer">
         <div class="bs-step bs-reveal"><div class="bs-step__num">01</div><div class="bs-step__icon">🔍</div><h3>Browse & Discover</h3><p>Explore thousands of verified products from trusted Nigerian sellers.</p></div>
@@ -122,7 +122,7 @@
             <div class="bs-video-showcase__feature"><div class="bs-video-showcase__feature-icon">✓</div> Safe and instant in-app chat communication</div>
             <div class="bs-video-showcase__feature"><div class="bs-video-showcase__feature-icon">✓</div> Swift delivery across covered regions in 2-3 days</div>
           </div>
-          <button class="bs-btn bs-btn--primary" onclick="showModal('auth-modal'); toggleAuth('signup');">
+          <button type="button" class="bs-btn bs-btn--primary" onclick="showModal('auth-modal'); toggleAuth('signup');">
             <span>Start Free Today</span>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
           </button>
@@ -344,9 +344,9 @@
         <h2>Ready to make swift transactions?</h2>
         <p>Join thousands of Nigerian users executing secure trade daily on BUYSELL.</p>
         <div class="bs-final-cta__alt">
-          <a href="#main-nav" class="bs-btn bs-btn--ghost bs-scroll-link" onclick="enterSite('buyer');">
+          <button type="button" class="bs-btn bs-btn--ghost" onclick="enterSite('buyer')">
             <span>Explore Marketplace Now</span>
-          </a>
+          </button>
         </div>
       </div>
     </div>
