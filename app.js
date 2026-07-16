@@ -7679,16 +7679,21 @@ function renderSellerAdsTable(ads) {
 }
 
 async function syncUserNotificationToken() {
- if (!currentUser || !('Notification' in window) || !('PushManager' in window) || !('serviceWorker' in navigator)) return;
+ if (!currentUser) throw new Error('Sign in before enabling notifications.');
+ if (!('Notification' in window) || !('PushManager' in window) || !('serviceWorker' in navigator)) {
+ throw new Error('Notifications are not supported on this device.');
+ }
 
  try {
- const permission = await Notification.requestPermission();
- if (permission !== 'granted') return;
+ if (Notification.permission !== 'granted') {
+ throw new Error('Notification permission was not granted.');
+ }
 
- await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+ const registrationResult = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+ if (registrationResult.waiting) await registrationResult.update().catch(() => {});
  const registration = await navigator.serviceWorker.ready;
  let subscription = await registration.pushManager.getSubscription();
- const VAPID_PUBLIC_KEY = "BCG8HOWX8Aqahxj9Uo-2zRdTD3YAMsyaYhbKdWyj0bJnDsNJAU-Z-pOdR6NOdLbFcPB3r5_0zebkzm6N7aiQDCY";
+ const VAPID_PUBLIC_KEY = "BHy42JVEzqL40I-Mhvu9dRK8Ewov4GSFKy5IIcsOKgerR-Z8DE_9WNc1N1GPShB0XF3fnjOwz2XpNtf4fdoOn50";
  const vapidKeyBytes = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
 
  if (subscription && !pushSubscriptionUsesKey(subscription, vapidKeyBytes)) {
@@ -7704,27 +7709,44 @@ async function syncUserNotificationToken() {
  });
  }
 
- // Upsert token registration matrix to user profiles table tracking strings
- await db.from('profiles').update({
- push_subscription_token: JSON.stringify(subscription),
- updated_at: new Date().toISOString()
- }).eq('id', currentUser.id);
+ const subscriptionJson = subscription.toJSON ? subscription.toJSON() : JSON.parse(JSON.stringify(subscription));
+ let saved = false;
+ let lastError = null;
 
  try {
- await db.from('push_subscriptions').upsert({
+ const { error: tableError } = await db.from('push_subscriptions').upsert({
  user_id: currentUser.id,
  endpoint: subscription.endpoint,
- subscription: subscription.toJSON ? subscription.toJSON() : JSON.parse(JSON.stringify(subscription)),
+ subscription: subscriptionJson,
  user_agent: navigator.userAgent,
  updated_at: new Date().toISOString()
  }, { onConflict: 'endpoint' });
+ if (tableError) throw tableError;
+ saved = true;
  } catch (tableErr) {
+ lastError = tableErr;
  console.warn('[PUSH ENGINE] Multi-device subscription table unavailable:', tableErr.message || tableErr);
  }
 
+ try {
+ const { error: profileError } = await db.from('profiles').update({
+ push_subscription_token: JSON.stringify(subscriptionJson),
+ updated_at: new Date().toISOString()
+ }).eq('id', currentUser.id);
+ if (profileError) throw profileError;
+ saved = true;
+ } catch (profileErr) {
+ lastError = profileErr;
+ console.warn('[PUSH ENGINE] Legacy profile subscription save unavailable:', profileErr.message || profileErr);
+ }
+
+ if (!saved) throw lastError || new Error('Unable to save notification subscription.');
+
  console.log('[PUSH ENGINE] Device token synchronized securely with database schema keys.');
+ return subscriptionJson;
  } catch (err) {
- console.warn('[PUSH ENGINE] Registration token sync bypassed: ', err.message);
+ console.warn('[PUSH ENGINE] Registration token sync failed: ', err.message || err);
+ throw err;
  }
 }
 
@@ -8003,9 +8025,16 @@ function updateNotificationButtonState() {
 
 async function requestNotificationPermission() {
  if (!('Notification' in window)) { toast('Not Supported', "Your browser doesn't support notifications", 'warn'); return; }
- const perm = await Notification.requestPermission();
+ if (!currentUser) { toast('Sign In Required', 'Please sign in before enabling notifications.', 'warn'); return; }
+ const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
  if (perm === 'granted') {
+ try {
  await syncUserNotificationToken();
+ } catch (error) {
+ updateNotificationButtonState();
+ toast('Notifications Not Saved', error.message || 'Could not save this device for notifications.', 'error');
+ return;
+ }
  updateNotificationButtonState();
  toast('Notifications Enabled', 'This device will receive alerts', 'success');
  } else {
@@ -8014,12 +8043,26 @@ async function requestNotificationPermission() {
  }
 }
 
-function testNotification() {
- if (Notification.permission === 'granted') {
- new Notification('BUYSELL Nigeria', { body: 'This is a test notification!', icon: '/favicon.ico' });
- toast('Sent!', 'Check your notification area', 'success');
- } else {
+async function testNotification() {
+ if (!('Notification' in window)) { toast('Not Supported', "Your browser doesn't support notifications", 'warn'); return; }
+ if (Notification.permission !== 'granted') {
  requestNotificationPermission();
+ return;
+ }
+
+ try {
+ await syncUserNotificationToken();
+ const registration = await navigator.serviceWorker.ready;
+ await registration.showNotification('BUYSELL Nigeria', {
+ body: 'Notifications are working on this device.',
+ icon: '/favicon.ico',
+ badge: '/favicon.ico',
+ data: { url: '/' },
+ tag: 'buysell-test-notification',
+ });
+ toast('Sent!', 'Check your notification area', 'success');
+ } catch (error) {
+ toast('Test Failed', error.message || 'Could not show a test notification.', 'error');
  }
 }
 
