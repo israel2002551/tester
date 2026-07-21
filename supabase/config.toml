@@ -1,0 +1,11 @@
+[functions.send-broadcast]
+verify_jwt = false
+
+[functions.notify-new-product]
+verify_jwt = false
+
+[functions.notify-seller-order]
+verify_jwt = false
+
+[functions.notify-product-digest]
+verify_jwt = false

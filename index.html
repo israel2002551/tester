@@ -3,9 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>BUYSELL Nigeria | Premium Marketplace</title>
+<title>BUYSELL Nigeria | Buy, Sell, and Manage Orders</title>
 <link rel="icon" href="data:,">
-<meta name="description" content="Nigeria's #1 marketplace. Buy, sell, dropship & earn affiliate income.">
+<meta name="description" content="Buy and sell with verified sellers, online payments, product videos, chat, and order tracking.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://buysell-markerplace.com/">
+<meta property="og:title" content="BUYSELL Nigeria | Buy, Sell, and Manage Orders">
+<meta property="og:description" content="Buy and sell with verified sellers, online payments, product videos, chat, and order tracking.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://buysell-markerplace.com/">
+<meta property="og:site_name" content="BUYSELL Nigeria">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#0b1f14">
  
 <!-- PWA Manifest injected by JS below -->
@@ -31,7 +39,7 @@
 </script>
  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<link rel="stylesheet" href="styles.css?v=7.6">
+<link rel="stylesheet" href="styles.css?v=7.7">
 </head>
 <body>
 
@@ -65,16 +73,16 @@
  <main class="landing-main">
  <div class="landing-inner">
  <div class="landing-tagline">
- <div class="pre-badge"><i class="fa-solid fa-bolt"></i> Nigeria's #1 Seller-First Marketplace</div>
- <h1>Buy, Sell & Earn - <br><em>The Nigerian Way</em></h1>
- <p>Authentic products, secure Paystack payments, dropshipping & affiliate income. All in one platform.</p>
+ <div class="pre-badge"><i class="fa-solid fa-store"></i> Marketplace tools for buyers and sellers</div>
+ <h1>Buy, sell, and manage orders <br><em>in one place</em></h1>
+ <p>Browse products, pay online, message sellers, and track order progress without switching between different apps.</p>
  </div>
  <div class="portal-grid" id="portal-grid">
  <div class="portal-card buyer-card delay-1" onclick="enterSite('buyer')">
  <span class="portal-badge">Most Popular</span>
  <div class="portal-icon buyer-icon"><i class="fa-solid fa-shopping-bag" style="color:#fff"></i></div>
  <h2>I'm a Buyer</h2>
- <p>Discover authentic products from verified Nigerian sellers. Pay securely through Paystack checkout.</p>
+ <p>Browse products from verified Nigerian sellers, check details, and pay through Paystack checkout.</p>
  <div class="portal-features">
  <div class="portal-feat"><i class="fa-solid fa-shield-alt"></i> Buyer Protection</div>
  <div class="portal-feat"><i class="fa-solid fa-credit-card"></i> Paystack Secure</div>
@@ -86,7 +94,7 @@
  <span class="portal-badge">1 Month FREE</span>
  <div class="portal-icon seller-icon"><i class="fa-solid fa-store" style="color:#fff"></i></div>
  <h2>I'm a Seller</h2>
- <p>Open your store FREE for 1 month! List products with videos, dropship globally, earn affiliate income.</p>
+ <p>Open your store for the first month, add products with videos, manage orders, and track sales from your dashboard.</p>
  <div class="portal-features">
  <div class="portal-feat"><i class="fa-solid fa-chart-line"></i> Sales Analytics</div>
  <div class="portal-feat"><i class="fa-solid fa-globe"></i> Dropshipping</div>
@@ -116,6 +124,10 @@
  <div class="trust-pill"><i class="fa-solid fa-credit-card"></i> Paystack Payments</div>
  <div class="trust-pill"><i class="fa-brands fa-whatsapp"></i> 24/7 Support</div>
  <div class="trust-pill"><i class="fa-solid fa-shield-alt"></i> Buyer Protection</div>
+ <a class="legal-footer-link" href="terms.html">Terms of Service</a>
+ <a class="legal-footer-link" href="privacy.html">Privacy Policy</a>
+ <a class="legal-footer-link" href="https://chat.whatsapp.com/LbqLGlmpqwbJqDEmj6FUPW?s=cl&amp;p=a&amp;ilr=1" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-whatsapp"></i> Community</a>
+ <a class="legal-footer-link" href="https://youtube.com/@buysellmarketplacenigeria?si=hz5EL1weqka8ikG1" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-youtube"></i> YouTube</a>
  </footer>
 </div>
 
@@ -133,6 +145,10 @@
  <button class="search-btn" onclick="doSearch()" aria-label="Search"><i class="fa-solid fa-search"></i></button>
  </div>
  <div class="nav-actions">
+ <a class="nav-legal-link" href="terms.html">Terms</a>
+ <a class="nav-legal-link" href="privacy.html">Privacy</a>
+ <a class="nav-legal-link" href="https://chat.whatsapp.com/LbqLGlmpqwbJqDEmj6FUPW?s=cl&amp;p=a&amp;ilr=1" target="_blank" rel="noopener noreferrer">Community</a>
+ <a class="nav-legal-link" href="https://youtube.com/@buysellmarketplacenigeria?si=hz5EL1weqka8ikG1" target="_blank" rel="noopener noreferrer">YouTube</a>
  <div id="nav-auth-btns">
  <button class="btn btn-primary btn-sm" id="nav-auth-inner-btn" onclick="showModal('auth-modal');toggleAuth('login')">Sign In</button>
  </div>
@@ -152,7 +168,7 @@
  <i class="fa-solid fa-cart-shopping"></i>
  <span class="cart-badge" id="cart-count">0</span>
  </div>
- <div class="nav-avatar" onclick="showProfile()" title="Profile"><i class="fa-solid fa-user" id="nav-avatar-inner"></i></div>
+ <div class="nav-avatar" onclick="showProfile()" title="Account"><i class="fa-solid fa-user" id="nav-avatar-inner"></i></div>
  <button class="btn btn-primary btn-sm" id="toggle-view-btn" onclick="toggleView()">
  <i class="fa-solid fa-store" id="toggle-view-icon"></i>
  <span id="toggle-view-text">Seller Dashboard</span>
@@ -161,6 +177,37 @@
  </div>
  </div>
 </nav>
+
+<!-- ==================== ACCOUNT PAGE ==================== -->
+<div id="account-view" class="hidden app-page">
+ <main class="account-page-shell">
+ <section class="account-page-card">
+ <div class="account-page-head">
+ <div>
+ <p class="section-meta">Account</p>
+ <h1 class="dash-page-title">Your Account</h1>
+ <p class="dash-page-sub" id="account-page-email">Manage your BUYSELL profile and privacy choices.</p>
+ </div>
+ <button class="btn btn-outline btn-sm" onclick="returnToPreviousAppView()"><i class="fa-solid fa-arrow-left"></i> Back</button>
+ </div>
+ <div class="account-summary-grid">
+ <div class="account-summary-item"><span>Name</span><strong id="account-page-name">-</strong></div>
+ <div class="account-summary-item"><span>Role</span><strong id="account-page-role">Buyer</strong></div>
+ </div>
+ <div class="legal-inline-links">
+ <a href="terms.html"><i class="fa-solid fa-file-contract"></i> Terms of Service</a>
+ <a href="privacy.html"><i class="fa-solid fa-shield-halved"></i> Privacy Policy</a>
+ <a href="https://chat.whatsapp.com/LbqLGlmpqwbJqDEmj6FUPW?s=cl&amp;p=a&amp;ilr=1" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-whatsapp"></i> Community</a>
+ <a href="https://youtube.com/@buysellmarketplacenigeria?si=hz5EL1weqka8ikG1" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-youtube"></i> YouTube</a>
+ </div>
+ <div class="danger-zone">
+ <h2><i class="fa-solid fa-triangle-exclamation"></i> Delete Account</h2>
+ <p>This permanently removes your login account and personal profile. Marketplace records needed for completed orders may be retained for legal, fraud-prevention, and accounting purposes.</p>
+ <button class="btn btn-danger" id="delete-account-btn" onclick="deleteMyAccount()"><i class="fa-solid fa-user-slash"></i> Delete My Account</button>
+ </div>
+ </section>
+ </main>
+</div>
 
 <!-- ==================== BUYER VIEW ==================== -->
 <div id="buyer-view" class="hidden">
@@ -380,7 +427,7 @@
  <div>
  <h1 class="sf-name" id="sf-name">Store Name</h1>
  <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.65rem">
- <span class="badge badge-verified"><i class="fa-solid fa-check"></i> Verified Seller</span>
+  <span class="badge badge-verified" id="sf-store-badge"><i class="fa-solid fa-check"></i> Verified Seller</span>
  <div class="stars" id="sf-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
  <span class="text-xs" style="color:rgba(255,255,255,.5)" id="sf-review-count">0 reviews</span>
  </div>
@@ -440,7 +487,7 @@
  <div class="dash-nav-section">
  <div class="dash-nav-label">Finance</div>
  <a class="dash-nav-item" onclick="showDash('withdrawals');closeMobSidebar()"><i class="fa-solid fa-exchange-alt"></i> Withdrawals</a>
- <a class="dash-nav-item" onclick="showDash('commission');closeMobSidebar()"><i class="fa-solid fa-coins"></i> Commission</a>
+ <a class="dash-nav-item" onclick="showDash('commission');closeMobSidebar()"><i class="fa-solid fa-circle-check"></i> Free Access</a>
  </div>
  <div class="dash-nav-section">
  <div class="dash-nav-label">Account</div>
@@ -461,14 +508,21 @@
  <main class="dash-main">
  <!-- OVERVIEW -->
  <div id="ds-overview" class="dash-section active">
- <h1 class="dash-page-title">Dashboard Overview</h1>
- <p class="dash-page-sub">Welcome back! Here's your store at a glance.</p>
+  <h1 class="dash-page-title" id="dash-overview-title">Dashboard Overview</h1>
+  <p class="dash-page-sub" id="dash-overview-sub">Welcome back! Here's your store at a glance.</p>
+  <div class="platform-store-notice hidden" id="platform-store-notice">
+  <div class="platform-store-notice-icon"><i class="fa-solid fa-shield-halved"></i></div>
+  <div>
+  <h2>Official Platform Store</h2>
+  <p>Products posted from this admin seller workspace are marked separately for buyers as BUYSELL Platform Store listings.</p>
+  </div>
+  </div>
  <div class="stats-grid">
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-box" style="color:var(--green)"></i></div><span class="stat-trend">+12%</span></div><div class="stat-value" id="st-products">0</div><div class="stat-label">Active Products</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-coins" style="color:var(--gold)"></i></div><span class="stat-trend">+8%</span></div><div class="stat-value" id="st-revenue">&#8358;0</div><div class="stat-label">Total Revenue</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#ede9fe"><i class="fa-solid fa-receipt" style="color:var(--purple)"></i></div><span class="stat-trend">+5%</span></div><div class="stat-value" id="st-orders">0</div><div class="stat-label">Total Orders</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dbeafe"><i class="fa-solid fa-star" style="color:var(--blue)"></i></div></div><div class="stat-value" id="st-rating"> - </div><div class="stat-label">Avg Rating</div></div>
- <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#ffedd5"><i class="fa-solid fa-calendar" style="color:#ea580c"></i></div></div><div class="stat-value" style="font-size:.95rem" id="st-trial">Free Trial</div><div class="stat-label" id="st-days"> - days left</div></div>
+ <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-circle-check" style="color:var(--green)"></i></div></div><div class="stat-value" style="font-size:.95rem" id="st-trial">Free</div><div class="stat-label" id="st-days">Seller Access</div></div>
  </div>
  <!-- Sales chart -->
  <div class="chart-card mb-4">
@@ -508,7 +562,7 @@
 
  <!-- ADD PRODUCT -->
  <div id="ds-add-product" class="dash-section">
- <h1 class="dash-page-title">Add New Product</h1>
+ <h1 class="dash-page-title" id="dash-add-product-title">Add New Product</h1>
  <p class="dash-page-sub">Products with videos get 3x more sales! </p>
  <div class="card card-pad-lg" style="max-width:650px">
  <form id="add-prod-form" onsubmit="submitProduct(event)">
@@ -745,23 +799,18 @@
 
  <!-- COMMISSION -->
  <div id="ds-commission" class="dash-section">
- <h1 class="dash-page-title">Platform Commission</h1>
- <p class="dash-page-sub">&#8358;2,500 after your 1-month free trial</p>
+ <h1 class="dash-page-title">Free Seller Access</h1>
+ <p class="dash-page-sub">Sellers can use BUYSELL without monthly subscription fees.</p>
  <div class="commission-box">
- <div class="commission-icon-wrap"><i class="fa-solid fa-dollar-sign"></i></div>
- <h2 style="text-align:center;margin-bottom:.28rem">Commission Payment</h2>
- <p style="text-align:center;color:var(--text3);margin-bottom:1.1rem">Keep your store active after the free trial</p>
+ <div class="commission-icon-wrap"><i class="fa-solid fa-circle-check"></i></div>
+ <h2 style="text-align:center;margin-bottom:.28rem">Your Store Is Free</h2>
+ <p style="text-align:center;color:var(--text3);margin-bottom:1.1rem">Publish products, manage orders, and receive buyer messages without paying a subscription.</p>
  <div class="bank-details-box" style="margin-bottom:1.1rem">
  <div class="bank-row"><span class="bk-label">Status</span><span id="comm-status-badge" class="badge badge-green">Active</span></div>
- <div class="bank-row"><span class="bk-label">Trial Ends</span><span class="bk-value" id="comm-trial-end"> - </span></div>
- <div class="bank-row"><span class="bk-label">Amount Due</span><span class="bk-value color-gold" style="font-size:1.05rem">&#8358;2,500</span></div>
- <hr class="divider">
- <div class="bank-row"><span class="bk-label">Bank</span><span class="bk-value">OPay</span></div>
- <div class="bank-row"><span class="bk-label">Account Number</span><span class="bk-value" style="color:var(--green);font-size:1rem">9061484256</span></div>
- <div class="bank-row"><span class="bk-label">Account Name</span><span class="bk-value">Efe Israel</span></div>
+ <div class="bank-row"><span class="bk-label">Expiry</span><span class="bk-value" id="comm-trial-end">No expiry</span></div>
+ <div class="bank-row"><span class="bk-label">Amount Due</span><span class="bk-value color-green" style="font-size:1.05rem">&#8358;0</span></div>
  </div>
- <button class="btn btn-paystack btn-full mb-2" onclick="payCommissionPaystack()"><i class="fa-solid fa-credit-card"></i> Pay &#8358;2,500 via Paystack</button>
- <button class="btn btn-outline btn-full" onclick="showModal('commission-modal')"><i class="fa-solid fa-upload"></i> Upload Bank Transfer Receipt</button>
+ <button class="btn btn-primary btn-full" onclick="showDash('add-product')"><i class="fa-solid fa-plus"></i> Add Product</button>
  </div>
  </div>
 
@@ -855,10 +904,15 @@
  <p style="font-size:.78rem;color:var(--text3);margin-bottom:.85rem">Your public Paystack key to receive card payments from buyers.</p>
  <div class="form-group"><label class="form-label">Paystack Public Key</label><input type="text" id="s-paystack-key" class="form-input" placeholder="pk_live_xxxxxxxxxxxx"></div>
  </div>
- <button type="submit" class="btn btn-primary btn-full" id="settings-save-btn"><i class="fa-solid fa-floppy-disk"></i> Save All Settings</button>
- </form>
- </div>
- </div>
+  <button type="submit" class="btn btn-primary btn-full" id="settings-save-btn"><i class="fa-solid fa-floppy-disk"></i> Save All Settings</button>
+  </form>
+  </div>
+  <div class="card card-pad-lg danger-zone-card">
+  <h3><i class="fa-solid fa-triangle-exclamation"></i> Delete Account</h3>
+  <p class="text-xs color-text3 mb-3">Permanently remove your BUYSELL login account and personal profile. Completed transaction records may be retained where legally required.</p>
+  <button class="btn btn-danger btn-full" onclick="deleteMyAccount()"><i class="fa-solid fa-user-slash"></i> Delete My Account</button>
+  </div>
+  </div>
 
  <!-- SUPPORT -->
  <div id="ds-support" class="dash-section">
@@ -867,7 +921,7 @@
  <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr));margin-bottom:1rem">
  <div class="card card-pad">
  <h3 class="mb-1" style="font-size:.95rem"><i class="fa-solid fa-user-shield color-green"></i> Message Admin</h3>
- <p class="text-xs color-text3 mb-3">Get help with KYC, commission receipts, listings, orders, disputes, and payouts.</p>
+ <p class="text-xs color-text3 mb-3">Get help with KYC, listings, orders, disputes, payouts, and store settings.</p>
  <button class="btn btn-primary btn-sm" onclick="openAdminSupportChat('Hello Admin Support, I need help with my seller account.')"><i class="fa-solid fa-comment-dots"></i> Start Chat</button>
  </div>
  <div class="card card-pad">
@@ -958,7 +1012,7 @@
  <button class="cb-quick-btn" onclick="askAdminBot('Summarise platform performance this month')">" Performance</button>
  <button class="cb-quick-btn" onclick="askAdminBot('How should I handle a seller dispute?')"><i class="fa-solid fa-scale-balanced"></i> Disputes</button>
  <button class="cb-quick-btn" onclick="askAdminBot('Give me 5 growth strategies for BUYSELL Nigeria')"> Growth</button>
- <button class="cb-quick-btn" onclick="askAdminBot('What commission pricing is best for Nigerian marketplaces?')">' Pricing</button>
+ <button class="cb-quick-btn" onclick="askAdminBot('What growth and trust improvements should we prioritize for this marketplace?')">Growth Ideas</button>
  </div>
  <div style="display:flex;gap:.5rem">
  <input type="text" id="admin-ai-input" class="form-input" placeholder="Ask anything about your platform..." onkeypress="if(event.key==='Enter')askAdminBot()">
@@ -973,9 +1027,9 @@
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dbeafe"><i class="fa-solid fa-users" style="color:var(--blue)"></i></div></div><div class="stat-value" id="adm-total-buyers">0</div><div class="stat-label">Total Buyers</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-coins" style="color:var(--gold)"></i></div></div><div class="stat-value color-green" id="adm-revenue">&#8358;0</div><div class="stat-label">Total GMV</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#ede9fe"><i class="fa-solid fa-percent" style="color:var(--purple)"></i></div></div><div class="stat-value" style="color:var(--purple)" id="adm-commission-due">&#8358;0</div><div class="stat-label">Platform Earnings</div></div>
- <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i></div></div><div class="stat-value color-green" id="adm-paid">0</div><div class="stat-label">Active (Paid)</div></div>
- <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-clock" style="color:var(--gold)"></i></div></div><div class="stat-value color-gold" id="adm-trial">0</div><div class="stat-label">On Free Trial</div></div>
- <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fee2e2"><i class="fa-solid fa-ban" style="color:var(--danger)"></i></div></div><div class="stat-value color-danger" id="adm-suspended">0</div><div class="stat-label">Suspended</div></div>
+ <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i></div></div><div class="stat-value color-green" id="adm-paid">0</div><div class="stat-label">Active Sellers</div></div>
+ <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-gift" style="color:var(--gold)"></i></div></div><div class="stat-value color-gold" id="adm-trial">0</div><div class="stat-label">Free Access</div></div>
+ <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fee2e2"><i class="fa-solid fa-user-lock" style="color:var(--danger)"></i></div></div><div class="stat-value color-danger" id="adm-suspended">0</div><div class="stat-label">Admin Review</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fee2e2"><i class="fa-solid fa-exclamation-triangle" style="color:var(--danger)"></i></div></div><div class="stat-value color-danger" id="adm-disputes">0</div><div class="stat-label">Open Disputes</div></div>
  </div>
  <div class="chart-card">
@@ -993,9 +1047,9 @@
  <div class="flex gap-2 flex-wrap">
  <select id="adm-seller-filter" class="form-select" style="width:auto;padding:.4rem .7rem;font-size:.78rem" onchange="loadAdminSellers()">
  <option value="all">All Sellers</option>
- <option value="paid">Active (Paid)</option>
- <option value="trial">On Trial</option>
- <option value="suspended">Suspended</option>
+ <option value="paid">Active Sellers</option>
+ <option value="trial">Free Access</option>
+ <option value="suspended">Admin Review</option>
  </select>
  <input type="text" id="adm-seller-search" class="form-input" placeholder="Name / email..." style="width:160px;font-size:.78rem;padding:.4rem .7rem" oninput="filterAdminSellers()">
  </div>
@@ -1050,7 +1104,7 @@
  <!-- BROADCAST TAB -->
  <div id="adm-tab-receipts" class="adm-tab hidden">
  <h2 class="mb-1"><i class="fa-solid fa-file-invoice color-green"></i> Commission Receipts</h2>
- <p class="color-text3 text-sm mb-3">Review seller commission payment proofs, approve valid receipts, or reject bad uploads.</p>
+ <p class="color-text3 text-sm mb-3">Review legacy payment proofs if any older sellers submitted them before free access was enabled.</p>
  <div class="stats-grid mb-4" style="grid-template-columns:repeat(3,1fr)">
  <div class="stat-card"><div class="stat-value color-gold" id="rcpt-pending">0</div><div class="stat-label">Pending</div></div>
  <div class="stat-card"><div class="stat-value color-green" id="rcpt-approved">0</div><div class="stat-label">Approved</div></div>
@@ -1083,7 +1137,7 @@
  </div>
  <div class="card card-pad mb-4">
  <h3 class="mb-3"><i class="fa-solid fa-user-check color-gold"></i> Seller Access Control</h3>
- <p class="text-xs color-text3 mb-3">Extend trials, activate paid sellers, deactivate overdue sellers, or reactivate accounts.</p>
+ <p class="text-xs color-text3 mb-3">Review seller access, reactivate accounts, or pause accounts that need admin review.</p>
  <div class="flex gap-2 mb-3 flex-wrap"><input type="text" id="acct-trial-search" class="form-input" placeholder="Search seller..." style="width:220px" oninput="filterTrialExtensions()"></div>
  <div class="overflow-x" style="max-height:430px;overflow-y:auto"><table class="data-table"><thead><tr><th>Seller</th><th>Email</th><th>Trial Ends</th><th>Status</th><th>Actions</th></tr></thead><tbody id="acct-trials-list"><tr><td colspan="5" class="text-center text-sm color-text3 p-3">Loading...</td></tr></tbody></table></div>
  </div>
@@ -1098,7 +1152,7 @@
  <option value="all">Everyone</option>
  <option value="sellers">Sellers Only</option>
  <option value="buyers">Buyers Only</option>
- <option value="trial">Sellers on Trial</option>
+ <option value="trial">Free Access Sellers</option>
  </select>
  </div>
  <div class="form-group">
@@ -1264,7 +1318,7 @@
  <div class="role-card-sub">Buy & sell</div>
  </label>
  </div>
- <div id="role-both-note" class="hidden" style="margin-top:.5rem;font-size:.76rem;color:var(--text3);background:var(--cream);border-radius:6px;padding:.5rem .75rem"><i class="fa-solid fa-info-circle color-green"></i> You'll have access to both Buyer and Seller dashboards. Seller features activate after free trial.</div>
+ <div id="role-both-note" class="hidden" style="margin-top:.5rem;font-size:.76rem;color:var(--text3);background:var(--cream);border-radius:6px;padding:.5rem .75rem"><i class="fa-solid fa-info-circle color-green"></i> You'll have access to both Buyer and Seller dashboards. Seller features are free to use.</div>
  <!-- <div id="role-sp-note" class="hidden" style="margin-top:.5rem;font-size:.76rem;color:var(--text3);background:#f3e8ff;border-radius:6px;padding:.5rem .75rem"><i class="fa-solid fa-tools" style="color:var(--purple)"></i> You'll get a dedicated Service Dashboard to post gigs, set pricing, and connect with local clients via WhatsApp.</div> -->
  </div>
  <div class="form-group"><label class="form-label">Email <span class="req">*</span></label><input type="email" id="auth-email" class="form-input" required placeholder="you@email.com" autocomplete="email"></div>
@@ -1273,7 +1327,7 @@
  <div id="auth-terms-group" class="form-group hidden" style="margin-bottom:.75rem">
  <label style="display:flex;align-items:flex-start;gap:.5rem;cursor:pointer;font-size:.78rem;color:var(--text2);line-height:1.5">
  <input type="checkbox" id="auth-terms-check" style="margin-top:3px;accent-color:var(--green);min-width:16px">
- <span>I agree to BUYSELL Nigeria's <a href="#" onclick="event.preventDefault();event.stopPropagation();showModal('terms-modal')" style="color:var(--green);text-decoration:underline;font-weight:600">Terms of Service</a>, <a href="#" onclick="event.preventDefault();event.stopPropagation();showModal('privacy-modal')" style="color:var(--green);text-decoration:underline;font-weight:600">Privacy Policy</a>, and <a href="#" onclick="event.preventDefault();event.stopPropagation();showModal('terms-modal')" style="color:var(--green);text-decoration:underline;font-weight:600">Marketplace Agreement</a></span>
+ <span>I agree to BUYSELL Nigeria's <a href="terms.html" style="color:var(--green);text-decoration:underline;font-weight:600">Terms of Service</a>, <a href="privacy.html" style="color:var(--green);text-decoration:underline;font-weight:600">Privacy Policy</a>, and <a href="terms.html" style="color:var(--green);text-decoration:underline;font-weight:600">Marketplace Agreement</a></span>
  </label>
  </div>
  <button type="submit" class="btn btn-primary btn-full btn-lg" id="auth-btn"><span id="auth-btn-text">Sign In</span><span id="auth-spinner" class="spinner hidden"></span></button>
@@ -1380,8 +1434,8 @@
  <ul style="margin-bottom:.85rem;padding-left:1.1rem">
  <li>All listed products must be genuine and accurately described.</li>
  <li>Sellers must respond to orders within 24 hours.</li>
- <li>After the free trial period, a monthly commission of <strong>&#8358;2,500</strong> is required to maintain an active store.</li>
- <li>Failure to pay commission will result in automatic store suspension.</li>
+ <li>Seller dashboard access is currently free; no monthly subscription is required to keep an active store.</li>
+ <li>BUYSELL may introduce optional paid promotions or premium services, but basic seller access remains available without subscription fees unless these terms are updated.</li>
  <li>Fraudulent or misleading listings will result in immediate account termination.</li>
  </ul>
 
@@ -1407,7 +1461,7 @@
  <li>Manipulating reviews or ratings.</li>
  <li>Harassing other users.</li>
  <li>Using the platform for money laundering or fraudulent transactions.</li>
- <li>Attempting to bypass platform fees or commission payments.</li>
+ <li>Attempting to bypass required transaction safety checks or platform rules.</li>
  </ul>
 
  <h4 style="color:var(--text);margin-bottom:.4rem"><i class="fa-solid fa-gavel color-green"></i> 6. Dispute Resolution</h4>
@@ -1784,16 +1838,16 @@
 <div id="suspended-modal">
  <div class="suspended-box">
  <div class="suspended-icon"><i class="fa-solid fa-ban"></i></div>
- <h2 class="mb-2">Store Suspended</h2>
- <p class="color-text3 mb-3">Your store has been suspended. Pay the &#8358;2,500 monthly commission to reactivate.</p>
+ <h2 class="mb-2">Store Access Review</h2>
+ <p class="color-text3 mb-3">Your store access needs admin review. Contact support if you believe this is a mistake.</p>
  <div class="bank-details-box">
  <div class="bank-row"><span class="bk-label">Bank</span><span class="bk-value">OPay</span></div>
  <div class="bank-row"><span class="bk-label">Account</span><span class="bk-value accent">9061484256</span></div>
  <div class="bank-row"><span class="bk-label">Name</span><span class="bk-value">Efe Israel</span></div>
- <div class="bank-row"><span class="bk-label">Amount</span><span class="bk-value" style="color:var(--gold);font-size:1.05rem">&#8358;2,500</span></div>
+ <div class="bank-row"><span class="bk-label">Seller Access</span><span class="bk-value" style="color:var(--green);font-size:1.05rem">Free</span></div>
  </div>
  <button class="btn btn-paystack btn-full mb-2" onclick="payCommissionPaystack()"><i class="fa-solid fa-credit-card"></i> Pay via Paystack</button>
- <button class="btn btn-outline btn-full" onclick="showModal('commission-modal')">Upload Bank Transfer Receipt</button>
+ <button class="btn btn-outline btn-full" onclick="openAdminSupportChat('Hello Admin Support, I need help restoring my seller access.')">Contact Support</button>
  <div style="margin-top:.85rem;text-align:center"><button class="btn btn-ghost btn-sm" style="color:var(--text3)" onclick="logoutUser()">Sign Out</button></div>
  </div>
 </div>
@@ -1802,7 +1856,7 @@
 <div id="commission-modal" class="modal-overlay">
  <div class="modal-box" style="max-width:450px;padding:1.65rem"><button class="modal-close" onclick="closeModal('commission-modal')"><i class="fa-solid fa-times"></i></button>
  <h2 class="mb-1"><i class="fa-solid fa-upload color-green"></i> Upload Commission Receipt</h2>
- <p class="color-text3 text-sm mb-3">Submit proof of your &#8358;2,500 bank transfer. Admin will verify within 24hrs.</p>
+ <p class="color-text3 text-sm mb-3">This legacy receipt form is kept only for older submitted payments. Seller access is now free.</p>
  <div class="form-group"><label class="form-label">Payment Screenshot <span class="req">*</span></label>
  <div class="upload-zone" onclick="document.getElementById('commission-file').click()"><i class="fa-solid fa-cloud-upload-alt"></i><div class="upload-label">Click to upload screenshot</div><div class="upload-sub">JPG or PNG</div></div>
  <input type="file" id="commission-file" accept="image/*" style="display:none">
@@ -1830,7 +1884,7 @@
  </div>
  <div class="faq-item mb-2">
  <div class="font-600 text-sm mb-1"> How do I open a seller store?</div>
- <p class="text-xs color-text3">Sign up as a Seller and get 1 month FREE. After trial, pay &#8358;2,500/month to keep your store active.</p>
+ <p class="text-xs color-text3">Sign up as a Seller and use your store tools for free.</p>
  </div>
  <div class="faq-item mb-2">
  <div class="font-600 text-sm mb-1"> How long is delivery?</div>
@@ -1902,9 +1956,9 @@
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dbeafe"><i class="fa-solid fa-users" style="color:var(--blue)"></i></div></div><div class="stat-value" id="adm-total-buyers">0</div><div class="stat-label">Total Buyers</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-coins" style="color:var(--gold)"></i></div></div><div class="stat-value color-green" id="adm-revenue">&#8358;0</div><div class="stat-label">Total GMV</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#ede9fe"><i class="fa-solid fa-percent" style="color:var(--purple)"></i></div></div><div class="stat-value" style="color:var(--purple)" id="adm-commission-due">&#8358;0</div><div class="stat-label">Platform Earnings</div></div>
- <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i></div></div><div class="stat-value color-green" id="adm-paid">0</div><div class="stat-label">Active (Paid)</div></div>
- <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-clock" style="color:var(--gold)"></i></div></div><div class="stat-value color-gold" id="adm-trial">0</div><div class="stat-label">On Free Trial</div></div>
- <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fee2e2"><i class="fa-solid fa-ban" style="color:var(--danger)"></i></div></div><div class="stat-value color-danger" id="adm-suspended">0</div><div class="stat-label">Suspended</div></div>
+ <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i></div></div><div class="stat-value color-green" id="adm-paid">0</div><div class="stat-label">Active Sellers</div></div>
+ <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-gift" style="color:var(--gold)"></i></div></div><div class="stat-value color-gold" id="adm-trial">0</div><div class="stat-label">Free Access</div></div>
+ <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fee2e2"><i class="fa-solid fa-user-lock" style="color:var(--danger)"></i></div></div><div class="stat-value color-danger" id="adm-suspended">0</div><div class="stat-label">Admin Review</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fee2e2"><i class="fa-solid fa-exclamation-triangle" style="color:var(--danger)"></i></div></div><div class="stat-value color-danger" id="adm-disputes">0</div><div class="stat-label">Open Disputes</div></div>
  </div>
  <div class="chart-card">
@@ -1931,9 +1985,9 @@
  <div class="flex gap-2 flex-wrap">
  <select id="adm-seller-filter" class="form-select" style="width:auto;padding:.4rem .7rem;font-size:.78rem" onchange="loadAdminSellers()">
  <option value="all">All Sellers</option>
- <option value="paid">Active (Paid)</option>
- <option value="trial">On Trial</option>
- <option value="suspended">Suspended</option>
+ <option value="paid">Active Sellers</option>
+ <option value="trial">Free Access</option>
+ <option value="suspended">Admin Review</option>
  </select>
  <input type="text" id="adm-seller-search" class="form-input" placeholder="Name / email..." style="width:160px;font-size:.78rem;padding:.4rem .7rem" oninput="filterAdminSellers()">
  </div>
@@ -2017,7 +2071,7 @@
  <option value="all">Everyone</option>
  <option value="sellers">Sellers Only</option>
  <option value="buyers">Buyers Only</option>
- <option value="trial">Sellers on Trial</option>
+ <option value="trial">Free Access Sellers</option>
  </select>
  </div>
  <div class="form-group">
@@ -2052,14 +2106,14 @@
  <div id="admin-ai-messages" style="height:280px;overflow-y:auto;background:var(--cream);border-radius:var(--radius-sm);border:1px solid var(--border);padding:.88rem;display:flex;flex-direction:column;gap:.58rem;margin-bottom:.75rem">
  <div class="cb-msg bot" style="display:flex;gap:.42rem">
  <div class="cb-avatar" style="background:var(--green-xlt);color:var(--green);font-size:.76rem;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-robot"></i></div>
- <div class="cb-bubble" style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;line-height:1.5">Hello Admin! ' I have <b>live database access</b> to your BUYSELL platform. I can read disputes, check seller statuses, approve receipts, and suspend unpaid users. Try asking me to review open disputes or enforce commission payments.</div>
+ <div class="cb-bubble" style="background:#fff;border:1px solid var(--border);padding:.52rem .82rem;border-radius:14px;font-size:.79rem;line-height:1.5">Hello Admin! I have <b>live database access</b> to your BUYSELL platform. I can read disputes, check seller statuses, review KYC, and help with account safety decisions.</div>
  </div>
  </div>
  <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.65rem">
  <button class="cb-quick-btn" onclick="askAdminBot('Read all open disputes and give me a summary with recommendations')"><i class="fa-solid fa-scale-balanced"></i> Read Disputes</button>
- <button class="cb-quick-btn" onclick="askAdminBot('Show me all unpaid sellers and service providers with expired trials')">" Unpaid Users</button>
- <button class="cb-quick-btn" onclick="askAdminBot('Suspend all sellers who have not paid and their trial has expired')">Blocked Enforce Sellers</button>
- <button class="cb-quick-btn" onclick="askAdminBot('Suspend all service providers who have not paid and their trial has expired')">Blocked Enforce Providers</button>
+ <button class="cb-quick-btn" onclick="askAdminBot('Show me sellers that need account review')"><i class="fa-solid fa-user-shield"></i> Account Review</button>
+ <button class="cb-quick-btn" onclick="askAdminBot('Summarise pending KYC and account safety issues')"><i class="fa-solid fa-shield-halved"></i> Safety Review</button>
+ <button class="cb-quick-btn" onclick="askAdminBot('Suggest improvements to complete the marketplace experience')"><i class="fa-solid fa-wand-magic-sparkles"></i> Site Improvements</button>
  <button class="cb-quick-btn" onclick="askAdminBot('Summarise platform performance this month')">" Performance</button>
  <button class="cb-quick-btn" onclick="askAdminBot('Give me 5 growth strategies for BUYSELL Nigeria')"> Growth</button>
  </div>
@@ -2072,8 +2126,8 @@
 
  <!-- RECEIPTS TAB -->
  <div id="adm-tab-receipts" class="adm-tab hidden">
- <h2 class="mb-1"><i class="fa-solid fa-file-invoice color-green"></i> Commission Receipts</h2>
- <p class="color-text3 text-sm mb-3">Review and approve seller commission payment proofs (&#8358;2,500/month).</p>
+ <h2 class="mb-1"><i class="fa-solid fa-file-invoice color-green"></i> Legacy Receipts</h2>
+ <p class="color-text3 text-sm mb-3">Review older seller receipts if they were submitted before seller access became free.</p>
  <div class="stats-grid mb-4" style="grid-template-columns:repeat(3,1fr)">
  <div class="stat-card"><div class="stat-value color-gold" id="rcpt-pending">0</div><div class="stat-label">Pending</div></div>
  <div class="stat-card"><div class="stat-value color-green" id="rcpt-approved">0</div><div class="stat-label">Approved</div></div>
@@ -2147,8 +2201,8 @@
  
  <!-- Section 1: Commission Activations -->
  <div class="card card-pad mb-4">
- <h3 class="mb-3"><i class="fa-solid fa-dollar-sign color-green"></i> Commission Activations (Pending Receipts)</h3>
- <p class="text-xs color-text3 mb-3">Sellers who uploaded a receipt and are waiting for account activation.</p>
+ <h3 class="mb-3"><i class="fa-solid fa-file-invoice color-green"></i> Legacy Receipts</h3>
+ <p class="text-xs color-text3 mb-3">Older payment receipts retained for record keeping. Seller access no longer depends on payment approval.</p>
  <div class="overflow-x">
  <table class="data-table">
  <thead><tr><th>Seller</th><th>Date</th><th>Reference</th><th>Receipt</th><th>Action</th></tr></thead>
@@ -2171,14 +2225,14 @@
 
  <!-- Section 3: Trial Extensions -->
  <div class="card card-pad mb-4">
- <h3 class="mb-3"><i class="fa-solid fa-clock color-gold"></i> Seller Trial Extensions</h3>
- <p class="text-xs color-text3 mb-3">Active and expired seller trials. You can extend their free trial by 30 days.</p>
+ <h3 class="mb-3"><i class="fa-solid fa-user-shield color-gold"></i> Seller Access Review</h3>
+ <p class="text-xs color-text3 mb-3">Seller access is free. Use this area only to review, reactivate, or pause accounts for admin reasons.</p>
  <div class="flex gap-2 mb-3">
  <input type="text" id="acct-trial-search" class="form-input" placeholder="Search seller..." style="width:200px" oninput="filterTrialExtensions()">
  </div>
  <div class="overflow-x" style="max-height:400px;overflow-y:auto">
  <table class="data-table" style="position:relative">
- <thead style="position:sticky;top:0;background:#fff;z-index:10;box-shadow:0 1px 2px rgba(0,0,0,0.05)"><tr><th>Seller</th><th>Email</th><th>Trial Ends</th><th>Status</th><th>Action</th></tr></thead>
+ <thead style="position:sticky;top:0;background:#fff;z-index:10;box-shadow:0 1px 2px rgba(0,0,0,0.05)"><tr><th>Seller</th><th>Email</th><th>Access</th><th>Status</th><th>Action</th></tr></thead>
  <tbody id="acct-trials-list"><tr><td colspan="5" class="text-center text-sm color-text3 p-3">Loading...</td></tr></tbody>
  </table>
  </div>
@@ -2542,7 +2596,7 @@
 
 <script src="https://js.paystack.co/v2/inline.js"></script>
 <script data-cfasync="false" src="config.js?v=3.3"></script>
-<script src="app.js?v=8.7"></script>
+<script src="app.js?v=8.8"></script>
  <script>
  (function() {
  'use strict';

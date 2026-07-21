@@ -1,10 +1,23 @@
+self.addEventListener('install', (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 self.addEventListener('push', (event) => {
-  let payload = {};
+  let payload = {
+    source: 'buysell-web-push',
+    title: 'BUYSELL Nigeria',
+    body: 'You have a new marketplace update.',
+    url: '/',
+  };
 
   try {
-    payload = event.data ? event.data.json() : {};
+    if (event.data) payload = { ...payload, ...event.data.json() };
   } catch {
-    return;
+    payload.body = event.data ? event.data.text() : payload.body;
   }
 
   if (payload.source !== 'buysell-web-push') {

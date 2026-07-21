@@ -10,6 +10,7 @@ __pycache__/
 auth_hits.txt
 role_hits.txt
 signup_hits.txt
+supabase/.temp/
 
 # Local/generated upgrade helpers
 add_features.py

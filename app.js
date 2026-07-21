@@ -49,6 +49,7 @@ let selectedRating = 0, checkoutPaymentMethod = 'paystack';
 let deferredInstallPrompt = null, salesChart = null;
 let sellerAnalyticsChart = null;
 let carouselStartX = 0;
+let previousAppView = 'buyer';
 // MOVE THESE TWO LINES HERE (TO THE TOP VARIABLES AREA):
 let wishlist = readStoredJson('bs_wishlist', []);
 let compareList = readStoredJson('bs_compare', []);
@@ -62,6 +63,7 @@ function showMarketLandingPage() {
  const buyerView = document.getElementById('buyer-view');
  const sellerDash = document.getElementById('seller-dashboard');
  const storefront = document.getElementById('storefront-view');
+ const accountView = document.getElementById('account-view');
  const hasMarketingLanding = !!marketing?.querySelector('#marketing-landing');
 
  if (marketing) {
@@ -85,7 +87,11 @@ function showMarketLandingPage() {
  storefront.classList.add('hidden');
  storefront.style.setProperty('display', 'none', 'important');
  }
- document.body.classList.remove('in-seller');
+ if (accountView) {
+ accountView.classList.add('hidden');
+ accountView.style.setProperty('display', 'none', 'important');
+ }
+ document.body.classList.remove('in-seller', 'platform-seller-mode');
 }
 
 function landingMediaElement(row) {
@@ -237,6 +243,47 @@ function getAdminEmails() {
 
 function isAdminEmail(email = currentUser?.email) {
  return getAdminEmails().includes(String(email || '').trim().toLowerCase());
+}
+
+function isPlatformProfile(profile = {}) {
+ const role = String(profile?.role || '').toLowerCase();
+ const email = String(profile?.email || profile?.user_email || '').trim().toLowerCase();
+ const accountType = String(profile?.accounts || '').toLowerCase();
+ return role === 'admin'
+ || accountType === 'admin'
+ || profile?.is_platform_store === true
+ || profile?.store_type === 'platform'
+ || isAdminEmail(email);
+}
+
+function isPlatformProduct(product = {}) {
+ return product?.is_platform_store === true
+ || product?.store_type === 'platform'
+ || isPlatformProfile(product?.profiles || product?.seller || {});
+}
+
+function getPlatformStoreLabel(profile = {}) {
+ if (isPlatformProfile(profile)) return 'BUYSELL Platform Store';
+ return profile?.store_name || profile?.name || 'Seller';
+}
+
+function updatePlatformSellerDashboardChrome() {
+ const isPlatform = isPlatformProfile(currentUser?.profile || {});
+ document.body.classList.toggle('platform-seller-mode', isPlatform);
+
+ const sidebarSub = document.querySelector('.dash-sidebar-head .sub');
+ const title = document.getElementById('dash-overview-title');
+ const sub = document.getElementById('dash-overview-sub');
+ const notice = document.getElementById('platform-store-notice');
+ const addTitle = document.getElementById('dash-add-product-title');
+
+ if (sidebarSub) sidebarSub.textContent = isPlatform ? 'Platform Store' : 'Seller Dashboard';
+ if (title) title.textContent = isPlatform ? 'Platform Store Dashboard' : 'Dashboard Overview';
+ if (sub) sub.textContent = isPlatform
+ ? 'Manage official BUYSELL listings buyers will recognize as Platform Store products.'
+ : "Welcome back! Here's your store at a glance.";
+ if (notice) notice.classList.toggle('hidden', !isPlatform);
+ if (addTitle) addTitle.textContent = isPlatform ? 'Add Platform Product' : 'Add New Product';
 }
 
 async function trackAnalytics(event) {
@@ -441,6 +488,48 @@ function toast(title, msg='', type='success', dur=3500) {
 function showModal(id) { const m = document.getElementById(id); if(m){ m.classList.add('open'); document.body.classList.add('modal-open'); } }
 function closeModal(id) { const m = document.getElementById(id); if(m){ m.classList.remove('open'); document.body.classList.remove('modal-open'); } }
 document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if(e.target===m) closeModal(m.id); }));
+
+function hideAccountPage() {
+ const accountView = document.getElementById('account-view');
+ if (accountView) {
+ accountView.classList.add('hidden');
+ accountView.style.setProperty('display', 'none', 'important');
+ }
+}
+
+function showAccountPage() {
+ if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
+ previousAppView = currentRole === 'seller' ? 'seller' : 'buyer';
+ const accountView = document.getElementById('account-view');
+ const buyerView = document.getElementById('buyer-view');
+ const sellerDash = document.getElementById('seller-dashboard');
+ const storefrontView = document.getElementById('storefront-view');
+ const adminPortal = document.getElementById('admin-portal-view');
+ const landing = document.getElementById('landing');
+ const marketing = document.getElementById('marketing-placeholder');
+ const mainNav = document.getElementById('main-nav');
+
+ if (mainNav) mainNav.style.setProperty('display', 'block', 'important');
+ [buyerView, sellerDash, storefrontView, adminPortal, landing, marketing].forEach(el => {
+ if (!el) return;
+ el.classList.add('hidden');
+ el.style.setProperty('display', 'none', 'important');
+ });
+ if (accountView) {
+ accountView.classList.remove('hidden');
+ accountView.style.setProperty('display', 'block', 'important');
+ }
+ document.body.classList.remove('in-seller');
+ document.getElementById('account-page-name').textContent = currentUser.profile?.name || currentUser.email || 'BUYSELL User';
+ document.getElementById('account-page-email').textContent = currentUser.email || 'Manage your BUYSELL profile and privacy choices.';
+ document.getElementById('account-page-role').textContent = profileEntryRole(currentUser.profile).replace('_', ' ');
+}
+
+function returnToPreviousAppView() {
+ hideAccountPage();
+ if (previousAppView === 'seller') showSellerDashboard();
+ else showBuyerView();
+}
 
 // ====================================================
 // AUTH
@@ -813,7 +902,7 @@ async function handleAuth(e) {
 
  const msgs = {
  buyer: 'Welcome! Browse thousands of products.',
- seller: 'Welcome Seller! First month is FREE.',
+ seller: 'Welcome Seller! Your store access is free.',
  both: 'Welcome! You can shop and sell on BUYSELL.',
  service_provider: 'Welcome Service Pro! Set up your portfolio and start getting hired.'
  };
@@ -833,7 +922,6 @@ async function handleAuth(e) {
 
 async function upsertProfile(user, meta) {
  if (!user?.id) return;
- const trialEnd = new Date(); trialEnd.setDate(trialEnd.getDate() + 30);
  const referredBy = meta.referred_by || appStorage.getItem('bs_ref') || user.user_metadata?.referred_by || '';
  const { error } = await db.from('profiles').upsert({
  id: user.id,
@@ -842,8 +930,9 @@ async function upsertProfile(user, meta) {
  role: meta.role || user.user_metadata?.role || 'buyer',
  accounts: meta.accounts || user.user_metadata?.accounts || meta.role || 'buyer',
  whatsapp: meta.whatsapp || user.user_metadata?.whatsapp || '',
- trial_end: trialEnd.toISOString(),
- commission_paid: false,
+ trial_end: null,
+ commission_paid: true,
+ is_suspended: false,
  referral_code: user.user_metadata?.referral_code || 'ref_' + Math.random().toString(36).substr(2, 8),
  referred_by: referredBy
  }, { onConflict: 'id', ignoreDuplicates: false });
@@ -933,6 +1022,11 @@ function updateNavForUser() {
  document.getElementById('nav-avatar-inner').textContent = initial;
  document.getElementById('nav-avatar-inner').style.fontSize = '.9rem';
  updateNotificationButtonState();
+ if ('Notification' in window && Notification.permission === 'granted') {
+ syncUserNotificationToken().catch(error => {
+ console.warn('[PUSH ENGINE] Background subscription refresh failed:', error.message || error);
+ });
+ }
  document.getElementById('dash-user-name').textContent = currentUser.profile?.name || 'Seller';
  document.getElementById('dash-user-email').textContent = currentUser.email || '';
  // Admin check
@@ -1004,6 +1098,40 @@ async function logoutUser() {
  toast('Signed Out', '', 'info');
 }
 
+async function deleteMyAccount() {
+ if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
+ const typed = prompt('This permanently deletes your BUYSELL account. Type DELETE to continue.');
+ if (typed !== 'DELETE') {
+ toast('Account deletion cancelled', 'No changes were made.', 'info');
+ return;
+ }
+
+ const btn = document.getElementById('delete-account-btn');
+ const oldHtml = btn?.innerHTML;
+ if (btn) {
+ btn.disabled = true;
+ btn.innerHTML = '<span class="spinner"></span> Deleting account...';
+ }
+
+ try {
+ await callEdge('delete-account', { confirm: 'DELETE' });
+ appStorage.clear();
+ appSessionStorage.clear();
+ await db.auth.signOut().catch(() => {});
+ currentUser = null;
+ currentChatPartner = null;
+ currentChatProductId = null;
+ toast('Account Deleted', 'Your BUYSELL account has been removed.', 'success', 7000);
+ setTimeout(() => window.location.assign('/'), 1200);
+ } catch (err) {
+ toast('Delete Failed', err.message || 'Could not delete your account right now.', 'error', 7000);
+ if (btn) {
+ btn.disabled = false;
+ btn.innerHTML = oldHtml || '<i class="fa-solid fa-user-slash"></i> Delete My Account';
+ }
+ }
+}
+
 
 async function generateDescription() {
  const name = document.getElementById('p-name').value.trim();
@@ -1056,7 +1184,7 @@ async function generateDescription() {
 
 
 
-function showProfile() { if (!currentUser) { showModal('auth-modal'); } else { toast(currentUser.profile?.name || 'You', currentUser.email, 'info'); } }
+function showProfile() { showAccountPage(); }
 
 // ====================================================
 // SITE NAVIGATION
@@ -1115,6 +1243,7 @@ function showBuyerView() {
  const adminPortal = document.getElementById('admin-portal-view');
  const landingPortal = document.getElementById('landing');
  const marketingPlaceholder = document.getElementById('marketing-placeholder');
+ const accountView = document.getElementById('account-view');
 
  // Direct Inline Override: Force reveal using style properties to bypass stylesheet conflicts
  if (buyerView) {
@@ -1132,6 +1261,7 @@ function showBuyerView() {
  if (adminPortal) { adminPortal.classList.add('hidden'); adminPortal.style.setProperty('display', 'none', 'important'); }
  if (landingPortal) { landingPortal.classList.add('hidden'); landingPortal.style.setProperty('display', 'none', 'important'); }
  if (marketingPlaceholder) { marketingPlaceholder.classList.add('hidden'); marketingPlaceholder.style.setProperty('display', 'none', 'important'); }
+ if (accountView) { accountView.classList.add('hidden'); accountView.style.setProperty('display', 'none', 'important'); }
 
  const toggleIcon = document.getElementById('toggle-view-icon');
  const toggleText = document.getElementById('toggle-view-text');
@@ -1141,7 +1271,7 @@ function showBuyerView() {
  const mobHamBtn = document.getElementById('mob-ham-btn');
  if (mobHamBtn) mobHamBtn.style.setProperty('display', 'none', 'important');
  
- document.body.classList.remove('in-seller');
+ document.body.classList.remove('in-seller', 'platform-seller-mode');
  currentRole = 'buyer';
 
  if (typeof startCarousel === 'function') startCarousel();
@@ -1162,6 +1292,7 @@ async function showSellerDashboard() {
  const adminPortal = document.getElementById('admin-portal-view');
  const landingPortal = document.getElementById('landing');
  const marketingPlaceholder = document.getElementById('marketing-placeholder');
+ const accountView = document.getElementById('account-view');
 
  // Direct Inline Override: Force layout display block for the merchant workspace panel
  if (sellerDash) {
@@ -1183,6 +1314,7 @@ async function showSellerDashboard() {
  if (adminPortal) { adminPortal.classList.add('hidden'); adminPortal.style.setProperty('display', 'none', 'important'); }
  if (landingPortal) { landingPortal.classList.add('hidden'); landingPortal.style.setProperty('display', 'none', 'important'); }
  if (marketingPlaceholder) { marketingPlaceholder.classList.add('hidden'); marketingPlaceholder.style.setProperty('display', 'none', 'important'); }
+ if (accountView) { accountView.classList.add('hidden'); accountView.style.setProperty('display', 'none', 'important'); }
 
  const toggleIcon = document.getElementById('toggle-view-icon');
  const toggleText = document.getElementById('toggle-view-text');
@@ -1197,6 +1329,7 @@ async function showSellerDashboard() {
  
  document.body.classList.add('in-seller');
  currentRole = 'seller';
+ updatePlatformSellerDashboardChrome();
  
  if (typeof stopCarousel === 'function') stopCarousel();
  if (typeof checkSellerCommission === 'function') checkSellerCommission();
@@ -1210,12 +1343,7 @@ async function showSellerDashboard() {
  if (typeof loadSellerAds === 'function') loadSellerAds();
 }
 function isSellerAccessExpired(profile = currentUser?.profile) {
- if (!currentUser || isAdminEmail()) return false;
- const expiry = profile?.subscription_end || profile?.paid_until || profile?.trial_end;
- const trialEnd = expiry ? new Date(expiry) : null;
- if (profile?.is_suspended) return true;
- if (trialEnd) return trialEnd <= new Date();
- return !profile?.commission_paid;
+ return false;
 }
 
 function isKycApprovedStatus(status) {
@@ -1299,6 +1427,7 @@ function showDash(section) {
 }
  if (section === 'analytics') loadSellerAnalytics();
  if (section === 'support') loadBroadcastMessages('seller-broadcast-list');
+ updatePlatformSellerDashboardChrome();
 }
 
 function setMobActive(btn) {
@@ -1372,7 +1501,7 @@ async function loadProducts() {
  document.getElementById('prods-empty').classList.add('hidden');
  document.getElementById('prods-error').classList.add('hidden');
  try {
- let q = db.from('products').select(`*, profiles(name, whatsapp, bank_name, account_number, account_name, paystack_key)`).eq('status', 'active').order('created_at', { ascending: false });
+ let q = db.from('products').select(`*, profiles(name, email, role, accounts, store_name, store_description, whatsapp, bank_name, account_number, account_name, paystack_key)`).eq('status', 'active').order('created_at', { ascending: false });
  const { data, error } = await q;
  if (error) throw error;
  products = data || [];
@@ -1398,6 +1527,8 @@ function prodCard(p) {
  const now = new Date();
  const isFlashActive = p.flash_price && p.flash_end && new Date(p.flash_end) > now;
  const displayPrice = isFlashActive ? p.flash_price : p.price;
+ const platformProduct = isPlatformProduct(p);
+ const sellerLabel = platformProduct ? 'BUYSELL Platform Store' : getPlatformStoreLabel(p.profiles || {});
  
  const discount = p.original_price > displayPrice 
  ? Math.round((1 - displayPrice / p.original_price) * 100) 
@@ -1433,6 +1564,7 @@ function prodCard(p) {
  discount && !isFlashActive ? `<span class="prod-badge prod-badge-discount">-${discount}%</span>` : '',
  videoCount > 0 ? `<span class="prod-badge prod-badge-video"><i class="fa-solid fa-video"></i> Video (${videoCount})</span>` : '',
  imageCount > 1 ? `<span class="prod-badge" style="background:var(--blue); color:#fff;"><i class="fa-solid fa-camera"></i> Photos (${imageCount})</span>` : '',
+ platformProduct ? `<span class="prod-badge prod-badge-platform"><i class="fa-solid fa-shield-halved"></i> Platform Store</span>` : '',
  p.category === 'dropship' ? `<span class="prod-badge prod-badge-drop">Dropship</span>` : '',
  p.seller_verified ? `<span class="prod-badge prod-badge-verified"><i class="fa-solid fa-check"></i> Verified</span>` : ''
  ].filter(Boolean).join('');
@@ -1447,7 +1579,7 @@ function prodCard(p) {
  .replace(/>/g, '&gt;');
 
  return `
- <div class="prod-card" onclick="openProduct('${p.id}')">
+ <div class="prod-card ${platformProduct ? 'platform-product' : ''}" onclick="openProduct('${p.id}')">
  <div class="prod-img-wrap">
  <img src="${resolvedCardThumbnail}" alt="${escHtml(p.name)}" loading="lazy">
  ${badges ? `<div class="prod-flags">${badges}</div>` : ''}
@@ -1465,7 +1597,7 @@ function prodCard(p) {
  <div class="prod-shipping text-xs color-text3" style="margin-top:.15rem"><i class="fa-solid fa-truck"></i> Shipping: ${fmtN(itemShippingFee(p))}</div>
  <div class="prod-rating-row"><span class="stars sm">${stars}</span><span class="text-xs color-text3">${p.avg_rating ? p.avg_rating.toFixed(1) : '5.0'} (${p.review_count||0})</span></div>
  <div class="prod-location"><i class="fa-solid fa-map-marker-alt" style="font-size:.6rem"></i>${escHtml(p.location||'Nigeria')}</div>
- <a class="prod-store-link" onclick="event.stopPropagation();viewStorefront('${p.seller_id}')"><i class="fa-solid fa-store" style="font-size:.6rem"></i>${escHtml(p.profiles?.name||'Seller')}</a>
+  <a class="prod-store-link ${platformProduct ? 'platform-store-link' : ''}" onclick="event.stopPropagation();viewStorefront('${p.seller_id}')"><i class="fa-solid ${platformProduct ? 'fa-shield-halved' : 'fa-store'}" style="font-size:.6rem"></i>${escHtml(sellerLabel)}</a>
  ${!isSoldOut ? `<button class="prod-mobile-add" onclick="event.stopPropagation();addToCart(${serializedCartData})"><i class="fa-solid fa-cart-plus"></i> Add to Cart</button>` : ''}
  </div>
  </div>`;
@@ -1774,9 +1906,11 @@ async function openProduct(id) {
  // Seller Profile Mapping
 // Seller Profile Mapping
  const seller = p.profiles || {};
- document.getElementById('modal-seller-name').textContent = seller.name || 'Seller';
- document.getElementById('modal-seller-email').textContent = 'Contact via In-App Chat Secure System';
- document.getElementById('modal-seller-avatar').textContent = (seller.name||'S')[0].toUpperCase();
+ const platformProduct = isPlatformProduct(p);
+ const sellerLabel = platformProduct ? 'BUYSELL Platform Store' : getPlatformStoreLabel(seller);
+ document.getElementById('modal-seller-name').textContent = sellerLabel;
+ document.getElementById('modal-seller-email').textContent = platformProduct ? 'Official marketplace store' : 'Contact via In-App Chat Secure System';
+ document.getElementById('modal-seller-avatar').textContent = platformProduct ? 'B' : (seller.name||'S')[0].toUpperCase();
 
  // SECURED FORCE: Ensure any direct WhatsApp shortcut button on the product modal is completely hidden or repurposed
  const modalWaBtn = document.getElementById('modal-whatsapp-btn') || document.querySelector('.modal-wa-btn');
@@ -1789,7 +1923,7 @@ async function openProduct(id) {
  if (contactSellerBtn) {
  const productId = p.id;
  contactSellerBtn.onclick = () => {
- openMessageModal(p.seller_id, seller.name || 'Seller', productId);
+  openMessageModal(p.seller_id, sellerLabel, productId);
  closeModal('product-modal');
  };
  }
@@ -1798,6 +1932,7 @@ async function openProduct(id) {
  const flags = [];
  if (isFlashActive) flags.push('<span class="prod-badge" style="background:var(--red);color:#fff">Flash Flash Sale</span>');
  if (vidArray.length > 0) flags.push('<span class="prod-badge prod-badge-video"> Video Available</span>');
+ if (platformProduct) flags.push('<span class="prod-badge prod-badge-platform"><i class="fa-solid fa-shield-halved"></i> Platform Store</span>');
  if (p.seller_verified) flags.push('<span class="prod-badge prod-badge-verified">OK Verified</span>');
  document.getElementById('modal-flags').innerHTML = flags.join('');
  
@@ -2933,12 +3068,8 @@ async function loadSellerStats() {
  document.getElementById('st-revenue').textContent = fmtN(revenue);
  document.getElementById('st-orders').textContent = (orders||[]).length;
  document.getElementById('st-rating').textContent = avgR;
- // Trial
- const profile = currentUser.profile || {};
- const trialEnd = profile.trial_end ? new Date(profile.trial_end) : new Date(Date.now()+30*86400000);
- const daysLeft = Math.max(0, Math.ceil((trialEnd - new Date()) / 86400000));
- document.getElementById('st-trial').textContent = daysLeft > 0 ? `${daysLeft}d left` : 'Expired';
- document.getElementById('st-days').textContent = daysLeft > 0 ? 'Free Trial' : 'Pay Commission';
+ document.getElementById('st-trial').textContent = 'Free';
+ document.getElementById('st-days').textContent = 'Seller Access';
  // Withdrawal data
  try {
  const wallet = await getSellerAvailableRevenue(currentUser.id);
@@ -3173,9 +3304,13 @@ if (nameVal.length > 300) {
  if (imgUrl) prodData.image_url = imgUrl;
  if (vidUrl) prodData.video_url = vidUrl;
 
+ let productNotificationRecord = null;
+ let oldProductNotificationRecord = null;
  if (editingProductId) {
- // UPDATE mode
- const updateData = { ...prodData };
+  const productIdForNotification = editingProductId;
+  oldProductNotificationRecord = await fetchProductForNotification(productIdForNotification);
+  // UPDATE mode
+  const updateData = { ...prodData };
  if (imgUrl) updateData.image_url = imgUrl;
  if (vidUrl) {
  updateData.video_url = vidUrl;
@@ -3188,22 +3323,28 @@ if (nameVal.length > 300) {
  action: 'update',
  product_id: editingProductId,
  data: updateData
- });
- editingProductId = null;
- toast('Product Updated! OK', 'Changes saved successfully', 'success');
+  });
+  productNotificationRecord = await fetchProductForNotification(productIdForNotification);
+  editingProductId = null;
+  toast('Product Updated! OK', 'Changes saved successfully', 'success');
  const cancelBtn = document.getElementById('edit-cancel-btn');
  if (cancelBtn) cancelBtn.style.display = 'none';
  document.querySelector('#ds-add-product .dash-page-title').textContent = 'Add New Product';
  document.querySelector('#ds-add-product .dash-page-sub').textContent = 'Products with videos get 3x more sales! ';
  } else {
- // INSERT mode - server-side via Edge Function
- await callEdge('manage-product', {
- action: 'create',
- data: { ...prodData, image_url: imgUrl, video_url: vidUrl }
- });
- toast('Product Published! ', 'Your product is now live', 'success');
- }
- document.getElementById('add-prod-form').reset();
+  // INSERT mode - server-side via Edge Function
+  const createResult = await callEdge('manage-product', {
+  action: 'create',
+  data: { ...prodData, image_url: imgUrl, video_url: vidUrl }
+  });
+  const createdProductId = createResult?.product?.id || createResult?.product_id || createResult?.id;
+  productNotificationRecord = createdProductId
+  ? await fetchProductForNotification(createdProductId)
+  : { ...prodData, image_url: imgUrl, video_url: vidUrl, status: 'active', seller_id: currentUser.id };
+  toast('Product Published! ', 'Your product is now live', 'success');
+  }
+  notifyProductIfActive(productNotificationRecord, oldProductNotificationRecord);
+  document.getElementById('add-prod-form').reset();
  showDash('products');
  } catch(err) {
  toast('Error', err.message, 'error');
@@ -3228,11 +3369,16 @@ async function deleteProduct(id) {
 async function toggleProductStatus(id, current) {
  const next = current === 'active' ? 'paused' : 'active';
  try {
- await ensureSellerProfileRole();
- await callEdge('manage-product', { action: 'toggle_status', product_id: id });
- }
+  await ensureSellerProfileRole();
+  const oldProduct = await fetchProductForNotification(id);
+  await callEdge('manage-product', { action: 'toggle_status', product_id: id });
+  if (next === 'active') {
+  const product = await fetchProductForNotification(id);
+  notifyProductIfActive(product, oldProduct || { status: current });
+  }
+  }
  catch(e) { toast('Error', e.message, 'error'); return; }
- loadSellerProds();
+  loadSellerProds();
 }
 
 // editing state
@@ -3332,10 +3478,12 @@ async function loadSellerOrders() {
 
 async function updateOrderStatus(id, status) {
  try {
- await callEdge('order-action', { action: 'update_status', order_id: id, status });
- toast(`Order ${status}!`, '', 'success');
- loadSellerOrders();
- } catch(e) { toast('Error', e.message, 'error'); }
+  const { data: oldOrder } = await db.from('orders').select('status').eq('id', id).maybeSingle();
+  await callEdge('order-action', { action: 'update_status', order_id: id, status });
+  if (status === 'confirmed') notifyOrderIfConfirmed(id, oldOrder?.status || 'pending');
+  toast(`Order ${status}!`, '', 'success');
+  loadSellerOrders();
+  } catch(e) { toast('Error', e.message, 'error'); }
 }
 
 let activeTrackingOrderId = null;
@@ -3394,8 +3542,10 @@ async function submitTrackingUpdate() {
  const status = document.getElementById('tracking-status-input').value;
  const note = document.getElementById('tracking-note-input').value.trim();
  try {
- await callEdge('order-action', { action: 'update_status', order_id: activeTrackingOrderId, status, note });
- document.getElementById('tracking-note-input').value = '';
+  const { data: oldOrder } = await db.from('orders').select('status').eq('id', activeTrackingOrderId).maybeSingle();
+  await callEdge('order-action', { action: 'update_status', order_id: activeTrackingOrderId, status, note });
+  if (status === 'confirmed') notifyOrderIfConfirmed(activeTrackingOrderId, oldOrder?.status || 'pending');
+  document.getElementById('tracking-note-input').value = '';
  toast('Tracking Updated', trackingLabel(status), 'success');
  openOrderTracking(activeTrackingOrderId);
  if (currentRole === 'seller') loadSellerOrders();
@@ -3441,86 +3591,22 @@ async function loadSellerReviews() {
 // ====================================================
 async function checkSellerCommission() {
  if (!currentUser?.profile) return;
- const p = currentUser.profile;
- const trialEnd = p.trial_end ? new Date(p.trial_end) : null;
- const expired = isSellerAccessExpired(p);
- document.getElementById('comm-trial-end').textContent = trialEnd ? fmtDate(trialEnd.toISOString()) : 'N/A';
+ document.getElementById('comm-trial-end').textContent = 'No expiry';
  const badge = document.getElementById('comm-status-badge');
- if (!expired) { badge.className='badge badge-green'; badge.textContent=`Active - ${Math.ceil((trialEnd-new Date())/86400000)}d left`; }
- else { badge.className='badge badge-red'; badge.textContent='Suspended'; }
- // Show suspended modal if needed
- if (expired && !isAdminEmail()) {
- document.getElementById('suspended-modal').classList.add('open');
- }
+ if (badge) { badge.className='badge badge-green'; badge.textContent='Free Seller Access'; }
 }
 
 function payCommissionPaystack() {
  if (!currentUser) return;
- if (!isPaystackReady()) return;
  closeModal('suspended-modal');
- openPaystackTransaction({
- key: PAYSTACK_PUBLIC_KEY,
- email: currentUser.email,
- amount: COMMISSION_AMOUNT,
- currency: 'NGN',
- reference: 'comm_' + Date.now(),
- onSuccess: async (response) => {
- // Commission confirmed via Paystack - direct update for immediate UI response
- try {
- await callEdge('admin-action', {
- action: 'toggle_commission',
- target_id: currentUser.id,
- data: { commission_paid: true, payment_reference: response.reference || response.trxref }
- });
- currentUser.profile.commission_paid = true;
- currentUser.profile.is_suspended = false;
- currentUser.profile.trial_end = new Date(Date.now() + 30*86400000).toISOString();
- document.getElementById('suspended-modal').classList.remove('open');
- document.body.classList.remove('modal-open');
- toast('Commission Paid! OK', 'Your store is now active', 'success');
+ toast('No Payment Needed', 'Seller access is now free. You can keep using your store.', 'success', 6000);
  checkSellerCommission();
- } catch (err) {
- toast('Verification Failed', err.message || 'Please contact support with your payment reference.', 'error');
- }
- },
- onCancel: () => toast('Payment cancelled','','warn')
- });
 }
 
 function payCommissionViaWallet() {
  if (!currentUser) return;
- const availableBalText = document.getElementById('wd-available')?.textContent || '\u20A60';
- const availableBalance = parseFloat(availableBalText.replace(/[^\d.]/g, '')) || 0;
- const commissionNaira = COMMISSION_AMOUNT / 100;
- 
- if (availableBalance < commissionNaira) {
- toast('Insufficient Funds', `Your Wallet balance must be at least ${fmtN(commissionNaira)} to renew subscription.`, 'warn');
- return;
- }
- 
- if (!confirm(`Deduct ${fmtN(commissionNaira)} from your marketplace wallet revenue to instantly extend store validity for 30 days?`)) return;
- 
- const badge = document.getElementById('comm-status-badge');
- toast('Processing Ledger Adjustment...', '', 'info');
-
- callEdge('admin-action', {
- action: 'pay_commission_via_wallet',
- target_id: currentUser.id
- }).then(() => {
- currentUser.profile.commission_paid = true;
- currentUser.profile.is_suspended = false;
- currentUser.profile.trial_end = new Date(Date.now() + 30*86400000).toISOString();
- 
- document.getElementById('suspended-modal').classList.remove('open');
- document.body.classList.remove('modal-open');
- toast('Hosting Extended! ', 'Store subscription activated successfully.', 'success');
- 
- loadWithdrawalData();
+ toast('No Payment Needed', 'Seller access is now free. You do not need to renew anything.', 'info', 6000);
  checkSellerCommission();
- loadSellerStats();
- }).catch(err => {
- toast('Adjustment Failed', err.message || 'Internal ledger processing exception error.', 'error');
- });
 }
 
 async function submitCommissionReceipt() {
@@ -4508,18 +4594,17 @@ async function loadAdminOverview() {
  db.from('profiles').select('id').eq('role','buyer'),
  db.from('orders').select('total_amount,created_at,status').neq('status','cancelled')
  ]);
- const now = new Date();
- const paid = (sellers||[]).filter(s => s.commission_paid).length;
- const trial = (sellers||[]).filter(s => !s.commission_paid && s.trial_end && new Date(s.trial_end) > now).length;
- const suspended= (sellers||[]).filter(s => !s.commission_paid && (!s.trial_end || new Date(s.trial_end) <= now)).length;
+ const activeSellers = (sellers||[]).filter(s => !s.is_suspended).length;
+ const freeSellers = (sellers||[]).length;
+ const suspended= (sellers||[]).filter(s => s.is_suspended).length;
  const revenue = (orders||[]).reduce((s,o) => s + (o.total_amount||0), 0);
 
  document.getElementById('adm-total-sellers').textContent = (sellers||[]).length;
  document.getElementById('adm-total-buyers').textContent = (buyers||[]).length;
  document.getElementById('adm-revenue').textContent = fmtN(revenue);
  document.getElementById('adm-commission-due').textContent= fmtN(Math.round(revenue * PLATFORM_FEE_PCT));
- document.getElementById('adm-paid').textContent = paid;
- document.getElementById('adm-trial').textContent = trial;
+ document.getElementById('adm-paid').textContent = activeSellers;
+ document.getElementById('adm-trial').textContent = freeSellers;
  document.getElementById('adm-suspended').textContent = suspended;
 
  // Disputes count
@@ -4604,10 +4689,10 @@ async function askAdminBot(preset) {
 function getAdminAiFallback(message) {
  const text = String(message || '').toLowerCase();
  if (text.includes('unpaid') || text.includes('expired') || text.includes('suspend')) {
- return 'I can help with that. Open Accounts to review expired trials and unpaid users, then use the Activate or Suspend actions. For bulk enforcement, use the unpaid sellers/providers quick actions after confirming the list.';
+ return 'Seller subscriptions are now free. Use Accounts only for manual account review, reactivation, KYC, disputes, or policy enforcement.';
  }
  if (text.includes('receipt') || text.includes('commission')) {
- return 'Check Account Management for pending commission receipts. Open the receipt image, confirm the payment reference, then approve to activate the seller or reject with a reason.';
+ return 'Seller subscription receipts are now legacy only. Basic seller access no longer depends on commission payment.';
  }
  if (text.includes('kyc')) {
  return 'Use the KYC Verify tab to open submitted documents. Approve only when the document matches the profile details; reject with a clear reason when it does not.';
@@ -4619,37 +4704,7 @@ function getAdminAiFallback(message) {
 }
 
 async function executeMassSuspension() {
- toast('Executing Enforcement', 'AI is scanning and suspending unpaid stores...', 'info', 3000);
- 
- // 1. Fetch all sellers
- const { data: sellers } = await db.from('profiles').select('id, commission_paid, trial_end').eq('role', 'seller');
- if (!sellers) {
- toast('Suspension Failed', 'Could not retrieve sellers list', 'error');
- return;
- }
- 
- const now = new Date();
- 
- // 2. Identify unpaid + expired sellers
- const targetIds = sellers
- .filter(s => !s.commission_paid && (!s.trial_end || new Date(s.trial_end) <= now))
- .map(s => s.id);
- 
- if (targetIds.length === 0) {
- toast('No Actions Needed', 'All sellers are paid or still within trial', 'success', 5000);
- return;
- }
- 
- // 3. Mass update
- const { error } = await db.from('profiles').update({ is_suspended: true }).in('id', targetIds);
- 
- if (error) {
- toast('Execution Error', error.message, 'error');
- return;
- }
- 
- toast('Enforcement Complete', `Successfully locked out ${targetIds.length} expired accounts.`, 'success', 6000);
- loadAdminOverview(); 
+ toast('No Subscription Enforcement', 'Seller access is free, so unpaid/expired seller suspension is disabled.', 'info', 6000);
 }
  
 async function loadAdminSellers() {
@@ -4667,10 +4722,9 @@ async function loadAdminSellers() {
 }
 
 function _applySellerFilter(sellers, filter) {
- const now = new Date();
- if (filter === 'paid') return sellers.filter(s => s.commission_paid);
- if (filter === 'trial') return sellers.filter(s => !s.commission_paid && s.trial_end && new Date(s.trial_end) > now);
- if (filter === 'suspended') return sellers.filter(s => !s.commission_paid && (!s.trial_end || new Date(s.trial_end) <= now));
+ if (filter === 'paid') return sellers.filter(s => !s.is_suspended);
+ if (filter === 'trial') return sellers;
+ if (filter === 'suspended') return sellers.filter(s => s.is_suspended);
  return sellers;
 }
 
@@ -4693,18 +4747,11 @@ function _renderAdminSellerList(sellers) {
  if (!sellers.length) { empty.classList.remove('hidden'); list.classList.add('hidden'); return; }
  empty.classList.add('hidden');
  list.classList.remove('hidden');
- const now = new Date();
  list.innerHTML = sellers.map(s => {
- const trialEnd = s.trial_end ? new Date(s.trial_end) : null;
- const daysLeft = trialEnd ? Math.ceil((trialEnd - now) / 86400000) : 0;
- const badge = s.commission_paid
- ? `<span class="badge badge-green">OK Active</span>`
- : daysLeft > 0
- ? `<span class="badge badge-gold">Trial: ${daysLeft}d</span>`
- : `<span class="badge badge-red">Warning Overdue</span>`;
- const approveBtn = s.commission_paid
- ? `<button onclick="adminToggleCommission('${s.id}',false)" class="btn btn-sm btn-outline"><i class="fa-solid fa-ban"></i> Revoke</button>`
- : `<button onclick="adminToggleCommission('${s.id}',true)" class="btn btn-sm btn-primary"><i class="fa-solid fa-check"></i> Approve</button>`;
+ const badge = s.is_suspended
+ ? `<span class="badge badge-red">Admin Review</span>`
+ : `<span class="badge badge-green">Free Access</span>`;
+ const approveBtn = `<button onclick="adminToggleCommission('${s.id}',true)" class="btn btn-sm btn-primary"><i class="fa-solid fa-check"></i> Mark Free</button>`;
  const accessBtn = s.is_suspended
  ? `<button onclick="adminReactivateUser('${s.id}')" class="btn btn-primary btn-sm"><i class="fa-solid fa-rotate-left"></i> Reactivate</button>`
  : `<button onclick="adminDeactivateUser('${s.id}')" class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)"><i class="fa-solid fa-ban"></i> Deactivate</button>`;
@@ -4800,10 +4847,12 @@ async function loadAdminOrders() {
 
 async function adminUpdateOrder(id, status) {
  try {
- await callEdge('admin-action', { action: 'update_order', target_id: id, data: { status } });
- toast('Order updated to ' + status, '', 'success');
- loadAdminOrders();
- } catch(e) { toast('Error', e.message, 'error'); }
+  const { data: oldOrder } = await db.from('orders').select('status').eq('id', id).maybeSingle();
+  await callEdge('admin-action', { action: 'update_order', target_id: id, data: { status } });
+  if (status === 'confirmed') notifyOrderIfConfirmed(id, oldOrder?.status || 'pending');
+  toast('Order updated to ' + status, '', 'success');
+  loadAdminOrders();
+  } catch(e) { toast('Error', e.message, 'error'); }
 }
 
 /* -- DISPUTES -- */
@@ -5198,31 +5247,22 @@ function _renderTrialExtensions(sellers) {
  tbody.innerHTML = '<tr><td colspan="5" class="text-center text-sm color-text3 p-3">No sellers found.</td></tr>';
  return;
  }
- const now = new Date();
  tbody.innerHTML = sellers.map(s => {
- const trialEnd = s.trial_end ? new Date(s.trial_end) : null;
- const daysLeft = trialEnd ? Math.ceil((trialEnd - now) / 86400000) : 0;
  const status = s.is_suspended
- ? '<span class="badge badge-red">Deactivated</span>'
- : s.commission_paid
- ? '<span class="badge badge-green">Active</span>'
- : daysLeft > 0
- ? `<span class="badge badge-gold">${daysLeft} days left</span>`
- : '<span class="badge badge-red">Expired</span>';
+ ? '<span class="badge badge-red">Admin Review</span>'
+ : '<span class="badge badge-green">Free Access</span>';
  const accessBtn = s.is_suspended
  ? `<button class="btn btn-primary btn-sm" onclick="adminReactivateUser('${s.id}')"><i class="fa-solid fa-rotate-left"></i> Reactivate</button>`
  : `<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="adminDeactivateUser('${s.id}')"><i class="fa-solid fa-ban"></i> Deactivate</button>`;
- const activateBtn = s.commission_paid
- ? ''
- : `<button class="btn btn-primary btn-sm" onclick="adminGrantCommission('${s.id}')"><i class="fa-solid fa-check"></i> Activate</button>`;
+ const activateBtn = s.commission_paid ? '' : `<button class="btn btn-primary btn-sm" onclick="adminGrantCommission('${s.id}')"><i class="fa-solid fa-check"></i> Mark Free</button>`;
  
  return `
  <tr>
  <td style="font-weight:600;font-size:.82rem">${escHtml(s.name || 'Unknown')}</td>
  <td class="text-xs color-text3">${escHtml(s.email || '')}</td>
- <td class="text-xs">${trialEnd ? fmtDate(s.trial_end) : 'N/A'}</td>
+ <td class="text-xs">Free</td>
  <td>${status}</td>
- <td><div class="flex gap-1 flex-wrap"><button class="btn btn-outline btn-sm" onclick="adminExtendTrial('${s.id}', '${s.trial_end || new Date().toISOString()}')"><i class="fa-solid fa-plus"></i> 30 Days</button>${activateBtn}${accessBtn}</div></td>
+ <td><div class="flex gap-1 flex-wrap">${activateBtn}${accessBtn}</div></td>
  </tr>
  `;
  }).join('');
@@ -5263,21 +5303,14 @@ async function adminRejectAd(adId) {
 }
 
 async function adminExtendTrial(sellerId, currentEnd) {
- if (!confirm('Extend trial by 30 days?')) return;
- try {
- await callEdge('admin-action', { action: 'extend_trial', target_id: sellerId, data: { current_end: currentEnd } });
- toast('Trial Extended', 'Seller has been given 30 more days.', 'success');
- loadAdminAccounts();
- } catch(e) {
- toast('Error', e.message, 'error');
- }
+ toast('No Trial Needed', 'Seller access is free and does not expire.', 'info', 6000);
 }
 
 async function adminGrantCommission(sellerId) {
- if (!confirm('Activate this seller as paid?')) return;
+ if (!confirm('Mark this seller as free/active?')) return;
  try {
  await callEdge('admin-action', { action: 'grant_commission', target_id: sellerId });
- toast('Seller Activated', 'Seller access is now active.', 'success');
+ toast('Seller Activated', 'Seller free access is active.', 'success');
  loadAdminAccounts();
  loadAdminSellers();
  } catch(e) {
@@ -5687,12 +5720,13 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
  // --- Cleanup, Notifications, and Analytics ---
  appStorage.removeItem('bs_ref');
  
- const seller = cart[0]?.profiles;
- if (seller?.whatsapp) {
- sendWhatsAppOrderNotification({ id: orderId, total_amount: totalAmount }, seller.whatsapp);
- }
+  const seller = cart[0]?.profiles;
+  if (seller?.whatsapp) {
+  sendWhatsAppOrderNotification({ id: orderId, total_amount: totalAmount }, seller.whatsapp);
+  }
+  notifyOrderIfConfirmed(orderId);
 
- trackAnalytics({
+  trackAnalytics({
  event_type: 'order_created',
  seller_id: cart[0]?.seller_id,
  order_id: orderId,
@@ -5734,29 +5768,43 @@ async function viewStorefront(sellerId) {
  storefrontView.classList.remove('hidden');
  storefrontView.style.display = 'block';
  }
- const { data: seller } = await db.from('profiles').select('*').eq('id', sellerId).single();
- if (!seller) { toast('Store not found','','error'); return; }
- // --- DYNAMIC LOGO IMAGE CONTEXT RESOLUTION ---
- const avatarNode = document.getElementById('sf-avatar');
- if (seller.logo_url) {
+ document.body.classList.remove('platform-seller-mode');
+  const { data: seller } = await db.from('profiles').select('*').eq('id', sellerId).single();
+  if (!seller) { toast('Store not found','','error'); return; }
+  const platformStore = isPlatformProfile(seller);
+  const storeLabel = platformStore ? 'BUYSELL Platform Store' : getPlatformStoreLabel(seller);
+  const storeDescription = platformStore
+  ? (seller.store_description || 'Official BUYSELL marketplace store for platform-listed products and trusted offers.')
+  : (seller.store_description || 'Welcome to our store!');
+  // --- DYNAMIC LOGO IMAGE CONTEXT RESOLUTION ---
+  const avatarNode = document.getElementById('sf-avatar');
+  if (seller.logo_url) {
  avatarNode.style.background = 'transparent';
  avatarNode.style.boxShadow = 'none';
  avatarNode.innerHTML = `<img src="${sanitizeUrl(seller.logo_url)}" alt="Logo" style="width:100%; height:100%; object-fit:cover; border-radius:50%; border:2px solid rgba(255,255,255,0.4);">`;
  } else {
- avatarNode.style.background = 'linear-gradient(135deg, var(--green), var(--green-lt))';
- avatarNode.textContent = (seller.name || 'S')[0].toUpperCase();
+  avatarNode.style.background = platformStore ? 'linear-gradient(135deg, var(--forest), var(--gold))' : 'linear-gradient(135deg, var(--green), var(--green-lt))';
+  avatarNode.innerHTML = platformStore ? '<i class="fa-solid fa-shield-halved"></i>' : '';
+  if (!platformStore) avatarNode.textContent = (seller.name || 'S')[0].toUpperCase();
+  }
+
+ document.getElementById('sf-name').textContent = storeLabel;
+ document.getElementById('sf-desc').textContent = storeDescription;
+ const sfBadge = document.getElementById('sf-store-badge');
+ if (sfBadge) {
+  sfBadge.className = platformStore ? 'badge badge-platform' : 'badge badge-verified';
+  sfBadge.innerHTML = platformStore
+  ? '<i class="fa-solid fa-shield-halved"></i> Platform Store'
+  : '<i class="fa-solid fa-check"></i> Verified Seller';
  }
 
- // Append new location metrics if available under the desc elements context
- if (seller.store_address) {
- document.getElementById('sf-desc').insertAdjacentHTML('beforeend', `
+  // Append new location metrics if available under the desc elements context
+  if (seller.store_address) {
+  document.getElementById('sf-desc').insertAdjacentHTML('beforeend', `
  <div style="font-size:0.75rem; color:rgba(255,255,255,0.7); margin-top:6px;">
  <i class="fa-solid fa-location-dot"></i> Store Hub: ${escHtml(seller.store_address)}
  </div>`);
  }
-document.getElementById('sf-name').textContent = seller.name || 'Seller Store';
- document.getElementById('sf-desc').textContent = seller.store_description || 'Welcome to our store!';
- 
  // ====================================================
  // EXCLUSION SECURED: PRIVACY AND TRANSACTION RETENTION
  // ====================================================
@@ -5772,12 +5820,12 @@ document.getElementById('sf-name').textContent = seller.name || 'Seller Store';
  sfWaLink.onclick = (e) => {
  e.preventDefault();
  e.stopPropagation();
- openConversation(sellerId, seller.name || 'Seller');
+  openConversation(sellerId, storeLabel);
  };
  }
 
  const { data: prods } = await db.from('products').select('*').eq('seller_id', sellerId).eq('status','active');
- const sfProds = prods || [];
+  const sfProds = (prods || []).map(product => ({ ...product, profiles: seller }));
  document.getElementById('sf-prod-count').textContent = sfProds.length;
  // Real order count
  const { count: orderCount } = await db.from('orders').select('id', { count: 'exact', head: true }).eq('seller_id', sellerId);
@@ -5793,17 +5841,17 @@ document.getElementById('sf-name').textContent = seller.name || 'Seller Store';
 // Share button URL setup
  const sfUrl = `${window.location.origin}${window.location.pathname}?store=${sellerId}`;
  const sfWaButtonElement = document.getElementById('sf-wa-link');
- if (sfWaButtonElement && sfWaButtonElement.parentElement) {
- sfWaButtonElement.parentElement.querySelectorAll('button').forEach(b => {
- if (b.textContent.includes('Share')) b.onclick = () => { navigator.clipboard?.writeText(sfUrl).then(()=>toast('Store Link Copied!','','success')).catch(()=>{}); if(navigator.share) navigator.share({title:seller.name,url:sfUrl}); };
- });
- }
+  if (sfWaButtonElement && sfWaButtonElement.parentElement) {
+  sfWaButtonElement.parentElement.querySelectorAll('button').forEach(b => {
+  if (b.textContent.includes('Share')) b.onclick = () => { navigator.clipboard?.writeText(sfUrl).then(()=>toast('Store Link Copied!','','success')).catch(()=>{}); if(navigator.share) navigator.share({title:storeLabel,url:sfUrl}); };
+  });
+  }
  const grid = document.getElementById('sf-products-grid');
  const empty = document.getElementById('sf-empty');
  if (!sfProds.length) { grid.innerHTML=''; empty.classList.remove('hidden'); }
  else { empty.classList.add('hidden'); grid.innerHTML = sfProds.map(p=>prodCard(p)).join(''); }
  // Update page title
- document.title = `${seller.name} - BUYSELL Nigeria`;
+  document.title = `${storeLabel} - BUYSELL Nigeria`;
  history.pushState(null,'',`?store=${sellerId}`);
 }
 
@@ -6813,7 +6861,7 @@ async function exportAdminReport() {
  db.from('orders').select('*').order('created_at', { ascending: false }).limit(500)
  ]);
 
- let csv = 'Section,ID,Name,Email,Role,Commission Paid,Trial End,Created\n';
+ let csv = 'Section,ID,Name,Email,Role,Free Access,Access Expiry,Created\n';
  (sellers || []).forEach(s => {
  csv += `Seller,${s.id},${escHtml(s.name||'')},${s.email||''},${s.role},${s.commission_paid},${s.trial_end||''},${s.created_at}\n`;
  });
@@ -7775,6 +7823,46 @@ function urlBase64ToUint8Array(base64String) {
  }
 
  return outputArray;
+}
+
+function fireNotificationFunction(fnName, payload) {
+ return callEdge(fnName, payload).catch(error => {
+ console.warn(`[PUSH ENGINE] ${fnName} notification skipped:`, error.message || error);
+ });
+}
+
+async function notifyProductIfActive(productRecord, oldRecord = null) {
+ if (!productRecord || productRecord.status !== 'active') return;
+ await fireNotificationFunction('notify-new-product', {
+ type: oldRecord ? 'UPDATE' : 'INSERT',
+ record: productRecord,
+ old_record: oldRecord,
+ });
+}
+
+async function fetchProductForNotification(productId) {
+ if (!productId) return null;
+ const { data, error } = await db.from('products').select('*').eq('id', productId).maybeSingle();
+ if (error) {
+ console.warn('[PUSH ENGINE] Could not load product for notification:', error.message || error);
+ return null;
+ }
+ return data || null;
+}
+
+async function notifyOrderIfConfirmed(orderId, oldStatus = null) {
+ if (!orderId) return;
+ const { data: order, error } = await db.from('orders').select('*').eq('id', orderId).maybeSingle();
+ if (error || !order) {
+ console.warn('[PUSH ENGINE] Could not load order for notification:', error?.message || error || 'not found');
+ return;
+ }
+ if (order.status !== 'confirmed') return;
+ await fireNotificationFunction('notify-seller-order', {
+ type: oldStatus ? 'UPDATE' : 'INSERT',
+ record: order,
+ old_record: oldStatus ? { ...order, status: oldStatus } : null,
+ });
 }
 
 async function loadActiveAds() {
