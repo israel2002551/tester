@@ -265,6 +265,8 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .buyer-command-strip button{border:1px solid var(--border);background:#fff;border-radius:10px;padding:.72rem .45rem;display:flex;flex-direction:column;align-items:center;gap:.35rem;color:var(--text2);font-weight:800;font-size:.72rem;cursor:pointer;box-shadow:0 6px 16px rgba(11,31,20,.04);min-width:0}
 .buyer-command-strip button i{width:32px;height:32px;border-radius:10px;background:var(--green-xlt);color:var(--green);display:flex;align-items:center;justify-content:center;font-size:.95rem}
 .buyer-command-strip button:hover{border-color:var(--green);transform:translateY(-1px)}
+.buyer-command-strip button.active{border-color:var(--green);background:var(--green-xlt);color:#15803d}
+.buyer-command-strip button.active i{background:var(--green);color:#fff}
 .buyer-deal-board{display:grid;grid-template-columns:1.4fr repeat(3,1fr);gap:.75rem}
 .buyer-deal-board button{border:0;text-align:left;cursor:pointer;font-family:'DM Sans',sans-serif}
 .deal-board-main{min-height:118px;border-radius:12px;padding:1rem;background:linear-gradient(135deg,#0b1f14,#1f6b3b);color:#fff;display:flex;flex-direction:column;justify-content:center;overflow:hidden;position:relative}
@@ -276,6 +278,7 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .deal-board-card i{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff}
 .deal-board-card strong{font-size:.95rem;line-height:1.2}
 .deal-board-card span{color:var(--text3)}
+.buyer-deal-board button.active{outline:2px solid var(--green);outline-offset:2px}
 .deal-board-card-orange i{background:#ea580c}.deal-board-card-green i{background:var(--green)}.deal-board-card-blue i{background:var(--blue)}
 @media(max-width:760px){.buyer-command-strip{grid-template-columns:repeat(3,1fr)}.buyer-deal-board{grid-template-columns:1fr 1fr}.deal-board-main{grid-column:1/-1}.deal-board-card{min-height:104px}}
 @media(max-width:420px){.buyer-command-strip{gap:.45rem}.buyer-command-strip button{font-size:.66rem;padding:.62rem .3rem}.buyer-deal-board{gap:.5rem}.deal-board-main{min-height:108px}.deal-board-main strong{font-size:1.05rem}.deal-board-card{padding:.75rem;min-height:96px}}

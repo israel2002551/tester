@@ -1714,11 +1714,54 @@ function prodCard(p) {
 // FILTERS & SEARCH
 // ====================================================
 
-function filterCat(cat) {
- document.querySelectorAll('.cat-chip').forEach(c => c.classList.toggle('active', c.dataset.cat === cat));
- if (cat === 'all') { delete activeFilters.category; document.getElementById('section-title-text').textContent = 'Latest Products'; }
- else { activeFilters.category = cat; document.getElementById('section-title-text').textContent = cat.charAt(0).toUpperCase()+cat.slice(1); }
+const CATEGORY_PAGE_LABELS = {
+ all: 'All Products',
+ trending: 'Trending Products',
+ electronics: 'Electronics',
+ phones: 'Phones & Tablets',
+ fashion: 'Fashion',
+ home: 'Home & Kitchen',
+ beauty: 'Beauty & Health',
+ sports: 'Sports',
+ dropship: 'Dropshipping Products',
+};
+
+function categoryLabel(cat) {
+ return CATEGORY_PAGE_LABELS[cat] || String(cat || 'Products').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function setCategoryUrl(cat) {
+ const url = new URL(window.location.href);
+ if (!cat || cat === 'all') url.searchParams.delete('category');
+ else url.searchParams.set('category', cat);
+ url.searchParams.delete('product');
+ url.searchParams.delete('store');
+ history.pushState({ category: cat || 'all' }, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+function filterCat(cat, options = {}) {
+ const selected = cat || 'all';
+ document.querySelectorAll('.cat-chip').forEach(c => c.classList.toggle('active', c.dataset.cat === selected));
+ document.querySelectorAll('[data-category-link]').forEach(btn => btn.classList.toggle('active', btn.dataset.categoryLink === selected));
+ if (selected === 'all') {
+  delete activeFilters.category;
+  document.getElementById('section-title-text').textContent = 'Latest Products';
+ } else {
+  activeFilters.category = selected;
+  document.getElementById('section-title-text').textContent = categoryLabel(selected);
+ }
  applyCurrentFilters();
+ if (options.updateUrl) setCategoryUrl(selected);
+ if (options.scroll) {
+  switchBuyerTab?.('shop');
+  document.querySelector('.products-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+ }
+}
+
+function openCategoryPage(cat) {
+ if (typeof showBuyerView === 'function' && currentRole !== 'buyer') showBuyerView();
+ filterCat(cat, { updateUrl: true, scroll: true });
+ document.title = `${categoryLabel(cat)} - BUYSELL Nigeria`;
 }
 
 let searchTimeout;
@@ -5875,13 +5918,19 @@ async function handleDeepLink() {
  const params = new URLSearchParams(window.location.search);
  const productId = params.get('product');
  const storeId = params.get('store');
+ const category = params.get('category');
  const refCode = params.get('ref');
  if (productId) {
- await loadProducts();
- openProduct(productId);
- }
- if (storeId) {
- viewStorefront(storeId);
+  await loadProducts();
+  openProduct(productId);
+  }
+  if (storeId) {
+  viewStorefront(storeId);
+  }
+ if (category && !productId && !storeId) {
+  await loadProducts();
+  filterCat(category, { scroll: true });
+  document.title = `${categoryLabel(category)} - BUYSELL Nigeria`;
  }
  if (refCode) {
  // Track referral click

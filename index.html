@@ -39,7 +39,7 @@
 </script>
  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<link rel="stylesheet" href="styles.css?v=8.0">
+<link rel="stylesheet" href="styles.css?v=8.1">
 </head>
 <body>
 
@@ -222,7 +222,7 @@
  <span class="slide-tag"><i class="fa-solid fa-bolt"></i> HOT DEALS</span>
  <h2>Tech & Electronics</h2>
  <p>Up to 70% off on microcontrollers, sensors & laptops.</p>
- <button class="btn btn-gold btn-sm" onclick="filterCat('electronics')">Shop Now <i class="fa-solid fa-arrow-right"></i></button>
+ <button class="btn btn-gold btn-sm" onclick="openCategoryPage('electronics')">Shop Now <i class="fa-solid fa-arrow-right"></i></button>
  </div>
  </div>
  <div class="carousel-slide">
@@ -232,7 +232,7 @@
  <span class="slide-tag" style="background:var(--green);color:#fff"><i class="fa-solid fa-palette"></i> NEW ARRIVALS</span>
  <h2>African Fashion</h2>
  <p>Authentic Ankara, Aso-oke & contemporary styles.</p>
- <button class="btn btn-primary btn-sm" onclick="filterCat('fashion')">Explore <i class="fa-solid fa-arrow-right"></i></button>
+ <button class="btn btn-primary btn-sm" onclick="openCategoryPage('fashion')">Explore <i class="fa-solid fa-arrow-right"></i></button>
  </div>
  </div>
  <div class="carousel-slide">
@@ -242,7 +242,7 @@
  <span class="slide-tag" style="background:#0BA4DB;color:#fff"><i class="fa-solid fa-credit-card"></i> SECURE CHECKOUT</span>
  <h2>Pay with Paystack</h2>
  <p>Cards, USSD, bank checkout & more. 100% secure.</p>
- <button class="btn btn-ghost btn-sm" onclick="filterCat('all')">Browse All <i class="fa-solid fa-arrow-right"></i></button>
+ <button class="btn btn-ghost btn-sm" onclick="openCategoryPage('all')">Browse All <i class="fa-solid fa-arrow-right"></i></button>
  </div>
  </div>
  </div>
@@ -258,30 +258,30 @@
  
   <div class="buyer-inner temu-shell">
   <section class="buyer-command-strip" aria-label="Marketplace shortcuts">
-  <button onclick="filterCat('trending')"><i class="fa-solid fa-fire"></i><span>Trending</span></button>
-  <button onclick="filterCat('phones')"><i class="fa-solid fa-mobile-screen"></i><span>Phones</span></button>
-  <button onclick="filterCat('fashion')"><i class="fa-solid fa-shirt"></i><span>Fashion</span></button>
-  <button onclick="filterCat('home')"><i class="fa-solid fa-house"></i><span>Home</span></button>
+  <button onclick="openCategoryPage('trending')" data-category-link="trending"><i class="fa-solid fa-fire"></i><span>Trending</span></button>
+  <button onclick="openCategoryPage('phones')" data-category-link="phones"><i class="fa-solid fa-mobile-screen"></i><span>Phones</span></button>
+  <button onclick="openCategoryPage('fashion')" data-category-link="fashion"><i class="fa-solid fa-shirt"></i><span>Fashion</span></button>
+  <button onclick="openCategoryPage('home')" data-category-link="home"><i class="fa-solid fa-house"></i><span>Home</span></button>
   <button onclick="switchBuyerTab('orders')"><i class="fa-solid fa-box"></i><span>Orders</span></button>
   <button onclick="openInbox()"><i class="fa-solid fa-comments"></i><span>Messages</span></button>
   </section>
   <section class="buyer-deal-board">
-  <button class="deal-board-main" onclick="filterCat('all')">
+  <button class="deal-board-main" onclick="openCategoryPage('all')" data-category-link="all">
   <span>Buyer Picks</span>
   <strong>Fresh marketplace finds</strong>
   <small>Verified stores, videos, chat, and secure checkout.</small>
   </button>
-  <button class="deal-board-card deal-board-card-orange" onclick="filterCat('trending')">
+  <button class="deal-board-card deal-board-card-orange" onclick="openCategoryPage('trending')" data-category-link="trending">
   <i class="fa-solid fa-bolt"></i>
   <span>Flash Picks</span>
   <strong>Hot products</strong>
   </button>
-  <button class="deal-board-card deal-board-card-green" onclick="filterCat('dropship')">
+  <button class="deal-board-card deal-board-card-green" onclick="openCategoryPage('dropship')" data-category-link="dropship">
   <i class="fa-solid fa-globe"></i>
   <span>Dropship</span>
   <strong>Global deals</strong>
   </button>
-  <button class="deal-board-card deal-board-card-blue" onclick="filterCat('electronics')">
+  <button class="deal-board-card deal-board-card-blue" onclick="openCategoryPage('electronics')" data-category-link="electronics">
   <i class="fa-solid fa-microchip"></i>
   <span>Tech Zone</span>
   <strong>Gadgets daily</strong>
@@ -313,15 +313,15 @@
  <div class="buyer-inner cats-section">
  <div class="cats-strip">
  <div class="cats-inner">
- <div class="cat-chip active" onclick="filterCat('all')" data-cat="all"><i class="fa-solid fa-border-all"></i> All</div>
- <div class="cat-chip" onclick="filterCat('electronics')" data-cat="electronics"><i class="fa-solid fa-microchip"></i> Electronics</div>
- <div class="cat-chip" onclick="filterCat('fashion')" data-cat="fashion"><i class="fa-solid fa-shirt"></i> Fashion</div>
- <div class="cat-chip" onclick="filterCat('phones')" data-cat="phones"><i class="fa-solid fa-mobile-alt"></i> Phones</div>
- <div class="cat-chip" onclick="filterCat('home')" data-cat="home"><i class="fa-solid fa-house"></i> Home</div>
- <div class="cat-chip" onclick="filterCat('beauty')" data-cat="beauty"><i class="fa-solid fa-spa"></i> Beauty</div>
- <div class="cat-chip" onclick="filterCat('sports')" data-cat="sports"><i class="fa-solid fa-dumbbell"></i> Sports</div>
- <div class="cat-chip" onclick="filterCat('dropship')" data-cat="dropship" style="background:linear-gradient(90deg,#0b1f14,#1a3a26);color:#fff;border-color:transparent"><i class="fa-solid fa-globe"></i> Dropship</div>
- <div class="cat-chip" onclick="filterCat('trending')" data-cat="trending" style="background:linear-gradient(90deg,#ea580c,#ef4444);color:#fff;border-color:transparent"><i class="fa-solid fa-fire"></i> Trending</div>
+ <div class="cat-chip active" onclick="openCategoryPage('all')" data-cat="all"><i class="fa-solid fa-border-all"></i> All</div>
+ <div class="cat-chip" onclick="openCategoryPage('electronics')" data-cat="electronics"><i class="fa-solid fa-microchip"></i> Electronics</div>
+ <div class="cat-chip" onclick="openCategoryPage('fashion')" data-cat="fashion"><i class="fa-solid fa-shirt"></i> Fashion</div>
+ <div class="cat-chip" onclick="openCategoryPage('phones')" data-cat="phones"><i class="fa-solid fa-mobile-alt"></i> Phones</div>
+ <div class="cat-chip" onclick="openCategoryPage('home')" data-cat="home"><i class="fa-solid fa-house"></i> Home</div>
+ <div class="cat-chip" onclick="openCategoryPage('beauty')" data-cat="beauty"><i class="fa-solid fa-spa"></i> Beauty</div>
+ <div class="cat-chip" onclick="openCategoryPage('sports')" data-cat="sports"><i class="fa-solid fa-dumbbell"></i> Sports</div>
+ <div class="cat-chip" onclick="openCategoryPage('dropship')" data-cat="dropship" style="background:linear-gradient(90deg,#0b1f14,#1a3a26);color:#fff;border-color:transparent"><i class="fa-solid fa-globe"></i> Dropship</div>
+ <div class="cat-chip" onclick="openCategoryPage('trending')" data-cat="trending" style="background:linear-gradient(90deg,#ea580c,#ef4444);color:#fff;border-color:transparent"><i class="fa-solid fa-fire"></i> Trending</div>
  </div>
  </div>
  </div>
@@ -2731,7 +2731,7 @@
 
 <script src="https://js.paystack.co/v2/inline.js"></script>
 <script data-cfasync="false" src="config.js?v=3.3"></script>
-<script src="app.js?v=9.1"></script>
+<script src="app.js?v=9.2"></script>
  <script>
  (function() {
  'use strict';
