@@ -8153,19 +8153,21 @@ async function syncUserNotificationToken() {
  let subscription = await registration.pushManager.getSubscription();
  const VAPID_PUBLIC_KEY = "BEL_hMw0i1uDcH_jt52ReK7GbXtLW4IvVK_7pW5fGSl-2f7inbRJgednd3R8YRXas-xNles0ezQfXMkopIhuKok";
  const vapidKeyBytes = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+ const storedVapidKey = appStorage.getItem('bs_vapid_public_key') || '';
 
- if (subscription && !pushSubscriptionUsesKey(subscription, vapidKeyBytes)) {
- await subscription.unsubscribe();
- subscription = null;
- }
+ if (subscription && (storedVapidKey !== VAPID_PUBLIC_KEY || !pushSubscriptionUsesKey(subscription, vapidKeyBytes))) {
+  await subscription.unsubscribe();
+  subscription = null;
+  }
 
  // If no active device subscription vector exists, create a new one
  if (!subscription) {
  subscription = await registration.pushManager.subscribe({
  userVisibleOnly: true,
- applicationServerKey: vapidKeyBytes
- });
- }
+  applicationServerKey: vapidKeyBytes
+  });
+  }
+ appStorage.setItem('bs_vapid_public_key', VAPID_PUBLIC_KEY);
 
  const subscriptionJson = subscription.toJSON ? subscription.toJSON() : JSON.parse(JSON.stringify(subscription));
  let saved = false;
