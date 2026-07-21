@@ -1325,6 +1325,7 @@ function showBuyerView() {
 
  if (typeof startCarousel === 'function') startCarousel();
  if (typeof loadProducts === 'function') loadProducts();
+ if (typeof loadUpcomingProducts === 'function') loadUpcomingProducts();
  if (typeof loadActiveAds === 'function') loadActiveAds();
  if (typeof updateCartCount === 'function') updateCartCount();
 }
@@ -1559,7 +1560,64 @@ async function loadProducts() {
  } catch(e) {
  document.getElementById('prods-skeleton').classList.add('hidden');
  document.getElementById('prods-error').classList.remove('hidden');
+  }
+}
+
+async function loadUpcomingProducts() {
+ const section = document.getElementById('buyer-upcoming-section');
+ const grid = document.getElementById('buyer-upcoming-grid');
+ if (!section || !grid) return;
+ try {
+  const { data, error } = await db
+  .from('upcoming_products')
+  .select('*')
+  .eq('status', 'active')
+  .order('priority', { ascending: false })
+  .order('created_at', { ascending: false })
+  .limit(8);
+  if (error) throw error;
+  const rows = data || [];
+  if (!rows.length) {
+  section.classList.add('hidden');
+  grid.innerHTML = '';
+  return;
+  }
+  section.classList.remove('hidden');
+  grid.innerHTML = rows.map(upcomingProductCard).join('');
+ } catch (e) {
+  console.warn('Upcoming products unavailable:', e.message || e);
+  section.classList.add('hidden');
  }
+}
+
+function upcomingMediaList(row = {}) {
+ const images = Array.isArray(row.images) ? row.images.filter(Boolean) : [];
+ const videos = Array.isArray(row.videos) ? row.videos.filter(Boolean) : [];
+ if (!images.length && row.image_url) images.push(row.image_url);
+ if (!videos.length && row.video_url) videos.push(row.video_url);
+ return { images, videos };
+}
+
+function upcomingProductCard(row) {
+ const { images, videos } = upcomingMediaList(row);
+ const cover = videos[0] || images[0] || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=600&h=600&fit=crop';
+ const isVideo = !!videos[0];
+ const launchText = row.launch_date ? `Launching ${fmtDate(row.launch_date)}` : 'Coming soon';
+ return `
+ <article class="upcoming-card">
+ <div class="upcoming-media">
+ ${isVideo
+ ? `<video src="${escAttr(cover)}" muted playsinline preload="metadata"></video><span class="upcoming-play"><i class="fa-solid fa-circle-play"></i></span>`
+ : `<img src="${escAttr(cover)}" alt="${escAttr(row.title || 'Upcoming product')}" loading="lazy">`}
+ <span class="upcoming-badge"><i class="fa-solid fa-shield-halved"></i> Platform Store</span>
+ </div>
+ <div class="upcoming-body">
+ <span>${escHtml(launchText)}</span>
+ <h3>${escHtml(row.title || 'Upcoming Product')}</h3>
+ <p>${escHtml(row.description || 'A new official BUYSELL product preview is coming soon.')}</p>
+ <button class="btn btn-outline btn-sm" onclick="toast('Coming Soon','This product is not available for purchase yet.','info')"><i class="fa-solid fa-bell"></i> Notify Me</button>
+ </div>
+ </article>`;
 }
 
 function renderProducts(prods) {
@@ -4606,6 +4664,139 @@ function switchAdminTab(tab) {
  if (tab === 'ai') adminAiHistory = [];
  if (tab === 'accounts') loadAdminAccounts();
  if (tab === 'kyc') loadAdminKyc();
+ if (tab === 'upcoming') loadAdminUpcomingProducts();
+}
+
+async function uploadUpcomingMediaFiles(files, kind) {
+ const isVideo = kind === 'video';
+ const maxCount = isVideo ? 4 : 10;
+ const maxSize = isVideo ? PRODUCT_MAX_VIDEO_SIZE : PRODUCT_MAX_IMAGE_SIZE;
+ const allowedTypes = isVideo ? PRODUCT_ALLOWED_VID_TYPES : PRODUCT_ALLOWED_IMG_TYPES;
+ const folder = isVideo ? 'upcoming/videos' : 'upcoming/images';
+ const selected = files.slice(0, maxCount);
+ if (files.length > maxCount) toast('Media limit applied', `Only the first ${maxCount} ${isVideo ? 'videos' : 'pictures'} were uploaded.`, 'warn');
+ const urls = [];
+ for (let i = 0; i < selected.length; i++) {
+  const file = selected[i];
+  if (!allowedTypes.includes(file.type)) throw new Error(`Unsupported ${isVideo ? 'video' : 'image'}: ${file.name}`);
+  if (file.size > maxSize) throw new Error(`${file.name} is too large.`);
+  const ext = safeFileExt(file.name, isVideo ? 'mp4' : 'jpg');
+  const path = `${folder}/${currentUser.id}/${Date.now()}-${i}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+  const uploaded = await uploadToFirstAvailableBucket(['products', 'uploads'], path, file, { contentType: file.type, upsert: false });
+  if (uploaded.publicUrl) urls.push(uploaded.publicUrl);
+ }
+ return urls;
+}
+
+function getVisibleAdminElement(id) {
+ const nodes = [...document.querySelectorAll(`#${id}`)];
+ return nodes.find(node => {
+  const portal = node.closest('#admin-portal-view');
+  const sellerDash = node.closest('#seller-dashboard');
+  if (portal) return portal.style.display !== 'none' && !portal.classList.contains('hidden');
+  if (sellerDash) return sellerDash.style.display !== 'none' && !sellerDash.classList.contains('hidden');
+  return false;
+ }) || nodes[0] || null;
+}
+
+async function submitUpcomingProduct() {
+ if (!guardAdminPanel()) return;
+ const btn = getVisibleAdminElement('up-submit-btn');
+ const title = getVisibleAdminElement('up-title')?.value.trim();
+ const description = getVisibleAdminElement('up-desc')?.value.trim();
+ const launchDate = getVisibleAdminElement('up-launch-date')?.value || null;
+ const priority = parseInt(getVisibleAdminElement('up-priority')?.value || '1', 10) || 1;
+ const imageFiles = Array.from(getVisibleAdminElement('up-images')?.files || []);
+ const videoFiles = Array.from(getVisibleAdminElement('up-videos')?.files || []);
+ if (!title || title.length < 3) { toast('Missing title', 'Enter an upcoming product name.', 'warn'); return; }
+ if (!imageFiles.length && !videoFiles.length) { toast('Media required', 'Upload at least one picture or video.', 'warn'); return; }
+ btn.disabled = true;
+ const oldHtml = btn.innerHTML;
+ btn.innerHTML = '<span class="spinner"></span> Uploading...';
+ try {
+  const images = await uploadUpcomingMediaFiles(imageFiles, 'image');
+  const videos = await uploadUpcomingMediaFiles(videoFiles, 'video');
+  const row = {
+  title,
+  description,
+  launch_date: launchDate,
+  priority,
+  images,
+  videos,
+  image_url: images[0] || '',
+  video_url: videos[0] || '',
+  status: 'active',
+  created_by: currentUser.id,
+  };
+  const { error } = await db.from('upcoming_products').insert(row);
+  if (error) throw error;
+  ['up-title','up-desc','up-launch-date','up-images','up-videos'].forEach(id => { const el = getVisibleAdminElement(id); if (el) el.value = ''; });
+  const priorityEl = getVisibleAdminElement('up-priority');
+  if (priorityEl) priorityEl.value = '1';
+  toast('Upcoming Product Published', 'It is now visible in the buyer portal.', 'success');
+  loadAdminUpcomingProducts();
+  loadUpcomingProducts();
+ } catch (e) {
+  toast('Upload Failed', e.message || 'Could not publish upcoming product.', 'error');
+ } finally {
+  btn.disabled = false;
+  btn.innerHTML = oldHtml;
+ }
+}
+
+async function loadAdminUpcomingProducts() {
+ if (!guardAdminPanel()) return;
+ const list = getVisibleAdminElement('admin-upcoming-list');
+ if (!list) return;
+ list.innerHTML = '<div class="text-sm color-text3">Loading upcoming products...</div>';
+ try {
+  const { data, error } = await db.from('upcoming_products').select('*').order('priority', { ascending: false }).order('created_at', { ascending: false }).limit(30);
+  if (error) throw error;
+  const rows = data || [];
+  if (!rows.length) {
+  list.innerHTML = '<div class="empty-state"><i class="fa-solid fa-calendar-plus"></i><p>No upcoming products uploaded yet.</p></div>';
+  return;
+  }
+  list.innerHTML = rows.map(row => {
+  const { images, videos } = upcomingMediaList(row);
+  const cover = videos[0] || images[0] || '';
+  return `<div class="admin-upcoming-item">
+  <div class="admin-upcoming-thumb">${cover ? (videos[0] ? `<video src="${escAttr(cover)}" muted></video>` : `<img src="${escAttr(cover)}" alt="">`) : '<i class="fa-solid fa-image"></i>'}</div>
+  <div class="admin-upcoming-info">
+  <strong>${escHtml(row.title || 'Upcoming Product')}</strong>
+  <span>${escHtml(row.launch_date ? fmtDate(row.launch_date) : 'Coming soon')} - ${images.length} picture${images.length === 1 ? '' : 's'} - ${videos.length} video${videos.length === 1 ? '' : 's'}</span>
+  <p>${escHtml(row.description || '')}</p>
+  </div>
+  <div class="admin-upcoming-actions">
+  <span class="badge ${row.status === 'active' ? 'badge-green' : 'badge-gray'}">${escHtml(row.status || 'active')}</span>
+  <button class="btn btn-outline btn-sm" onclick="toggleUpcomingProduct('${escAttr(row.id)}','${escAttr(row.status || 'active')}')">${row.status === 'active' ? 'Hide' : 'Show'}</button>
+  <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:#fecaca" onclick="deleteUpcomingProduct('${escAttr(row.id)}')"><i class="fa-solid fa-trash"></i></button>
+  </div>
+  </div>`;
+  }).join('');
+ } catch (e) {
+  list.innerHTML = `<div class="text-sm color-danger">Could not load upcoming products: ${escHtml(e.message || 'Unknown error')}</div>`;
+ }
+}
+
+async function toggleUpcomingProduct(id, status) {
+ if (!guardAdminPanel()) return;
+ const next = status === 'active' ? 'hidden' : 'active';
+ const { error } = await db.from('upcoming_products').update({ status: next }).eq('id', id);
+ if (error) { toast('Error', error.message, 'error'); return; }
+ toast('Upcoming Product Updated', `Status: ${next}`, 'success');
+ loadAdminUpcomingProducts();
+ loadUpcomingProducts();
+}
+
+async function deleteUpcomingProduct(id) {
+ if (!guardAdminPanel()) return;
+ if (!confirm('Delete this upcoming product?')) return;
+ const { error } = await db.from('upcoming_products').delete().eq('id', id);
+ if (error) { toast('Error', error.message, 'error'); return; }
+ toast('Deleted', 'Upcoming product removed.', 'info');
+ loadAdminUpcomingProducts();
+ loadUpcomingProducts();
 }
 
 /* -- OVERVIEW -- */

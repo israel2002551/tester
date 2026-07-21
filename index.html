@@ -39,7 +39,7 @@
 </script>
  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<link rel="stylesheet" href="styles.css?v=7.8">
+<link rel="stylesheet" href="styles.css?v=7.9">
 </head>
 <body>
 
@@ -288,6 +288,18 @@
   </button>
   </section>
   </div>
+
+  <section class="buyer-inner buyer-upcoming-section hidden" id="buyer-upcoming-section">
+  <div class="buyer-section-head">
+  <div>
+  <span class="section-kicker">Platform Store Preview</span>
+  <h2>Upcoming Products</h2>
+  <p>Official BUYSELL products and launches coming soon.</p>
+  </div>
+  <button class="btn btn-outline btn-sm" onclick="loadUpcomingProducts()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+  </div>
+  <div class="upcoming-grid" id="buyer-upcoming-grid"></div>
+  </section>
 
   <!-- Flash Sales Banner -->
   <div id="flash-sales-container" class="buyer-inner hidden" style="padding-top:.5rem">
@@ -1000,6 +1012,7 @@
  <button class="buyer-tab" id="atab-withdrawals" data-admin-tab="withdrawals" onclick="switchAdminTab('withdrawals')"><i class="fa-solid fa-money-bill-transfer"></i> Payouts</button>
  <button class="buyer-tab" id="atab-receipts" data-admin-tab="receipts" onclick="switchAdminTab('receipts')"><i class="fa-solid fa-receipt"></i> Receipts</button>
  <button class="buyer-tab" id="atab-broadcast" data-admin-tab="broadcast" onclick="switchAdminTab('broadcast')"><i class="fa-solid fa-bullhorn"></i> Broadcast</button>
+ <button class="buyer-tab" id="atab-upcoming" data-admin-tab="upcoming" onclick="switchAdminTab('upcoming')"><i class="fa-solid fa-calendar-plus"></i> Upcoming</button>
  <button class="buyer-tab" id="atab-ai" data-admin-tab="ai" onclick="switchAdminTab('ai')"><i class="fa-solid fa-robot"></i> AI Assistant</button>
  <button class="buyer-tab" id="atab-branding" data-admin-tab="branding" onclick="switchAdminTab('branding')"><i class="fa-solid fa-palette"></i> Branding</button>
 </div>
@@ -1027,10 +1040,38 @@
  <button class="btn btn-primary btn-full" id="save-logo-btn" onclick="saveAdminLogo()">
  <i class="fa-solid fa-save"></i> Save & Apply Logo
  </button>
- </div>
-</div> 
+  </div>
+  </div>
  
- <!-- AI ASSISTANT TAB -->
+  <!-- UPCOMING PRODUCTS TAB -->
+  <div id="adm-tab-upcoming" class="adm-tab hidden">
+  <div class="admin-upcoming-grid">
+  <div class="card card-pad-lg">
+  <h3 class="mb-1"><i class="fa-solid fa-calendar-plus color-green"></i> Upload Upcoming Product</h3>
+  <p class="text-xs color-text3 mb-3">Create official platform previews shown on the buyer portal. Upload pictures and videos in bulk.</p>
+  <div class="form-group"><label class="form-label">Product Name <span class="req">*</span></label><input type="text" id="up-title" class="form-input" placeholder="e.g., BUYSELL Smart Watch Pro"></div>
+  <div class="form-group"><label class="form-label">Short Description</label><textarea id="up-desc" class="form-textarea" rows="3" placeholder="Tell buyers what is coming soon..."></textarea></div>
+  <div class="form-grid form-grid-2">
+  <div class="form-group"><label class="form-label">Expected Launch</label><input type="date" id="up-launch-date" class="form-input"></div>
+  <div class="form-group"><label class="form-label">Priority</label><input type="number" id="up-priority" class="form-input" value="1" min="0" max="99"></div>
+  </div>
+  <div class="form-group"><label class="form-label">Pictures <span class="req">*</span></label><input type="file" id="up-images" class="form-input" accept="image/*" multiple><div class="text-xs color-text3 mt-1">Upload up to 10 pictures. First picture becomes the cover.</div></div>
+  <div class="form-group"><label class="form-label">Videos</label><input type="file" id="up-videos" class="form-input" accept="video/*" multiple><div class="text-xs color-text3 mt-1">Upload up to 4 preview videos.</div></div>
+  <button class="btn btn-primary btn-full" id="up-submit-btn" onclick="submitUpcomingProduct()"><i class="fa-solid fa-cloud-arrow-up"></i> Publish Upcoming Product</button>
+  </div>
+  <div class="card card-pad-lg">
+  <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
+  <div>
+  <h3 class="mb-1"><i class="fa-solid fa-list color-green"></i> Upcoming Queue</h3>
+  <p class="text-xs color-text3">Manage official previews shown to buyers.</p>
+  </div>
+  <button class="btn btn-outline btn-sm" onclick="loadAdminUpcomingProducts()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+  </div>
+  <div id="admin-upcoming-list" class="admin-upcoming-list"><div class="text-sm color-text3">Loading...</div></div>
+  </div>
+  </div>
+  </div>
+  <!-- AI ASSISTANT TAB -->
 <div id="adm-tab-ai" class="adm-tab hidden">
  <div class="card card-pad-lg" style="max-width:600px">
  <h3 class="mb-1"><i class="fa-solid fa-robot color-green"></i> Admin AI Assistant</h3>
@@ -1962,9 +2003,10 @@
  <a href="#" class="dash-nav-item" id="ap-nav-disputes" onclick="switchAdminTab('disputes');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-gavel"></i> Disputes</a>
  <a href="#" class="dash-nav-item" id="ap-nav-withdrawals" onclick="switchAdminTab('withdrawals');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-coins"></i> Payouts</a>
  <a href="#" class="dash-nav-item" id="ap-nav-receipts" onclick="switchAdminTab('receipts');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-file-invoice"></i> Receipts</a>
- <a href="#" class="dash-nav-item" id="ap-nav-kyc" onclick="switchAdminTab('kyc');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-id-card"></i> KYC Verify</a>
- <a href="#" class="dash-nav-item" id="ap-nav-broadcast" onclick="switchAdminTab('broadcast');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-bullhorn"></i> Broadcast</a>
- <a href="#" class="dash-nav-item" id="ap-nav-predictive" onclick="switchAdminTab('predictive');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-crystal-ball"></i> Predictive</a>
+  <a href="#" class="dash-nav-item" id="ap-nav-kyc" onclick="switchAdminTab('kyc');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-id-card"></i> KYC Verify</a>
+  <a href="#" class="dash-nav-item" id="ap-nav-broadcast" onclick="switchAdminTab('broadcast');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-bullhorn"></i> Broadcast</a>
+  <a href="#" class="dash-nav-item" id="ap-nav-upcoming" onclick="switchAdminTab('upcoming');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-calendar-plus"></i> Upcoming</a>
+  <a href="#" class="dash-nav-item" id="ap-nav-predictive" onclick="switchAdminTab('predictive');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-crystal-ball"></i> Predictive</a>
  <a href="#" class="dash-nav-item" id="ap-nav-competitors" onclick="switchAdminTab('competitors');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-users"></i> Competitors</a>
  <a href="#" class="dash-nav-item" id="ap-nav-notifications" onclick="switchAdminTab('notifications');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-bell"></i> Alerts</a>
  <a href="#" class="dash-nav-item" id="ap-nav-ai" onclick="switchAdminTab('ai');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-robot"></i> AI Assistant</a>
@@ -1991,9 +2033,10 @@
  <button class="buyer-tab" data-admin-tab="orders" onclick="switchAdminTab('orders')"><i class="fa-solid fa-box"></i> Orders</button>
  <button class="buyer-tab" data-admin-tab="disputes" onclick="switchAdminTab('disputes')"><i class="fa-solid fa-scale-balanced"></i> Disputes</button>
  <button class="buyer-tab" data-admin-tab="withdrawals" onclick="switchAdminTab('withdrawals')"><i class="fa-solid fa-money-bill-transfer"></i> Payouts</button>
- <button class="buyer-tab" data-admin-tab="receipts" onclick="switchAdminTab('receipts')"><i class="fa-solid fa-receipt"></i> Receipts</button>
- <button class="buyer-tab" data-admin-tab="broadcast" onclick="switchAdminTab('broadcast')"><i class="fa-solid fa-bullhorn"></i> Broadcast</button>
- <button class="buyer-tab" data-admin-tab="ai" onclick="switchAdminTab('ai')"><i class="fa-solid fa-robot"></i> AI</button>
+  <button class="buyer-tab" data-admin-tab="receipts" onclick="switchAdminTab('receipts')"><i class="fa-solid fa-receipt"></i> Receipts</button>
+  <button class="buyer-tab" data-admin-tab="broadcast" onclick="switchAdminTab('broadcast')"><i class="fa-solid fa-bullhorn"></i> Broadcast</button>
+  <button class="buyer-tab" data-admin-tab="upcoming" onclick="switchAdminTab('upcoming')"><i class="fa-solid fa-calendar-plus"></i> Upcoming</button>
+  <button class="buyer-tab" data-admin-tab="ai" onclick="switchAdminTab('ai')"><i class="fa-solid fa-robot"></i> AI</button>
  <button class="buyer-tab" data-admin-tab="branding" onclick="switchAdminTab('branding')"><i class="fa-solid fa-palette"></i> Branding</button>
  </div>
 
@@ -2157,14 +2200,43 @@
  <button class="btn btn-primary btn-full" onclick="sendBroadcast()"><i class="fa-solid fa-paper-plane"></i> Send Broadcast</button>
  <div class="divider mt-4 mb-3"></div>
  <h4 class="mb-3">Recent Broadcasts</h4>
- <div id="bc-history"><p class="color-text3 text-sm">None sent yet.</p></div>
- </div>
- </div>
+  <div id="bc-history"><p class="color-text3 text-sm">None sent yet.</p></div>
+  </div>
+  </div>
+ 
+  <!-- UPCOMING PRODUCTS TAB -->
+  <div id="adm-tab-upcoming" class="adm-tab hidden">
+  <div class="admin-upcoming-grid">
+  <div class="card card-pad-lg">
+  <h3 class="mb-1"><i class="fa-solid fa-calendar-plus color-green"></i> Upload Upcoming Product</h3>
+  <p class="text-xs color-text3 mb-3">Create official platform previews shown on the buyer portal. Upload pictures and videos in bulk.</p>
+  <div class="form-group"><label class="form-label">Product Name <span class="req">*</span></label><input type="text" id="up-title" class="form-input" placeholder="e.g., BUYSELL Smart Watch Pro"></div>
+  <div class="form-group"><label class="form-label">Short Description</label><textarea id="up-desc" class="form-textarea" rows="3" placeholder="Tell buyers what is coming soon..."></textarea></div>
+  <div class="form-grid form-grid-2">
+  <div class="form-group"><label class="form-label">Expected Launch</label><input type="date" id="up-launch-date" class="form-input"></div>
+  <div class="form-group"><label class="form-label">Priority</label><input type="number" id="up-priority" class="form-input" value="1" min="0" max="99"></div>
+  </div>
+  <div class="form-group"><label class="form-label">Pictures <span class="req">*</span></label><input type="file" id="up-images" class="form-input" accept="image/*" multiple><div class="text-xs color-text3 mt-1">Upload up to 10 pictures. First picture becomes the cover.</div></div>
+  <div class="form-group"><label class="form-label">Videos</label><input type="file" id="up-videos" class="form-input" accept="video/*" multiple><div class="text-xs color-text3 mt-1">Upload up to 4 preview videos.</div></div>
+  <button class="btn btn-primary btn-full" id="up-submit-btn" onclick="submitUpcomingProduct()"><i class="fa-solid fa-cloud-arrow-up"></i> Publish Upcoming Product</button>
+  </div>
+  <div class="card card-pad-lg">
+  <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
+  <div>
+  <h3 class="mb-1"><i class="fa-solid fa-list color-green"></i> Upcoming Queue</h3>
+  <p class="text-xs color-text3">Manage official previews shown to buyers.</p>
+  </div>
+  <button class="btn btn-outline btn-sm" onclick="loadAdminUpcomingProducts()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+  </div>
+  <div id="admin-upcoming-list" class="admin-upcoming-list"><div class="text-sm color-text3">Loading...</div></div>
+  </div>
+  </div>
+  </div>
 
- <!-- AI ASSISTANT TAB -->
- <div id="adm-tab-ai" class="adm-tab hidden">
- <div class="card card-pad-lg" style="max-width:600px">
- <h3 class="mb-1"><i class="fa-solid fa-robot color-green"></i> Admin AI Assistant</h3>
+  <!-- AI ASSISTANT TAB -->
+  <div id="adm-tab-ai" class="adm-tab hidden">
+  <div class="card card-pad-lg" style="max-width:600px">
+  <h3 class="mb-1"><i class="fa-solid fa-robot color-green"></i> Admin AI Assistant</h3>
  <p class="text-xs color-text3 mb-3">AI COO with <b>live database access</b> - reads disputes, sellers, orders, and can suspend/approve users on command.</p>
  <div id="admin-ai-messages" style="height:280px;overflow-y:auto;background:var(--cream);border-radius:var(--radius-sm);border:1px solid var(--border);padding:.88rem;display:flex;flex-direction:column;gap:.58rem;margin-bottom:.75rem">
  <div class="cb-msg bot" style="display:flex;gap:.42rem">
@@ -2659,7 +2731,7 @@
 
 <script src="https://js.paystack.co/v2/inline.js"></script>
 <script data-cfasync="false" src="config.js?v=3.3"></script>
-<script src="app.js?v=8.9"></script>
+<script src="app.js?v=9.0"></script>
  <script>
  (function() {
  'use strict';
