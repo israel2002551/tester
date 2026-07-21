@@ -37,7 +37,7 @@ function money(value: unknown) {
 }
 
 const siteUrl = Deno.env.get("SITE_URL") ?? "https://buysell-markerplace.com";
-const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") ?? "BHy42JVEzqL40I-Mhvu9dRK8Ewov4GSFKy5IIcsOKgerR-Z8DE_9WNc1N1GPShB0XF3fnjOwz2XpNtf4fdoOn50";
+const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") ?? "BEL_hMw0i1uDcH_jt52ReK7GbXtLW4IvVK_7pW5fGSl-2f7inbRJgednd3R8YRXas-xNles0ezQfXMkopIhuKok";
 const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
 const vapidSubject = Deno.env.get("VAPID_SUBJECT") ?? "mailto:info@buysell-markerplace.com";
 

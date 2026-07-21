@@ -8151,7 +8151,7 @@ async function syncUserNotificationToken() {
  if (registrationResult.waiting) await registrationResult.update().catch(() => {});
  const registration = await navigator.serviceWorker.ready;
  let subscription = await registration.pushManager.getSubscription();
- const VAPID_PUBLIC_KEY = "BHy42JVEzqL40I-Mhvu9dRK8Ewov4GSFKy5IIcsOKgerR-Z8DE_9WNc1N1GPShB0XF3fnjOwz2XpNtf4fdoOn50";
+ const VAPID_PUBLIC_KEY = "BEL_hMw0i1uDcH_jt52ReK7GbXtLW4IvVK_7pW5fGSl-2f7inbRJgednd3R8YRXas-xNles0ezQfXMkopIhuKok";
  const vapidKeyBytes = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
 
  if (subscription && !pushSubscriptionUsesKey(subscription, vapidKeyBytes)) {
