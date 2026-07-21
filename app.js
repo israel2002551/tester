@@ -1726,6 +1726,18 @@ const CATEGORY_PAGE_LABELS = {
  dropship: 'Dropshipping Products',
 };
 
+const CATEGORY_PAGE_URLS = {
+ all: 'products.html',
+ trending: 'category-trending.html',
+ electronics: 'category-electronics.html',
+ phones: 'category-phones.html',
+ fashion: 'category-fashion.html',
+ home: 'category-home.html',
+ beauty: 'category-beauty.html',
+ sports: 'category-sports.html',
+ dropship: 'category-dropship.html',
+};
+
 function categoryLabel(cat) {
  return CATEGORY_PAGE_LABELS[cat] || String(cat || 'Products').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
@@ -1759,9 +1771,8 @@ function filterCat(cat, options = {}) {
 }
 
 function openCategoryPage(cat) {
- if (typeof showBuyerView === 'function' && currentRole !== 'buyer') showBuyerView();
- filterCat(cat, { updateUrl: true, scroll: true });
- document.title = `${categoryLabel(cat)} - BUYSELL Nigeria`;
+ const selected = cat || 'all';
+ window.location.href = CATEGORY_PAGE_URLS[selected] || `products.html?category=${encodeURIComponent(selected)}`;
 }
 
 let searchTimeout;
