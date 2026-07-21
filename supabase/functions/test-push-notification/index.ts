@@ -41,6 +41,12 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
+    if (!vapidPrivateKey) {
+      return json({
+        error: "Server push is not configured yet. Set the VAPID_PRIVATE_KEY Supabase secret, then redeploy the push functions.",
+      }, 500);
+    }
+
     const authHeader = req.headers.get("Authorization") ?? "";
     const token = authHeader.replace(/^Bearer\s+/i, "").trim();
     if (!token) return json({ error: "Sign in before testing push notifications." }, 401);
@@ -116,8 +122,10 @@ serve(async (req) => {
       }
     }
 
+    const firstFailure = failures[0]?.error ? String(failures[0].error) : "";
     return json({
       success: sent.length > 0,
+      error: sent.length > 0 ? undefined : firstFailure || "Push delivery failed for every saved device subscription.",
       targets: targets.length,
       sent: sent.length,
       failed: failures.length,
