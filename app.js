@@ -276,6 +276,10 @@ function updatePlatformSellerDashboardChrome() {
  const sub = document.getElementById('dash-overview-sub');
  const notice = document.getElementById('platform-store-notice');
  const addTitle = document.getElementById('dash-add-product-title');
+ const adPrice = document.getElementById('ad-price-label');
+ const adCopy = document.getElementById('ad-pricing-copy');
+ const adPlacement = document.getElementById('ad-placement-copy');
+ const adButton = document.getElementById('ad-pay-btn');
 
  if (sidebarSub) sidebarSub.textContent = isPlatform ? 'Platform Store' : 'Seller Dashboard';
  if (title) title.textContent = isPlatform ? 'Platform Store Dashboard' : 'Dashboard Overview';
@@ -284,6 +288,10 @@ function updatePlatformSellerDashboardChrome() {
  : "Welcome back! Here's your store at a glance.";
  if (notice) notice.classList.toggle('hidden', !isPlatform);
  if (addTitle) addTitle.textContent = isPlatform ? 'Add Platform Product' : 'Add New Product';
+ if (adPrice) adPrice.textContent = isPlatform ? 'Free' : '₦5,000';
+ if (adCopy) adCopy.textContent = isPlatform ? 'Admin advertisements are free and can go live immediately for 30 days.' : 'Upload a 30-second video or an image. ₦5,000 for 30 days of premium visibility.';
+ if (adPlacement) adPlacement.textContent = isPlatform ? '30 days placement, no payment needed for admin' : '30 days placement after admin approval';
+ if (adButton) adButton.innerHTML = isPlatform ? '<i class="fa-solid fa-shield-halved"></i> Publish Free Admin Ad' : '<i class="fa-solid fa-credit-card"></i> Pay & Submit Ad';
 }
 
 async function trackAnalytics(event) {
@@ -719,6 +727,47 @@ async function uploadToFirstAvailableBucket(buckets, path, file, options = {}) {
  lastError = error;
  }
  throw lastError || new Error('Upload failed');
+}
+
+const PRODUCT_IMAGE_LIMIT = 8;
+const PRODUCT_VIDEO_LIMIT = 3;
+const PRODUCT_MAX_IMAGE_SIZE = 8 * 1024 * 1024;
+const PRODUCT_MAX_VIDEO_SIZE = 80 * 1024 * 1024;
+const PRODUCT_ALLOWED_IMG_TYPES = ['image/jpeg','image/png','image/webp','image/gif'];
+const PRODUCT_ALLOWED_VID_TYPES = ['video/mp4','video/webm','video/ogg','video/quicktime'];
+
+function safeFileExt(fileName = '', fallback = 'bin') {
+ return (String(fileName).split('.').pop() || fallback).toLowerCase().replace(/[^a-z0-9]/g, '') || fallback;
+}
+
+function fileListToArray(inputId) {
+ return Array.from(document.getElementById(inputId)?.files || []);
+}
+
+async function uploadProductMediaFiles(files, kind) {
+ const isVideo = kind === 'video';
+ const maxCount = isVideo ? PRODUCT_VIDEO_LIMIT : PRODUCT_IMAGE_LIMIT;
+ const maxSize = isVideo ? PRODUCT_MAX_VIDEO_SIZE : PRODUCT_MAX_IMAGE_SIZE;
+ const allowedTypes = isVideo ? PRODUCT_ALLOWED_VID_TYPES : PRODUCT_ALLOWED_IMG_TYPES;
+ const folder = isVideo ? 'vids' : 'imgs';
+ const label = isVideo ? 'video' : 'image';
+ const selected = files.slice(0, maxCount);
+
+ if (files.length > maxCount) {
+ toast(`Too many ${label}s`, `Only the first ${maxCount} ${label}${maxCount > 1 ? 's' : ''} will be uploaded.`, 'warn');
+ }
+
+ const urls = [];
+ for (let index = 0; index < selected.length; index++) {
+  const file = selected[index];
+  if (!allowedTypes.includes(file.type)) throw new Error(`Unsupported ${label} type: ${file.name}`);
+  if (file.size > maxSize) throw new Error(`${file.name} is too large. ${isVideo ? 'Videos' : 'Images'} must be under ${Math.round(maxSize / 1024 / 1024)}MB.`);
+  const ext = safeFileExt(file.name, isVideo ? 'mp4' : 'jpg');
+  const path = `${folder}/${currentUser.id}/${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+  const uploaded = await uploadToFirstAvailableBucket(['products', 'uploads'], path, file, { contentType: file.type, upsert: false });
+  if (uploaded.publicUrl) urls.push(uploaded.publicUrl);
+ }
+ return urls;
 }
 
 async function signInWithGoogle() {
@@ -3255,35 +3304,12 @@ if (nameVal.length > 300) {
  if (!VALID_CATS.includes(catVal)) { toast('Invalid category','Please select a valid category','warn'); return; }
  if (!VALID_CONDS.includes(condVal)) { toast('Invalid condition','Please select a valid condition','warn'); return; }
 
- // -- File upload security ---
- const ALLOWED_IMG_TYPES = ['image/jpeg','image/png','image/webp','image/gif'];
- const ALLOWED_VID_TYPES = ['video/mp4','video/webm','video/ogg','video/quicktime'];
- const MAX_IMG_SIZE = 5 * 1024 * 1024; // 5MB
- const MAX_VID_SIZE = 50 * 1024 * 1024; // 50MB
-
- const imgFile = document.getElementById('p-image').files[0];
- const vidFile = document.getElementById('p-video').files[0];
-
- if (imgFile) {
- if (!ALLOWED_IMG_TYPES.includes(imgFile.type)) { toast('Invalid image','Only JPG, PNG, WebP, GIF allowed','warn'); return; }
- if (imgFile.size > MAX_IMG_SIZE) { toast('Image too large','Maximum image size is 5MB','warn'); return; }
- }
- if (vidFile) {
- if (!ALLOWED_VID_TYPES.includes(vidFile.type)) { toast('Invalid video','Only MP4, WebM, OGG, MOV allowed','warn'); return; }
- if (vidFile.size > MAX_VID_SIZE) { toast('Video too large','Maximum video size is 50MB','warn'); return; }
- }
-
- let imgUrl = '', vidUrl = '';
- if (imgFile) {
- const ext = imgFile.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g,'');
- const uploaded = await uploadToFirstAvailableBucket(['products', 'uploads'], `imgs/${currentUser.id}/${Date.now()}.${ext}`, imgFile, { contentType: imgFile.type, upsert: false });
- imgUrl = uploaded.publicUrl;
- }
- if (vidFile) {
- const ext = vidFile.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g,'');
- const uploaded = await uploadToFirstAvailableBucket(['products', 'uploads'], `vids/${currentUser.id}/${Date.now()}.${ext}`, vidFile, { contentType: vidFile.type, upsert: false });
- vidUrl = uploaded.publicUrl;
- }
+ const imgFiles = fileListToArray('p-image');
+ const vidFiles = fileListToArray('p-video');
+ const imageUrls = await uploadProductMediaFiles(imgFiles, 'image');
+ const videoUrls = await uploadProductMediaFiles(vidFiles, 'video');
+ const imgUrl = imageUrls[0] || '';
+ const vidUrl = videoUrls[0] || '';
 
  const price = priceVal;
  const origPrice= parseFloat(document.getElementById('p-orig-price').value) || price;
@@ -3298,11 +3324,13 @@ if (nameVal.length > 300) {
  category: catVal,
  condition: condVal,
  location: locVal.substring(0, 100),
- has_video: !!vidUrl, negotiable: document.getElementById('p-negotiable').checked,
+ has_video: videoUrls.length > 0, negotiable: document.getElementById('p-negotiable').checked,
  stock_quantity: stock, low_stock_alert: Math.max(0, parseInt(document.getElementById('p-low-stock').value)||3),
- };
+  };
  if (imgUrl) prodData.image_url = imgUrl;
  if (vidUrl) prodData.video_url = vidUrl;
+ if (imageUrls.length) prodData.images = imageUrls;
+ if (videoUrls.length) prodData.videos = videoUrls;
 
  let productNotificationRecord = null;
  let oldProductNotificationRecord = null;
@@ -3311,14 +3339,8 @@ if (nameVal.length > 300) {
   oldProductNotificationRecord = await fetchProductForNotification(productIdForNotification);
   // UPDATE mode
   const updateData = { ...prodData };
- if (imgUrl) updateData.image_url = imgUrl;
- if (vidUrl) {
- updateData.video_url = vidUrl;
- updateData.has_video = true;
- } else {
- delete updateData.video_url;
- delete updateData.has_video;
- }
+  if (!imageUrls.length) { delete updateData.image_url; delete updateData.images; }
+  if (!videoUrls.length) { delete updateData.video_url; delete updateData.videos; delete updateData.has_video; }
  await callEdge('manage-product', {
  action: 'update',
  product_id: editingProductId,
@@ -3335,12 +3357,12 @@ if (nameVal.length > 300) {
   // INSERT mode - server-side via Edge Function
   const createResult = await callEdge('manage-product', {
   action: 'create',
-  data: { ...prodData, image_url: imgUrl, video_url: vidUrl }
-  });
+   data: prodData
+   });
   const createdProductId = createResult?.product?.id || createResult?.product_id || createResult?.id;
   productNotificationRecord = createdProductId
   ? await fetchProductForNotification(createdProductId)
-  : { ...prodData, image_url: imgUrl, video_url: vidUrl, status: 'active', seller_id: currentUser.id };
+  : { ...prodData, status: 'active', seller_id: currentUser.id };
   toast('Product Published! ', 'Your product is now live', 'success');
   }
   notifyProductIfActive(productNotificationRecord, oldProductNotificationRecord);
@@ -4587,29 +4609,37 @@ function switchAdminTab(tab) {
 }
 
 /* -- OVERVIEW -- */
+function setTextAllById(id, value) {
+ document.querySelectorAll(`#${id}`).forEach(node => { node.textContent = value; });
+}
+
 async function loadAdminOverview() {
  if (!guardAdminPanel()) return;
- const [{ data: sellers }, { data: buyers }, { data: orders }] = await Promise.all([
- db.from('profiles').select('id,commission_paid,trial_end,role').eq('role','seller'),
- db.from('profiles').select('id').eq('role','buyer'),
- db.from('orders').select('total_amount,created_at,status').neq('status','cancelled')
- ]);
+ const [{ data: sellers }, { data: buyers }, { data: orders }, { count: productCount }, { count: pendingAdCount }] = await Promise.all([
+  db.from('profiles').select('id,commission_paid,trial_end,role').eq('role','seller'),
+  db.from('profiles').select('id').eq('role','buyer'),
+  db.from('orders').select('total_amount,created_at,status').neq('status','cancelled'),
+  db.from('products').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+  db.from('advertisements').select('id', { count: 'exact', head: true }).in('status', ['pending', 'pending_payment'])
+  ]);
  const activeSellers = (sellers||[]).filter(s => !s.is_suspended).length;
  const freeSellers = (sellers||[]).length;
  const suspended= (sellers||[]).filter(s => s.is_suspended).length;
  const revenue = (orders||[]).reduce((s,o) => s + (o.total_amount||0), 0);
 
- document.getElementById('adm-total-sellers').textContent = (sellers||[]).length;
- document.getElementById('adm-total-buyers').textContent = (buyers||[]).length;
- document.getElementById('adm-revenue').textContent = fmtN(revenue);
- document.getElementById('adm-commission-due').textContent= fmtN(Math.round(revenue * PLATFORM_FEE_PCT));
- document.getElementById('adm-paid').textContent = activeSellers;
- document.getElementById('adm-trial').textContent = freeSellers;
- document.getElementById('adm-suspended').textContent = suspended;
+ setTextAllById('adm-total-sellers', (sellers||[]).length);
+ setTextAllById('adm-total-buyers', (buyers||[]).length);
+ setTextAllById('adm-revenue', fmtN(revenue));
+ setTextAllById('adm-commission-due', fmtN(Math.round(revenue * PLATFORM_FEE_PCT)));
+ setTextAllById('adm-paid', activeSellers);
+ setTextAllById('adm-trial', freeSellers);
+ setTextAllById('adm-suspended', suspended);
+ setTextAllById('adm-total-products', productCount || 0);
+ setTextAllById('adm-pending-ads', pendingAdCount || 0);
 
  // Disputes count
  const { count } = await db.from('disputes').select('id', { count:'exact', head:true }).eq('status','open');
- document.getElementById('adm-disputes').textContent = count || 0;
+ setTextAllById('adm-disputes', count || 0);
 
  // Revenue bar chart
  _renderAdminRevenueChart(orders || []);
@@ -5515,13 +5545,43 @@ function askBot(q) {
 let csvRows = [];
 
 function downloadCsvTemplate() {
- const headers = ['name','price','original_price','shipping_fee','category','condition','description','location','stock_quantity','negotiable'];
- const example = ['iPhone 14 Pro Max','450000','550000','2500','phones','new','Brand new sealed iPhone 14 Pro Max 256GB','Ikeja Lagos','5','false'];
+ const headers = ['name','price','original_price','shipping_fee','category','condition','description','location','stock_quantity','negotiable','image_url','images','video_url','videos'];
+ const example = ['iPhone 14 Pro Max','450000','550000','2500','phones','new','Brand new sealed iPhone 14 Pro Max 256GB','Ikeja Lagos','5','false','https://example.com/main.jpg','https://example.com/side.jpg|https://example.com/back.jpg','https://example.com/demo.mp4','https://example.com/demo2.mp4'];
  const csv = [headers.join(','), example.join(',')].join('\n');
  const blob = new Blob([csv], { type: 'text/csv' });
  const url = URL.createObjectURL(blob);
  const a = document.createElement('a'); a.href = url; a.download = 'buysell_product_template.csv'; a.click();
  URL.revokeObjectURL(url);
+}
+
+function parseCsvLine(line) {
+ const vals = [];
+ let current = '';
+ let quoted = false;
+ for (let i = 0; i < line.length; i++) {
+  const char = line[i];
+  const next = line[i + 1];
+  if (char === '"' && quoted && next === '"') {
+  current += '"';
+  i++;
+  } else if (char === '"') {
+  quoted = !quoted;
+  } else if (char === ',' && !quoted) {
+  vals.push(current.trim());
+  current = '';
+  } else {
+  current += char;
+  }
+ }
+ vals.push(current.trim());
+ return vals.map(v => v.replace(/^"|"$/g, ''));
+}
+
+function splitMediaUrls(value) {
+ return String(value || '')
+ .split(/[|;]/)
+ .map(url => sanitizeUrl(url.trim()))
+ .filter(Boolean);
 }
 
 function handleCsvUpload(input) {
@@ -5530,9 +5590,9 @@ function handleCsvUpload(input) {
  const reader = new FileReader();
  reader.onload = e => {
  const lines = e.target.result.split('\n').filter(l => l.trim());
- const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
- csvRows = lines.slice(1).map(line => {
- const vals = line.split(',');
+  const headers = parseCsvLine(lines[0]).map(h => h.trim().toLowerCase());
+  csvRows = lines.slice(1).map(line => {
+  const vals = parseCsvLine(line);
  const obj = {};
  headers.forEach((h, i) => obj[h] = (vals[i]||'').trim().replace(/^"|"$/g,''));
  return obj;
@@ -5564,22 +5624,30 @@ async function importCsvProducts() {
  if (!csvRows.length || !currentUser) return;
  const btn = document.getElementById('csv-import-btn');
  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Importing...';
- const toInsert = csvRows.map(r => ({
- seller_id: currentUser.id,
- name: r.name, description: r.description||r.name,
- price: parseFloat(r.price)||0,
- original_price: parseFloat(r.original_price)||parseFloat(r.price)||0,
- shipping_fee: Math.max(0, parseFloat(r.shipping_fee ?? r.shipping_cost ?? 0)||0),
- shipping_cost: Math.max(0, parseFloat(r.shipping_fee ?? r.shipping_cost ?? 0)||0),
- category: r.category||'electronics',
- condition: r.condition||'new',
- location: r.location||'Nigeria',
- stock_quantity: parseInt(r.stock_quantity)||10,
- negotiable: r.negotiable==='true'||r.negotiable==='1',
- image_url: '', video_url: '', has_video: false,
- status: 'active', avg_rating: 5, review_count: 0,
- created_at: new Date().toISOString()
- }));
+ const toInsert = csvRows.map(r => {
+  const imageUrls = [sanitizeUrl(r.image_url || ''), ...splitMediaUrls(r.images)].filter(Boolean);
+  const videoUrls = [sanitizeUrl(r.video_url || ''), ...splitMediaUrls(r.videos)].filter(Boolean);
+  return {
+  seller_id: currentUser.id,
+  name: r.name, description: r.description||r.name,
+  price: parseFloat(r.price)||0,
+  original_price: parseFloat(r.original_price)||parseFloat(r.price)||0,
+  shipping_fee: Math.max(0, parseFloat(r.shipping_fee ?? r.shipping_cost ?? 0)||0),
+  shipping_cost: Math.max(0, parseFloat(r.shipping_fee ?? r.shipping_cost ?? 0)||0),
+  category: r.category||'electronics',
+  condition: r.condition||'new',
+  location: r.location||'Nigeria',
+  stock_quantity: parseInt(r.stock_quantity)||10,
+  negotiable: r.negotiable==='true'||r.negotiable==='1',
+  image_url: imageUrls[0] || '',
+  images: imageUrls,
+  video_url: videoUrls[0] || '',
+  videos: videoUrls,
+  has_video: videoUrls.length > 0,
+  status: 'active', avg_rating: 5, review_count: 0,
+  created_at: new Date().toISOString()
+  };
+ });
  const BATCH = 50;
  let imported = 0;
  for (let i = 0; i < toInsert.length; i += BATCH) {
@@ -7602,6 +7670,43 @@ async function createFlashSale() {
 let adPopupAds = [], adPopupIndex = 0, adSkipTimer = null;
 const AD_PRICE_KOBO = 500000;
 
+function resetAdForm() {
+ document.getElementById('ad-title').value = '';
+ document.getElementById('ad-desc').value = '';
+ document.getElementById('ad-link').value = `${PUBLIC_SITE_URL}/`;
+ document.getElementById('ad-media-file').value = '';
+ document.getElementById('ad-media-preview-container')?.classList.add('hidden');
+ document.getElementById('ad-media-zone')?.classList.remove('has-file');
+ const label = document.querySelector('#ad-media-zone .upload-label');
+ if (label) label.textContent = 'Click to upload Media (Image or Video)';
+}
+
+async function insertAdminAdvertisement(adData) {
+ const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+ const base = {
+ ...adData,
+ status: 'active',
+ payment_status: 'admin_free',
+ payment_reference: `ADMIN-FREE-${Date.now()}`,
+ approved_at: new Date().toISOString(),
+ expires_at: expiresAt,
+ };
+ const variants = [
+ base,
+ { ...base, user_id: currentUser.id },
+ { title: base.title, description: base.description, media_url: base.media_url, media_type: base.media_type, cta_text: base.cta_text, cta_link: base.cta_link, advertiser_id: currentUser.id, seller_id: currentUser.id, status: 'active', expires_at: expiresAt },
+ ];
+ let lastError = null;
+ for (const row of variants) {
+  const { error } = await db.from('advertisements').insert(row);
+  if (!error) return;
+  lastError = error;
+  const msg = String(error.message || '').toLowerCase();
+  if (!msg.includes('column') && !msg.includes('schema cache')) break;
+ }
+ throw lastError || new Error('Could not create admin advertisement');
+}
+
 function normalizeAdUrl(url) {
  const raw = String(url || '').trim();
  if (!raw) return '';
@@ -7905,7 +8010,8 @@ async function trackAdStat(adId, type) {
 
 async function initiateAdPayment() {
  if (!currentUser) { showModal('auth-modal'); return; }
- if (!isPaystackReady()) return;
+ const adminAd = isAdminEmail(currentUser.email) || isPlatformProfile(currentUser.profile || {});
+ if (!adminAd && !isPaystackReady()) return;
 
  const title = document.getElementById('ad-title')?.value.trim();
  const desc = document.getElementById('ad-desc')?.value.trim();
@@ -7957,19 +8063,29 @@ async function initiateAdPayment() {
  const { data } = db.storage.from('uploads').getPublicUrl(path);
  mediaUrl = data.publicUrl;
 
- const adData = {
- title,
- description: desc || '',
- media_url: mediaUrl,
+  const adData = {
+  title,
+  description: desc || '',
+  media_url: mediaUrl,
  media_type: isVideo ? 'video' : 'image',
  cta_text: cta,
  cta_link: link,
  seller_id: currentUser.id,
  advertiser_id: currentUser.id,
- advertiser_type: currentRole || 'seller'
- };
+  advertiser_type: currentRole || 'seller'
+  };
 
- // Initialize Paystack payment
+  if (adminAd) {
+  await insertAdminAdvertisement({ ...adData, advertiser_type: 'admin' });
+  toast('Admin Ad Published', 'Advertisement is live for 30 days with no payment needed.', 'success');
+  resetAdForm();
+  loadSellerAds();
+  btn.disabled = false;
+  updatePlatformSellerDashboardChrome();
+  return;
+  }
+
+  // Initialize Paystack payment
  const init = await callEdge('init-ad-payment', { amount: AD_PRICE_KOBO / 100 });
  if (!init?.access_code && !init?.reference) throw new Error('Could not initialize ad payment');
  
@@ -7989,15 +8105,7 @@ async function initiateAdPayment() {
  
  toast('Ad Submitted', 'Payment verified. Your ad is now waiting for admin approval.', 'success');
  
- // Reset Form
- document.getElementById('ad-title').value = '';
- document.getElementById('ad-desc').value = '';
- document.getElementById('ad-link').value = `${PUBLIC_SITE_URL}/`;
- document.getElementById('ad-media-file').value = '';
- document.getElementById('ad-media-preview-container')?.classList.add('hidden');
- document.getElementById('ad-media-zone')?.classList.remove('has-file');
- const label = document.querySelector('#ad-media-zone .upload-label');
- if (label) label.textContent = 'Click to upload Media (Image or Video)';
+  resetAdForm();
  
  loadSellerAds();
  } catch (err) {
@@ -8012,9 +8120,10 @@ async function initiateAdPayment() {
  }
  });
  } catch(e) {
- toast('Error', e.message, 'error');
- btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Submit Ad';
- }
+  toast('Error', e.message, 'error');
+  btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Submit Ad';
+  updatePlatformSellerDashboardChrome();
+  }
 }
 function closeAdPopup() {
  document.getElementById('ad-popup-overlay')?.classList.add('hidden');

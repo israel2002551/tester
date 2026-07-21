@@ -260,6 +260,25 @@ h1,h2,h3,h4,h5,h6{font-family:'Syne',sans-serif;line-height:1.2}
 .carousel-dots{position:absolute;bottom:.65rem;left:50%;transform:translateX(-50%);display:flex;gap:.38rem}
 .carousel-dot{width:6px;height:6px;border-radius:99px;background:rgba(255,255,255,.4);cursor:pointer;transition:all .3s;border:none}
 .carousel-dot.active{background:#fff;width:20px}
+.temu-shell{padding-top:.2rem;padding-bottom:.75rem}
+.buyer-command-strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.6rem;margin-bottom:.75rem}
+.buyer-command-strip button{border:1px solid var(--border);background:#fff;border-radius:10px;padding:.72rem .45rem;display:flex;flex-direction:column;align-items:center;gap:.35rem;color:var(--text2);font-weight:800;font-size:.72rem;cursor:pointer;box-shadow:0 6px 16px rgba(11,31,20,.04);min-width:0}
+.buyer-command-strip button i{width:32px;height:32px;border-radius:10px;background:var(--green-xlt);color:var(--green);display:flex;align-items:center;justify-content:center;font-size:.95rem}
+.buyer-command-strip button:hover{border-color:var(--green);transform:translateY(-1px)}
+.buyer-deal-board{display:grid;grid-template-columns:1.4fr repeat(3,1fr);gap:.75rem}
+.buyer-deal-board button{border:0;text-align:left;cursor:pointer;font-family:'DM Sans',sans-serif}
+.deal-board-main{min-height:118px;border-radius:12px;padding:1rem;background:linear-gradient(135deg,#0b1f14,#1f6b3b);color:#fff;display:flex;flex-direction:column;justify-content:center;overflow:hidden;position:relative}
+.deal-board-main:after{content:'';position:absolute;right:-32px;bottom:-38px;width:140px;height:140px;border-radius:50%;background:rgba(255,255,255,.08)}
+.deal-board-main span,.deal-board-card span{font-size:.72rem;font-weight:900;text-transform:uppercase;letter-spacing:0;color:rgba(255,255,255,.72)}
+.deal-board-main strong{font-size:1.28rem;margin:.28rem 0 .2rem;position:relative}
+.deal-board-main small{color:rgba(255,255,255,.72);font-size:.78rem;max-width:330px;position:relative}
+.deal-board-card{border-radius:12px;padding:.9rem;background:#fff;color:var(--text);border:1px solid var(--border);display:flex;flex-direction:column;gap:.4rem;min-height:118px;box-shadow:0 8px 20px rgba(11,31,20,.05)}
+.deal-board-card i{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff}
+.deal-board-card strong{font-size:.95rem;line-height:1.2}
+.deal-board-card span{color:var(--text3)}
+.deal-board-card-orange i{background:#ea580c}.deal-board-card-green i{background:var(--green)}.deal-board-card-blue i{background:var(--blue)}
+@media(max-width:760px){.buyer-command-strip{grid-template-columns:repeat(3,1fr)}.buyer-deal-board{grid-template-columns:1fr 1fr}.deal-board-main{grid-column:1/-1}.deal-board-card{min-height:104px}}
+@media(max-width:420px){.buyer-command-strip{gap:.45rem}.buyer-command-strip button{font-size:.66rem;padding:.62rem .3rem}.buyer-deal-board{gap:.5rem}.deal-board-main{min-height:108px}.deal-board-main strong{font-size:1.05rem}.deal-board-card{padding:.75rem;min-height:96px}}
 
 /* Tabs (All / My Orders) */
 .buyer-tabs{display:flex;border-bottom:2px solid var(--border);margin-bottom:1.1rem}
@@ -1093,6 +1112,15 @@ body.platform-seller-mode .dash-user-card{background:rgba(212,165,116,.1)}
 #admin-portal-view h1, #admin-portal-view h2, #admin-portal-view h3 {
  font-family: 'Syne', sans-serif;
 }
+.admin-command-panel{display:flex;justify-content:space-between;gap:1rem;align-items:stretch;background:linear-gradient(135deg,#07150d,#195c35);color:#fff;border-radius:14px;padding:1.15rem;margin-bottom:1rem;box-shadow:0 16px 34px rgba(11,31,20,.14)}
+.admin-command-kicker{display:inline-flex;color:var(--gold);font-weight:900;font-size:.68rem;text-transform:uppercase;letter-spacing:0;margin-bottom:.35rem}
+.admin-command-panel h2{font-size:1.35rem;margin:0 0 .3rem;color:#fff}
+.admin-command-panel p{margin:0;color:rgba(255,255,255,.72);font-size:.84rem;line-height:1.5;max-width:620px}
+.admin-command-actions{display:grid;grid-template-columns:repeat(2,minmax(110px,1fr));gap:.55rem;min-width:280px}
+.admin-command-actions button{border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.08);color:#fff;border-radius:10px;padding:.72rem;display:flex;align-items:center;gap:.48rem;font-weight:800;font-size:.78rem;cursor:pointer;text-align:left}
+.admin-command-actions button i{color:var(--gold)}
+.admin-command-actions button:hover{background:rgba(255,255,255,.14)}
+@media(max-width:760px){.admin-command-panel{flex-direction:column}.admin-command-actions{min-width:0;grid-template-columns:1fr 1fr}}
 #hire-pro-section .prod-card:hover { border-color: var(--purple); }
 
 /* ====================================================

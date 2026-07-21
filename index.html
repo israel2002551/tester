@@ -39,7 +39,7 @@
 </script>
  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<link rel="stylesheet" href="styles.css?v=7.7">
+<link rel="stylesheet" href="styles.css?v=7.8">
 </head>
 <body>
 
@@ -253,11 +253,44 @@
  <button class="carousel-dot" onclick="goSlide(1)"></button>
  <button class="carousel-dot" onclick="goSlide(2)"></button>
  </div>
- </div>
- </div>
+  </div>
+  </div>
+ 
+  <div class="buyer-inner temu-shell">
+  <section class="buyer-command-strip" aria-label="Marketplace shortcuts">
+  <button onclick="filterCat('trending')"><i class="fa-solid fa-fire"></i><span>Trending</span></button>
+  <button onclick="filterCat('phones')"><i class="fa-solid fa-mobile-screen"></i><span>Phones</span></button>
+  <button onclick="filterCat('fashion')"><i class="fa-solid fa-shirt"></i><span>Fashion</span></button>
+  <button onclick="filterCat('home')"><i class="fa-solid fa-house"></i><span>Home</span></button>
+  <button onclick="switchBuyerTab('orders')"><i class="fa-solid fa-box"></i><span>Orders</span></button>
+  <button onclick="openInbox()"><i class="fa-solid fa-comments"></i><span>Messages</span></button>
+  </section>
+  <section class="buyer-deal-board">
+  <button class="deal-board-main" onclick="filterCat('all')">
+  <span>Buyer Picks</span>
+  <strong>Fresh marketplace finds</strong>
+  <small>Verified stores, videos, chat, and secure checkout.</small>
+  </button>
+  <button class="deal-board-card deal-board-card-orange" onclick="filterCat('trending')">
+  <i class="fa-solid fa-bolt"></i>
+  <span>Flash Picks</span>
+  <strong>Hot products</strong>
+  </button>
+  <button class="deal-board-card deal-board-card-green" onclick="filterCat('dropship')">
+  <i class="fa-solid fa-globe"></i>
+  <span>Dropship</span>
+  <strong>Global deals</strong>
+  </button>
+  <button class="deal-board-card deal-board-card-blue" onclick="filterCat('electronics')">
+  <i class="fa-solid fa-microchip"></i>
+  <span>Tech Zone</span>
+  <strong>Gadgets daily</strong>
+  </button>
+  </section>
+  </div>
 
- <!-- Flash Sales Banner -->
- <div id="flash-sales-container" class="buyer-inner hidden" style="padding-top:.5rem">
+  <!-- Flash Sales Banner -->
+  <div id="flash-sales-container" class="buyer-inner hidden" style="padding-top:.5rem">
  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem">
  <h2 style="margin:0;font-size:1.05rem;display:flex;align-items:center;gap:.4rem"><span style="background:#ef4444;color:#fff;padding:.2rem .5rem;border-radius:6px;font-size:.75rem;font-weight:700">Flash FLASH SALE</span> Deal of the Day</h2>
  </div>
@@ -592,15 +625,15 @@
  </button>
 </div>
  <div class="form-group"><label class="form-label">Location <span class="req">*</span></label><input type="text" id="p-location" class="form-input" required placeholder="e.g., Ikeja, Lagos"></div>
- <div class="form-group"><label class="form-label">Product Image <span class="req">*</span></label><input type="file" id="p-image" class="form-input" accept="image/*" style="background:var(--cream)"></div>
- <div class="form-group"><label class="form-label">Product Video <span style="color:var(--text3);font-weight:400">(Recommended - 3x more sales)</span></label><input type="file" id="p-video" class="form-input" accept="video/*" style="background:var(--cream)"><div style="font-size:.74rem;color:var(--text3);margin-top:.28rem"><i class="fa-solid fa-info-circle"></i> Max 50MB.</div></div>
+ <div class="form-group"><label class="form-label">Product Pictures <span class="req">*</span></label><input type="file" id="p-image" class="form-input" accept="image/*" multiple style="background:var(--cream)"><div style="font-size:.74rem;color:var(--text3);margin-top:.28rem"><i class="fa-solid fa-images"></i> Upload up to 8 pictures. First picture becomes the main thumbnail.</div></div>
+ <div class="form-group"><label class="form-label">Product Videos <span style="color:var(--text3);font-weight:400">(Recommended - 3x more sales)</span></label><input type="file" id="p-video" class="form-input" accept="video/*" multiple style="background:var(--cream)"><div style="font-size:.74rem;color:var(--text3);margin-top:.28rem"><i class="fa-solid fa-circle-play"></i> Upload up to 3 product videos. First video becomes the main product video.</div></div>
  <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;margin-bottom:1.1rem"><input type="checkbox" id="p-negotiable" style="width:17px;height:17px;accent-color:var(--green)"><span class="text-sm">Price is Negotiable</span></label>
  <button type="submit" class="btn btn-primary btn-full btn-lg" id="pub-btn"><span id="pub-btn-text">Publish Product</span><span id="pub-spinner" class="spinner hidden"></span></button>
  </form>
  </div>
  <div class="card card-pad-lg" style="max-width:650px;margin-top:1.25rem">
  <h3 class="mb-1"><i class="fa-solid fa-file-alt color-green"></i> Bulk Upload via CSV</h3>
- <p class="text-xs color-text3 mb-3">Upload multiple products at once. <a href="#" onclick="downloadCsvTemplate()" style="color:var(--green)">Download template -></a></p>
+ <p class="text-xs color-text3 mb-3">Upload multiple products at once. Template supports image/video URL columns and multiple media URLs separated with |. <a href="#" onclick="downloadCsvTemplate()" style="color:var(--green)">Download template -></a></p>
  <div class="upload-zone" id="csv-zone" onclick="document.getElementById('csv-file').click()">
  <i class="fa-solid fa-cloud-upload-alt"></i>
  <div class="upload-label">Click to upload CSV file</div>
@@ -698,7 +731,7 @@
  
  <div class="card card-pad-lg mb-4" style="max-width:700px">
  <h3 class="mb-1"><i class="fa-solid fa-bullhorn color-green"></i> Create New Advertisement</h3>
- <p class="text-xs color-text3 mb-3">Upload a 30-second video or an image. &#8358;5,000 for 30 days of premium visibility.</p>
+ <p class="text-xs color-text3 mb-3" id="ad-pricing-copy">Upload a 30-second video or an image. &#8358;5,000 for 30 days of premium visibility.</p>
  <div class="form-group">
  <label class="form-label">Ad Title <span class="req">*</span></label>
  <input type="text" id="ad-title" class="form-input" placeholder="Catchy title for your ad">
@@ -738,8 +771,8 @@
  </div>
  <div class="flex items-center gap-3 mt-4 pt-3" style="border-top:1px solid var(--border)">
  <div style="flex:1">
- <div class="font-600">Total Price: <span class="color-green font-bold text-lg">&#8358;5,000</span></div>
- <div class="text-xs color-text3">30 days placement after admin approval</div>
+  <div class="font-600">Total Price: <span class="color-green font-bold text-lg" id="ad-price-label">&#8358;5,000</span></div>
+  <div class="text-xs color-text3" id="ad-placement-copy">30 days placement after admin approval</div>
  </div>
  <button class="btn btn-primary" onclick="initiateAdPayment()" id="ad-pay-btn"><i class="fa-solid fa-credit-card"></i> Pay & Submit Ad</button>
  </div>
@@ -1020,9 +1053,22 @@
  </div>
  </div>
 </div>
- <!-- OVERVIEW TAB -->
- <div id="adm-tab-overview" class="adm-tab">
- <div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(148px,1fr));margin-bottom:1.25rem">
+  <!-- OVERVIEW TAB -->
+  <div id="adm-tab-overview" class="adm-tab">
+  <div class="admin-command-panel">
+  <div>
+  <span class="admin-command-kicker">Live command center</span>
+  <h2>Marketplace Health</h2>
+  <p>Monitor sellers, buyers, orders, products, advertisements, payouts, and open risks from one polished admin view.</p>
+  </div>
+  <div class="admin-command-actions">
+  <button onclick="switchAdminTab('accounts')"><i class="fa-solid fa-user-check"></i><span>Accounts</span></button>
+  <button onclick="switchAdminTab('kyc')"><i class="fa-solid fa-id-card"></i><span>KYC</span></button>
+  <button onclick="switchAdminTab('broadcast')"><i class="fa-solid fa-bullhorn"></i><span>Broadcast</span></button>
+  <button onclick="showSellerDashboard().then(()=>showDash('advertise'))"><i class="fa-solid fa-rectangle-ad"></i><span>Free Admin Ads</span></button>
+  </div>
+  </div>
+  <div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(148px,1fr));margin-bottom:1.25rem">
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-store" style="color:var(--green)"></i></div></div><div class="stat-value" id="adm-total-sellers">0</div><div class="stat-label">Total Sellers</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dbeafe"><i class="fa-solid fa-users" style="color:var(--blue)"></i></div></div><div class="stat-value" id="adm-total-buyers">0</div><div class="stat-label">Total Buyers</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-coins" style="color:var(--gold)"></i></div></div><div class="stat-value color-green" id="adm-revenue">&#8358;0</div><div class="stat-label">Total GMV</div></div>
@@ -1030,8 +1076,10 @@
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i></div></div><div class="stat-value color-green" id="adm-paid">0</div><div class="stat-label">Active Sellers</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-gift" style="color:var(--gold)"></i></div></div><div class="stat-value color-gold" id="adm-trial">0</div><div class="stat-label">Free Access</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fee2e2"><i class="fa-solid fa-user-lock" style="color:var(--danger)"></i></div></div><div class="stat-value color-danger" id="adm-suspended">0</div><div class="stat-label">Admin Review</div></div>
- <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fee2e2"><i class="fa-solid fa-exclamation-triangle" style="color:var(--danger)"></i></div></div><div class="stat-value color-danger" id="adm-disputes">0</div><div class="stat-label">Open Disputes</div></div>
- </div>
+  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fee2e2"><i class="fa-solid fa-exclamation-triangle" style="color:var(--danger)"></i></div></div><div class="stat-value color-danger" id="adm-disputes">0</div><div class="stat-label">Open Disputes</div></div>
+  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#e0f2fe"><i class="fa-solid fa-boxes-stacked" style="color:var(--blue)"></i></div></div><div class="stat-value" id="adm-total-products">0</div><div class="stat-label">Active Products</div></div>
+  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#ffedd5"><i class="fa-solid fa-rectangle-ad" style="color:#ea580c"></i></div></div><div class="stat-value" id="adm-pending-ads">0</div><div class="stat-label">Pending Ads</div></div>
+  </div>
  <div class="chart-card">
  <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
  <h3 style="font-size:1rem;margin:0">Platform Revenue (30 Days)</h3>
@@ -1949,9 +1997,22 @@
  <button class="buyer-tab" data-admin-tab="branding" onclick="switchAdminTab('branding')"><i class="fa-solid fa-palette"></i> Branding</button>
  </div>
 
- <!-- OVERVIEW TAB -->
- <div id="adm-tab-overview" class="adm-tab">
- <div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(148px,1fr));margin-bottom:1.25rem">
+  <!-- OVERVIEW TAB -->
+  <div id="adm-tab-overview" class="adm-tab">
+  <div class="admin-command-panel">
+  <div>
+  <span class="admin-command-kicker">Live command center</span>
+  <h2>Marketplace Health</h2>
+  <p>Monitor sellers, buyers, orders, products, advertisements, payouts, and open risks from one polished admin view.</p>
+  </div>
+  <div class="admin-command-actions">
+  <button onclick="switchAdminTab('accounts')"><i class="fa-solid fa-user-check"></i><span>Accounts</span></button>
+  <button onclick="switchAdminTab('kyc')"><i class="fa-solid fa-id-card"></i><span>KYC</span></button>
+  <button onclick="switchAdminTab('broadcast')"><i class="fa-solid fa-bullhorn"></i><span>Broadcast</span></button>
+  <button onclick="showSellerDashboard().then(()=>showDash('advertise'))"><i class="fa-solid fa-rectangle-ad"></i><span>Free Admin Ads</span></button>
+  </div>
+  </div>
+  <div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(148px,1fr));margin-bottom:1.25rem">
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-store" style="color:var(--green)"></i></div></div><div class="stat-value" id="adm-total-sellers">0</div><div class="stat-label">Total Sellers</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dbeafe"><i class="fa-solid fa-users" style="color:var(--blue)"></i></div></div><div class="stat-value" id="adm-total-buyers">0</div><div class="stat-label">Total Buyers</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-coins" style="color:var(--gold)"></i></div></div><div class="stat-value color-green" id="adm-revenue">&#8358;0</div><div class="stat-label">Total GMV</div></div>
@@ -1959,8 +2020,10 @@
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i></div></div><div class="stat-value color-green" id="adm-paid">0</div><div class="stat-label">Active Sellers</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-gift" style="color:var(--gold)"></i></div></div><div class="stat-value color-gold" id="adm-trial">0</div><div class="stat-label">Free Access</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fee2e2"><i class="fa-solid fa-user-lock" style="color:var(--danger)"></i></div></div><div class="stat-value color-danger" id="adm-suspended">0</div><div class="stat-label">Admin Review</div></div>
- <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fee2e2"><i class="fa-solid fa-exclamation-triangle" style="color:var(--danger)"></i></div></div><div class="stat-value color-danger" id="adm-disputes">0</div><div class="stat-label">Open Disputes</div></div>
- </div>
+  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fee2e2"><i class="fa-solid fa-exclamation-triangle" style="color:var(--danger)"></i></div></div><div class="stat-value color-danger" id="adm-disputes">0</div><div class="stat-label">Open Disputes</div></div>
+  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#e0f2fe"><i class="fa-solid fa-boxes-stacked" style="color:var(--blue)"></i></div></div><div class="stat-value" id="adm-total-products">0</div><div class="stat-label">Active Products</div></div>
+  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#ffedd5"><i class="fa-solid fa-rectangle-ad" style="color:#ea580c"></i></div></div><div class="stat-value" id="adm-pending-ads">0</div><div class="stat-label">Pending Ads</div></div>
+  </div>
  <div class="chart-card">
  <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
  <h3 style="font-size:1rem;margin:0">Platform Revenue (30 Days)</h3>
@@ -2596,7 +2659,7 @@
 
 <script src="https://js.paystack.co/v2/inline.js"></script>
 <script data-cfasync="false" src="config.js?v=3.3"></script>
-<script src="app.js?v=8.8"></script>
+<script src="app.js?v=8.9"></script>
  <script>
  (function() {
  'use strict';
