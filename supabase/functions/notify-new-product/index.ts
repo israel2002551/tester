@@ -151,7 +151,7 @@ serve(async (req) => {
       body: `${formattedPrice}${description ? ` - ${String(description).slice(0, 90)}` : ""}`,
       icon: image_url || `${siteUrl}/favicon.ico`,
       image: image_url || undefined,
-      url: id ? `${siteUrl}/?product=${encodeURIComponent(String(id))}` : siteUrl,
+      url: id ? `${siteUrl}/?view=shop&product=${encodeURIComponent(String(id))}` : `${siteUrl}/?view=shop`,
       tag: id ? `product-${id}` : "new-product",
     };
 

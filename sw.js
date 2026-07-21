@@ -11,7 +11,7 @@ self.addEventListener('push', (event) => {
     source: 'buysell-web-push',
     title: 'BUYSELL Nigeria',
     body: 'You have a new marketplace update.',
-    url: '/',
+    url: '/?view=shop',
   };
 
   try {

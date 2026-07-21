@@ -61,7 +61,7 @@ function categoryProductCard(product) {
   const rating = Number(product.avg_rating || 5).toFixed(1);
   const seller = product.profiles?.store_name || product.profiles?.name || 'Seller';
   return `
-    <article class="cat-product-card" onclick="location.href='index.html?product=${categoryEsc(product.id)}'">
+    <article class="cat-product-card" onclick="location.href='index.html?view=shop&product=${categoryEsc(product.id)}'">
       <div class="cat-product-media">
         <img src="${categoryEsc(image)}" alt="${categoryEsc(product.name || 'Product')}" loading="lazy">
         <div class="cat-product-badges">
@@ -150,6 +150,9 @@ async function loadCategoryPageProducts() {
 function initCategoryPage() {
   const config = CATEGORY_PAGE_CONFIG[currentCategory] || CATEGORY_PAGE_CONFIG.all;
   document.title = `${config.title} - BUYSELL Nigeria`;
+  document.querySelectorAll('.category-page-header a[href="index.html"]').forEach(link => {
+    link.setAttribute('href', 'index.html?view=shop');
+  });
   document.getElementById('category-title').textContent = config.title;
   document.getElementById('category-subtitle').textContent = config.subtitle;
   document.getElementById('category-icon').className = `fa-solid ${config.icon}`;

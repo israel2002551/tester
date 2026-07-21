@@ -378,11 +378,13 @@ if (typeof supabase !== 'undefined') {
 
  const shouldContinueAfterAuth = appStorage.getItem('bs_manual_navigation_pass') || hasAuthRedirectParams();
 
- // Keep passive session restores on the market landing. OAuth callbacks and button clicks route into the app.
- if (!shouldContinueAfterAuth) {
- console.log("Background session detected. Holding layout on market landing.");
- showMarketLandingPage();
- } else {
+  // Keep passive session restores on the market landing. OAuth callbacks and app routes open the app.
+  if (hasAppRouteParams()) {
+  await continueUrlRoute();
+  } else if (!shouldContinueAfterAuth) {
+  console.log("Background session detected. Holding layout on market landing.");
+  showMarketLandingPage();
+  } else {
  continuePendingEntry();
  }
 
@@ -402,8 +404,12 @@ if (typeof supabase !== 'undefined') {
  };
  }
 
- showMarketLandingPage();
- }
+  if (hasAppRouteParams()) {
+  await continueUrlRoute();
+  } else {
+  showMarketLandingPage();
+  }
+  }
  }, 0);
  });
 }
@@ -642,18 +648,54 @@ function profileEntryRole(profile = currentUser?.profile) {
 }
 
 function hasAuthRedirectParams() {
- const params = new URLSearchParams(window.location.search);
- const hashParams = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
- return params.has('code') ||
+  const params = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+  return params.has('code') ||
  params.has('state') ||
  hashParams.has('access_token') ||
  hashParams.has('refresh_token') ||
- hashParams.has('provider_token');
+  hashParams.has('provider_token');
+}
+
+function hasAppRouteParams() {
+ const params = new URLSearchParams(window.location.search);
+ return params.get('view') === 'shop' ||
+ params.get('dashboard') === 'seller' ||
+ params.has('product') ||
+ params.has('store') ||
+ params.has('category') ||
+ params.has('chat');
+}
+
+async function continueUrlRoute() {
+ const params = new URLSearchParams(window.location.search);
+ appStorage.removeItem('bs_manual_navigation_pass');
+
+ if (params.get('dashboard') === 'seller') {
+  if (!currentUser) {
+   openEntryAuth('seller', 'login');
+   return;
+  }
+  if (profileHasSellerAccess()) {
+   await showSellerDashboard();
+   if (params.has('order')) showDash('orders');
+  } else {
+   showBuyerView();
+   toast('Seller account required', 'Sign in with a seller account to open seller notifications.', 'warn', 6000);
+  }
+  return;
+ }
+
+ showBuyerView();
+ if (params.get('view') === 'shop') switchBuyerTab?.('shop');
+ if (params.has('product') || params.has('store') || params.has('category') || params.has('chat')) {
+  await handleDeepLink();
+ }
 }
 
 function cleanAuthRedirectUrl() {
- if (!hasAuthRedirectParams() || !window.history?.replaceState) return;
- window.history.replaceState({}, document.title, window.location.pathname);
+  if (!hasAuthRedirectParams() || !window.history?.replaceState) return;
+  window.history.replaceState({}, document.title, window.location.pathname);
 }
 
 function continuePendingEntry() {
@@ -1028,10 +1070,12 @@ async function checkSession() {
  if (event === 'SIGNED_IN' && session?.user) {
  if (!currentUser) {
  await onAuthSuccess(session.user);
- if (appStorage.getItem('bs_manual_navigation_pass') || hasAuthRedirectParams()) {
- continuePendingEntry();
- } else {
- showMarketLandingPage();
+  if (hasAppRouteParams()) {
+  await continueUrlRoute();
+  } else if (appStorage.getItem('bs_manual_navigation_pass') || hasAuthRedirectParams()) {
+  continuePendingEntry();
+  } else {
+  showMarketLandingPage();
  }
  }
  }
@@ -1059,8 +1103,9 @@ async function checkSession() {
  const { data: { session } } = await db.auth.getSession();
  if (session?.user) {
  await onAuthSuccess(session.user);
- if (hasAuthRedirectParams()) continuePendingEntry();
- }
+  if (hasAppRouteParams()) await continueUrlRoute();
+  else if (hasAuthRedirectParams()) continuePendingEntry();
+  }
 }
 
 function updateNavForUser() {
@@ -1772,6 +1817,14 @@ function filterCat(cat, options = {}) {
 
 function openCategoryPage(cat) {
  const selected = cat || 'all';
+ appStorage.setItem('bs_last_market_route', 'index.html?view=shop');
+ if (window.history?.replaceState) {
+  const url = new URL(window.location.href);
+  url.searchParams.set('view', 'shop');
+  url.searchParams.delete('product');
+  url.searchParams.delete('store');
+  window.history.replaceState({ view: 'shop' }, '', `${url.pathname}${url.search}${url.hash}`);
+ }
  window.location.href = CATEGORY_PAGE_URLS[selected] || `products.html?category=${encodeURIComponent(selected)}`;
 }
 
@@ -8505,7 +8558,7 @@ async function testNotification() {
  body: 'Notifications are working on this device.',
  icon: '/favicon.ico',
  badge: '/favicon.ico',
- data: { url: '/' },
+  data: { url: '/?view=shop' },
  tag: 'buysell-test-notification',
  });
  toast('Sent!', 'Check your notification area', 'success');
