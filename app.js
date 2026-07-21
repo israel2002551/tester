@@ -8187,10 +8187,9 @@ async function syncUserNotificationToken() {
  }
 
  try {
- const { error: profileError } = await db.from('profiles').update({
- push_subscription_token: JSON.stringify(subscriptionJson),
- updated_at: new Date().toISOString()
- }).eq('id', currentUser.id);
+  const { error: profileError } = await db.from('profiles').update({
+  push_subscription_token: JSON.stringify(subscriptionJson)
+  }).eq('id', currentUser.id);
  if (profileError) throw profileError;
  saved = true;
  } catch (profileErr) {
