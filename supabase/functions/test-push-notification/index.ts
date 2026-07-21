@@ -61,6 +61,7 @@ serve(async (req) => {
 
     const userId = userData.user.id;
     const { title, body, url } = await req.json().catch(() => ({}));
+    const now = Date.now();
     const payload = {
       source: "buysell-web-push",
       title: String(title || "BUYSELL Nigeria"),
@@ -68,7 +69,11 @@ serve(async (req) => {
       icon: `${siteUrl}/favicon.ico`,
       badge: `${siteUrl}/favicon.ico`,
       url: String(url || `${siteUrl}/?view=shop`),
-      tag: `test-push-${userId}`,
+      tag: `test-push-${userId}-${now}`,
+      timestamp: now,
+      requireInteraction: true,
+      renotify: true,
+      vibrate: [120, 80, 120],
     };
 
     const targets: { endpoint: string; subscription: any }[] = [];

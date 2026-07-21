@@ -30,7 +30,11 @@ self.addEventListener('push', (event) => {
     icon: payload.icon || '/favicon.ico',
     image: payload.image,
     badge: payload.badge || '/favicon.ico',
-    tag: payload.tag,
+    tag: payload.tag || `buysell-${Date.now()}`,
+    renotify: payload.renotify !== false,
+    requireInteraction: payload.requireInteraction === true,
+    timestamp: payload.timestamp || Date.now(),
+    vibrate: payload.vibrate || [120, 80, 120],
     data: {
       url: payload.url || '/',
     },

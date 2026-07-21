@@ -8148,7 +8148,7 @@ async function syncUserNotificationToken() {
  }
 
  const registrationResult = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
- if (registrationResult.waiting) await registrationResult.update().catch(() => {});
+ await registrationResult.update().catch(() => {});
  const registration = await navigator.serviceWorker.ready;
  let subscription = await registration.pushManager.getSubscription();
  const VAPID_PUBLIC_KEY = "BEL_hMw0i1uDcH_jt52ReK7GbXtLW4IvVK_7pW5fGSl-2f7inbRJgednd3R8YRXas-xNles0ezQfXMkopIhuKok";
@@ -8565,12 +8565,12 @@ async function testNotification() {
 
  try {
   await syncUserNotificationToken();
-  await callEdge('test-push-notification', {
+  const result = await callEdge('test-push-notification', {
    title: 'BUYSELL Nigeria',
-   body: 'Background notifications are active for this device.',
+   body: `Background notifications are active for this device. ${new Date().toLocaleTimeString()}`,
    url: `${PUBLIC_SITE_URL}/?view=shop`,
   });
-  toast('Push Sent', 'Close the site and future alerts will still reach this device.', 'success', 5500);
+  toast('Push Sent', `Sent to ${result?.sent || 1} device(s). Check your browser or system notification area.`, 'success', 6500);
   return;
  } catch (serverError) {
   console.warn('[PUSH ENGINE] Server push test failed, falling back to local notification:', serverError.message || serverError);
