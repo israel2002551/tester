@@ -8137,8 +8137,9 @@ function renderSellerAdsTable(ads) {
 
 async function syncUserNotificationToken() {
  if (!currentUser) throw new Error('Sign in before enabling notifications.');
+ if (!window.isSecureContext) throw new Error('Open the live HTTPS site before enabling notifications.');
  if (!('Notification' in window) || !('PushManager' in window) || !('serviceWorker' in navigator)) {
- throw new Error('Notifications are not supported on this device.');
+  throw new Error('Notifications are not supported on this device.');
  }
 
  try {
@@ -8546,9 +8547,45 @@ async function requestNotificationPermission() {
 
 async function testNotification() {
  if (!('Notification' in window)) { toast('Not Supported', "Your browser doesn't support notifications", 'warn'); return; }
+ if (!currentUser) { toast('Sign In Required', 'Please sign in before testing notifications.', 'warn'); return; }
  if (Notification.permission !== 'granted') {
- requestNotificationPermission();
- return;
+ await requestNotificationPermission();
+ if (Notification.permission !== 'granted') return;
+ }
+
+ try {
+  await syncUserNotificationToken();
+  await callEdge('test-push-notification', {
+   title: 'BUYSELL Nigeria',
+   body: 'Background notifications are active for this device.',
+   url: `${PUBLIC_SITE_URL}/?view=shop`,
+  });
+  toast('Push Sent', 'Close the site and future alerts will still reach this device.', 'success', 5500);
+  return;
+ } catch (serverError) {
+  console.warn('[PUSH ENGINE] Server push test failed, falling back to local notification:', serverError.message || serverError);
+  toast('Server Push Not Ready', serverError.message || 'Could not send a background push yet.', 'warn', 6500);
+ }
+
+ try {
+  const registration = await navigator.serviceWorker.ready;
+  await registration.showNotification('BUYSELL Nigeria', {
+  body: 'Local notification works. Server push still needs configuration.',
+  icon: '/favicon.ico',
+  badge: '/favicon.ico',
+  data: { url: '/?view=shop' },
+  tag: 'buysell-test-notification',
+  });
+ } catch (error) {
+  toast('Test Failed', error.message || 'Could not show a test notification.', 'error');
+ }
+}
+
+async function testLocalNotification() {
+ if (!('Notification' in window)) { toast('Not Supported', "Your browser doesn't support notifications", 'warn'); return; }
+ if (Notification.permission !== 'granted') {
+ await requestNotificationPermission();
+  return;
  }
 
  try {

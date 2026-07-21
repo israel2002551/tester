@@ -9,3 +9,6 @@ verify_jwt = false
 
 [functions.notify-product-digest]
 verify_jwt = false
+
+[functions.test-push-notification]
+verify_jwt = true

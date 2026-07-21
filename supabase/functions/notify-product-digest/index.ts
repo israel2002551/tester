@@ -139,7 +139,7 @@ serve(async (req) => {
       body: `${names}${productCount > 3 ? " and more" : ""}. Latest from ${money(first.price)}.`,
       icon: first.image_url || `${siteUrl}/favicon.ico`,
       image: first.image_url || undefined,
-      url: siteUrl,
+      url: `${siteUrl}/?view=shop`,
       tag: "product-digest",
     };
 
