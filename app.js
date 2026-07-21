@@ -1607,7 +1607,7 @@ function upcomingProductCard(row) {
  <article class="upcoming-card">
  <div class="upcoming-media">
  ${isVideo
- ? `<video src="${escAttr(cover)}" muted playsinline preload="metadata"></video><span class="upcoming-play"><i class="fa-solid fa-circle-play"></i></span>`
+ ? `<video src="${escAttr(cover)}" controls playsinline preload="metadata"></video>`
  : `<img src="${escAttr(cover)}" alt="${escAttr(row.title || 'Upcoming product')}" loading="lazy">`}
  <span class="upcoming-badge"><i class="fa-solid fa-shield-halved"></i> Platform Store</span>
  </div>
