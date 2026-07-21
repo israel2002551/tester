@@ -8508,11 +8508,11 @@ function updateNotificationButtonState() {
  return;
  }
 
- if (Notification.permission === 'granted') {
- btn.classList.add('enabled');
- btn.title = 'Notifications enabled on this device';
- btn.setAttribute('aria-label', 'Notifications enabled on this device');
- icon.className = 'fa-solid fa-bell';
+  if (Notification.permission === 'granted') {
+  btn.classList.add('enabled');
+  btn.title = 'Notifications enabled. Click to send a test push.';
+  btn.setAttribute('aria-label', 'Send test notification');
+  icon.className = 'fa-solid fa-bell';
  } else if (Notification.permission === 'denied') {
  btn.classList.add('blocked');
  btn.title = 'Notifications blocked. Enable them in browser site settings.';
@@ -8523,6 +8523,16 @@ function updateNotificationButtonState() {
  btn.setAttribute('aria-label', 'Enable notifications');
  icon.className = 'fa-regular fa-bell';
  }
+}
+
+async function handleNotificationBellClick() {
+ if (!('Notification' in window)) { toast('Not Supported', "Your browser doesn't support notifications", 'warn'); return; }
+ if (!currentUser) { toast('Sign In Required', 'Please sign in before enabling notifications.', 'warn'); return; }
+ if (Notification.permission === 'granted') {
+  await testNotification();
+  return;
+ }
+ await requestNotificationPermission();
 }
 
 async function requestNotificationPermission() {

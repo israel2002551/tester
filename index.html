@@ -161,7 +161,7 @@
  <i class="fa-solid fa-envelope"></i>
  <span class="cart-badge hidden" id="inbox-count">0</span>
  </div>
- <button type="button" class="cart-btn nav-notify-btn" id="nav-notify-btn" onclick="requestNotificationPermission()" title="Enable notifications" aria-label="Enable notifications">
+ <button type="button" class="cart-btn nav-notify-btn" id="nav-notify-btn" onclick="handleNotificationBellClick()" title="Enable notifications" aria-label="Enable notifications">
  <i class="fa-solid fa-bell" id="nav-notify-icon"></i>
  </button>
  <div class="cart-btn" onclick="openCart()" title="Cart" id="cart-btn-el">
@@ -2731,7 +2731,7 @@
 
 <script src="https://js.paystack.co/v2/inline.js"></script>
 <script data-cfasync="false" src="config.js?v=3.3"></script>
-<script src="app.js?v=9.3"></script>
+<script src="app.js?v=9.4"></script>
  <script>
  (function() {
  'use strict';
