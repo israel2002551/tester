@@ -49,6 +49,7 @@ let selectedRating = 0, checkoutPaymentMethod = 'paystack';
 let deferredInstallPrompt = null, salesChart = null;
 let sellerAnalyticsChart = null;
 let carouselStartX = 0;
+let notificationSyncPromise = null;
 let previousAppView = 'buyer';
 // MOVE THESE TWO LINES HERE (TO THE TOP VARIABLES AREA):
 let wishlist = readStoredJson('bs_wishlist', []);
@@ -8136,6 +8137,14 @@ function renderSellerAdsTable(ads) {
 }
 
 async function syncUserNotificationToken() {
+ if (notificationSyncPromise) return notificationSyncPromise;
+ notificationSyncPromise = syncUserNotificationTokenInner().finally(() => {
+  notificationSyncPromise = null;
+ });
+ return notificationSyncPromise;
+}
+
+async function syncUserNotificationTokenInner() {
  if (!currentUser) throw new Error('Sign in before enabling notifications.');
  if (!window.isSecureContext) throw new Error('Open the live HTTPS site before enabling notifications.');
  if (!('Notification' in window) || !('PushManager' in window) || !('serviceWorker' in navigator)) {
