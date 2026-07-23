@@ -145,6 +145,8 @@
  <button class="search-btn" onclick="doSearch()" aria-label="Search"><i class="fa-solid fa-search"></i></button>
  </div>
  <div class="nav-actions">
+ <a class="nav-legal-link" href="products.html">Products</a>
+ <a class="nav-legal-link" href="upcoming.html">Upcoming</a>
  <a class="nav-legal-link" href="terms.html">Terms</a>
  <a class="nav-legal-link" href="privacy.html">Privacy</a>
  <a class="nav-legal-link" href="https://chat.whatsapp.com/LbqLGlmpqwbJqDEmj6FUPW?s=cl&amp;p=a&amp;ilr=1" target="_blank" rel="noopener noreferrer">Community</a>
@@ -259,9 +261,11 @@
   <div class="buyer-inner temu-shell">
   <section class="buyer-command-strip" aria-label="Marketplace shortcuts">
   <button onclick="openCategoryPage('trending')" data-category-link="trending"><i class="fa-solid fa-fire"></i><span>Trending</span></button>
+  <button onclick="openCategoryPage('all')" data-category-link="all"><i class="fa-solid fa-border-all"></i><span>Products</span></button>
   <button onclick="openCategoryPage('phones')" data-category-link="phones"><i class="fa-solid fa-mobile-screen"></i><span>Phones</span></button>
   <button onclick="openCategoryPage('fashion')" data-category-link="fashion"><i class="fa-solid fa-shirt"></i><span>Fashion</span></button>
   <button onclick="openCategoryPage('home')" data-category-link="home"><i class="fa-solid fa-house"></i><span>Home</span></button>
+  <button onclick="openCategoryPage('upcoming')" data-category-link="upcoming"><i class="fa-solid fa-calendar-plus"></i><span>Upcoming</span></button>
   <button onclick="switchBuyerTab('orders')"><i class="fa-solid fa-box"></i><span>Orders</span></button>
   <button onclick="openInbox()"><i class="fa-solid fa-comments"></i><span>Messages</span></button>
   </section>
@@ -286,6 +290,11 @@
   <span>Tech Zone</span>
   <strong>Gadgets daily</strong>
   </button>
+  <button class="deal-board-card" onclick="openCategoryPage('upcoming')" data-category-link="upcoming">
+  <i class="fa-solid fa-calendar-plus"></i>
+  <span>Upcoming</span>
+  <strong>Launching soon</strong>
+  </button>
   </section>
   </div>
 
@@ -296,7 +305,10 @@
   <h2>Upcoming Products</h2>
   <p>Official BUYSELL products and launches coming soon.</p>
   </div>
+  <div class="flex items-center gap-2">
+  <a class="btn btn-outline btn-sm" href="upcoming.html"><i class="fa-solid fa-calendar-plus"></i> View All</a>
   <button class="btn btn-outline btn-sm" onclick="loadUpcomingProducts()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+  </div>
   </div>
   <div class="upcoming-grid" id="buyer-upcoming-grid"></div>
   </section>

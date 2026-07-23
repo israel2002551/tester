@@ -8,6 +8,7 @@ const CATEGORY_PAGE_CONFIG = {
   beauty: { title: 'Beauty & Health', icon: 'fa-spa', subtitle: 'Beauty, personal care, wellness, and health products.' },
   sports: { title: 'Sports', icon: 'fa-dumbbell', subtitle: 'Fitness, sports gear, and active lifestyle products.' },
   dropship: { title: 'Dropshipping Products', icon: 'fa-globe', subtitle: 'Global products available for dropship sellers and buyers.' },
+  upcoming: { title: 'Upcoming Products', icon: 'fa-calendar-plus', subtitle: 'Preview official BUYSELL products launching soon.' },
 };
 
 const CATEGORY_PAGE_LINKS = {
@@ -20,6 +21,7 @@ const CATEGORY_PAGE_LINKS = {
   beauty: 'category-beauty.html',
   sports: 'category-sports.html',
   dropship: 'category-dropship.html',
+  upcoming: 'upcoming.html',
 };
 
 let categoryProducts = [];
@@ -55,6 +57,7 @@ function categoryProductImage(product) {
 }
 
 function categoryProductCard(product) {
+  if (currentCategory === 'upcoming') return upcomingCategoryProductCard(product);
   const image = categoryProductImage(product);
   const videos = Array.isArray(product.videos) ? product.videos.filter(Boolean) : [];
   const hasVideo = videos.length || product.video_url || product.has_video;
@@ -81,6 +84,48 @@ function categoryProductCard(product) {
     </article>`;
 }
 
+function categoryUpcomingMedia(product = {}) {
+  const images = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
+  const videos = Array.isArray(product.videos) ? product.videos.filter(Boolean) : [];
+  if (!images.length && product.image_url) images.push(product.image_url);
+  if (!videos.length && product.video_url) videos.push(product.video_url);
+  return { images, videos };
+}
+
+function categoryDate(value) {
+  if (!value) return '';
+  try {
+    return new Intl.DateTimeFormat('en-NG', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value));
+  } catch (_) {
+    return '';
+  }
+}
+
+function upcomingCategoryProductCard(product) {
+  const { images, videos } = categoryUpcomingMedia(product);
+  const cover = videos[0] || images[0] || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=600&h=600&fit=crop';
+  const isVideo = !!videos[0];
+  const launchText = categoryDate(product.launch_date);
+  return `
+    <article class="cat-product-card upcoming-listing-card">
+      <div class="cat-product-media">
+        ${isVideo
+          ? `<video src="${categoryEsc(cover)}" controls playsinline preload="metadata"></video>`
+          : `<img src="${categoryEsc(cover)}" alt="${categoryEsc(product.title || 'Upcoming product')}" loading="lazy">`}
+        <div class="cat-product-badges">
+          <span><i class="fa-solid fa-calendar-plus"></i> Coming Soon</span>
+          <span>Platform Store</span>
+        </div>
+      </div>
+      <div class="cat-product-body">
+        <h2>${categoryEsc(product.title || 'Upcoming Product')}</h2>
+        <div class="cat-product-price">${launchText ? `Launching ${categoryEsc(launchText)}` : 'Launching soon'}</div>
+        <p class="cat-product-desc">${categoryEsc(product.description || 'A new official BUYSELL product preview is coming soon.')}</p>
+        <div class="cat-product-store"><i class="fa-solid fa-shield-halved"></i> BUYSELL Platform Store</div>
+      </div>
+    </article>`;
+}
+
 function renderCategoryProducts(items) {
   const grid = document.getElementById('category-products-grid');
   const empty = document.getElementById('category-empty');
@@ -103,6 +148,7 @@ function applyCategorySearch() {
   if (term) {
     items = items.filter(product => [
       product.name,
+      product.title,
       product.description,
       product.category,
       product.location,
@@ -110,7 +156,11 @@ function applyCategorySearch() {
   }
   if (sort === 'price-asc') items.sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
   if (sort === 'price-desc') items.sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
-  if (sort === 'rating') items.sort((a, b) => Number(b.avg_rating || 0) - Number(a.avg_rating || 0));
+  if (sort === 'rating') {
+    items.sort((a, b) => currentCategory === 'upcoming'
+      ? Number(b.priority || 0) - Number(a.priority || 0)
+      : Number(b.avg_rating || 0) - Number(a.avg_rating || 0));
+  }
   renderCategoryProducts(items);
 }
 
@@ -123,11 +173,15 @@ async function loadCategoryPageProducts() {
   grid.innerHTML = '';
   try {
     let query = categoryDb
-      .from('products')
-      .select('*, profiles(name, store_name, role, email)')
-      .eq('status', 'active')
-      .order('created_at', { ascending: false });
-    if (!['all', 'trending'].includes(currentCategory)) query = query.eq('category', currentCategory);
+      .from(currentCategory === 'upcoming' ? 'upcoming_products' : 'products')
+      .select(currentCategory === 'upcoming' ? '*' : '*, profiles(name, store_name, role, email)')
+      .eq('status', 'active');
+    if (currentCategory === 'upcoming') {
+      query = query.order('priority', { ascending: false }).order('created_at', { ascending: false });
+    } else {
+      query = query.order('created_at', { ascending: false });
+    }
+    if (!['all', 'trending', 'upcoming'].includes(currentCategory)) query = query.eq('category', currentCategory);
     const { data, error: queryError } = await query;
     if (queryError) throw queryError;
     categoryProducts = data || [];

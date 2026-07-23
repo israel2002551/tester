@@ -1770,6 +1770,7 @@ const CATEGORY_PAGE_LABELS = {
  beauty: 'Beauty & Health',
  sports: 'Sports',
  dropship: 'Dropshipping Products',
+ upcoming: 'Upcoming Products',
 };
 
 const CATEGORY_PAGE_URLS = {
@@ -1782,6 +1783,7 @@ const CATEGORY_PAGE_URLS = {
  beauty: 'category-beauty.html',
  sports: 'category-sports.html',
  dropship: 'category-dropship.html',
+ upcoming: 'upcoming.html',
 };
 
 function categoryLabel(cat) {
