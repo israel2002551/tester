@@ -1371,7 +1371,6 @@ function showBuyerView() {
 
  if (typeof startCarousel === 'function') startCarousel();
  if (typeof loadProducts === 'function') loadProducts();
- if (typeof loadUpcomingProducts === 'function') loadUpcomingProducts();
  if (typeof loadActiveAds === 'function') loadActiveAds();
  if (typeof updateCartCount === 'function') updateCartCount();
 }
