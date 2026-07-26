@@ -82,6 +82,15 @@ type ProfileRow = {
 
 const resendApiKey = Deno.env.get("RESEND_API_KEY") ?? "";
 const fromEmail = Deno.env.get("FROM_EMAIL") ?? "BUYSELL Nigeria <info@updates.buysell-markerplace.com>";
+const invalidRecipientDomains = new Set([
+  "example.com",
+  "example.net",
+  "example.org",
+  "test.com",
+  "test.test",
+  "invalid.com",
+  "localhost",
+]);
 
 function esc(value: unknown) {
   return String(value ?? "")
@@ -112,6 +121,27 @@ function profileMatchesTarget(profile: ProfileRow, target: Target) {
   if (target === "sellers") return isSeller;
   if (target === "service_providers") return isProvider;
   return isBuyer || isSeller || isProvider;
+}
+
+function normalizeEmail(value: unknown) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getEmailDomain(email: string) {
+  return email.split("@").pop() || "";
+}
+
+function isDeliverableEmail(email: string) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return false;
+  if (invalidRecipientDomains.has(getEmailDomain(email))) return false;
+  return true;
+}
+
+function getResendErrorHint(errorMessage: string) {
+  if (errorMessage.includes("Invalid `to` field")) {
+    return "Resend rejected at least one recipient. Placeholder emails are now filtered automatically. If all remaining recipients are real and this still happens, your Resend account/API key is likely in testing mode; verify your sending domain in Resend or send only to Resend's allowed test address.";
+  }
+  return "";
 }
 
 async function countRows(admin: ReturnType<typeof createClient>, table: string, filter?: (query: any) => any) {
@@ -376,9 +406,25 @@ serve(async (req) => {
       getPlatformSnapshot(admin),
     ]);
 
+    const skippedRecipients: { email: string; reason: string }[] = [];
+    const seenEmails = new Set<string>();
     const recipients = profiles
       .filter((profile) => profile.email && profileMatchesTarget(profile, target))
-      .filter((profile, index, arr) => arr.findIndex((other) => other.email?.toLowerCase() === profile.email?.toLowerCase()) === index)
+      .map((profile) => ({ ...profile, email: normalizeEmail(profile.email) }))
+      .filter((profile) => {
+        const email = normalizeEmail(profile.email);
+        if (!email) return false;
+        if (seenEmails.has(email)) {
+          skippedRecipients.push({ email, reason: "Duplicate email address" });
+          return false;
+        }
+        seenEmails.add(email);
+        if (!isDeliverableEmail(email)) {
+          skippedRecipients.push({ email, reason: "Invalid or placeholder email address" });
+          return false;
+        }
+        return true;
+      })
       .slice(0, maxRecipients);
 
     const html = buildEmailHtml({ title, message, target, snapshot });
@@ -392,6 +438,8 @@ serve(async (req) => {
         target,
         recipient_count: recipients.length,
         sample_recipients: recipients.slice(0, 10).map((profile) => profile.email),
+        skipped: skippedRecipients.length,
+        skipped_recipients: skippedRecipients.slice(0, 20),
         snapshot,
       });
     }
@@ -434,8 +482,9 @@ serve(async (req) => {
           });
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
+          const hint = getResendErrorHint(errorMessage);
           chunk.forEach((recipient) => {
-            failures.push({ email: recipient.email, error: errorMessage });
+            failures.push({ email: recipient.email, error: errorMessage, hint });
           });
         }
 
@@ -452,6 +501,8 @@ serve(async (req) => {
       target,
       sent: results.length,
       failed: failures.length,
+      skipped: skippedRecipients.length,
+      skipped_recipients: skippedRecipients.slice(0, 20),
       failures: failures.slice(0, 20),
       snapshot,
     }, failures.length ? 207 : 200);

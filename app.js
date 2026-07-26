@@ -5361,16 +5361,25 @@ async function sendBroadcast() {
  
  if (!title || !body) { toast('Fill in title and message', '', 'warn'); return; }
  
- try { 
+ try {
  // Passes payload keys straight to your Edge Function
- await callEdge('send-broadcast', { title, body, target, type }); 
+ const result = await callEdge('send-broadcast', { title, body, target, type });
+ const sent = Number(result?.sent || 0);
+ const failed = Number(result?.failed || 0);
+ const skipped = Number(result?.skipped || 0);
+ if (failed) {
+  const firstFailure = result?.failures?.[0];
+  const hint = firstFailure?.hint || firstFailure?.error || 'Some emails could not be sent.';
+  toast('Broadcast Partially Sent', `Sent: ${sent}. Failed: ${failed}. Skipped: ${skipped}. ${hint}`, 'warn', 9000);
+ } else {
+  toast('Broadcast Sent!', `Sent: ${sent}. Skipped invalid: ${skipped}.`, 'success');
  }
- catch(e) { 
- toast('Error', e.message, 'error'); 
- return; 
  }
- 
- toast('" Broadcast Sent!', 'To: ' + target, 'success');
+ catch(e) {
+ toast('Error', e.message, 'error');
+ return;
+ }
+
  document.getElementById('bc-title').value = '';
  document.getElementById('bc-body').value = '';
  loadBroadcastHistory();
