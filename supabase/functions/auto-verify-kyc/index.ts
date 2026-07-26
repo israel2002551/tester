@@ -29,10 +29,12 @@ type ProfileRow = {
   name?: string | null;
   email?: string | null;
   role?: string | null;
+  accounts?: string | null;
 };
 
-type ProviderResult = {
-  verified: boolean;
+type AiReviewResult = {
+  status: "in_review" | "rejected";
+  aiPassed: boolean;
   reason: string;
   raw?: unknown;
 };
@@ -40,8 +42,8 @@ type ProviderResult = {
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const providerUrl = Deno.env.get("KYC_PROVIDER_URL") ?? "";
-const providerApiKey = Deno.env.get("KYC_PROVIDER_API_KEY") ?? "";
+const openAiApiKey = Deno.env.get("OPENAI_API_KEY") ?? "";
+const openAiModel = Deno.env.get("OPENAI_KYC_MODEL") ?? "gpt-5-mini";
 
 function json(body: Json, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -77,7 +79,9 @@ function validateLocalRules(kyc: KycRow, profile: ProfileRow) {
   const legalName = getLegalName(kyc);
   const allowedDocTypes = new Set(["nin", "bvn", "drivers_license", "voters_card", "passport"]);
 
-  if (!["seller", "both", "service_provider"].includes(String(profile.role || ""))) {
+  const role = String(profile.role || "");
+  const accounts = String(profile.accounts || "");
+  if (!["seller", "both", "service_provider", "admin"].includes(role) && !["seller", "both", "service_provider"].includes(accounts)) {
     errors.push("Profile is not a seller or service provider.");
   }
   if (!allowedDocTypes.has(docType)) errors.push("Unsupported document type.");
@@ -89,41 +93,110 @@ function validateLocalRules(kyc: KycRow, profile: ProfileRow) {
   return errors;
 }
 
-async function callKycProvider(kyc: KycRow, profile: ProfileRow): Promise<ProviderResult> {
-  if (!providerUrl) {
+function parseAiJson(text: string): Record<string, unknown> {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
+  const candidate = fenced || trimmed.match(/\{[\s\S]*\}/)?.[0] || trimmed;
+  return JSON.parse(candidate);
+}
+
+function extractOutputText(raw: Json) {
+  if (typeof raw.output_text === "string") return raw.output_text;
+  const parts: string[] = [];
+  for (const item of Array.isArray(raw.output) ? raw.output : []) {
+    const content = (item as Json).content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      const text = (block as Json).text;
+      if (typeof text === "string") parts.push(text);
+    }
+  }
+  return parts.join("\n");
+}
+
+async function callOpenAiKycReview(kyc: KycRow, profile: ProfileRow): Promise<AiReviewResult> {
+  if (!openAiApiKey) {
     return {
-      verified: false,
-      reason: "No KYC provider configured. Set KYC_PROVIDER_URL and KYC_PROVIDER_API_KEY.",
+      status: "in_review",
+      aiPassed: false,
+      reason: "OpenAI KYC review is not configured. Set OPENAI_API_KEY.",
     };
   }
 
-  const res = await fetch(providerUrl, {
+  const expectedDocType = getDocType(kyc);
+  const expectedDocNumber = getDocNumber(kyc);
+  const expectedName = getLegalName(kyc);
+  const content: Record<string, unknown>[] = [
+    {
+      type: "input_text",
+      text: [
+        "You are reviewing seller KYC documents for a marketplace.",
+        "Do not identify or compare faces. Do not claim government-record validation.",
+        "Only inspect document image quality, visible text, document type, and whether the submitted number/name appear to match the visible document.",
+        "Return only valid JSON with keys: decision, reason, extracted_document_type, extracted_document_number, extracted_name, doc_number_matches, name_looks_consistent, image_quality, tamper_or_fake_signals.",
+        "decision must be one of: pass_for_manual_review, reject, needs_manual_review.",
+        `Submitted document type: ${expectedDocType}`,
+        `Submitted document number: ${expectedDocNumber}`,
+        `Submitted legal name: ${expectedName}`,
+        `Seller profile name/email: ${profile.name || ""} / ${profile.email || ""}`,
+      ].join("\n"),
+    },
+    { type: "input_image", image_url: kyc.front_url },
+  ];
+
+  if (kyc.back_url) content.push({ type: "input_image", image_url: kyc.back_url });
+  if (kyc.selfie_url) {
+    content.push({
+      type: "input_text",
+      text: "The next image is a selfie/holder image. Use it only to check basic submission quality and whether an ID document is present; do not perform face recognition.",
+    });
+    content.push({ type: "input_image", image_url: kyc.selfie_url });
+  }
+
+  const res = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(providerApiKey ? { Authorization: `Bearer ${providerApiKey}` } : {}),
+      Authorization: `Bearer ${openAiApiKey}`,
     },
     body: JSON.stringify({
-      user_id: kyc.user_id,
-      email: profile.email,
-      name: getLegalName(kyc),
-      document_type: getDocType(kyc),
-      document_number: getDocNumber(kyc),
-      front_url: kyc.front_url,
-      back_url: kyc.back_url,
-      selfie_url: kyc.selfie_url,
+      model: openAiModel,
+      input: [{ role: "user", content }],
     }),
   });
 
   const raw = await res.json().catch(() => ({}));
   if (!res.ok) {
-    return { verified: false, reason: `Provider request failed with HTTP ${res.status}.`, raw };
+    return { status: "in_review", aiPassed: false, reason: `OpenAI review failed with HTTP ${res.status}.`, raw };
   }
 
-  const status = normalize((raw as Json).status || (raw as Json).verification_status);
-  const verified = (raw as Json).verified === true || ["verified", "approved", "success"].includes(status);
-  const reason = String((raw as Json).reason || (raw as Json).message || (verified ? "Provider verified identity." : "Provider did not verify identity."));
-  return { verified, reason, raw };
+  const outputText = extractOutputText(raw as Json);
+  let parsed: Record<string, unknown> = {};
+  try {
+    parsed = outputText ? parseAiJson(outputText) : {};
+  } catch {
+    return {
+      status: "in_review",
+      aiPassed: false,
+      reason: "AI pre-check returned an unreadable response. Manual review required.",
+      raw,
+    };
+  }
+  const decision = normalize(parsed.decision);
+  const extractedNumber = normalizeDocNumber(parsed.extracted_document_number);
+  const numberMatches = parsed.doc_number_matches === true || Boolean(expectedDocNumber && extractedNumber === expectedDocNumber);
+  const imageQuality = normalize(parsed.image_quality);
+  const tamperSignals = String(parsed.tamper_or_fake_signals || "").trim();
+  const reject = decision === "reject" || imageQuality === "unreadable" || (!numberMatches && decision !== "needs_manual_review");
+  const aiPassed = !reject && numberMatches && decision === "pass_for_manual_review";
+  const reason = String(parsed.reason || (aiPassed ? "AI pre-check passed. Admin review still required." : "AI pre-check needs manual review."));
+
+  return {
+    status: reject ? "rejected" : "in_review",
+    aiPassed,
+    reason: tamperSignals ? `${reason} Signals: ${tamperSignals}` : reason,
+    raw: { ...raw, parsed },
+  };
 }
 
 async function findKycRow(admin: ReturnType<typeof createClient>, userId: string, kycId?: string): Promise<KycRow | null> {
@@ -165,7 +238,7 @@ serve(async (req) => {
 
     const [kyc, profileResult] = await Promise.all([
       findKycRow(admin, userId, kycId),
-      admin.from("profiles").select("id,name,email,role").eq("id", userId).maybeSingle(),
+      admin.from("profiles").select("id,name,email,role,accounts").eq("id", userId).maybeSingle(),
     ]);
 
     if (!kyc) return json({ error: "KYC submission not found." }, 404);
@@ -196,28 +269,29 @@ serve(async (req) => {
       });
     }
 
-    const provider = await callKycProvider(kyc, profile);
-    const nextStatus = provider.verified ? "approved" : "in_review";
-    const profileStatus = provider.verified ? "verified" : "pending";
+    const aiReview = await callOpenAiKycReview(kyc, profile);
+    const nextStatus = aiReview.status;
+    const profileStatus = "pending";
 
     await Promise.all([
       admin.from("kyc_verifications").update({
         status: nextStatus,
-        admin_note: provider.reason,
+        admin_note: aiReview.reason,
         reviewed_at: new Date().toISOString(),
       }).eq("id", kyc.id),
       admin.from("profiles").update({
         kyc_status: nextStatus,
-        verification_status: profileStatus,
-        seller_verified: provider.verified,
+        verification_status: nextStatus === "rejected" ? "rejected" : profileStatus,
+        seller_verified: false,
       }).eq("id", userId),
     ]);
 
     return json({
       ok: true,
       status: nextStatus,
-      verified: provider.verified,
-      reason: provider.reason,
+      verified: false,
+      ai_passed: aiReview.aiPassed,
+      reason: aiReview.reason,
     });
   } catch (error) {
     console.error("auto-verify-kyc failed:", error);

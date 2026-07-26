@@ -607,7 +607,7 @@ function openEntryAuth(role = 'buyer', mode = 'login') {
 function profileHasSellerAccess(profile = currentUser?.profile) {
  const role = profile?.role;
  const accounts = profile?.accounts;
- return role === 'seller' || role === 'admin' || role === 'both' || accounts === 'seller' || accounts === 'both';
+ return role === 'seller' || role === 'admin' || role === 'both' || role === 'service_provider' || accounts === 'seller' || accounts === 'both' || accounts === 'service_provider';
 }
 
 async function ensureSellerProfileRole() {
@@ -625,17 +625,37 @@ async function ensureSellerProfileRole() {
  if (!profileHasSellerAccess(profile)) {
  throw new Error('Seller account required. Please sign in with a seller account.');
  }
- if (profile.role === 'seller' || profile.role === 'admin') return true;
+ const legacyAccessPatch = {
+  commission_paid: true,
+  trial_end: null
+ };
+
+ if (profile.is_suspended === true) {
+  throw new Error('Seller account suspended. Please contact support.');
+ }
+
+ if (profile.role === 'seller' || profile.role === 'admin') {
+  if (profile.commission_paid !== true || profile.trial_end) {
+  const { data } = await db
+  .from('profiles')
+  .update(legacyAccessPatch)
+  .eq('id', currentUser.id)
+  .select('*')
+  .maybeSingle();
+  currentUser.profile = data || { ...profile, ...legacyAccessPatch };
+  }
+  return true;
+ }
 
  const { data, error } = await db
  .from('profiles')
- .update({ role: 'seller', accounts: profile.accounts || 'seller' })
+ .update({ role: 'seller', accounts: profile.accounts || 'seller', ...legacyAccessPatch })
  .eq('id', currentUser.id)
  .select('*')
  .single();
 
  if (error) throw new Error(error.message || 'Could not confirm seller access');
- currentUser.profile = data || { ...profile, role: 'seller', accounts: profile.accounts || 'seller' };
+ currentUser.profile = data || { ...profile, role: 'seller', accounts: profile.accounts || 'seller', ...legacyAccessPatch };
  currentRole = 'seller';
  return true;
 }
@@ -3957,11 +3977,14 @@ async function saveSettings(e) {
  store_category: document.getElementById('s-store-cat').value,
  store_description: document.getElementById('s-store-desc').value.trim(),
  whatsapp: document.getElementById('s-whatsapp').value.trim(),
- paystack_key: document.getElementById('s-paystack-key').value.trim(),
- notif_email: document.getElementById('s-notif-email').value.trim(),
- // Added extended metadata attributes
- instagram_handle: document.getElementById('s-instagram')?.value.trim() || '',
- store_address: document.getElementById('s-address')?.value.trim() || ''
+  paystack_key: document.getElementById('s-paystack-key').value.trim(),
+  notif_email: document.getElementById('s-notif-email').value.trim(),
+  bank_name: document.getElementById('s-bank-name').value.trim(),
+  account_number: document.getElementById('s-account-num').value.trim(),
+  account_name: document.getElementById('s-account-name').value.trim(),
+  // Added extended metadata attributes
+  instagram_handle: document.getElementById('s-instagram')?.value.trim() || '',
+  store_address: document.getElementById('s-address')?.value.trim() || ''
  };
  
  if (!updates.store_name || !updates.whatsapp) {
@@ -3986,10 +4009,10 @@ async function saveSettings(e) {
 
 // 2. Clean payload metrics and transmit straight to the profile edge framework
  const cleanUpdates = purgePayloadNulls(updates);
- await callEdge('update-profile', cleanUpdates);
+ const updateResult = await callEdge('update-profile', cleanUpdates);
  
  // Synced properties updates locally
- if (currentUser.profile) Object.assign(currentUser.profile, cleanUpdates); 
+ if (currentUser.profile) Object.assign(currentUser.profile, updateResult?.profile || cleanUpdates);
  toast('Profile Brand Saved! ', 'Your store profile parameters are updated.', 'success');
  loadWithdrawalData();
  } catch (err) {
@@ -6945,6 +6968,39 @@ function getAdminKycElement(id) {
  return document.querySelector(`#admin-portal-view #${id}`) || document.getElementById(id);
 }
 
+async function fetchAdminKycRows(filter) {
+ try {
+  const result = await callEdge('admin-kyc', { action: 'list', filter });
+  const rows = result?.rows || [];
+  const profileMap = new Map();
+  (result?.profiles || []).forEach(profile => profileMap.set(profile.id, profile));
+  return { rows, profileMap };
+ } catch (edgeError) {
+  console.warn('admin-kyc list failed, falling back to direct query:', edgeError);
+ }
+
+ let query = db.from('kyc_verifications').select('*').order('created_at', { ascending: false });
+ if (filter === 'pending') {
+  query = query.in('status', ['pending', 'submitted', 'in_review', 'review']);
+ } else if (filter !== 'all') {
+  query = query.eq('status', filter);
+ }
+ const { data: rows, error } = await query;
+ if (error) throw error;
+
+ const userIds = [...new Set((rows || []).map(k => k.user_id).filter(Boolean))];
+ const profileMap = new Map();
+ if (userIds.length) {
+  const { data: profiles, error: profileError } = await db
+  .from('profiles')
+  .select('id,name,email,whatsapp')
+  .in('id', userIds);
+  if (profileError) console.warn('KYC profile lookup failed:', profileError);
+  (profiles || []).forEach(profile => profileMap.set(profile.id, profile));
+ }
+ return { rows: rows || [], profileMap };
+}
+
 async function loadAdminKyc() {
  if (!guardAdminPanel()) return;
  const skeleton = getAdminKycElement('adm-kyc-skeleton');
@@ -6953,38 +7009,21 @@ async function loadAdminKyc() {
  skeleton?.classList.remove('hidden'); list?.classList.add('hidden'); empty?.classList.add('hidden');
 
  try {
- const filter = getAdminKycElement('adm-kyc-filter')?.value || 'pending';
- let query = db.from('kyc_verifications').select('*').order('created_at', { ascending: false });
- if (filter === 'pending') {
- query = query.in('status', ['pending', 'submitted', 'in_review', 'review']);
- } else if (filter !== 'all') {
- query = query.eq('status', filter);
- }
- const { data: rows, error } = await query;
- if (error) throw error;
+  const filter = getAdminKycElement('adm-kyc-filter')?.value || 'pending';
+  const { rows, profileMap } = await fetchAdminKycRows(filter);
 
- const userIds = [...new Set((rows || []).map(k => k.user_id).filter(Boolean))];
- const profileMap = new Map();
- if (userIds.length) {
- const { data: profiles, error: profileError } = await db
- .from('profiles')
- .select('id,name,email,whatsapp')
- .in('id', userIds);
- if (profileError) console.warn('KYC profile lookup failed:', profileError);
- (profiles || []).forEach(profile => profileMap.set(profile.id, profile));
- }
-
- skeleton?.classList.add('hidden');
- if (!rows || !rows.length) { empty?.classList.remove('hidden'); return; }
+  skeleton?.classList.add('hidden');
+  if (!rows || !rows.length) { empty?.classList.remove('hidden'); return; }
  list?.classList.remove('hidden');
  list.style.display = 'flex';
 
  list.innerHTML = rows.map(k => {
- const profile = profileMap.get(k.user_id) || {};
- const isPending = k.status === 'pending';
- const statusBadge = k.status === 'approved' ? '<span class="badge badge-green">Approved</span>'
- : k.status === 'rejected' ? '<span class="badge badge-red">Rejected</span>'
- : '<span class="badge badge-gold">Pending</span>';
+  const profile = profileMap.get(k.user_id) || {};
+  const isPending = ['pending', 'submitted', 'in_review', 'review'].includes(String(k.status || '').toLowerCase());
+  const statusBadge = k.status === 'approved' ? '<span class="badge badge-green">Approved</span>'
+  : k.status === 'rejected' ? '<span class="badge badge-red">Rejected</span>'
+  : k.status === 'in_review' ? '<span class="badge badge-gold">AI Reviewed</span>'
+  : '<span class="badge badge-gold">Pending</span>';
  return `
  <div class="card card-pad">
  <div class="flex justify-between items-start gap-2 flex-wrap mb-2">
@@ -7002,12 +7041,13 @@ async function loadAdminKyc() {
  <div class="flex gap-2 flex-wrap mb-3">
  ${k.front_url ? `<a href="${k.front_url}" target="_blank" class="btn btn-ghost btn-sm" style="color:var(--blue)"><i class="fa-solid fa-image"></i> Front</a>` : ''}
  ${k.back_url ? `<a href="${k.back_url}" target="_blank" class="btn btn-ghost btn-sm" style="color:var(--blue)"><i class="fa-solid fa-image"></i> Back</a>` : ''}
- ${k.selfie_url ? `<a href="${k.selfie_url}" target="_blank" class="btn btn-ghost btn-sm" style="color:var(--blue)"><i class="fa-solid fa-user"></i> Selfie</a>` : ''}
- </div>
- ${isPending ? `<div class="flex gap-2">
- <button class="btn btn-primary btn-sm" onclick="adminApproveKyc('${k.id}','${k.user_id}')"><i class="fa-solid fa-check"></i> Approve</button>
- <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="adminRejectKyc('${k.id}','${k.user_id}')"><i class="fa-solid fa-times"></i> Reject</button>
- </div>` : (k.admin_note ? `<div class="text-xs color-text3"><b>Note:</b> ${escHtml(k.admin_note)}</div>` : '')}
+  ${k.selfie_url ? `<a href="${k.selfie_url}" target="_blank" class="btn btn-ghost btn-sm" style="color:var(--blue)"><i class="fa-solid fa-user"></i> Selfie</a>` : ''}
+  </div>
+  ${k.admin_note ? `<div class="text-xs color-text3 mb-3"><b>Note:</b> ${escHtml(k.admin_note)}</div>` : ''}
+  ${isPending ? `<div class="flex gap-2">
+  <button class="btn btn-primary btn-sm" onclick="adminApproveKyc('${k.id}','${k.user_id}')"><i class="fa-solid fa-check"></i> Approve</button>
+  <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="adminRejectKyc('${k.id}','${k.user_id}')"><i class="fa-solid fa-times"></i> Reject</button>
+  </div>` : ''}
  </div>`;
  }).join('');
  } catch(e) {
@@ -7020,46 +7060,56 @@ async function loadAdminKyc() {
 async function adminApproveKyc(kycId, userId) {
  if (!confirm('Approve this KYC submission?')) return;
  try {
- try {
- await callEdge('admin-action', { action: 'approve_kyc', target_id: kycId, data: { user_id: userId } });
- } catch (edgeError) {
- console.warn('approve_kyc function failed, using scoped update:', edgeError);
- await updateWithMissingColumnRetry('kyc_verifications', {
- status: 'approved',
- reviewed_at: new Date().toISOString(),
+  try {
+  await callEdge('admin-kyc', { action: 'approve', kyc_id: kycId, user_id: userId });
+  } catch (edgeError) {
+  console.warn('admin-kyc approve failed, trying legacy admin-action:', edgeError);
+  try {
+  await callEdge('admin-action', { action: 'approve_kyc', target_id: kycId, data: { user_id: userId } });
+  } catch (legacyEdgeError) {
+  console.warn('approve_kyc function failed, using scoped update:', legacyEdgeError);
+  await updateWithMissingColumnRetry('kyc_verifications', {
+  status: 'approved',
+  reviewed_at: new Date().toISOString(),
  }, { id: kycId });
  await updateWithMissingColumnRetry('profiles', {
  kyc_status: 'approved',
  verification_status: 'verified',
- seller_verified: true,
- }, { id: userId });
- }
- toast('KYC Approved OK', 'Seller is now verified.', 'success');
- loadAdminKyc();
- } catch(e) { toast('Error', e.message, 'error'); }
+  seller_verified: true,
+  }, { id: userId });
+  }
+  }
+  toast('KYC Approved OK', 'Seller is now verified.', 'success');
+  loadAdminKyc();
+  } catch(e) { toast('Error', e.message, 'error'); }
 }
 
 async function adminRejectKyc(kycId, userId) {
  const reason = prompt('Reason for rejection (optional):') || '';
  try {
- try {
- await callEdge('admin-action', { action: 'reject_kyc', target_id: kycId, data: { user_id: userId, reason } });
- } catch (edgeError) {
- console.warn('reject_kyc function failed, using scoped update:', edgeError);
- await updateWithMissingColumnRetry('kyc_verifications', {
- status: 'rejected',
- admin_note: reason,
+  try {
+  await callEdge('admin-kyc', { action: 'reject', kyc_id: kycId, user_id: userId, reason });
+  } catch (edgeError) {
+  console.warn('admin-kyc reject failed, trying legacy admin-action:', edgeError);
+  try {
+  await callEdge('admin-action', { action: 'reject_kyc', target_id: kycId, data: { user_id: userId, reason } });
+  } catch (legacyEdgeError) {
+  console.warn('reject_kyc function failed, using scoped update:', legacyEdgeError);
+  await updateWithMissingColumnRetry('kyc_verifications', {
+  status: 'rejected',
+  admin_note: reason,
  reviewed_at: new Date().toISOString(),
  }, { id: kycId });
  await updateWithMissingColumnRetry('profiles', {
  kyc_status: 'rejected',
  verification_status: 'rejected',
- seller_verified: false,
- }, { id: userId });
- }
- toast('KYC Rejected', 'Seller has been notified.', 'info');
- loadAdminKyc();
- } catch(e) { toast('Error', e.message, 'error'); }
+  seller_verified: false,
+  }, { id: userId });
+  }
+  }
+  toast('KYC Rejected', 'Seller has been notified.', 'info');
+  loadAdminKyc();
+  } catch(e) { toast('Error', e.message, 'error'); }
 }
 
 // ====================================================
@@ -7168,20 +7218,20 @@ async function submitKyc(event) {
  const backUrl = backFile ? await uploadKycFile(backFile, 'back') : null;
  const selfieUrl = await uploadKycFile(selfieFile, 'selfie');
 
- await insertWithMissingColumnRetry('kyc_verifications', {
- user_id: currentUser.id,
- doc_type: docType,
- document_type: docType,
- doc_number: docNum,
- document_number: docNum,
- full_name: fullName,
- legal_name: fullName,
- front_url: frontUrl,
- back_url: backUrl,
- selfie_url: selfieUrl,
- status: 'pending',
- created_at: new Date().toISOString(),
- }, false);
+ const insertedKyc = await insertWithMissingColumnRetry('kyc_verifications', {
+  user_id: currentUser.id,
+  doc_type: docType,
+  document_type: docType,
+  doc_number: docNum,
+  document_number: docNum,
+  full_name: fullName,
+  legal_name: fullName,
+  front_url: frontUrl,
+  back_url: backUrl,
+  selfie_url: selfieUrl,
+  status: 'pending',
+  created_at: new Date().toISOString(),
+ });
 
  await updateWithMissingColumnRetry('profiles', {
  kyc_status: 'pending',
@@ -7190,15 +7240,15 @@ async function submitKyc(event) {
  }, { id: currentUser.id });
  currentUser.profile = { ...(currentUser.profile || {}), kyc_status: 'pending' };
 
- let autoKycResult = null;
- try {
- autoKycResult = await callEdge('auto-verify-kyc', {});
- currentUser.profile = {
- ...(currentUser.profile || {}),
- kyc_status: autoKycResult.status || currentUser.profile?.kyc_status || 'pending',
- verification_status: autoKycResult.verified ? 'verified' : 'pending',
- seller_verified: !!autoKycResult.verified,
- };
+  let autoKycResult = null;
+  try {
+  autoKycResult = await callEdge('auto-verify-kyc', insertedKyc?.id ? { kyc_id: insertedKyc.id } : {});
+  currentUser.profile = {
+  ...(currentUser.profile || {}),
+  kyc_status: autoKycResult.status || currentUser.profile?.kyc_status || 'pending',
+  verification_status: autoKycResult.status === 'rejected' ? 'rejected' : (autoKycResult.verified ? 'verified' : 'pending'),
+  seller_verified: !!autoKycResult.verified,
+  };
  } catch (autoError) {
  console.warn('Automatic KYC verification unavailable:', autoError);
  }
@@ -7209,12 +7259,20 @@ async function submitKyc(event) {
  const selfieLabel = document.getElementById('kyc-selfie-label');
  if (selfieLabel) selfieLabel.textContent = 'Take a selfie holding your ID next to your face';
  closeModal('kyc-modal');
- if (autoKycResult?.verified) {
- toast('KYC Verified!', 'Your seller account is now verified.', 'success');
- } else {
- toast('KYC Submitted!', 'Seller dashboard access is now open while verification is reviewed.', 'success');
- }
- await showSellerDashboard();
+  if (autoKycResult?.status === 'rejected') {
+  toast('KYC Rejected', autoKycResult.reason || 'Please resubmit clear documents.', 'error', 7000);
+  } else if (autoKycResult?.verified) {
+  toast('KYC Verified!', 'Your seller account is now verified.', 'success');
+  } else if (autoKycResult?.ai_passed) {
+  toast('KYC Pre-check Passed', 'Your documents passed AI pre-check and are ready for admin review.', 'success');
+  } else {
+  toast('KYC Submitted!', 'Seller dashboard access is now open while verification is reviewed.', 'success');
+  }
+  if (autoKycResult?.status === 'rejected') {
+  showBuyerView();
+  } else {
+  await showSellerDashboard();
+  }
  } catch(e) {
  toast('Submission Error', e.message, 'error');
  } finally {
