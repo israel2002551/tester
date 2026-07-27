@@ -1466,37 +1466,41 @@ function isKycApprovedStatus(status) {
 }
 
 function isKycSubmittedStatus(status) {
- return ['pending', 'submitted', 'in_review', 'review'].includes(String(status || '').toLowerCase());
+ return ['pending', 'submitted', 'in_review', 'review', 'rejected'].includes(String(status || '').toLowerCase());
 }
 
 async function getSellerKycStatus(userId = currentUser?.id) {
  if (!userId) return { status: 'missing', row: null };
  if (currentUser?.profile && (currentUser.profile.seller_verified || isKycApprovedStatus(currentUser.profile.kyc_status || currentUser.profile.verification_status))) {
- return { status: 'approved', row: null };
- }
+  return { status: 'approved', row: null };
+  }
+ const profileKycStatus = currentUser?.profile?.kyc_status || currentUser?.profile?.verification_status || '';
  try {
- const { data, error } = await db.from('kyc_verifications')
- .select('id,status,created_at')
- .eq('user_id', userId)
- .order('created_at', { ascending: false })
- .limit(1);
- if (error) throw error;
- const row = data?.[0] || null;
- return { status: row?.status || 'missing', row };
- } catch (e) {
- console.warn('KYC status check failed:', e);
- return { status: currentUser?.profile?.kyc_status || 'missing', row: null };
- }
+  const { data, error } = await db.from('kyc_verifications')
+ .select('id,status,created_at,admin_note')
+  .eq('user_id', userId)
+  .order('created_at', { ascending: false })
+  .limit(1);
+  if (error) throw error;
+  const row = data?.[0] || null;
+  const status = row?.status || profileKycStatus || 'missing';
+  if (row && currentUser?.profile && currentUser.profile.kyc_status !== status) {
+  currentUser.profile = { ...(currentUser.profile || {}), kyc_status: status };
+  }
+  return { status, row };
+  } catch (e) {
+  console.warn('KYC status check failed:', e);
+  return { status: profileKycStatus || 'missing', row: null };
+  }
 }
 
 async function requireSellerKyc() {
  if (!currentUser || isAdminEmail()) return true;
- const { status } = await getSellerKycStatus(currentUser.id);
+ const { status, row } = await getSellerKycStatus(currentUser.id);
  if (isKycApprovedStatus(status) || isKycSubmittedStatus(status)) return true;
+ if (row?.id) return true;
  showBuyerView();
- const msg = status === 'rejected'
- ? 'Your KYC was rejected. Please resubmit clear documents before using the seller dashboard.'
- : 'Complete KYC before using your seller dashboard.';
+ const msg = 'Complete KYC once before using your seller dashboard.';
  toast('KYC Required', msg, 'warn', 7000);
  showModal('kyc-modal');
  return false;
@@ -7277,11 +7281,7 @@ async function submitKyc(event) {
   } else {
   toast('KYC Submitted!', 'Seller dashboard access is now open while verification is reviewed.', 'success');
   }
-  if (autoKycResult?.status === 'rejected') {
-  showBuyerView();
-  } else {
   await showSellerDashboard();
-  }
  } catch(e) {
  toast('Submission Error', e.message, 'error');
  } finally {

@@ -255,8 +255,8 @@ serve(async (req) => {
           reviewed_at: new Date().toISOString(),
         }).eq("id", kyc.id),
         admin.from("profiles").update({
-          kyc_status: "rejected",
-          verification_status: "rejected",
+          kyc_status: "in_review",
+          verification_status: "pending",
           seller_verified: false,
         }).eq("id", userId),
       ]);
@@ -280,8 +280,8 @@ serve(async (req) => {
         reviewed_at: new Date().toISOString(),
       }).eq("id", kyc.id),
       admin.from("profiles").update({
-        kyc_status: nextStatus,
-        verification_status: nextStatus === "rejected" ? "rejected" : profileStatus,
+        kyc_status: nextStatus === "rejected" ? "in_review" : nextStatus,
+        verification_status: profileStatus,
         seller_verified: false,
       }).eq("id", userId),
     ]);
