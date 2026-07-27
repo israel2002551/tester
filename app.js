@@ -2454,15 +2454,15 @@ async function getSellerAvailableRevenue(sellerId = currentUser?.id) {
  .filter(o => o.status === 'delivered')
  .reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
  const pending = (withdrawals || [])
- .filter(w => w.status === 'pending')
+ .filter(w => ['pending', 'processing', 'in_review'].includes(String(w.status || '')))
  .reduce((sum, w) => sum + Number(w.amount || 0), 0);
  const paid = (withdrawals || [])
- .filter(w => w.status === 'paid')
+ .filter(w => ['paid', 'completed'].includes(String(w.status || '')))
  .reduce((sum, w) => sum + Number(w.amount || 0), 0);
  const walletDebits = (walletTransactions || [])
  .filter(t => String(t.type || '').startsWith('debit'))
  .reduce((sum, t) => sum + Number(t.amount || 0), 0);
- const available = Math.max(0, (revenue * 0.92) - pending - paid - walletDebits);
+ const available = Math.max(0, revenue - pending - paid - walletDebits);
 
  return { available, revenue, pending, paid, walletDebits };
 }
@@ -3314,7 +3314,7 @@ async function loadSellerStats() {
  if (currentUser.profile) currentUser.profile.wallet_balance = wallet.available;
  } catch (err) {
  console.warn('Could not refresh seller available revenue:', err);
- document.getElementById('wd-available').textContent = fmtN(Math.max(0, revenue * 0.92));
+ document.getElementById('wd-available').textContent = fmtN(Math.max(0, revenue));
  document.getElementById('wd-total').textContent = fmtN(0);
  }
  // Orders badge
