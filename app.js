@@ -50,11 +50,11 @@ const CACHE_TTL_MS = 45000;
 const PRODUCT_LIST_COLUMNS = [
  'id','seller_id','name','description','price','original_price','shipping_fee','shipping_cost',
  'category','condition','location','images','videos','image_url','video_url','has_video',
- 'stock_quantity','status','created_at','flash_price','flash_end','negotiable','low_stock_alert','stock_status'
+ 'stock_quantity','status','created_at','flash_price','flash_end','negotiable','low_stock_alert'
 ];
 const PRODUCT_MINIMAL_COLUMNS = ['id','seller_id','name','price','category','status','created_at','image_url'];
 const PRODUCT_PROFILE_HYDRATE_COLUMNS = ['id','name','email','role','accounts','store_name','store_description','whatsapp','bank_name','account_number','account_name','paystack_key','logo_url','store_address'];
-const SELLER_PRODUCT_COLUMNS = 'id,name,price,shipping_fee,shipping_cost,image_url,has_video,stock_quantity,stock_status,status,created_at';
+const SELLER_PRODUCT_COLUMNS = 'id,name,price,shipping_fee,shipping_cost,image_url,has_video,stock_quantity,status,created_at';
 const ORDER_LIST_COLUMNS = ['id','status','total_amount','created_at','delivery_name','delivery_address','items','payment_method','proof_url','payment_proof_url','seller_id','buyer_id'];
 const SELLER_ADMIN_COLUMNS = ['id','name','email','role','accounts','store_name','whatsapp','created_at','is_suspended','commission_paid','trial_end','kyc_status','last_login_at','last_seen_at','login_count'];
 const PROFILE_COLUMNS = ['id','name','email','role','accounts','store_name','store_description','whatsapp','bank_name','account_number','account_name','paystack_key','commission_paid','trial_end','is_suspended','kyc_status','verification_status','seller_verified','logo_url','store_address','login_count','last_login_at','last_seen_at','created_at'];
@@ -3725,7 +3725,7 @@ async function loadSellerProds() {
  const { data, error } = await q;
  skeleton?.classList.add('hidden');
  if (error) { toast('Products unavailable', error.message, 'error'); return; }
- const prods = (data||[]).filter(p => filter==='all'||filter===p.stock_status||(filter==='sold-out'&&p.stock_quantity===0)|| (filter==='active'&&p.status==='active'));
+ const prods = (data||[]).filter(p => filter==='all'||(filter==='sold-out'&&Number(p.stock_quantity)===0)|| (filter==='active'&&p.status==='active'));
  if (!prods.length) { empty?.classList.remove('hidden'); return; }
  empty?.classList.add('hidden');
  list?.classList.remove('hidden');
