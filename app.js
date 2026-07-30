@@ -5272,6 +5272,11 @@ function setTextAllById(id, value) {
  document.querySelectorAll(`#${id}`).forEach(node => { node.textContent = value; });
 }
 
+function getVisibleElementById(id) {
+ const nodes = [...document.querySelectorAll(`#${id}`)];
+ return nodes.find(node => node.offsetParent !== null) || nodes[0] || null;
+}
+
 const ONLINE_USER_WINDOW_MS = 5 * 60 * 1000;
 
 function isUserOnline(profile = {}) {
@@ -5337,8 +5342,8 @@ async function loadAdminOverview() {
 
 async function loadAdminOnlineUsers() {
  if (!guardAdminPanel()) return;
- const tbody = document.getElementById('adm-online-list');
- const countEl = document.getElementById('adm-online-count');
+ const tbody = getVisibleElementById('adm-online-list');
+ const countEl = getVisibleElementById('adm-online-count');
  if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center text-sm color-text3 p-3">Loading user activity...</td></tr>';
  try {
  const users = await fetchAdminUserActivity(300);
@@ -7438,7 +7443,7 @@ function openHelpModal() { showModal('help-modal'); }
 // ADMIN KYC MANAGEMENT
 // ====================================================
 function getAdminKycElement(id) {
- return document.querySelector(`#admin-portal-view #${id}`) || document.getElementById(id);
+ return getVisibleElementById(id);
 }
 
 async function fetchAdminKycRows(filter) {

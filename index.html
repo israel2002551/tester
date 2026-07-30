@@ -1132,12 +1132,59 @@
  <h3 style="font-size:1rem;margin:0">Platform Revenue (30 Days)</h3>
  <button class="btn btn-outline btn-sm" onclick="loadAdminOverview()"><i class="fa-solid fa-sync"></i> Refresh</button>
  </div>
- <canvas id="admin-revenue-chart"></canvas>
- </div>
- </div>
+  <canvas id="admin-revenue-chart"></canvas>
+  </div>
+  </div>
 
- <!-- SELLERS TAB -->
- <div id="adm-tab-sellers" class="adm-tab hidden">
+  <!-- ONLINE USERS TAB -->
+  <div id="adm-tab-online" class="adm-tab hidden">
+  <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
+  <div>
+  <h3 class="mb-1"><i class="fa-solid fa-signal color-green"></i> User Activity</h3>
+  <p class="text-xs color-text3">Online status is based on users seen in the last 5 minutes.</p>
+  </div>
+  <div class="flex gap-2 flex-wrap">
+  <span class="badge badge-green" id="adm-online-count">0 online</span>
+  <button class="btn btn-outline btn-sm" onclick="loadAdminOnlineUsers()"><i class="fa-solid fa-sync"></i> Refresh</button>
+  </div>
+  </div>
+  <div class="card overflow-hidden">
+  <div class="overflow-x">
+  <table class="data-table">
+  <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Logins</th><th>Last Login</th><th>Last Seen</th></tr></thead>
+  <tbody id="adm-online-list"><tr><td colspan="6" class="text-center text-sm color-text3 p-3">Loading user activity...</td></tr></tbody>
+  </table>
+  </div>
+  </div>
+  </div>
+
+  <!-- KYC VERIFICATION TAB -->
+  <div id="adm-tab-kyc" class="adm-tab hidden">
+  <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
+  <div>
+  <h3 class="mb-1"><i class="fa-solid fa-id-card color-green"></i> KYC Verify</h3>
+  <p class="text-xs color-text3">Review submitted verification documents and update seller trust status.</p>
+  </div>
+  <div class="flex gap-2 flex-wrap">
+  <select id="adm-kyc-filter" class="form-select" style="width:auto;padding:.4rem .7rem;font-size:.78rem" onchange="loadAdminKyc()">
+  <option value="pending">Pending Review</option>
+  <option value="approved">Approved</option>
+  <option value="rejected">Rejected</option>
+  <option value="all">All Submissions</option>
+  </select>
+  <button class="btn btn-outline btn-sm" onclick="loadAdminKyc()"><i class="fa-solid fa-sync"></i> Refresh</button>
+  </div>
+  </div>
+  <div id="adm-kyc-skeleton"><div class="skeleton mb-3" style="height:150px"></div></div>
+  <div id="adm-kyc-list" class="hidden" style="display:flex;flex-direction:column;gap:1rem"></div>
+  <div id="adm-kyc-empty" class="hidden text-center" style="padding:3rem">
+  <i class="fa-solid fa-shield-check" style="font-size:2.5rem;color:var(--green);display:block;margin-bottom:.75rem"></i>
+  <p class="color-text3">No pending KYC verifications</p>
+  </div>
+  </div>
+
+  <!-- SELLERS TAB -->
+  <div id="adm-tab-sellers" class="adm-tab hidden">
  <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
  <div class="flex gap-2 flex-wrap">
  <select id="adm-seller-filter" class="form-select" style="width:auto;padding:.4rem .7rem;font-size:.78rem" onchange="loadAdminSellers()">
