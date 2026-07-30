@@ -27,6 +27,8 @@ const CATEGORY_PAGE_LINKS = {
 let categoryProducts = [];
 let currentCategory = document.body?.dataset.category || 'all';
 let categoryDb = null;
+const CATEGORY_PRODUCT_COLUMNS = 'id,seller_id,name,description,price,original_price,category,condition,location,images,videos,image_url,video_url,has_video,stock_quantity,status,created_at,avg_rating,review_count,profiles(name,store_name,role,email)';
+const CATEGORY_UPCOMING_COLUMNS = 'id,title,description,image_url,video_url,images,videos,launch_date,priority,status,created_at';
 
 try {
   const categoryParam = new URLSearchParams(window.location.search).get('category');
@@ -122,8 +124,19 @@ function upcomingCategoryProductCard(product) {
         <div class="cat-product-price">${launchText ? `Launching ${categoryEsc(launchText)}` : 'Launching soon'}</div>
         <p class="cat-product-desc">${categoryEsc(product.description || 'A new official BUYSELL product preview is coming soon.')}</p>
         <div class="cat-product-store"><i class="fa-solid fa-shield-halved"></i> BUYSELL Platform Store</div>
+        <button class="btn btn-outline btn-sm" type="button" onclick="event.stopPropagation(); saveCategoryUpcomingInterest('${categoryEsc(product.id)}','${categoryEsc(product.title || 'Upcoming product')}')"><i class="fa-solid fa-bell"></i> Notify Me</button>
       </div>
     </article>`;
+}
+
+function saveCategoryUpcomingInterest(productId, title = 'Upcoming product') {
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem('bs_upcoming_interest') || '[]'); } catch (_) {}
+  if (!saved.some(item => item.product_id === productId)) {
+    saved.push({ product_id: productId, title, created_at: new Date().toISOString() });
+    localStorage.setItem('bs_upcoming_interest', JSON.stringify(saved));
+  }
+  alert(`Reminder saved for ${title}. Sign in on the marketplace to receive account notifications.`);
 }
 
 function renderCategoryProducts(items) {
@@ -174,12 +187,12 @@ async function loadCategoryPageProducts() {
   try {
     let query = categoryDb
       .from(currentCategory === 'upcoming' ? 'upcoming_products' : 'products')
-      .select(currentCategory === 'upcoming' ? '*' : '*, profiles(name, store_name, role, email)')
+      .select(currentCategory === 'upcoming' ? CATEGORY_UPCOMING_COLUMNS : CATEGORY_PRODUCT_COLUMNS)
       .eq('status', 'active');
     if (currentCategory === 'upcoming') {
-      query = query.order('priority', { ascending: false }).order('created_at', { ascending: false });
+      query = query.order('priority', { ascending: false }).order('created_at', { ascending: false }).limit(80);
     } else {
-      query = query.order('created_at', { ascending: false });
+      query = query.order('created_at', { ascending: false }).limit(80);
     }
     if (!['all', 'trending', 'upcoming'].includes(currentCategory)) query = query.eq('category', currentCategory);
     const { data, error: queryError } = await query;

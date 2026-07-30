@@ -117,6 +117,7 @@ async function fetchProfileById(id, method = 'maybeSingle') {
 
 function revealView(el, display = 'block') {
  if (!el) return;
+ window.bsAppViewActive = true;
  el.classList.remove('hidden', 'page-enter');
  el.style.setProperty('display', display, 'important');
  void el.offsetWidth;
@@ -124,6 +125,7 @@ function revealView(el, display = 'block') {
 }
 
 function showMarketLandingPage() {
+ window.bsAppViewActive = false;
  const marketing = document.getElementById('marketing-placeholder');
  const landing = document.getElementById('landing');
  const mainNav = document.getElementById('main-nav');
@@ -440,17 +442,14 @@ if (typeof supabase !== 'undefined') {
  processInboundChatRedirects();
  }
 
- const shouldContinueAfterAuth = appStorage.getItem('bs_manual_navigation_pass') || hasAuthRedirectParams();
+  const shouldContinueAfterAuth = appStorage.getItem('bs_manual_navigation_pass') || hasAuthRedirectParams();
 
-  // Keep passive session restores on the market landing. OAuth callbacks and app routes open the app.
   if (hasAppRouteParams()) {
   await continueUrlRoute();
-  } else if (!shouldContinueAfterAuth) {
-  console.log("Background session detected. Holding layout on market landing.");
-  showMarketLandingPage();
   } else {
- continuePendingEntry();
- }
+  if (!shouldContinueAfterAuth) console.log("Background session detected. Restoring app workspace.");
+  continuePendingEntry();
+  }
 
  } else {
  console.log("Guest View Matrix Active.");
@@ -6934,6 +6933,7 @@ function showAdminPortal() {
 
 function showServiceDashboard() {
  if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
+ window.bsAppViewActive = true;
  ['buyer-view', 'seller-dashboard', 'storefront-view'].forEach(id => {
  const view = document.getElementById(id);
  if (!view) return;

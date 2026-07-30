@@ -39,7 +39,7 @@
 </script>
  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<link rel="stylesheet" href="styles.css?v=8.2">
+<link rel="stylesheet" href="styles.css?v=10.1">
 </head>
 <body>
 
@@ -2765,8 +2765,8 @@
 -->
 
 <script src="https://js.paystack.co/v2/inline.js"></script>
-<script data-cfasync="false" src="config.js?v=3.3"></script>
-<script src="app.js?v=10.0"></script>
+<script data-cfasync="false" src="config.js?v=3.4"></script>
+<script src="app.js?v=10.1"></script>
  <script>
  (function() {
  'use strict';
@@ -2782,8 +2782,8 @@
  return response.text();
  })
  .then(htmlContent => {
- document.getElementById('marketing-placeholder').innerHTML = htmlContent;
- if (typeof showMarketLandingPage === 'function') showMarketLandingPage();
+  document.getElementById('marketing-placeholder').innerHTML = htmlContent;
+  if (!window.bsAppViewActive && typeof showMarketLandingPage === 'function') showMarketLandingPage();
  if (typeof loadLandingMedia === 'function') loadLandingMedia();
 
  // Wire scrolling links local behavior anchors
@@ -2834,7 +2834,7 @@
  }
  })
  .catch(err => {
- if (typeof showMarketLandingPage === 'function') showMarketLandingPage();
+  if (!window.bsAppViewActive && typeof showMarketLandingPage === 'function') showMarketLandingPage();
  console.error("Error setting up pre-landing view engine context:", err);
  });
  })();
