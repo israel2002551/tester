@@ -52,7 +52,8 @@ const PRODUCT_LIST_COLUMNS = [
  'category','condition','location','images','videos','image_url','video_url','has_video',
  'stock_quantity','status','created_at','flash_price','flash_end','negotiable','low_stock_alert','stock_status'
 ];
-const PRODUCT_PROFILE_COLUMNS = 'name,email,role,accounts,store_name,store_description,whatsapp,bank_name,account_number,account_name,paystack_key,logo_url,store_address';
+const PRODUCT_MINIMAL_COLUMNS = ['id','seller_id','name','price','category','status','created_at','image_url'];
+const PRODUCT_PROFILE_HYDRATE_COLUMNS = ['id','name','email','role','accounts','store_name','store_description','whatsapp','bank_name','account_number','account_name','paystack_key','logo_url','store_address'];
 const SELLER_PRODUCT_COLUMNS = 'id,name,price,shipping_fee,shipping_cost,image_url,has_video,stock_quantity,stock_status,status,created_at';
 const ORDER_LIST_COLUMNS = ['id','status','total_amount','created_at','delivery_name','delivery_address','items','payment_method','proof_url','payment_proof_url','seller_id','buyer_id'];
 const SELLER_ADMIN_COLUMNS = ['id','name','email','role','accounts','store_name','whatsapp','created_at','is_suspended','commission_paid','trial_end','kyc_status','last_login_at','last_seen_at','login_count'];
@@ -113,6 +114,29 @@ async function runSelectWithColumnFallback(table, columns, configure) {
 async function fetchProfileById(id, method = 'maybeSingle') {
  const result = await runSelectWithColumnFallback('profiles', PROFILE_COLUMNS, q => q.eq('id', id)[method]());
  return result.data || null;
+}
+
+async function fetchProductRows(configure) {
+ try {
+  return await runSelectWithColumnFallback('products', PRODUCT_LIST_COLUMNS, configure);
+ } catch (fullError) {
+  console.warn('Product list fell back to minimal columns:', fullError);
+  return runSelectWithColumnFallback('products', PRODUCT_MINIMAL_COLUMNS, configure);
+ }
+}
+
+async function hydrateProductProfiles(rows = []) {
+ if (!rows.length || rows.some(row => row?.profiles)) return rows;
+ const sellerIds = [...new Set(rows.map(row => row?.seller_id).filter(Boolean))];
+ if (!sellerIds.length) return rows;
+ try {
+  const { data: profiles = [] } = await runSelectWithColumnFallback('profiles', PRODUCT_PROFILE_HYDRATE_COLUMNS, q => q.in('id', sellerIds));
+  const profilesById = new Map(profiles.map(profile => [profile.id, profile]));
+  return rows.map(row => ({ ...row, profiles: profilesById.get(row.seller_id) || null }));
+ } catch (error) {
+  console.warn('Seller profile hydration skipped:', error);
+  return rows;
+ }
 }
 
 function revealView(el, display = 'block') {
@@ -1732,12 +1756,11 @@ async function loadProducts(options = {}) {
  empty?.classList.add('hidden');
  errorEl?.classList.add('hidden');
  try {
-  const columns = [...PRODUCT_LIST_COLUMNS, `profiles(${PRODUCT_PROFILE_COLUMNS})`];
-  const { data } = await runSelectWithColumnFallback('products', columns, q => q
+  const { data } = await fetchProductRows(q => q
   .eq('status', 'active')
   .order('created_at', { ascending: false })
   .range(page * PRODUCT_PAGE_SIZE, page * PRODUCT_PAGE_SIZE + PRODUCT_PAGE_SIZE - 1));
-  products = setCachedData(key, data || []);
+  products = setCachedData(key, await hydrateProductProfiles(data || []));
   filteredProducts = [...products];
   applyCurrentFilters();
   } catch(e) {
@@ -6666,9 +6689,11 @@ function missingColumn(error) {
  if (!error) return "";
  const text = `${error.message || ""} ${error.details || ""} ${error.hint || ""}`;
  const quoted =
- text.match(/find the '([^']+)' column/i) ||
- text.match(/'([^']+)' column/i) ||
- text.match(/column "([^"]+)"/i);
+  text.match(/find the '([^']+)' column/i) ||
+  text.match(/'([^']+)' column/i) ||
+  text.match(/column "([^"]+)"/i) ||
+  text.match(/column\s+\w+\.([a-z0-9_]+)\s+does not exist/i) ||
+  text.match(/column\s+([a-z0-9_]+)\s+does not exist/i);
  return quoted ? quoted[1] : "";
 }
 
@@ -7821,7 +7846,8 @@ async function showWishlistModal() {
  container.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
  
  try {
-  const { data: items } = await runSelectWithColumnFallback('products', PRODUCT_LIST_COLUMNS, q => q.in('id', wishlist).limit(60));
+  const { data } = await fetchProductRows(q => q.in('id', wishlist).limit(60));
+  const items = await hydrateProductProfiles(data || []);
  if (!items || !items.length) {
  container.innerHTML = '<p class="text-center color-text3 p-3">Products no longer available.</p>';
  return;
@@ -7865,9 +7891,17 @@ async function showWishlistModal() {
  </div>
  </div>
  `}).join('');
- } catch(e) {
- container.innerHTML = '<p class="text-center color-danger">Error loading wishlist</p>';
- }
+  } catch(e) {
+  console.warn('Wishlist load failed:', e);
+  container.innerHTML = `
+  <div class="text-center p-3">
+  <p class="color-danger" style="margin-bottom:12px">Could not load saved products.</p>
+  <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+  <button class="btn btn-outline btn-sm" onclick="showWishlistModal()"><i class="fa-solid fa-rotate-right"></i> Retry</button>
+  <button class="btn btn-ghost btn-sm" onclick="wishlist=[];saveWishlist();showWishlistModal()"><i class="fa-solid fa-trash"></i> Clear</button>
+  </div>
+  </div>`;
+  }
 }
 
 // ====================================================
