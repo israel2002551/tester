@@ -1799,9 +1799,32 @@ function upcomingProductCard(row) {
  <span>${escHtml(launchText)}</span>
  <h3>${escHtml(row.title || 'Upcoming Product')}</h3>
  <p>${escHtml(row.description || 'A new official BUYSELL product preview is coming soon.')}</p>
- <button class="btn btn-outline btn-sm" onclick="toast('Coming Soon','This product is not available for purchase yet.','info')"><i class="fa-solid fa-bell"></i> Notify Me</button>
- </div>
- </article>`;
+  <button class="btn btn-outline btn-sm" onclick="saveUpcomingProductInterest('${escAttr(row.id)}','${escAttr(row.title || 'Upcoming product')}')"><i class="fa-solid fa-bell"></i> Notify Me</button>
+  </div>
+  </article>`;
+}
+
+function saveUpcomingProductInterest(productId, title = 'Upcoming product') {
+ const saved = readStoredJson('bs_upcoming_interest', []);
+ const email = currentUser?.email || '';
+ const exists = saved.some(item => item.product_id === productId && (!email || item.email === email));
+ if (!exists) {
+  saved.push({
+  product_id: productId,
+  title,
+  email,
+  user_id: currentUser?.id || '',
+  created_at: new Date().toISOString()
+  });
+  appStorage.setItem('bs_upcoming_interest', JSON.stringify(saved));
+ }
+ if (!currentUser) {
+  toast('Saved on this device', 'Sign in so we can connect this reminder to your account.', 'info');
+  showModal('auth-modal');
+  toggleAuth('login');
+  return;
+ }
+ toast('Reminder Saved', `We will notify you when ${title} is available.`, 'success');
 }
 
 function renderProducts(prods) {
@@ -7090,16 +7113,24 @@ function renderServiceCards(gigs) {
 async function loadSpdOverview() {
  if (!currentUser) return;
  try {
- // Load gig count
- const { data: gigs } = await db.from('service_gigs')
- .select('id, title, category, starting_rate, status, portfolio_urls')
- .eq('provider_id', currentUser.id);
- const activeGigs = (gigs || []).filter(g => g.status === 'active');
- 
- document.getElementById('spd-gigs').textContent = activeGigs.length;
- // Views and leads are placeholders for now until analytics wired
- document.getElementById('spd-views').textContent = activeGigs.length * 12; // estimated
- document.getElementById('spd-leads').textContent = activeGigs.length > 0 ? Math.floor(activeGigs.length * 3) : 0;
+  const [{ data: gigs }, { data: bookings }] = await Promise.all([
+  db.from('service_gigs')
+  .select('id,title,category,starting_rate,status,portfolio_urls')
+  .eq('provider_id', currentUser.id)
+  .limit(DASHBOARD_PAGE_SIZE),
+  db.from('service_bookings')
+  .select('id,status,created_at')
+  .eq('provider_id', currentUser.id)
+  .order('created_at', { ascending: false })
+  .limit(DASHBOARD_PAGE_SIZE)
+  ]);
+  const activeGigs = (gigs || []).filter(g => g.status === 'active');
+  const activeBookings = bookings || [];
+  const openLeads = activeBookings.filter(b => !['completed', 'cancelled'].includes(String(b.status || '').toLowerCase())).length;
+  
+  document.getElementById('spd-gigs').textContent = activeGigs.length;
+  document.getElementById('spd-views').textContent = activeBookings.length;
+  document.getElementById('spd-leads').textContent = openLeads;
 
  // Populate recent leads section with active gig summary cards
  const leadsContainer = document.querySelector('#spd-sec-overview .card.card-pad.mb-4');
@@ -7173,7 +7204,7 @@ async function loadMyGigs() {
  if (!currentUser) return;
  try {
  const { data } = await db.from('service_gigs')
-  .select('id,title,category,description,starting_rate,status,portfolio_urls,created_at')
+  .select('id,title,category,description,location,starting_rate,status,portfolio_urls,created_at')
  .eq('provider_id', currentUser.id)
  .order('created_at', { ascending: false });
  const gigs = data || [];
@@ -7354,10 +7385,15 @@ async function viewProviderProfile(providerId) {
  ? allImages.map(url => `<img src="${url}" style="width:100%;aspect-ratio:1;object-fit:cover;cursor:pointer;border-radius:6px" onclick="window.open('${url}','_blank')">`).join('')
  : '<p class="color-text3 text-sm" style="grid-column:1/-1;text-align:center;padding:1rem">No portfolio images yet.</p>';
 
- // Reviews placeholder
- document.getElementById('sp-p-rating').textContent = '5.0';
- document.getElementById('sp-p-reviews-count').textContent = '0';
- document.getElementById('sp-p-reviews').innerHTML = '<p class="color-text3 text-sm">No reviews yet. Be the first to hire and review!</p>';
+  const serviceReviews = await loadServiceProviderReviews(providerId);
+  const avgRating = serviceReviews.length
+  ? (serviceReviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / serviceReviews.length).toFixed(1)
+  : '0.0';
+  document.getElementById('sp-p-rating').textContent = avgRating;
+  document.getElementById('sp-p-reviews-count').textContent = String(serviceReviews.length);
+  document.getElementById('sp-p-reviews').innerHTML = serviceReviews.length
+  ? serviceReviews.slice(0, 8).map(review => `<div class="review-card"><div class="flex justify-between items-center"><strong class="text-sm">${escHtml(review.client?.name || 'Client')}</strong><span class="stars sm">${starIcons(review.rating)}</span></div><p class="review-text">${escHtml(review.comment || review.review_text || '')}</p><span class="text-xs color-text3">${fmtDate(review.created_at)}</span></div>`).join('')
+  : '<p class="color-text3 text-sm">No reviews yet. Be the first to hire and review!</p>';
 
  // WhatsApp CTA
  document.getElementById('sp-p-wa-btn').href = wa
@@ -8683,6 +8719,26 @@ async function syncUserNotificationTokenInner() {
  console.warn('[PUSH ENGINE] Registration token sync failed: ', err.message || err);
  throw err;
  }
+}
+
+async function loadServiceProviderReviews(providerId) {
+ const { data: bookings, error: bookingError } = await db.from('service_bookings')
+ .select('id,client_id,client:client_id(name,email)')
+ .eq('provider_id', providerId)
+ .limit(DASHBOARD_PAGE_SIZE);
+ if (bookingError || !bookings?.length) return [];
+ const bookingIds = bookings.map(booking => booking.id).filter(Boolean);
+ if (!bookingIds.length) return [];
+ const clientByBooking = new Map(bookings.map(booking => [booking.id, booking.client || {}]));
+ const { data: reviews, error: reviewError } = await db.from('reviews')
+ .select('id,booking_id,rating,comment,review_text,created_at,type')
+ .in('booking_id', bookingIds)
+ .order('created_at', { ascending: false })
+ .limit(DASHBOARD_PAGE_SIZE);
+ if (reviewError) return [];
+ return (reviews || [])
+ .filter(review => !review.type || review.type === 'service')
+ .map(review => ({ ...review, client: clientByBooking.get(review.booking_id) || {} }));
 }
 
 function pushSubscriptionUsesKey(subscription, expectedKey) {

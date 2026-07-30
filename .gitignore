@@ -12,6 +12,9 @@ role_hits.txt
 signup_hits.txt
 supabase/.temp/
 
+# Supabase project files stay local
+supabase/
+
 # Local/generated upgrade helpers
 add_features.py
 dump_features.py
