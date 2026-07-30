@@ -44,18 +44,84 @@ function readStoredJson(key, fallback) {
 let pendingEntryRole = appStorage.getItem('bs_entry_role') || '';
 let cart = readStoredJson('bs_cart', []);
 let products = [], filteredProducts = [], activeFilters = {};
+const PRODUCT_PAGE_SIZE = 60;
+const DASHBOARD_PAGE_SIZE = 80;
+const CACHE_TTL_MS = 45000;
+const PRODUCT_LIST_COLUMNS = [
+ 'id','seller_id','name','description','price','original_price','shipping_fee','shipping_cost',
+ 'category','condition','location','images','videos','image_url','video_url','has_video',
+ 'stock_quantity','status','created_at','flash_price','flash_end','negotiable','low_stock_alert','stock_status'
+];
+const PRODUCT_PROFILE_COLUMNS = 'name,email,role,accounts,store_name,store_description,whatsapp,bank_name,account_number,account_name,paystack_key,logo_url,store_address';
+const SELLER_PRODUCT_COLUMNS = 'id,name,price,shipping_fee,shipping_cost,image_url,has_video,stock_quantity,stock_status,status,created_at';
+const ORDER_LIST_COLUMNS = ['id','status','total_amount','created_at','delivery_name','delivery_address','items','payment_method','proof_url','payment_proof_url','seller_id','buyer_id'];
+const SELLER_ADMIN_COLUMNS = ['id','name','email','role','accounts','store_name','whatsapp','created_at','is_suspended','commission_paid','trial_end','kyc_status','last_login_at','last_seen_at','login_count'];
+const PROFILE_COLUMNS = ['id','name','email','role','accounts','store_name','store_description','whatsapp','bank_name','account_number','account_name','paystack_key','commission_paid','trial_end','is_suspended','kyc_status','verification_status','seller_verified','logo_url','store_address','login_count','last_login_at','last_seen_at','created_at'];
+const KYC_LIST_COLUMNS = ['id','user_id','status','document_type','document_number','full_name','front_url','back_url','selfie_url','created_at','reviewed_at','admin_note'];
+const appCache = new Map();
 let carouselIndex = 0, carouselTimer = null;
 let selectedRating = 0, checkoutPaymentMethod = 'paystack';
 let deferredInstallPrompt = null, salesChart = null;
 let sellerAnalyticsChart = null;
 let carouselStartX = 0;
 let notificationSyncPromise = null;
+let presenceHeartbeatTimer = null;
 let previousAppView = 'buyer';
 // MOVE THESE TWO LINES HERE (TO THE TOP VARIABLES AREA):
 let wishlist = readStoredJson('bs_wishlist', []);
 let compareList = readStoredJson('bs_compare', []);
 const analyticsSessionId = appStorage.getItem('bs_analytics_session') || ('sess_' + Date.now() + '_' + Math.random().toString(36).slice(2));
 appStorage.setItem('bs_analytics_session', analyticsSessionId);
+
+function cacheKey(name, params = {}) {
+ return `${name}:${JSON.stringify(params)}`;
+}
+
+function getCachedData(key) {
+ const hit = appCache.get(key);
+ if (!hit || Date.now() - hit.time > CACHE_TTL_MS) return null;
+ return hit.data;
+}
+
+function setCachedData(key, data) {
+ appCache.set(key, { data, time: Date.now() });
+ return data;
+}
+
+function clearCacheByPrefix(prefix) {
+ [...appCache.keys()].forEach(key => {
+  if (key.startsWith(prefix)) appCache.delete(key);
+ });
+}
+
+async function runSelectWithColumnFallback(table, columns, configure) {
+ let remaining = [...columns];
+ let lastError = null;
+ while (remaining.length) {
+  const relation = remaining.join(',');
+  const builder = configure(db.from(table).select(relation), relation);
+  const { data, error, count } = await builder;
+  if (!error) return { data, count };
+  lastError = error;
+  const col = missingColumn(error);
+  if (!col || !remaining.includes(col)) break;
+  remaining = remaining.filter(item => item !== col);
+ }
+ throw lastError || new Error(`Could not load ${table}`);
+}
+
+async function fetchProfileById(id, method = 'maybeSingle') {
+ const result = await runSelectWithColumnFallback('profiles', PROFILE_COLUMNS, q => q.eq('id', id)[method]());
+ return result.data || null;
+}
+
+function revealView(el, display = 'block') {
+ if (!el) return;
+ el.classList.remove('hidden', 'page-enter');
+ el.style.setProperty('display', display, 'important');
+ void el.offsetWidth;
+ el.classList.add('page-enter');
+}
 
 function showMarketLandingPage() {
  const marketing = document.getElementById('marketing-placeholder');
@@ -358,11 +424,8 @@ if (typeof supabase !== 'undefined') {
  }
 
  try {
- const { data: profile, error } = await supabase
- .from('profiles')
- .select('*')
- .eq('id', session.user.id)
- .maybeSingle();
+  const profile = await fetchProfileById(session.user.id).catch(() => null);
+  const error = null;
 
  if (!error && profile) {
  currentUser.profile = profile;
@@ -530,10 +593,7 @@ function showAccountPage() {
  el.classList.add('hidden');
  el.style.setProperty('display', 'none', 'important');
  });
- if (accountView) {
- accountView.classList.remove('hidden');
- accountView.style.setProperty('display', 'block', 'important');
- }
+ revealView(accountView);
  document.body.classList.remove('in-seller');
  document.getElementById('account-page-name').textContent = currentUser.profile?.name || currentUser.email || 'BUYSELL User';
  document.getElementById('account-page-email').textContent = currentUser.email || 'Manage your BUYSELL profile and privacy choices.';
@@ -615,7 +675,7 @@ async function ensureSellerProfileRole() {
 
  let profile = currentUser.profile || {};
  if (!profile.role && !profile.accounts) {
- const { data } = await db.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
+  const data = await fetchProfileById(currentUser.id);
  if (data) {
  currentUser.profile = data;
  profile = data;
@@ -640,7 +700,7 @@ async function ensureSellerProfileRole() {
   .from('profiles')
   .update(legacyAccessPatch)
   .eq('id', currentUser.id)
-  .select('*')
+  .select(PROFILE_COLUMNS.join(','))
   .maybeSingle();
   currentUser.profile = data || { ...profile, ...legacyAccessPatch };
   }
@@ -651,7 +711,7 @@ async function ensureSellerProfileRole() {
  .from('profiles')
  .update({ role: 'seller', accounts: profile.accounts || 'seller', ...legacyAccessPatch })
  .eq('id', currentUser.id)
- .select('*')
+  .select(PROFILE_COLUMNS.join(','))
  .single();
 
  if (error) throw new Error(error.message || 'Could not confirm seller access');
@@ -935,7 +995,7 @@ async function handleAuth(e) {
 
  // Use session.user (more reliable than data.user after token refresh)
  const user = data.session?.user || data.user;
- await withTimeout(onAuthSuccess(user), 10000, 'Profile loading timed out. Please refresh and try again.');
+ await withTimeout(onAuthSuccess(user, { countLogin: true }), 10000, 'Profile loading timed out. Please refresh and try again.');
  closeModal('auth-modal');
  continuePendingEntry();
 
@@ -977,7 +1037,7 @@ async function handleAuth(e) {
  return;
  }
  const user = loginData.session?.user || loginData.user;
- await withTimeout(onAuthSuccess(user), 10000, 'Profile loading timed out. Please refresh and try again.');
+ await withTimeout(onAuthSuccess(user, { countLogin: true }), 10000, 'Profile loading timed out. Please refresh and try again.');
  closeModal('auth-modal');
  continuePendingEntry();
  return;
@@ -1008,7 +1068,7 @@ async function handleAuth(e) {
 
  const user = loginData.session?.user || loginData.user;
  await upsertProfile(user, { name, role, accounts, whatsapp: wa });
- await withTimeout(onAuthSuccess(user), 10000, 'Profile loading timed out. Please refresh and try again.');
+ await withTimeout(onAuthSuccess(user, { countLogin: true }), 10000, 'Profile loading timed out. Please refresh and try again.');
  closeModal('auth-modal');
  continuePendingEntry();
 
@@ -1051,7 +1111,39 @@ async function upsertProfile(user, meta) {
  if (error) console.warn('upsertProfile error:', error.message);
 }
 
-async function onAuthSuccess(user) {
+async function recordProfilePresence({ countLogin = false } = {}) {
+ if (!currentUser?.id) return;
+ const now = new Date().toISOString();
+ const profile = currentUser.profile || {};
+ const nextLoginCount = countLogin ? Number(profile.login_count || 0) + 1 : Number(profile.login_count || 0);
+ const patch = {
+ last_seen_at: now,
+ ...(countLogin ? { last_login_at: now, login_count: nextLoginCount } : {})
+ };
+ try {
+ await updateWithMissingColumnRetry('profiles', patch, { id: currentUser.id });
+ currentUser.profile = {
+ ...profile,
+ ...patch,
+ ...(countLogin ? { login_count: nextLoginCount } : {})
+ };
+ } catch (error) {
+ console.warn('Profile presence update skipped:', error.message || error);
+ }
+}
+
+function startPresenceHeartbeat() {
+ if (presenceHeartbeatTimer) clearInterval(presenceHeartbeatTimer);
+ presenceHeartbeatTimer = setInterval(() => {
+ if (currentUser) recordProfilePresence().catch(() => {});
+ }, 60000);
+}
+
+document.addEventListener('visibilitychange', () => {
+ if (!document.hidden && currentUser) recordProfilePresence().catch(() => {});
+});
+
+async function onAuthSuccess(user, options = {}) {
  if (!user) return;
  currentUser = user;
  let googleProfileHint = {};
@@ -1062,12 +1154,18 @@ async function onAuthSuccess(user) {
  }
 
  // Load profile from DB
- const { data: profile, error } = await db.from('profiles').select('*').eq('id', user.id).single();
+ let profile = null;
+ let error = null;
+ try {
+  profile = await fetchProfileById(user.id, 'single');
+ } catch (profileError) {
+  error = profileError;
+ }
 
  if (error || !profile) {
- // Profile not yet created (trigger may still be running) - create it now
- await upsertProfile(user, { ...(user.user_metadata || {}), ...googleProfileHint });
- const { data: retryProfile } = await db.from('profiles').select('*').eq('id', user.id).single();
+  // Profile not yet created (trigger may still be running) - create it now
+  await upsertProfile(user, { ...(user.user_metadata || {}), ...googleProfileHint });
+  const retryProfile = await fetchProfileById(user.id, 'single').catch(() => null);
  currentUser.profile = retryProfile || {
  role: googleProfileHint.role || user.user_metadata?.role || 'buyer',
  name: user.user_metadata?.name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
@@ -1079,6 +1177,8 @@ async function onAuthSuccess(user) {
  appStorage.removeItem('bs_google_profile_hint');
 
  currentRole = currentUser.profile?.role || 'buyer';
+ await recordProfilePresence({ countLogin: options.countLogin === true });
+ startPresenceHeartbeat();
  updateNavForUser();
  updateInboxCount();
  setupMessageRealtime();
@@ -1101,11 +1201,15 @@ async function checkSession() {
  }
  }
  if (event === 'SIGNED_OUT') {
- if (messageChannel) {
- db.removeChannel(messageChannel);
- messageChannel = null;
- }
- currentUser = null;
+  if (messageChannel) {
+  db.removeChannel(messageChannel);
+  messageChannel = null;
+  }
+  if (presenceHeartbeatTimer) {
+  clearInterval(presenceHeartbeatTimer);
+  presenceHeartbeatTimer = null;
+  }
+  currentUser = null;
  currentRole = 'buyer';
  currentChatPartner = null;
  currentChatProductId = null;
@@ -1361,10 +1465,7 @@ function showBuyerView() {
  const accountView = document.getElementById('account-view');
 
  // Direct Inline Override: Force reveal using style properties to bypass stylesheet conflicts
- if (buyerView) {
- buyerView.classList.remove('hidden');
- buyerView.style.setProperty('display', 'block', 'important');
- }
+ revealView(buyerView);
  if (mainNav) {
  mainNav.classList.remove('hidden');
  mainNav.style.setProperty('display', 'block', 'important');
@@ -1390,7 +1491,7 @@ function showBuyerView() {
  currentRole = 'buyer';
 
  if (typeof startCarousel === 'function') startCarousel();
- if (typeof loadProducts === 'function') loadProducts();
+  if (typeof loadProducts === 'function') loadProducts({ preferCache: true });
  if (typeof loadActiveAds === 'function') loadActiveAds();
  if (typeof updateCartCount === 'function') updateCartCount();
 }
@@ -1411,8 +1512,7 @@ async function showSellerDashboard() {
 
  // Direct Inline Override: Force layout display block for the merchant workspace panel
  if (sellerDash) {
- sellerDash.classList.remove('hidden');
- sellerDash.style.setProperty('display', 'block', 'important');
+  revealView(sellerDash);
  
  // Failsafe: Ensure its inner direct child layout wrapper isn't set to display none by CSS
  const innerLayout = sellerDash.querySelector('.dash-layout');
@@ -1614,22 +1714,37 @@ function stopCarousel() { if (carouselTimer) clearInterval(carouselTimer); }
 // ====================================================
 // PRODUCTS
 // ====================================================
-async function loadProducts() {
- document.getElementById('prods-skeleton').classList.remove('hidden');
- document.getElementById('prods-grid').classList.add('hidden');
- document.getElementById('prods-empty').classList.add('hidden');
- document.getElementById('prods-error').classList.add('hidden');
+async function loadProducts(options = {}) {
+ const { preferCache = true, page = 0 } = options;
+ const skeleton = document.getElementById('prods-skeleton');
+ const grid = document.getElementById('prods-grid');
+ const empty = document.getElementById('prods-empty');
+ const errorEl = document.getElementById('prods-error');
+ const key = cacheKey('products', { page });
+ const cached = preferCache ? getCachedData(key) : null;
+ if (cached?.length) {
+  products = cached;
+  filteredProducts = [...products];
+  applyCurrentFilters();
+ } else {
+  skeleton?.classList.remove('hidden');
+  grid?.classList.add('hidden');
+ }
+ empty?.classList.add('hidden');
+ errorEl?.classList.add('hidden');
  try {
- let q = db.from('products').select(`*, profiles(name, email, role, accounts, store_name, store_description, whatsapp, bank_name, account_number, account_name, paystack_key)`).eq('status', 'active').order('created_at', { ascending: false });
- const { data, error } = await q;
- if (error) throw error;
- products = data || [];
- filteredProducts = [...products];
- applyCurrentFilters();
- } catch(e) {
- document.getElementById('prods-skeleton').classList.add('hidden');
- document.getElementById('prods-error').classList.remove('hidden');
-  }
+  const columns = [...PRODUCT_LIST_COLUMNS, `profiles(${PRODUCT_PROFILE_COLUMNS})`];
+  const { data } = await runSelectWithColumnFallback('products', columns, q => q
+  .eq('status', 'active')
+  .order('created_at', { ascending: false })
+  .range(page * PRODUCT_PAGE_SIZE, page * PRODUCT_PAGE_SIZE + PRODUCT_PAGE_SIZE - 1));
+  products = setCachedData(key, data || []);
+  filteredProducts = [...products];
+  applyCurrentFilters();
+  } catch(e) {
+  skeleton?.classList.add('hidden');
+  errorEl?.classList.remove('hidden');
+   }
 }
 
 async function loadUpcomingProducts() {
@@ -1639,7 +1754,7 @@ async function loadUpcomingProducts() {
  try {
   const { data, error } = await db
   .from('upcoming_products')
-  .select('*')
+  .select('id,title,description,image_url,video_url,images,videos,launch_date,priority,status,created_at')
   .eq('status', 'active')
   .order('priority', { ascending: false })
   .order('created_at', { ascending: false })
@@ -2187,6 +2302,7 @@ async function loadProductReviews(productId) {
  ({ data } = await db.from('reviews').select('*,profiles!buyer_id(name)').eq('product_id', productId).order('created_at', { ascending: false }).limit(10));
  }
  const reviews = data || [];
+ latestProductReviews = reviews;
  const count = reviews.length;
  document.getElementById('modal-review-count').textContent = `${count} review${count!==1?'s':''}`;
  document.getElementById('modal-verified-count').textContent = count;
@@ -2233,6 +2349,7 @@ async function loadProductReviews(productId) {
  ({ data } = await db.from('reviews').select('*,profiles!buyer_id(name)').eq('product_id', productId).order('created_at', { ascending: false }).limit(20));
  }
  const reviews = data || [];
+ latestProductReviews = reviews;
  const count = reviews.length;
  document.getElementById('modal-review-count').textContent = `${count} review${count!==1?'s':''}`;
  document.getElementById('modal-verified-count').textContent = reviews.filter(r => r.verified_purchase !== false).length;
@@ -2248,9 +2365,12 @@ async function loadProductReviews(productId) {
  const list = document.getElementById('modal-reviews-list');
  if (!count) { list.innerHTML = '<p class="color-text3 text-sm" style="padding:.5rem 0">No reviews yet. Be the first to share your experience!</p>'; return; }
  list.innerHTML = reviews.map(r => {
- const imgs = Array.isArray(r.image_urls) ? r.image_urls : [];
- return `<div class="review-card"><div class="flex justify-between items-center"><div style="display:flex;align-items:center;gap:.4rem"><div style="width:26px;height:26px;border-radius:50%;background:var(--green-xlt);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:var(--green)">${(r.profiles?.name||'B')[0].toUpperCase()}</div><span class="reviewer-name">${escHtml(r.profiles?.name||'Verified Buyer')}</span></div><div class="stars sm">${starIcons(r.rating)}</div></div><p class="review-text">${escHtml(r.review_text || r.comment || '')}</p>${imgs.length ? `<div class="review-images-gallery">${imgs.map(url => `<img src="${escAttr(url)}" alt="Review photo" onclick="openReviewImage('${escAttr(url)}')">`).join('')}</div>` : ''}<span class="text-xs color-text3"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i> ${r.verified_purchase === false ? 'Buyer Review' : 'Verified Purchase'} - ${fmtDate(r.created_at)}</span></div>`;
- }).join('');
+ const imgs = getReviewImageUrls(r);
+ const isMine = isReviewOwnedByCurrentUser(r);
+ const reviewId = escAttr(r.id);
+ const actions = isMine && r.id ? `<div class="review-actions"><button class="btn btn-ghost btn-sm" onclick="openEditReviewModal('${reviewId}')" title="Edit review"><i class="fa-solid fa-pen"></i></button><button class="btn btn-ghost btn-sm text-red" onclick="deleteProductReview('${reviewId}')" title="Delete review"><i class="fa-solid fa-trash"></i></button></div>` : '';
+ return `<div class="review-card"><div class="flex justify-between items-center"><div style="display:flex;align-items:center;gap:.4rem"><div style="width:26px;height:26px;border-radius:50%;background:var(--green-xlt);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:var(--green)">${escHtml((r.profiles?.name||'B')[0].toUpperCase())}</div><span class="reviewer-name">${escHtml(r.profiles?.name||'Verified Buyer')}</span></div><div style="display:flex;align-items:center;gap:.45rem"><div class="stars sm">${starIcons(r.rating)}</div>${actions}</div></div><p class="review-text">${escHtml(getReviewText(r))}</p>${imgs.length ? `<div class="review-images-gallery">${imgs.map(url => `<img src="${escAttr(url)}" alt="Review photo" onclick="openReviewImage('${escAttr(url)}')">`).join('')}</div>` : ''}<span class="text-xs color-text3"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i> ${r.verified_purchase === false ? 'Buyer Review' : 'Verified Purchase'} - ${fmtDate(r.created_at)}</span></div>`;
+  }).join('');
 }
 
 // ====================================================
@@ -3013,6 +3133,9 @@ async function submitTransferOrder() {
 // REVIEWS
 // ====================================================
 let reviewProductId = null;
+let reviewEditingId = null;
+let reviewEditingRow = null;
+let latestProductReviews = [];
 function openReviewModal(productId = null, productName = '', sellerId = null) {
  if (!currentUser) { showModal('auth-modal'); return; }
  const target = productId
@@ -3022,12 +3145,29 @@ function openReviewModal(productId = null, productName = '', sellerId = null) {
  reviewProductId = target.id;
  currentProd = currentProd?.id === target.id ? currentProd : { ...(currentProd || {}), ...target };
  document.getElementById('review-product-name').textContent = target.name || 'Purchased item';
+ resetReviewModalForm();
+ showModal('review-modal');
+}
+
+function resetReviewModalForm() {
+ reviewEditingId = null;
+ reviewEditingRow = null;
  selectedRating = 0;
  setRating(0);
- document.getElementById('review-text').value = '';
- document.getElementById('review-images-input').value = '';
- document.getElementById('review-img-previews').innerHTML = '';
- showModal('review-modal');
+ const title = document.getElementById('review-modal-title');
+ const editInput = document.getElementById('review-edit-id');
+ const textInput = document.getElementById('review-text');
+ const imageInput = document.getElementById('review-images-input');
+ const previews = document.getElementById('review-img-previews');
+ const submitBtn = document.getElementById('review-submit-btn');
+ const cancelBtn = document.getElementById('review-cancel-edit-btn');
+ if (title) title.textContent = 'Write a Review';
+ if (editInput) editInput.value = '';
+ if (textInput) textInput.value = '';
+ if (imageInput) imageInput.value = '';
+ if (previews) previews.innerHTML = '';
+ if (submitBtn) submitBtn.innerHTML = '<i class="fa-solid fa-star"></i> Submit Review';
+ cancelBtn?.classList.add('hidden');
 }
 
 function setRating(val) {
@@ -3044,7 +3184,8 @@ async function submitReview() {
  const text = document.getElementById('review-text').value.trim();
  if (!text) { toast('Please write a review','','warn'); return; }
  const btn = document.getElementById('review-submit-btn');
- btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting...';
+ const isEditing = !!reviewEditingId;
+ btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> ${isEditing ? 'Saving...' : 'Submitting...'}`;
 
  try {
  // Upload review images if any
@@ -3063,20 +3204,27 @@ async function submitReview() {
  }
  }
 
- const verifiedPurchase = await hasDeliveredPurchase(reviewProductId);
- await submitProductReview({
- product_id: reviewProductId,
- rating: selectedRating,
- review_text: text,
- image_urls: imageUrls,
- verified_purchase: verifiedPurchase
- });
- toast('Review Submitted! ', 'Thanks for your feedback!', 'success');
- closeModal('review-modal');
- loadProductReviews(reviewProductId);
- loadProducts();
- } catch(e) { toast('Error', e.message || 'Could not submit review', 'error'); }
- btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-star"></i> Submit Review';
+  const verifiedPurchase = await hasDeliveredPurchase(reviewProductId);
+  const reviewPayload = {
+  product_id: reviewProductId,
+  rating: selectedRating,
+  review_text: text,
+  image_urls: imageUrls.length ? imageUrls : (reviewEditingRow?.image_urls || []),
+  verified_purchase: verifiedPurchase
+  };
+  if (isEditing) {
+  await updateProductReview(reviewEditingId, reviewPayload);
+  toast('Review Updated', 'Your review has been saved.', 'success');
+  } else {
+  await submitProductReview(reviewPayload);
+  toast('Review Submitted! ', 'Thanks for your feedback!', 'success');
+  }
+  closeModal('review-modal');
+  resetReviewModalForm();
+  loadProductReviews(reviewProductId);
+  loadProducts();
+  } catch(e) { toast('Error', e.message || 'Could not submit review', 'error'); }
+ btn.disabled = false; btn.innerHTML = isEditing ? '<i class="fa-solid fa-floppy-disk"></i> Save Changes' : '<i class="fa-solid fa-star"></i> Submit Review';
 }
 
 async function submitProductReview(payload) {
@@ -3111,6 +3259,98 @@ async function submitProductReview(payload) {
  if (!msg.includes('column') && !msg.includes('schema cache')) break;
  }
  throw lastError || new Error('Could not submit review');
+}
+
+function getReviewOwnerColumn(review = {}) {
+ if (!currentUser?.id) return null;
+ if (review.reviewer_id === currentUser.id) return 'reviewer_id';
+ if (review.buyer_id === currentUser.id) return 'buyer_id';
+ if (review.user_id === currentUser.id) return 'user_id';
+ return null;
+}
+
+function isReviewOwnedByCurrentUser(review = {}) {
+ return !!getReviewOwnerColumn(review);
+}
+
+function getReviewText(review = {}) {
+ return review.review_text || review.comment || '';
+}
+
+function getReviewImageUrls(review = {}) {
+ return Array.isArray(review.image_urls) ? review.image_urls : [];
+}
+
+function showExistingReviewImages(urls = []) {
+ const container = document.getElementById('review-img-previews');
+ if (!container) return;
+ container.innerHTML = urls.map(url => `<div class="review-img-preview"><img src="${escAttr(url)}" alt="Review photo"></div>`).join('');
+}
+
+function openEditReviewModal(reviewId) {
+ if (!currentUser) { showModal('auth-modal'); return; }
+ const review = latestProductReviews.find(r => String(r.id) === String(reviewId));
+ if (!review || !isReviewOwnedByCurrentUser(review)) {
+ toast('Cannot edit review', 'You can only edit reviews you wrote.', 'warn');
+ return;
+ }
+ reviewEditingId = review.id;
+ reviewEditingRow = review;
+ reviewProductId = review.product_id || reviewProductId;
+ const title = document.getElementById('review-modal-title');
+ const editInput = document.getElementById('review-edit-id');
+ const textInput = document.getElementById('review-text');
+ const imageInput = document.getElementById('review-images-input');
+ const submitBtn = document.getElementById('review-submit-btn');
+ const cancelBtn = document.getElementById('review-cancel-edit-btn');
+ if (title) title.textContent = 'Edit Review';
+ if (editInput) editInput.value = review.id;
+ if (textInput) textInput.value = getReviewText(review);
+ if (imageInput) imageInput.value = '';
+ setRating(Number(review.rating || 0));
+ showExistingReviewImages(getReviewImageUrls(review));
+ if (submitBtn) submitBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Changes';
+ cancelBtn?.classList.remove('hidden');
+ showModal('review-modal');
+}
+
+async function updateProductReview(reviewId, payload) {
+ const review = reviewEditingRow || latestProductReviews.find(r => String(r.id) === String(reviewId));
+ const ownerColumn = getReviewOwnerColumn(review || {});
+ if (!ownerColumn) throw new Error('You can only edit reviews you wrote.');
+ const base = { rating: payload.rating };
+ const variants = [
+ { ...base, review_text: payload.review_text, image_urls: payload.image_urls || [], verified_purchase: !!payload.verified_purchase },
+ { ...base, review_text: payload.review_text, verified_purchase: !!payload.verified_purchase },
+ { ...base, comment: payload.review_text, verified_purchase: !!payload.verified_purchase },
+ { ...base, comment: payload.review_text },
+ ];
+ let lastError = null;
+ for (const patch of variants) {
+ const { error } = await db.from('reviews').update(patch).eq('id', reviewId).eq(ownerColumn, currentUser.id);
+ if (!error) return { success: true };
+ lastError = error;
+ const msg = (error.message || '').toLowerCase();
+ if (!msg.includes('column') && !msg.includes('schema cache')) break;
+ }
+ throw lastError || new Error('Could not update review');
+}
+
+async function deleteProductReview(reviewId) {
+ if (!currentUser) { showModal('auth-modal'); return; }
+ const review = latestProductReviews.find(r => String(r.id) === String(reviewId));
+ const ownerColumn = getReviewOwnerColumn(review || {});
+ if (!ownerColumn) { toast('Cannot delete review', 'You can only delete reviews you wrote.', 'warn'); return; }
+ if (!confirm('Delete this review?')) return;
+ try {
+ const { error } = await db.from('reviews').delete().eq('id', reviewId).eq(ownerColumn, currentUser.id);
+ if (error) throw error;
+ toast('Review Deleted', 'Your review has been removed.', 'success');
+ loadProductReviews(review.product_id || reviewProductId);
+ loadProducts();
+ } catch (e) {
+ toast('Error', e.message || 'Could not delete review', 'error');
+ }
 }
 
 function previewReviewImages(input) {
@@ -3246,7 +3486,11 @@ async function loadBuyerOrders() {
  list?.classList.add('hidden');
  empty?.classList.add('hidden');
  try {
- const { data: orders, error } = await db.from('orders').select('*').eq('buyer_id', currentUser.id).order('created_at',{ascending:false});
+  const { data: orders } = await runSelectWithColumnFallback('orders', ORDER_LIST_COLUMNS, q => q
+  .eq('buyer_id', currentUser.id)
+  .order('created_at',{ascending:false})
+  .limit(DASHBOARD_PAGE_SIZE));
+  const error = null;
  if (error) throw error;
  skeleton?.classList.add('hidden');
  if (!orders?.length) { empty?.classList.remove('hidden'); return; }
@@ -3426,16 +3670,21 @@ async function loadSellerAnalytics() {
 async function loadSellerProds() {
  if (!currentUser) return;
  const filter = document.getElementById('prod-filter')?.value || 'all';
- document.getElementById('sp-skeleton').classList.remove('hidden');
- document.getElementById('sp-list').classList.add('hidden');
- let q = db.from('products').select('*').eq('seller_id', currentUser.id).order('created_at', {ascending: false});
+ const skeleton = document.getElementById('sp-skeleton');
+ const list = document.getElementById('sp-list');
+ const empty = document.getElementById('sp-empty');
+ skeleton?.classList.remove('hidden');
+ list?.classList.add('hidden');
+ empty?.classList.add('hidden');
+ let q = db.from('products').select(SELLER_PRODUCT_COLUMNS).eq('seller_id', currentUser.id).order('created_at', {ascending: false}).limit(DASHBOARD_PAGE_SIZE);
  const { data, error } = await q;
- document.getElementById('sp-skeleton').classList.add('hidden');
+ skeleton?.classList.add('hidden');
+ if (error) { toast('Products unavailable', error.message, 'error'); return; }
  const prods = (data||[]).filter(p => filter==='all'||filter===p.stock_status||(filter==='sold-out'&&p.stock_quantity===0)|| (filter==='active'&&p.status==='active'));
- if (!prods.length) { document.getElementById('sp-empty').classList.remove('hidden'); return; }
- document.getElementById('sp-empty').classList.add('hidden');
- document.getElementById('sp-list').classList.remove('hidden');
- document.getElementById('sp-list').innerHTML = prods.map(p => `
+ if (!prods.length) { empty?.classList.remove('hidden'); return; }
+ empty?.classList.add('hidden');
+ list?.classList.remove('hidden');
+ list.innerHTML = prods.map(p => `
  <div class="prod-list-item">
  <img class="prod-list-img" src="${p.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=200'}" alt="" loading="lazy">
  <div class="prod-list-info">
@@ -3570,17 +3819,26 @@ if (nameVal.length > 300) {
 
 async function deleteProduct(id) {
  if (!confirm('Delete this product?')) return;
+ const card = document.querySelector(`[onclick="editProduct('${id}')"]`)?.closest('.prod-list-item');
+ if (card) card.style.opacity = '.45';
  try {
- await ensureSellerProfileRole();
- await callEdge('manage-product', { action: 'delete', product_id: id });
- }
- catch(e) { toast('Error', e.message, 'error'); return; }
+  await ensureSellerProfileRole();
+  await callEdge('manage-product', { action: 'delete', product_id: id });
+  }
+ catch(e) { if (card) card.style.opacity = ''; toast('Error', e.message, 'error'); return; }
+ clearCacheByPrefix('products:');
  toast('Product Deleted', '', 'info');
  loadSellerProds();
 }
 
 async function toggleProductStatus(id, current) {
  const next = current === 'active' ? 'paused' : 'active';
+ const card = document.querySelector(`[onclick="toggleProductStatus('${id}','${current}')"]`)?.closest('.prod-list-item');
+ const statusBadge = card?.querySelector('.prod-list-meta .badge');
+ if (statusBadge) {
+  statusBadge.className = `badge badge-${next === 'active' ? 'green' : 'gray'}`;
+  statusBadge.textContent = next;
+ }
  try {
   await ensureSellerProfileRole();
   const oldProduct = await fetchProductForNotification(id);
@@ -3591,14 +3849,16 @@ async function toggleProductStatus(id, current) {
   }
   }
  catch(e) { toast('Error', e.message, 'error'); return; }
-  loadSellerProds();
+   clearCacheByPrefix('products:');
+   loadSellerProds();
 }
 
 // editing state
 let editingProductId = null;
 
 async function editProduct(id) {
- const { data: p, error } = await db.from('products').select('*').eq('id', id).single();
+ const { data: p } = await runSelectWithColumnFallback('products', PRODUCT_LIST_COLUMNS, q => q.eq('id', id).single());
+ const error = null;
  if (error || !p) { toast('Could not load product', '', 'error'); return; }
  editingProductId = id;
  showDash('add-product');
@@ -3649,7 +3909,13 @@ function cancelEditProduct() {
 // ====================================================
 async function loadSellerOrders() {
  if (!currentUser) return;
- const { data: orders } = await db.from('orders').select('*').eq('seller_id', currentUser.id).order('created_at',{ascending:false});
+ document.getElementById('orders-skeleton')?.classList.remove('hidden');
+ document.getElementById('orders-list')?.classList.add('hidden');
+ document.getElementById('orders-empty')?.classList.add('hidden');
+ const { data: orders } = await runSelectWithColumnFallback('orders', ORDER_LIST_COLUMNS, q => q
+ .eq('seller_id', currentUser.id)
+ .order('created_at',{ascending:false})
+ .limit(DASHBOARD_PAGE_SIZE));
  document.getElementById('orders-skeleton').classList.add('hidden');
  const list = document.getElementById('orders-list');
  if (!orders?.length) { document.getElementById('orders-empty').classList.remove('hidden'); return; }
@@ -3717,7 +3983,10 @@ async function openOrderTracking(orderId) {
 
  try {
  const { data: order } = await db.from('orders').select('id,status,seller_id,buyer_id,created_at').eq('id', orderId).maybeSingle();
- const { data: events } = await db.from('order_tracking').select('*').eq('order_id', orderId).order('created_at', { ascending: true });
+ const { data: events } = await db.from('order_tracking')
+ .select('id,order_id,status,note,created_at,created_by')
+ .eq('order_id', orderId)
+ .order('created_at', { ascending: true });
  renderTrackingTimeline(order || { id: orderId, status: 'pending' }, events || []);
  } catch (e) {
  document.getElementById('tracking-timeline').innerHTML = `<p class="color-text3 text-sm">Could not load tracking updates. ${escHtml(e.message || '')}</p>`;
@@ -4382,7 +4651,12 @@ async function loadDropshipData() {
  await loadSupplierConnections();
  updateSupplierCards();
  updateDropshipCalculator();
- const { data: products } = await db.from('products').select('*').eq('seller_id', currentUser.id).eq('category', 'dropship').order('created_at', { ascending:false });
+  const { data: products } = await db.from('products')
+  .select('id,name,price,image_url,stock_quantity,status,created_at')
+  .eq('seller_id', currentUser.id)
+  .eq('category', 'dropship')
+  .order('created_at', { ascending:false })
+  .limit(DASHBOARD_PAGE_SIZE);
  const dropshipProducts = products || [];
  const importedEl = document.getElementById('ds-imported');
  if (importedEl) importedEl.textContent = dropshipProducts.length;
@@ -4518,7 +4792,11 @@ async function loadAffiliateData() {
  const bankStatus = document.getElementById('aff-bank-status');
  if (bankStatus) bankStatus.textContent = currentUser.profile?.account_number ? `${currentUser.profile.bank_name || 'Bank'} ending ${String(currentUser.profile.account_number).slice(-4)}` : 'Not set';
  let refs = [];
- const { data, error } = await db.from('referrals').select('*').eq('referrer_id', currentUser.id).order('created_at', { ascending:false });
+ const { data, error } = await db.from('referrals')
+ .select('id,referrer_id,source,amount,paid,created_at')
+ .eq('referrer_id', currentUser.id)
+ .order('created_at', { ascending:false })
+ .limit(DASHBOARD_PAGE_SIZE);
  if (!error) refs = data || [];
  const earned = (refs||[]).filter(r=>r.paid).reduce((s,r)=>s+(r.amount||500),0);
  const pending = (refs||[]).filter(r=>!r.paid).reduce((s,r)=>s+(r.amount||5000),0);
@@ -4601,7 +4879,11 @@ function requestAffiliatePayout() {
 
 async function loadWithdrawalHistory() {
  if (!currentUser) return;
- const { data: wds } = await db.from('withdrawals').select('*').eq('seller_id', currentUser.id).order('created_at',{ascending:false});
+ const { data: wds } = await db.from('withdrawals')
+ .select('id,amount,status,created_at')
+ .eq('seller_id', currentUser.id)
+ .order('created_at',{ascending:false})
+ .limit(DASHBOARD_PAGE_SIZE);
  const tbody = document.getElementById('wd-history');
  if (!wds?.length) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--text3)">No withdrawals yet</td></tr>'; return; }
  const totalPaid = wds.filter(w=>w.status==='paid').reduce((s,w)=>s+w.amount,0);
@@ -4800,6 +5082,7 @@ function switchAdminTab(tab) {
  if (tab === 'ai') adminAiHistory = [];
  if (tab === 'accounts') loadAdminAccounts();
  if (tab === 'kyc') loadAdminKyc();
+ if (tab === 'online') loadAdminOnlineUsers();
  if (tab === 'upcoming') loadAdminUpcomingProducts();
 }
 
@@ -4886,7 +5169,11 @@ async function loadAdminUpcomingProducts() {
  if (!list) return;
  list.innerHTML = '<div class="text-sm color-text3">Loading upcoming products...</div>';
  try {
-  const { data, error } = await db.from('upcoming_products').select('*').order('priority', { ascending: false }).order('created_at', { ascending: false }).limit(30);
+  const { data, error } = await db.from('upcoming_products')
+  .select('id,title,description,image_url,video_url,images,videos,launch_date,priority,status,created_at')
+  .order('priority', { ascending: false })
+  .order('created_at', { ascending: false })
+  .limit(30);
   if (error) throw error;
   const rows = data || [];
   if (!rows.length) {
@@ -4940,14 +5227,43 @@ function setTextAllById(id, value) {
  document.querySelectorAll(`#${id}`).forEach(node => { node.textContent = value; });
 }
 
+const ONLINE_USER_WINDOW_MS = 5 * 60 * 1000;
+
+function isUserOnline(profile = {}) {
+ const lastSeen = profile.last_seen_at ? new Date(profile.last_seen_at).getTime() : 0;
+ return !!lastSeen && Date.now() - lastSeen <= ONLINE_USER_WINDOW_MS;
+}
+
+function formatProfileDate(value) {
+ return value ? `${fmtDate(value)} - ${formatMsgTime(value)}` : 'Never';
+}
+
+async function fetchAdminUserActivity(limit = 200) {
+ let { data, error } = await db.from('profiles')
+ .select('id,name,email,role,accounts,login_count,last_login_at,last_seen_at,created_at,kyc_status')
+ .order('last_seen_at', { ascending: false, nullsFirst: false })
+ .limit(limit);
+ if (error) {
+ console.warn('User activity columns unavailable, using basic profile list:', error.message || error);
+ ({ data, error } = await db.from('profiles')
+ .select('id,name,email,role,accounts,created_at,kyc_status')
+ .order('created_at', { ascending: false })
+ .limit(limit));
+ }
+ if (error) throw error;
+ return data || [];
+}
+
 async function loadAdminOverview() {
  if (!guardAdminPanel()) return;
- const [{ data: sellers }, { data: buyers }, { data: orders }, { count: productCount }, { count: pendingAdCount }] = await Promise.all([
-  db.from('profiles').select('id,commission_paid,trial_end,role').eq('role','seller'),
+ const [{ data: sellers }, { data: buyers }, { data: orders }, { count: productCount }, { count: pendingAdCount }, userActivityResult, pendingKycResult] = await Promise.all([
+  db.from('profiles').select('id,commission_paid,trial_end,role,is_suspended').eq('role','seller'),
   db.from('profiles').select('id').eq('role','buyer'),
   db.from('orders').select('total_amount,created_at,status').neq('status','cancelled'),
   db.from('products').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-  db.from('advertisements').select('id', { count: 'exact', head: true }).in('status', ['pending', 'pending_payment'])
+  db.from('advertisements').select('id', { count: 'exact', head: true }).in('status', ['pending', 'pending_payment']),
+  fetchAdminUserActivity().then(data => ({ data })).catch(error => ({ data: [], error })),
+  db.from('kyc_verifications').select('id', { count: 'exact', head: true }).in('status', ['pending', 'submitted', 'in_review', 'review'])
   ]);
  const activeSellers = (sellers||[]).filter(s => !s.is_suspended).length;
  const freeSellers = (sellers||[]).length;
@@ -4963,13 +5279,48 @@ async function loadAdminOverview() {
  setTextAllById('adm-suspended', suspended);
  setTextAllById('adm-total-products', productCount || 0);
  setTextAllById('adm-pending-ads', pendingAdCount || 0);
+ setTextAllById('adm-online-users', (userActivityResult.data || []).filter(isUserOnline).length);
+ setTextAllById('adm-pending-kyc', pendingKycResult.count || 0);
 
  // Disputes count
  const { count } = await db.from('disputes').select('id', { count:'exact', head:true }).eq('status','open');
  setTextAllById('adm-disputes', count || 0);
 
- // Revenue bar chart
- _renderAdminRevenueChart(orders || []);
+  // Revenue bar chart
+  _renderAdminRevenueChart(orders || []);
+}
+
+async function loadAdminOnlineUsers() {
+ if (!guardAdminPanel()) return;
+ const tbody = document.getElementById('adm-online-list');
+ const countEl = document.getElementById('adm-online-count');
+ if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center text-sm color-text3 p-3">Loading user activity...</td></tr>';
+ try {
+ const users = await fetchAdminUserActivity(300);
+ const onlineCount = users.filter(isUserOnline).length;
+ setTextAllById('adm-online-users', onlineCount);
+ if (countEl) countEl.textContent = `${onlineCount} online`;
+ if (!users.length) {
+ if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center text-sm color-text3 p-3">No users found</td></tr>';
+ return;
+ }
+ if (tbody) tbody.innerHTML = users.map(user => {
+ const online = isUserOnline(user);
+ const role = user.accounts || user.role || 'buyer';
+ const loginCount = Number(user.login_count || 0);
+ const statusBadge = online ? '<span class="badge badge-green">Online</span>' : '<span class="badge badge-outline">Offline</span>';
+ return `<tr>
+ <td><div style="font-weight:700;font-size:.84rem">${escHtml(user.name || 'User')}</div><div class="text-xs color-text3">${escHtml(user.email || '')}</div></td>
+ <td><span class="badge badge-outline">${escHtml(String(role).replace('_', ' '))}</span></td>
+ <td>${statusBadge}</td>
+ <td class="font-bold">${loginCount}</td>
+ <td class="text-xs color-text3">${formatProfileDate(user.last_login_at)}</td>
+ <td class="text-xs color-text3">${formatProfileDate(user.last_seen_at)}</td>
+ </tr>`;
+ }).join('');
+ } catch (e) {
+ if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="text-center text-sm color-danger p-3">Error: ${escHtml(e.message || 'Could not load user activity')}</td></tr>`;
+ }
 }
 
  // ====================================================
@@ -5070,7 +5421,10 @@ async function loadAdminSellers() {
  document.getElementById('admin-list').classList.add('hidden');
  document.getElementById('admin-empty').classList.add('hidden');
 
- const { data: sellers } = await db.from('profiles').select('*').eq('role','seller').order('created_at',{ascending:false});
+  const { data: sellers } = await runSelectWithColumnFallback('profiles', SELLER_ADMIN_COLUMNS, q => q
+  .eq('role','seller')
+  .order('created_at',{ascending:false})
+  .limit(DASHBOARD_PAGE_SIZE));
  _adminSellersCache = sellers || [];
  document.getElementById('admin-skeleton').classList.add('hidden');
 
@@ -5169,7 +5523,7 @@ async function loadAdminOrders() {
  document.getElementById('adm-orders-list').classList.add('hidden');
  document.getElementById('adm-orders-empty').classList.add('hidden');
  const filter = document.getElementById('adm-order-filter')?.value || 'all';
- let q = db.from('orders').select('*').order('created_at',{ascending:false}).limit(120);
+  let q = db.from('orders').select(ORDER_LIST_COLUMNS.join(',')).order('created_at',{ascending:false}).limit(120);
  if (filter !== 'all') q = q.eq('status', filter);
  const { data: orders } = await q;
  document.getElementById('adm-orders-skeleton').classList.add('hidden');
@@ -5215,7 +5569,10 @@ async function adminUpdateOrder(id, status) {
 /* -- DISPUTES -- */
 async function loadAdminDisputes() {
  if (!isAdmin()) return;
- const { data: disputes } = await db.from('disputes').select('*').order('created_at',{ascending:false}).limit(60);
+ const { data: disputes } = await db.from('disputes')
+ .select('id,order_id,dispute_type,description,status,created_at')
+ .order('created_at',{ascending:false})
+ .limit(60);
  const dl = document.getElementById('admin-disputes-list');
  const open = (disputes||[]).filter(d => d.status === 'open').length;
  document.getElementById('adm-disputes').textContent = open;
@@ -5390,7 +5747,10 @@ async function sendBroadcast() {
 }
 
 async function loadBroadcastHistory() {
- const { data: bcs } = await db.from('broadcasts').select('*').order('created_at',{ascending:false}).limit(10);
+  const { data: bcs } = await db.from('broadcasts')
+  .select('id,title,body,type,target,created_at')
+  .order('created_at',{ascending:false})
+  .limit(10);
  const el = document.getElementById('bc-history');
  if (!el) return;
  const icons = { info:'Info', success:'OK', warn:'Warning', error:'' };
@@ -5423,8 +5783,8 @@ async function loadBroadcastMessages(containerId, limit = 5) {
  if (!el || !currentUser) return;
  el.innerHTML = '<div class="text-center p-2"><span class="spinner"></span></div>';
  try {
- const { data, error } = await db.from('broadcasts')
- .select('*')
+  const { data, error } = await db.from('broadcasts')
+  .select('id,title,body,type,target,created_at')
  .in('target', getBroadcastTargetsForProfile())
  .order('created_at', { ascending: false })
  .limit(limit);
@@ -5586,7 +5946,7 @@ async function loadTrialExtensions() {
  const tbody = document.getElementById('acct-trials-list');
  try {
  const { data: sellers } = await db.from('profiles')
- .select('*')
+ .select('id,name,email,role,store_name,commission_paid,trial_end,is_suspended,created_at')
  .eq('role', 'seller')
  .order('trial_end', { ascending: true });
 
@@ -5728,7 +6088,11 @@ async function adminReactivateUser(userId) {
 async function checkBroadcastForUser() {
  if (!currentUser) return;
  const targets = getBroadcastTargetsForProfile();
- const { data: bcs } = await db.from('broadcasts').select('*').in('target', targets).order('created_at',{ascending:false}).limit(2);
+ const { data: bcs } = await db.from('broadcasts')
+ .select('id,title,body,type,target,created_at')
+ .in('target', targets)
+ .order('created_at',{ascending:false})
+ .limit(2);
  (bcs||[]).forEach((b, i) => setTimeout(() => toast(b.title, b.body, b.type||'info', 7000), i * 2200));
 }
 
@@ -6179,7 +6543,10 @@ async function viewStorefront(sellerId) {
  storefrontView.style.display = 'block';
  }
  document.body.classList.remove('platform-seller-mode');
-  const { data: seller } = await db.from('profiles').select('*').eq('id', sellerId).single();
+  const { data: seller } = await db.from('profiles')
+  .select('id,name,email,role,accounts,store_name,store_description,whatsapp,logo_url,store_address,kyc_status,seller_verified,verification_status')
+  .eq('id', sellerId)
+  .single();
   if (!seller) { toast('Store not found','','error'); return; }
   const platformStore = isPlatformProfile(seller);
   const storeLabel = platformStore ? 'BUYSELL Platform Store' : getPlatformStoreLabel(seller);
@@ -6234,7 +6601,11 @@ async function viewStorefront(sellerId) {
  };
  }
 
- const { data: prods } = await db.from('products').select('*').eq('seller_id', sellerId).eq('status','active');
+ const { data: prods } = await runSelectWithColumnFallback('products', PRODUCT_LIST_COLUMNS, q => q
+ .eq('seller_id', sellerId)
+ .eq('status','active')
+ .order('created_at', { ascending: false })
+ .limit(PRODUCT_PAGE_SIZE));
   const sfProds = (prods || []).map(product => ({ ...product, profiles: seller }));
  document.getElementById('sf-prod-count').textContent = sfProds.length;
  // Real order count
@@ -6393,7 +6764,7 @@ async function loadHubsForState(stateName) {
  // 2. Fetch live data from Supabase
  const { data, error } = await db
  .from('safe_hubs')
- .select('*')
+ .select('id,name,address,state,lga,contact_phone,latitude,longitude,is_active')
  .eq('state', stateName)
  .eq('is_active', true);
 
@@ -6433,6 +6804,29 @@ function shareCurrentProduct() {
  if (currentProd) shareProduct(currentProd);
 }
 
+function hardenExternalLinks(root = document) {
+ root.querySelectorAll?.('a[target="_blank"]').forEach(link => {
+ const rel = new Set(String(link.getAttribute('rel') || '').toLowerCase().split(/\s+/).filter(Boolean));
+ rel.add('noopener');
+ rel.add('noreferrer');
+ link.setAttribute('rel', Array.from(rel).join(' '));
+ });
+}
+
+function installSecurityDomGuards() {
+ hardenExternalLinks();
+ const observer = new MutationObserver(records => {
+ records.forEach(record => {
+ record.addedNodes.forEach(node => {
+ if (node.nodeType !== 1) return;
+ if (node.matches?.('a[target="_blank"]')) hardenExternalLinks(node.parentElement || document);
+ else hardenExternalLinks(node);
+ });
+ });
+ });
+ observer.observe(document.body, { childList: true, subtree: true });
+}
+
 // ====================================================
 // INIT
 // ====================================================
@@ -6446,9 +6840,10 @@ function shareCurrentProduct() {
 // UNIFIED SINGLE-PAGE RUNTIME INITIALIZATION
 // ====================================================
 (async function init() {
- console.log(" Launching single-page application lifecycle...");
- 
- const savedLogo = appStorage.getItem('buysell_custom_logo');
+  console.log(" Launching single-page application lifecycle...");
+  installSecurityDomGuards();
+  
+  const savedLogo = appStorage.getItem('buysell_custom_logo');
  if (savedLogo) applySiteLogo(savedLogo);
 
  if (typeof updateCartCount === 'function') updateCartCount();
@@ -6778,7 +7173,7 @@ async function loadMyGigs() {
  if (!currentUser) return;
  try {
  const { data } = await db.from('service_gigs')
- .select('*')
+  .select('id,title,category,description,starting_rate,status,portfolio_urls,created_at')
  .eq('provider_id', currentUser.id)
  .order('created_at', { ascending: false });
  const gigs = data || [];
@@ -6928,8 +7323,12 @@ async function viewProviderProfile(providerId) {
  showModal('sp-profile-modal');
 
  try {
- const { data: provider } = await db.from('profiles').select('*').eq('id', providerId).single();
- const { data: gigs } = await db.from('service_gigs').select('*').eq('provider_id', providerId).eq('status', 'active').order('created_at', { ascending: false });
+  const provider = await fetchProfileById(providerId, 'single');
+  const { data: gigs } = await db.from('service_gigs')
+  .select('id,title,category,description,starting_rate,status,portfolio_urls,created_at')
+  .eq('provider_id', providerId)
+  .eq('status', 'active')
+  .order('created_at', { ascending: false });
 
  const name = provider?.name || 'Service Pro';
  const wa = (provider?.whatsapp || '').replace(/\D/g, '');
@@ -6992,7 +7391,7 @@ async function fetchAdminKycRows(filter) {
   console.warn('admin-kyc list failed, falling back to direct query:', edgeError);
  }
 
- let query = db.from('kyc_verifications').select('*').order('created_at', { ascending: false });
+ let query = db.from('kyc_verifications').select(KYC_LIST_COLUMNS.join(',')).order('created_at', { ascending: false }).limit(DASHBOARD_PAGE_SIZE);
  if (filter === 'pending') {
   query = query.in('status', ['pending', 'submitted', 'in_review', 'review']);
  } else if (filter !== 'all') {
@@ -7298,8 +7697,8 @@ async function exportAdminReport() {
  toast('Generating...', 'Preparing your CSV report', 'info');
  try {
  const [{ data: sellers }, { data: orders }] = await Promise.all([
- db.from('profiles').select('*').eq('role', 'seller'),
- db.from('orders').select('*').order('created_at', { ascending: false }).limit(500)
+  db.from('profiles').select('id,name,email,role,commission_paid,trial_end,created_at').eq('role', 'seller'),
+  db.from('orders').select('id,buyer_id,status,total_amount,payment_method,created_at').order('created_at', { ascending: false }).limit(500)
  ]);
 
  let csv = 'Section,ID,Name,Email,Role,Free Access,Access Expiry,Created\n';
@@ -7308,7 +7707,7 @@ async function exportAdminReport() {
  });
  csv += '\nSection,Order ID,Buyer,Status,Total,Payment Method,Created\n';
  (orders || []).forEach(o => {
- csv += `Order,${o.id},${o.buyer_id},${o.status},${o.total||0},${o.payment_method||''},${o.created_at}\n`;
+  csv += `Order,${o.id},${o.buyer_id},${o.status},${o.total_amount||0},${o.payment_method||''},${o.created_at}\n`;
  });
 
  const blob = new Blob([csv], { type: 'text/csv' });
@@ -7386,7 +7785,7 @@ async function showWishlistModal() {
  container.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
  
  try {
- const { data: items } = await db.from('products').select('*').in('id', wishlist);
+  const { data: items } = await runSelectWithColumnFallback('products', PRODUCT_LIST_COLUMNS, q => q.in('id', wishlist).limit(60));
  if (!items || !items.length) {
  container.innerHTML = '<p class="text-center color-text3 p-3">Products no longer available.</p>';
  return;
@@ -7454,7 +7853,7 @@ async function showCompareModal() {
  const container = document.getElementById('compare-content');
  container.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
  try {
- const { data: items } = await db.from('products').select('*').in('id', compareList.slice(0, 4));
+  const { data: items } = await db.from('products').select('id,name,price,category,condition,location').in('id', compareList.slice(0, 4));
  if (!items || items.length < 2) { container.innerHTML = '<p class="text-center color-text3">Could not load products.</p>'; return; }
  const fields = ['name','price','category','condition','location'];
  let html = '<table class="data-table" style="width:100%"><thead><tr><th>Feature</th>';
@@ -7637,8 +8036,8 @@ async function showInbox() {
  container.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
  if (!currentUser) { renderInboxEmpty(container, 'Sign in to view messages.'); return; }
  try {
- const { data, error } = await db.from('messages')
- .select('*')
+  const { data, error } = await db.from('messages')
+  .select('id,sender_id,receiver_id,body,message,content,image_url,product_id,is_read,created_at')
  .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
  .order('created_at', { ascending: false })
  .limit(120);
@@ -7691,7 +8090,7 @@ async function openConversation(partnerId, partnerName, productId = null) {
  conv.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
  await renderMessageProductCard(currentChatProductId);
  try {
- const { data, error } = await db.from('messages').select('*')
+  const { data, error } = await db.from('messages').select('id,sender_id,receiver_id,body,message,content,image_url,product_id,is_read,created_at')
  .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${currentUser.id})`)
  .order('created_at', { ascending: true }).limit(100);
  if (error) throw error;
@@ -8154,12 +8553,12 @@ async function loadSellerAds() {
  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3)">Loading ads...</td></tr>';
  try {
  let { data, error } = await db.from('advertisements')
- .select('*')
+  .select('id,title,description,media_url,media_type,target_url,placement,status,expires_at,created_at,payment_status')
  .eq('advertiser_id', currentUser.id)
  .order('created_at', { ascending: false });
  if (error) {
  ({ data, error } = await db.from('advertisements')
- .select('*')
+  .select('id,title,description,media_url,media_type,target_url,placement,status,expires_at,created_at,payment_status')
  .eq('user_id', currentUser.id)
  .order('created_at', { ascending: false }));
  }
@@ -8330,7 +8729,7 @@ async function notifyProductIfActive(productRecord, oldRecord = null) {
 
 async function fetchProductForNotification(productId) {
  if (!productId) return null;
- const { data, error } = await db.from('products').select('*').eq('id', productId).maybeSingle();
+ const { data, error } = await db.from('products').select(PRODUCT_LIST_COLUMNS.join(',')).eq('id', productId).maybeSingle();
  if (error) {
  console.warn('[PUSH ENGINE] Could not load product for notification:', error.message || error);
  return null;
@@ -8340,7 +8739,7 @@ async function fetchProductForNotification(productId) {
 
 async function notifyOrderIfConfirmed(orderId, oldStatus = null) {
  if (!orderId) return;
- const { data: order, error } = await db.from('orders').select('*').eq('id', orderId).maybeSingle();
+ const { data: order, error } = await db.from('orders').select(ORDER_LIST_COLUMNS.join(',')).eq('id', orderId).maybeSingle();
  if (error || !order) {
  console.warn('[PUSH ENGINE] Could not load order for notification:', error?.message || error || 'not found');
  return;
@@ -8358,7 +8757,7 @@ async function loadActiveAds() {
  const dismissedUntil = Number(appSessionStorage.getItem('bs_ads_dismissed_until') || 0);
  if (Date.now() < dismissedUntil) return;
  const { data, error } = await db.from('advertisements')
- .select('*')
+ .select('id,title,description,media_url,media_type,target_url,placement,status,expires_at,created_at')
  .eq('status', 'active')
  .gt('expires_at', new Date().toISOString())
  .order('created_at', { ascending: false })

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redirecting - BUYSELL Nigeria</title>
+<meta name="robots" content="noindex">
+<script>
+(function () {
+  var routes = {
+    '/products': '/products.html',
+    '/upcoming': '/upcoming.html',
+    '/terms': '/terms.html',
+    '/privacy': '/privacy.html',
+    '/marketing': '/marketing.html',
+    '/category-trending': '/category-trending.html',
+    '/category-phones': '/category-phones.html',
+    '/category-fashion': '/category-fashion.html',
+    '/category-home': '/category-home.html',
+    '/category-electronics': '/category-electronics.html',
+    '/category-beauty': '/category-beauty.html',
+    '/category-sports': '/category-sports.html',
+    '/category-dropship': '/category-dropship.html',
+    '/category/trending': '/category-trending.html',
+    '/category/phones': '/category-phones.html',
+    '/category/fashion': '/category-fashion.html',
+    '/category/home': '/category-home.html',
+    '/category/electronics': '/category-electronics.html',
+    '/category/beauty': '/category-beauty.html',
+    '/category/sports': '/category-sports.html',
+    '/category/dropship': '/category-dropship.html'
+  };
+
+  var path = window.location.pathname.replace(/\/+$/, '') || '/';
+  var destination = routes[path] || '/index.html';
+  window.location.replace(destination + window.location.search + window.location.hash);
+}());
+</script>
+</head>
+<body>
+<p>Redirecting to BUYSELL Nigeria...</p>
+</body>
+</html>

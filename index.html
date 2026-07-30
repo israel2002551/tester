@@ -46,7 +46,7 @@
 <!-- PWA Banner -->
 <div id="pwa-banner">
  <div class="pwa-text">
- <div class="pwa-title">" Install BUYSELL App</div>
+ <div class="pwa-title">Install BUYSELL App</div>
  <div class="pwa-sub">Add to home screen for faster access</div>
  </div>
  <div class="pwa-actions">
@@ -73,10 +73,15 @@
  <main class="landing-main">
  <div class="landing-inner">
  <div class="landing-tagline">
- <div class="pre-badge"><i class="fa-solid fa-store"></i> Marketplace tools for buyers and sellers</div>
- <h1>Buy, sell, and manage orders <br><em>in one place</em></h1>
- <p>Browse products, pay online, message sellers, and track order progress without switching between different apps.</p>
- </div>
+  <div class="pre-badge"><i class="fa-solid fa-store"></i> Marketplace tools for buyers and sellers</div>
+  <h1>Buy, sell, and manage orders <br><em>in one place</em></h1>
+  <p>Browse products, pay online, message sellers, and track order progress without switching between different apps.</p>
+  <div class="landing-proof-row" aria-label="Marketplace trust highlights">
+  <span><i class="fa-solid fa-shield-check"></i> Verified seller checks</span>
+  <span><i class="fa-solid fa-lock"></i> Secure checkout</span>
+  <span><i class="fa-solid fa-star"></i> Buyer reviews</span>
+  </div>
+  </div>
  <div class="portal-grid" id="portal-grid">
  <div class="portal-card buyer-card delay-1" onclick="enterSite('buyer')">
  <span class="portal-badge">Most Popular</span>
@@ -1001,6 +1006,7 @@
  <!-- Admin Tab Bar -->
  <div class="buyer-tabs-wrap admin-tab-bar" style="margin-bottom:1.5rem;overflow-x:auto;-webkit-overflow-scrolling:touch">
  <button class="buyer-tab active" id="atab-overview" data-admin-tab="overview" onclick="switchAdminTab('overview')"><i class="fa-solid fa-chart-line"></i> Overview</button>
+ <button class="buyer-tab" id="atab-online" data-admin-tab="online" onclick="switchAdminTab('online')"><i class="fa-solid fa-signal"></i> Online Users</button>
  <button class="buyer-tab" id="atab-kyc" data-admin-tab="kyc" onclick="switchAdminTab('kyc')"><i class="fa-solid fa-id-card"></i> KYC Verify</button>
  <button class="buyer-tab" id="atab-accounts" data-admin-tab="accounts" onclick="switchAdminTab('accounts')"><i class="fa-solid fa-user-gear"></i> Account Management</button>
  <button class="buyer-tab" id="atab-sellers" data-admin-tab="sellers" onclick="switchAdminTab('sellers')"><i class="fa-solid fa-store"></i> Sellers</button>
@@ -1101,6 +1107,7 @@
   </div>
   <div class="admin-command-actions">
   <button onclick="switchAdminTab('accounts')"><i class="fa-solid fa-user-check"></i><span>Accounts</span></button>
+  <button onclick="switchAdminTab('online')"><i class="fa-solid fa-signal"></i><span>Online</span></button>
   <button onclick="switchAdminTab('kyc')"><i class="fa-solid fa-id-card"></i><span>KYC</span></button>
   <button onclick="switchAdminTab('broadcast')"><i class="fa-solid fa-bullhorn"></i><span>Broadcast</span></button>
   <button onclick="showSellerDashboard().then(()=>showDash('advertise'))"><i class="fa-solid fa-rectangle-ad"></i><span>Free Admin Ads</span></button>
@@ -1109,6 +1116,8 @@
   <div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(148px,1fr));margin-bottom:1.25rem">
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-store" style="color:var(--green)"></i></div></div><div class="stat-value" id="adm-total-sellers">0</div><div class="stat-label">Total Sellers</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dbeafe"><i class="fa-solid fa-users" style="color:var(--blue)"></i></div></div><div class="stat-value" id="adm-total-buyers">0</div><div class="stat-label">Total Buyers</div></div>
+ <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-signal" style="color:var(--green)"></i></div></div><div class="stat-value color-green" id="adm-online-users">0</div><div class="stat-label">Online Users</div></div>
+ <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-id-card" style="color:var(--gold)"></i></div></div><div class="stat-value color-gold" id="adm-pending-kyc">0</div><div class="stat-label">Pending KYC</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-coins" style="color:var(--gold)"></i></div></div><div class="stat-value color-green" id="adm-revenue">&#8358;0</div><div class="stat-label">Total GMV</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#ede9fe"><i class="fa-solid fa-percent" style="color:var(--purple)"></i></div></div><div class="stat-value" style="color:var(--purple)" id="adm-commission-due">&#8358;0</div><div class="stat-label">Platform Earnings</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i></div></div><div class="stat-value color-green" id="adm-paid">0</div><div class="stat-label">Active Sellers</div></div>
@@ -1794,8 +1803,9 @@
 <!-- REVIEW MODAL -->
 <div id="review-modal" class="modal-overlay">
  <div class="modal-box"><button class="modal-close" onclick="closeModal('review-modal')"><i class="fa-solid fa-times"></i></button>
- <h2 class="mb-1">Write a Review</h2>
+ <h2 class="mb-1" id="review-modal-title">Write a Review</h2>
  <p class="color-text3 text-sm mb-3" id="review-product-name"></p>
+ <input type="hidden" id="review-edit-id">
  <div class="review-star-row" id="star-row">
  <button class="star-btn" data-val="1" onclick="setRating(1)">&#9733;</button>
  <button class="star-btn" data-val="2" onclick="setRating(2)">&#9733;</button>
@@ -1815,7 +1825,10 @@
  <input type="file" id="review-images-input" accept="image/jpeg,image/png,image/webp" multiple style="display:none" onchange="previewReviewImages(this)">
  <div class="review-img-previews" id="review-img-previews"></div>
  </div>
- <button class="btn btn-primary btn-full" id="review-submit-btn" onclick="submitReview()"><i class="fa-solid fa-star"></i> Submit Review</button>
+ <div style="display:flex;gap:.55rem;flex-wrap:wrap">
+ <button class="btn btn-primary" style="flex:1" id="review-submit-btn" onclick="submitReview()"><i class="fa-solid fa-star"></i> Submit Review</button>
+ <button class="btn btn-outline hidden" type="button" id="review-cancel-edit-btn" onclick="resetReviewModalForm()"><i class="fa-solid fa-ban"></i> Cancel</button>
+ </div>
  </div>
 </div>
 
@@ -2000,6 +2013,7 @@
  <a href="#" class="dash-nav-item" id="ap-nav-disputes" onclick="switchAdminTab('disputes');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-gavel"></i> Disputes</a>
  <a href="#" class="dash-nav-item" id="ap-nav-withdrawals" onclick="switchAdminTab('withdrawals');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-coins"></i> Payouts</a>
  <a href="#" class="dash-nav-item" id="ap-nav-receipts" onclick="switchAdminTab('receipts');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-file-invoice"></i> Receipts</a>
+  <a href="#" class="dash-nav-item" id="ap-nav-online" onclick="switchAdminTab('online');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-signal"></i> Online Users</a>
   <a href="#" class="dash-nav-item" id="ap-nav-kyc" onclick="switchAdminTab('kyc');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-id-card"></i> KYC Verify</a>
   <a href="#" class="dash-nav-item" id="ap-nav-broadcast" onclick="switchAdminTab('broadcast');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-bullhorn"></i> Broadcast</a>
   <a href="#" class="dash-nav-item" id="ap-nav-upcoming" onclick="switchAdminTab('upcoming');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-calendar-plus"></i> Upcoming</a>
@@ -2024,6 +2038,7 @@
  <!-- Admin Tab Bar (mobile fallback) -->
  <div class="buyer-tabs-wrap admin-mobile-tabs" style="margin-bottom:1.5rem;overflow-x:auto;-webkit-overflow-scrolling:touch;display:none" id="ap-mobile-tabs">
  <button class="buyer-tab active" data-admin-tab="overview" onclick="switchAdminTab('overview')"><i class="fa-solid fa-chart-line"></i> Overview</button>
+ <button class="buyer-tab" data-admin-tab="online" onclick="switchAdminTab('online')"><i class="fa-solid fa-signal"></i> Online</button>
  <button class="buyer-tab" data-admin-tab="kyc" onclick="switchAdminTab('kyc')"><i class="fa-solid fa-id-card"></i> KYC</button>
  <button class="buyer-tab" data-admin-tab="accounts" onclick="switchAdminTab('accounts')"><i class="fa-solid fa-user-gear"></i> Accounts</button>
  <button class="buyer-tab" data-admin-tab="sellers" onclick="switchAdminTab('sellers')"><i class="fa-solid fa-store"></i> Sellers</button>
@@ -2047,6 +2062,7 @@
   </div>
   <div class="admin-command-actions">
   <button onclick="switchAdminTab('accounts')"><i class="fa-solid fa-user-check"></i><span>Accounts</span></button>
+  <button onclick="switchAdminTab('online')"><i class="fa-solid fa-signal"></i><span>Online</span></button>
   <button onclick="switchAdminTab('kyc')"><i class="fa-solid fa-id-card"></i><span>KYC</span></button>
   <button onclick="switchAdminTab('broadcast')"><i class="fa-solid fa-bullhorn"></i><span>Broadcast</span></button>
   <button onclick="showSellerDashboard().then(()=>showDash('advertise'))"><i class="fa-solid fa-rectangle-ad"></i><span>Free Admin Ads</span></button>
@@ -2055,6 +2071,8 @@
   <div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(148px,1fr));margin-bottom:1.25rem">
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-store" style="color:var(--green)"></i></div></div><div class="stat-value" id="adm-total-sellers">0</div><div class="stat-label">Total Sellers</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dbeafe"><i class="fa-solid fa-users" style="color:var(--blue)"></i></div></div><div class="stat-value" id="adm-total-buyers">0</div><div class="stat-label">Total Buyers</div></div>
+ <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-signal" style="color:var(--green)"></i></div></div><div class="stat-value color-green" id="adm-online-users">0</div><div class="stat-label">Online Users</div></div>
+ <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-id-card" style="color:var(--gold)"></i></div></div><div class="stat-value color-gold" id="adm-pending-kyc">0</div><div class="stat-label">Pending KYC</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#fef9c3"><i class="fa-solid fa-coins" style="color:var(--gold)"></i></div></div><div class="stat-value color-green" id="adm-revenue">&#8358;0</div><div class="stat-label">Total GMV</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#ede9fe"><i class="fa-solid fa-percent" style="color:var(--purple)"></i></div></div><div class="stat-value" style="color:var(--purple)" id="adm-commission-due">&#8358;0</div><div class="stat-label">Platform Earnings</div></div>
  <div class="stat-card"><div class="stat-top"><div class="stat-icon" style="background:#dcfce7"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i></div></div><div class="stat-value color-green" id="adm-paid">0</div><div class="stat-label">Active Sellers</div></div>
@@ -2140,7 +2158,27 @@
  <i class="fa-solid fa-check-circle" style="font-size:2.5rem;color:var(--green);display:block;margin-bottom:.75rem"></i>
  <p class="color-text3">No pending withdrawals</p>
  </div>
- </div>
+  </div>
+
+  <!-- ONLINE USERS TAB -->
+  <div id="adm-tab-online" class="adm-tab hidden">
+  <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
+  <div>
+  <h3 class="mb-1"><i class="fa-solid fa-signal color-green"></i> User Activity</h3>
+  <p class="text-xs color-text3">Online status is based on users seen in the last 5 minutes.</p>
+  </div>
+  <div class="flex gap-2 flex-wrap">
+  <span class="badge badge-green" id="adm-online-count">0 online</span>
+  <button class="btn btn-outline btn-sm" onclick="loadAdminOnlineUsers()"><i class="fa-solid fa-sync"></i> Refresh</button>
+  </div>
+  </div>
+  <div class="table-responsive">
+  <table class="table">
+  <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Logins</th><th>Last Login</th><th>Last Seen</th></tr></thead>
+  <tbody id="adm-online-list"><tr><td colspan="6" class="text-center text-sm color-text3 p-3">Loading user activity...</td></tr></tbody>
+  </table>
+  </div>
+  </div>
 
  <!-- KYC VERIFICATION TAB -->
  <div id="adm-tab-kyc" class="adm-tab hidden">
