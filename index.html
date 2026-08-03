@@ -352,14 +352,26 @@
  <div id="active-filters"></div>
  </div>
 
- <div class="section-header">
- <div>
- <h2 class="section-title" id="section-title-text">Latest Products</h2>
- <div class="section-meta">Live from BUYSELL - <span id="prod-count">0</span> items</div>
- </div>
- </div>
+  <div class="section-header">
+  <div>
+  <h2 class="section-title" id="section-title-text">Latest Products</h2>
+  <div class="section-meta">Curated marketplace listings with BUYSELL-managed delivery</div>
+  </div>
+  </div>
+  <div class="buyer-assurance-strip" aria-label="Buyer protections">
+  <div><i class="fa-solid fa-truck-fast"></i><span>BUYSELL collects from sellers</span></div>
+  <div><i class="fa-solid fa-location-crosshairs"></i><span>Admin-controlled tracking</span></div>
+  <div><i class="fa-solid fa-shield-halved"></i><span>Buyer protection support</span></div>
+  </div>
+  <section id="recently-viewed-section" class="recently-viewed-section hidden" aria-label="Recently viewed products">
+  <div class="mini-section-head">
+  <h3>Recently Viewed</h3>
+  <button class="btn btn-ghost btn-sm" onclick="clearRecentlyViewed()"><i class="fa-solid fa-xmark"></i> Clear</button>
+  </div>
+  <div id="recently-viewed-grid" class="recently-viewed-grid"></div>
+  </section>
 
- <div id="prods-skeleton" class="products-grid">
+  <div id="prods-skeleton" class="products-grid">
  <div class="skeleton" style="height:250px"></div><div class="skeleton" style="height:250px"></div>
  <div class="skeleton" style="height:250px"></div><div class="skeleton" style="height:250px"></div>
  </div>
@@ -403,7 +415,7 @@
  </div>
  <div class="card card-pad">
  <h3 class="mb-1" style="font-size:.95rem"><i class="fa-brands fa-whatsapp color-green"></i> WhatsApp Support</h3>
- <p class="text-xs color-text3 mb-3">Use WhatsApp for urgent checkout, delivery, or verification support.</p>
+ <p class="text-xs color-text3 mb-3">Use WhatsApp for urgent checkout, BUYSELL delivery, or verification support.</p>
  <a href="https://wa.me/2349061484256?text=Hello%20BUYSELL%20Support" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Open WhatsApp</a>
  </div>
  <div class="card card-pad">
@@ -457,7 +469,7 @@
  <div class="trust-grid">
  <div class="trust-card"><div class="trust-icon" style="background:#dcfce7"><i class="fa-solid fa-shield-alt" style="color:var(--green)"></i></div><h3>Buyer Protection</h3><p>Full refund guarantee</p></div>
  <div class="trust-card"><div class="trust-icon" style="background:#dbeafe"><i class="fa-solid fa-credit-card" style="color:#3b82f6"></i></div><h3>Paystack Secure</h3><p>Cards, bank, USSD & more</p></div>
- <div class="trust-card"><div class="trust-icon" style="background:#fef9c3"><i class="fa-solid fa-shipping-fast" style="color:var(--gold)"></i></div><h3>Fast Delivery</h3><p>Nationwide in 2 - 5 days</p></div>
+ <div class="trust-card"><div class="trust-icon" style="background:#fef9c3"><i class="fa-solid fa-truck-fast" style="color:var(--gold)"></i></div><h3>BUYSELL Delivery Team</h3><p>We collect from sellers and control tracking</p></div>
  <div class="trust-card"><div class="trust-icon" style="background:#f3e8ff"><i class="fa-solid fa-star" style="color:var(--purple)"></i></div><h3>Verified Reviews</h3><p>Real buyer ratings</p></div>
  </div>
  </div>
@@ -618,7 +630,7 @@
  <div class="form-group"><label class="form-label">Price (&#8358;) <span class="req">*</span></label><input type="number" id="p-price" class="form-input" required placeholder="500000" inputmode="numeric"></div>
  <div class="form-group"><label class="form-label">Original Price</label><input type="number" id="p-orig-price" class="form-input" placeholder="Crossed-out price" inputmode="numeric"></div>
  </div>
- <div class="form-group"><label class="form-label">Shipping Fee (&#8358;) <span class="req">*</span></label><input type="number" id="p-shipping-fee" class="form-input" required placeholder="e.g. 2500" inputmode="numeric" min="0"><div class="text-xs color-text3 mt-1">Set 0 only if you offer free delivery for this product.</div></div>
+ <div class="form-group"><label class="form-label">BUYSELL Delivery Fee (&#8358;) <span class="req">*</span></label><input type="number" id="p-shipping-fee" class="form-input" required placeholder="e.g. 2500" inputmode="numeric" min="0"><div class="text-xs color-text3 mt-1">Set the fee buyers pay for BUYSELL collection and delivery. Use 0 only for free delivery.</div></div>
  <div class="form-grid form-grid-2">
  <div class="form-group"><label class="form-label">Stock Quantity <span class="req">*</span></label><input type="number" id="p-stock" class="form-input" required placeholder="e.g. 10" inputmode="numeric" min="0"></div>
  <div class="form-group"><label class="form-label">Low Stock Alert</label><input type="number" id="p-low-stock" class="form-input" placeholder="Alert at (e.g. 3)" inputmode="numeric" min="1"></div>
@@ -1209,7 +1221,7 @@
  <option value="all">All Orders</option>
  <option value="pending">Pending</option>
  <option value="confirmed">Confirmed</option>
- <option value="shipped">Shipped</option>
+ <option value="shipped">Collected by BUYSELL</option>
  <option value="delivered">Delivered</option>
  <option value="cancelled">Cancelled</option>
  </select>
@@ -1637,7 +1649,7 @@
  <p style="margin-bottom:.85rem">All data is encrypted in transit (SSL/TLS) and stored securely via Supabase infrastructure. We never sell your personal information to third parties.</p>
 
  <h4 style="color:var(--text);margin-bottom:.4rem"><i class="fa-solid fa-share-nodes color-green"></i> Information Sharing</h4>
- <p style="margin-bottom:.85rem">Delivery details are shared only with sellers to fulfill orders. Service provider contact info (WhatsApp) is visible to potential clients on the platform. We may share data with law enforcement when legally required.</p>
+ <p style="margin-bottom:.85rem">Delivery details are handled by the BUYSELL delivery team. Sellers receive only the order handoff details needed for BUYSELL collection. Service provider contact info (WhatsApp) is visible to potential clients on the platform. We may share data with law enforcement when legally required.</p>
 
  <h4 style="color:var(--text);margin-bottom:.4rem"><i class="fa-solid fa-user-gear color-green"></i> Your Rights</h4>
  <p style="margin-bottom:.85rem">You may request deletion of your account and data at any time by contacting support@buysell.ng. Nigerian data protection regulations (NDPR) apply.</p>
@@ -1722,7 +1734,7 @@
  <div id="cart-summary" class="hidden">
  <div class="cart-summary-box">
  <div class="cart-total-row"><span class="font-600">Subtotal</span><span id="cart-subtotal"></span></div>
- <div class="cart-total-row"><span class="font-600">Shipping</span><span id="cart-shipping"></span></div>
+ <div class="cart-total-row"><span class="font-600">BUYSELL Delivery</span><span id="cart-shipping"></span></div>
  <div class="cart-total-row" style="font-size:1.05rem"><span class="font-bold">Total</span><span id="cart-total" class="font-bold color-green"></span></div>
  </div>
  <button class="btn btn-primary btn-full btn-lg mt-3" onclick="closeModal('cart-modal');startCheckout()"><i class="fa-solid fa-lock"></i> Secure Checkout</button>
@@ -1743,11 +1755,12 @@
  </div>
  <!-- Panel 1: Delivery -->
  <div class="checkout-panel active" id="co-p1">
- <h3 class="mb-3">Delivery Information</h3>
+ <h3 class="mb-1">BUYSELL Delivery Information</h3>
+ <p class="text-xs color-text3 mb-3">Our delivery team collects the product from the seller, checks handoff, and controls order tracking until delivery or pickup.</p>
  <div class="form-group"><label class="form-label">Full Name <span class="req">*</span></label><input type="text" id="co-name" class="form-input" required placeholder="Recipient name" autocomplete="name"></div>
  <div class="form-group"><label class="form-label">Phone Number <span class="req">*</span></label><input type="tel" id="co-phone" class="form-input" required placeholder="0801 234 5678" inputmode="tel" autocomplete="tel"></div>
 <div class="form-group">
- <label class="form-label">How should we get this to you?</label>
+ <label class="form-label">How should BUYSELL deliver this to you?</label>
  <div class="flex gap-2 mb-3">
  <button type="button" id="btn-home" class="btn btn-primary btn-sm flex-1" onclick="setDeliveryMode('home')">
  <i class="fa-solid fa-house"></i> Doorstep
@@ -1831,12 +1844,12 @@
  <div class="checkout-panel" id="co-p3">
  <div class="success-panel">
  <div class="success-icon-wrap"><i class="fa-solid fa-check"></i></div>
- <h2 class="mb-2">Order Placed! </h2>
- <p class="color-text3 mb-3">Your order is confirmed. The seller will be notified.</p>
+  <h2 class="mb-2">Order Placed!</h2>
+  <p class="color-text3 mb-3">Your order is confirmed. BUYSELL will collect the product from the seller and manage tracking for you.</p>
  <div class="success-order-box">
  <div class="flex justify-between mb-2"><span class="text-sm color-text3">Order ID</span><span class="font-bold text-sm" id="co-order-id"></span></div>
  <div class="flex justify-between mb-2"><span class="text-sm color-text3">Total Paid</span><span class="font-bold text-sm color-green" id="co-order-total"></span></div>
- <div class="flex justify-between"><span class="text-sm color-text3">Est. Delivery</span><span class="font-bold text-sm">2 - 5 business days</span></div>
+  <div class="flex justify-between"><span class="text-sm color-text3">Delivery Team</span><span class="font-bold text-sm">BUYSELL Managed</span></div>
  </div>
  <div class="flex gap-2 justify-center flex-wrap">
  <button class="btn btn-outline btn-sm" onclick="closeModal('checkout-modal');switchBuyerTab('orders')"><i class="fa-solid fa-receipt"></i> View Orders</button>
@@ -2033,8 +2046,8 @@
  <p class="text-xs color-text3">Sign up as a Seller and use your store tools for free.</p>
  </div>
  <div class="faq-item mb-2">
- <div class="font-600 text-sm mb-1"> How long is delivery?</div>
- <p class="text-xs color-text3">Nationwide delivery takes 2 - 5 business days. Use Safe Pickup hubs for same-day collection.</p>
+ <div class="font-600 text-sm mb-1">How does delivery work?</div>
+ <p class="text-xs color-text3">The BUYSELL delivery team collects from the seller, updates tracking, and delivers to your address or selected pickup hub.</p>
  </div>
  <div class="faq-item">
  <div class="font-600 text-sm mb-1">' How does the affiliate program work?</div>
@@ -2173,7 +2186,7 @@
  <option value="all">All Orders</option>
  <option value="pending">Pending</option>
  <option value="confirmed">Confirmed</option>
- <option value="shipped">Shipped</option>
+ <option value="shipped">Collected by BUYSELL</option>
  <option value="delivered">Delivered</option>
  <option value="cancelled">Cancelled</option>
  </select>
@@ -2766,9 +2779,9 @@
  <div id="tracking-update-panel" class="tracking-update-panel hidden">
  <div class="form-grid form-grid-2">
  <select id="tracking-status-input" class="form-select">
- <option value="confirmed">Confirmed</option>
- <option value="picked_up">Picked Up</option>
- <option value="in_transit">In Transit</option>
+ <option value="confirmed">BUYSELL Pickup Scheduled</option>
+ <option value="picked_up">Collected by BUYSELL</option>
+ <option value="in_transit">With BUYSELL Delivery</option>
  <option value="out_for_delivery">Out for Delivery</option>
  <option value="delivered">Delivered</option>
  </select>

@@ -1851,12 +1851,46 @@ function saveUpcomingProductInterest(productId, title = 'Upcoming product') {
 
 function renderProducts(prods) {
  document.getElementById('prods-skeleton').classList.add('hidden');
- document.getElementById('prod-count').textContent = prods.length;
  const grid = document.getElementById('prods-grid');
  if (!prods.length) { grid.classList.add('hidden'); document.getElementById('prods-empty').classList.remove('hidden'); return; }
  document.getElementById('prods-empty').classList.add('hidden');
  grid.classList.remove('hidden');
  grid.innerHTML = prods.map(p => prodCard(p)).join('');
+ renderRecentlyViewed();
+}
+
+function readRecentlyViewedIds() {
+ return readStoredJson('bs_recently_viewed', []);
+}
+
+function rememberRecentlyViewed(id) {
+ if (!id) return;
+ const next = [id, ...readRecentlyViewedIds().filter(item => item !== id)].slice(0, 12);
+ appStorage.setItem('bs_recently_viewed', JSON.stringify(next));
+ renderRecentlyViewed();
+}
+
+function clearRecentlyViewed() {
+ appStorage.removeItem('bs_recently_viewed');
+ renderRecentlyViewed();
+}
+
+function renderRecentlyViewed() {
+ const section = document.getElementById('recently-viewed-section');
+ const grid = document.getElementById('recently-viewed-grid');
+ if (!section || !grid || !products?.length) return;
+ const recentProducts = readRecentlyViewedIds()
+ .map(id => products.find(product => product.id === id))
+ .filter(Boolean)
+ .slice(0, 8);
+ section.classList.toggle('hidden', recentProducts.length === 0);
+ grid.innerHTML = recentProducts.map(product => {
+ const imageList = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
+ const thumb = product.image_url || imageList[0] || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=300&h=240&fit=crop';
+ const now = new Date();
+ const displayPrice = product.flash_price && product.flash_end && new Date(product.flash_end) > now ? product.flash_price : product.price;
+ return `<button class="recent-item" onclick="openProduct('${escAttr(product.id)}')"><img src="${escAttr(thumb)}" alt="${escAttr(product.name || 'Product')}" loading="lazy"><div><strong>${escHtml(product.name || 'Product')}</strong><span>${fmtN(displayPrice)}</span></div></button>`;
+ }).join('');
 }
 
 function prodCard(p) {
@@ -1930,7 +1964,7 @@ function prodCard(p) {
  <span class="prod-price">${fmtN(displayPrice)}</span>
  ${p.original_price > displayPrice ? `<span class="prod-orig">${fmtN(p.original_price)}</span>` : ''}
  </div>
- <div class="prod-shipping text-xs color-text3" style="margin-top:.15rem"><i class="fa-solid fa-truck"></i> Shipping: ${fmtN(itemShippingFee(p))}</div>
+  <div class="prod-shipping text-xs color-text3" style="margin-top:.15rem"><i class="fa-solid fa-truck-fast"></i> BUYSELL delivery: ${fmtN(itemShippingFee(p))}</div>
  <div class="prod-rating-row"><span class="stars sm">${stars}</span><span class="text-xs color-text3">${p.avg_rating ? p.avg_rating.toFixed(1) : '5.0'} (${p.review_count||0})</span></div>
  <div class="prod-location"><i class="fa-solid fa-map-marker-alt" style="font-size:.6rem"></i>${escHtml(p.location||'Nigeria')}</div>
   <a class="prod-store-link ${platformProduct ? 'platform-store-link' : ''}" onclick="event.stopPropagation();viewStorefront('${p.seller_id}')"><i class="fa-solid ${platformProduct ? 'fa-shield-halved' : 'fa-store'}" style="font-size:.6rem"></i>${escHtml(sellerLabel)}</a>
@@ -2163,7 +2197,8 @@ async function openProduct(id) {
  currentProd = products.find(p => p.id === id);
  if (!currentProd) return;
  const p = currentProd;
- 
+ rememberRecentlyViewed(id);
+  
  // --- FLASH SALE LOGIC ---
  const now = new Date();
  const isFlashActive = p.flash_price && p.flash_end && new Date(p.flash_end) > now;
@@ -2282,7 +2317,7 @@ async function openProduct(id) {
  document.getElementById('modal-condition').textContent = p.condition || 'New';
  document.getElementById('modal-location').textContent = p.location || 'Nigeria';
  const modalShippingEl = document.getElementById('modal-shipping-fee');
- if (modalShippingEl) modalShippingEl.textContent = `Shipping: ${fmtN(itemShippingFee(p))}`;
+ if (modalShippingEl) modalShippingEl.textContent = `BUYSELL delivery: ${fmtN(itemShippingFee(p))}`;
  
  const stock = p.stock_quantity;
  const sb = document.getElementById('modal-stock-badge');
@@ -2576,7 +2611,7 @@ function renderCartItems() {
  <div style="flex:1;min-width:0">
  <div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px">${escHtml(c.name)}</div>
  <div class="color-green font-bold">${fmtN(c.price)}</div>
- <div class="text-xs color-text3">Store shipping: ${fmtN(itemShippingFee(c))}</div>
+ <div class="text-xs color-text3">BUYSELL delivery fee: ${fmtN(itemShippingFee(c))}</div>
  <div class="flex items-center gap-2 mt-1">
  <button onclick="changeCartQty('${c.id}',-1)" class="btn btn-outline btn-sm" style="padding:.2rem .5rem">-</button>
  <span class="text-sm font-bold">${c.qty||1}</span>
@@ -2727,7 +2762,7 @@ async function startCheckout() {
  document.getElementById('co-items').innerHTML = cart.map(c=>`
  <div class="order-item">
  <img src="${c.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=100'}" alt="" loading="lazy">
- <div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(c.name)}</div><div class="color-text3 text-xs">Qty: ${c.qty||1} - Store shipping: ${fmtN(itemShippingFee(c))}</div></div>
+ <div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(c.name)}</div><div class="color-text3 text-xs">Qty: ${c.qty||1} - BUYSELL delivery fee: ${fmtN(itemShippingFee(c))}</div></div>
  <div class="font-bold text-sm">${fmtN(c.price*(c.qty||1))}</div>
  </div>`).join('');
  
@@ -3134,7 +3169,7 @@ async function submitTransferOrder() {
  }
  const sellerProfile = cart[0]?.profiles || {};
  if (!sellerProfile.bank_name || !sellerProfile.account_number || !sellerProfile.account_name) {
- toast('Bank transfer unavailable', 'This seller has not added bank details. Please use Paystack checkout.', 'warn');
+ toast('Bank transfer unavailable', 'Please use Paystack checkout so BUYSELL can manage payment and delivery tracking.', 'warn');
  selectCheckoutPaymentMethod('paystack');
  return;
  }
@@ -3558,13 +3593,14 @@ async function loadBuyerOrders() {
  <div class="text-xs color-text3">${fmtDate(o.created_at)}${paymentMethod}</div>
  </div>
  <div class="buyer-order-total">
- <span class="badge ${statusColors[o.status]||'badge-gray'}">${escHtml(o.status || 'pending')}</span>
+  <span class="badge ${statusColors[o.status]||'badge-gray'}">${escHtml(orderStatusLabel(o.status || 'pending'))}</span>
  <strong>${fmtN(o.total_amount)}</strong>
  </div>
  </div>
  <div class="buyer-order-items">${itemHtml}</div>
  <div class="buyer-order-meta">
- <span><i class="fa-solid fa-location-dot"></i> ${escHtml(o.delivery_address || 'Delivery address not saved')}</span>
+  <span><i class="fa-solid fa-truck-fast"></i> BUYSELL delivery team handles collection, tracking, and delivery.</span>
+  <span><i class="fa-solid fa-location-dot"></i> ${escHtml(o.delivery_address || 'Delivery address not saved')}</span>
  </div>
  <div class="buyer-order-actions">
  ${o.seller_id ? `<button class="btn btn-outline btn-sm" onclick="openConversation('${escAttr(o.seller_id)}','Seller','${escAttr(productId)}')"><i class="fa-solid fa-message"></i> Message Seller</button>` : ''}
@@ -3735,7 +3771,7 @@ async function loadSellerProds() {
  <div class="prod-list-info">
  <div class="prod-list-name">${escHtml(p.name)}</div>
  <div class="prod-list-price">${fmtN(p.price)}</div>
- <div class="text-xs color-text3">Shipping: ${fmtN(itemShippingFee(p))}</div>
+ <div class="text-xs color-text3">BUYSELL delivery fee: ${fmtN(itemShippingFee(p))}</div>
  <div class="prod-list-meta">
  <span class="badge badge-${p.status==='active'?'green':'gray'}">${p.status}</span>
  <span class="stock-pill ${p.stock_quantity===0?'stock-out':p.stock_quantity<=5?'stock-low':'stock-high'}">Stock: ${p.stock_quantity??'N/A'}</span>
@@ -3782,8 +3818,8 @@ if (nameVal.length > 300) {
 }
  if (isNaN(priceVal) || priceVal <= 0) { toast('Invalid price','Enter a price greater than 0','warn'); return; }
  if (priceVal > 100000000) { toast('Price too high','Maximum price is \u20A6100,000,000','warn'); return; }
- if (isNaN(shippingFeeVal) || shippingFeeVal < 0) { toast('Invalid shipping fee','Enter 0 or a valid shipping fee','warn'); return; }
- if (shippingFeeVal > 10000000) { toast('Shipping fee too high','Maximum shipping fee is \u20A610,000,000','warn'); return; }
+ if (isNaN(shippingFeeVal) || shippingFeeVal < 0) { toast('Invalid delivery fee','Enter 0 or a valid BUYSELL delivery fee','warn'); return; }
+ if (shippingFeeVal > 10000000) { toast('Delivery fee too high','Maximum delivery fee is \u20A610,000,000','warn'); return; }
  if (stockVal < 0 || stockVal > 100000) { toast('Invalid stock','Stock must be between 0 and 100,000','warn'); return; }
  if (descVal.length > 2000) { toast('Description too long','Max 2,000 characters','warn'); return; }
  if (!VALID_CATS.includes(catVal)) { toast('Invalid category','Please select a valid category','warn'); return; }
@@ -3975,13 +4011,14 @@ async function loadSellerOrders() {
  <div class="card card-pad mb-3">
  <div class="flex justify-between items-start flex-wrap gap-2 mb-2">
  <div><div class="font-bold">${o.id}</div><div class="text-xs color-text3">${fmtDate(o.created_at)}</div></div>
- <span class="badge ${statusColors[o.status]||'badge-gray'}">${o.status}</span>
+  <span class="badge ${statusColors[o.status]||'badge-gray'}">${escHtml(orderStatusLabel(o.status))}</span>
  </div>
  <div class="mb-2">${(o.items||[]).map(i=>`<span class="text-sm">${escHtml(i.name)} x${i.qty}</span>`).join(', ')}</div>
  <div class="flex justify-between items-center flex-wrap gap-2">
  <div>
  <div class="text-sm"><i class="fa-solid fa-user color-text3"></i> ${escHtml(o.delivery_name||'Buyer')}</div>
- <div class="text-xs color-text3"><i class="fa-solid fa-map-marker-alt"></i> ${escHtml(o.delivery_address||'')}</div>
+  <div class="text-xs color-text3"><i class="fa-solid fa-truck-fast"></i> BUYSELL delivery team will collect from you and manage tracking.</div>
+  <div class="text-xs color-text3"><i class="fa-solid fa-map-marker-alt"></i> Buyer delivery area: ${escHtml(o.delivery_address||'')}</div>
  </div>
  <div class="text-right">
  <div class="font-bold color-green">${fmtN(o.total_amount)}</div>
@@ -3991,9 +4028,9 @@ async function loadSellerOrders() {
  ${o.proof_url ? `<div class="mt-2"><a href="${o.proof_url}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-image"></i> View Proof</a></div>` : ''}
  <div class="flex gap-2 mt-3 flex-wrap">
  ${o.buyer_id ? `<button onclick="openConversation('${escAttr(o.buyer_id)}','Buyer','${escAttr(productId)}')" class="btn btn-outline btn-sm"><i class="fa-solid fa-message"></i> Message Buyer</button>` : ''}
- ${o.status==='pending'?`<button onclick="updateOrderStatus('${o.id}','confirmed')" class="btn btn-primary btn-sm">Confirm Order</button>`:''}
- ${o.status==='confirmed'?`<button onclick="updateOrderStatus('${o.id}','shipped')" class="btn btn-sm" style="background:#ede9fe;color:#6d28d9">Mark Shipped</button>`:''}
- ${o.status==='shipped'?`<button onclick="updateOrderStatus('${o.id}','delivered')" class="btn btn-sm" style="background:#dcfce7;color:#15803d">Mark Delivered</button>`:''}
+  ${o.status==='pending'?`<span class="badge badge-gold"><i class="fa-solid fa-box"></i> Prepare for BUYSELL pickup</span>`:''}
+  ${o.status==='confirmed'?`<span class="badge badge-blue"><i class="fa-solid fa-truck-fast"></i> Pickup scheduled by BUYSELL</span>`:''}
+  ${['shipped','in_transit','picked_up'].includes(String(o.status))?`<span class="badge badge-purple"><i class="fa-solid fa-route"></i> With BUYSELL delivery</span>`:''}
  
  </div>
  </div>`;
@@ -4013,7 +4050,22 @@ async function updateOrderStatus(id, status) {
 let activeTrackingOrderId = null;
 
 function trackingLabel(status) {
- return String(status || 'pending').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+ const labels = {
+  pending: 'Payment Review',
+  confirmed: 'BUYSELL Pickup Scheduled',
+  picked_up: 'Collected by BUYSELL',
+  shipped: 'Collected by BUYSELL',
+  in_transit: 'With BUYSELL Delivery',
+  out_for_delivery: 'Out for Delivery',
+  delivered: 'Delivered',
+  cancelled: 'Cancelled',
+  refunded: 'Refunded'
+ };
+ return labels[String(status || 'pending').toLowerCase()] || String(status || 'pending').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function orderStatusLabel(status) {
+ return trackingLabel(status);
 }
 
 async function openOrderTracking(orderId) {
@@ -4023,7 +4075,7 @@ async function openOrderTracking(orderId) {
  document.getElementById('tracking-timeline').innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
  document.getElementById('tracking-status-strip').innerHTML = '';
  const updatePanel = document.getElementById('tracking-update-panel');
- updatePanel?.classList.toggle('hidden', currentRole !== 'seller' && currentRole !== 'admin');
+ updatePanel?.classList.toggle('hidden', !isAdmin());
  showModal('tracking-modal');
 
  try {
@@ -5592,14 +5644,14 @@ async function loadAdminOrders() {
  </div>
  <div class="text-right">
  <div class="font-bold color-green">${fmtN(o.total_amount)}</div>
- <span class="badge ${sc[o.status]||'badge-gray'}">${o.status}</span>
+  <span class="badge ${sc[o.status]||'badge-gray'}">${escHtml(orderStatusLabel(o.status))}</span>
  </div>
  </div>
  <div class="text-xs color-text3 mb-2"><i class="fa-solid fa-user"></i> ${escHtml(o.delivery_name||' - ')} &nbsp;|&nbsp; <i class="fa-solid fa-map-marker-alt"></i> ${escHtml((o.delivery_address||'').substr(0,50))}</div>
  <div class="flex gap-2 flex-wrap">
- ${o.status==='pending' ? `<button onclick="adminUpdateOrder('${o.id}','confirmed')" class="btn btn-primary btn-sm">Confirm</button>` : ''}
- ${o.status==='confirmed' ? `<button onclick="adminUpdateOrder('${o.id}','shipped')" class="btn btn-sm" style="background:#ede9fe;color:var(--purple)">Mark Shipped</button>` : ''}
- ${o.status==='shipped' ? `<button onclick="adminUpdateOrder('${o.id}','delivered')" class="btn btn-sm" style="background:#dcfce7;color:#15803d">Mark Delivered</button>` : ''}
+  ${o.status==='pending' ? `<button onclick="adminUpdateOrder('${o.id}','confirmed')" class="btn btn-primary btn-sm">Schedule Pickup</button>` : ''}
+  ${o.status==='confirmed' ? `<button onclick="adminUpdateOrder('${o.id}','shipped')" class="btn btn-sm" style="background:#ede9fe;color:var(--purple)">Collected by BUYSELL</button>` : ''}
+  ${o.status==='shipped' ? `<button onclick="adminUpdateOrder('${o.id}','delivered')" class="btn btn-sm" style="background:#dcfce7;color:#15803d">Mark Delivered</button>` : ''}
  ${!['cancelled','refunded'].includes(o.status) ? `<button onclick="adminUpdateOrder('${o.id}','cancelled')" class="btn btn-outline btn-sm">Cancel</button>` : ''}
  ${o.proof_url ? `<a href="${o.proof_url}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-image"></i> Proof</a>` : ''}
  </div>
@@ -5611,7 +5663,7 @@ async function adminUpdateOrder(id, status) {
   const { data: oldOrder } = await db.from('orders').select('status').eq('id', id).maybeSingle();
   await callEdge('admin-action', { action: 'update_order', target_id: id, data: { status } });
   if (status === 'confirmed') notifyOrderIfConfirmed(id, oldOrder?.status || 'pending');
-  toast('Order updated to ' + status, '', 'success');
+  toast('Order updated to ' + orderStatusLabel(status), '', 'success');
   loadAdminOrders();
   } catch(e) { toast('Error', e.message, 'error'); }
 }
@@ -6228,7 +6280,7 @@ function getChatSystemPrompt(context) {
 function getChatFallback(message, context = {}) {
  const text = String(message || '').toLowerCase();
  if (text.includes('pay') || text.includes('payment') || text.includes('paystack')) {
- return 'You can pay with Paystack at checkout for card, bank, USSD, and other supported options. Bank transfer is also available when the seller has added bank details.';
+ return 'You can pay with Paystack at checkout for card, bank, USSD, and other supported options. BUYSELL manages the order handoff and delivery tracking after payment.';
  }
  if (text.includes('order') || text.includes('track')) {
  return 'Open My Orders to view your order status. If you just paid with Paystack, wait for verification to finish, then your confirmed order will appear there.';
