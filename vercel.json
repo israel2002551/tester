@@ -1,6 +1,48 @@
 {
   "cleanUrls": true,
   "trailingSlash": false,
+  "redirects": [
+    {
+      "source": "/category-trending",
+      "destination": "/category/trending",
+      "permanent": true
+    },
+    {
+      "source": "/category-phones",
+      "destination": "/category/phones",
+      "permanent": true
+    },
+    {
+      "source": "/category-fashion",
+      "destination": "/category/fashion",
+      "permanent": true
+    },
+    {
+      "source": "/category-home",
+      "destination": "/category/home",
+      "permanent": true
+    },
+    {
+      "source": "/category-electronics",
+      "destination": "/category/electronics",
+      "permanent": true
+    },
+    {
+      "source": "/category-beauty",
+      "destination": "/category/beauty",
+      "permanent": true
+    },
+    {
+      "source": "/category-sports",
+      "destination": "/category/sports",
+      "permanent": true
+    },
+    {
+      "source": "/category-dropship",
+      "destination": "/category/dropship",
+      "permanent": true
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
@@ -79,38 +121,6 @@
     {
       "source": "/marketing",
       "destination": "/marketing.html"
-    },
-    {
-      "source": "/category-trending",
-      "destination": "/category-trending.html"
-    },
-    {
-      "source": "/category-phones",
-      "destination": "/category-phones.html"
-    },
-    {
-      "source": "/category-fashion",
-      "destination": "/category-fashion.html"
-    },
-    {
-      "source": "/category-home",
-      "destination": "/category-home.html"
-    },
-    {
-      "source": "/category-electronics",
-      "destination": "/category-electronics.html"
-    },
-    {
-      "source": "/category-beauty",
-      "destination": "/category-beauty.html"
-    },
-    {
-      "source": "/category-sports",
-      "destination": "/category-sports.html"
-    },
-    {
-      "source": "/category-dropship",
-      "destination": "/category-dropship.html"
     },
     {
       "source": "/category/trending",

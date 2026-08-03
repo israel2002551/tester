@@ -12,16 +12,16 @@ const CATEGORY_PAGE_CONFIG = {
 };
 
 const CATEGORY_PAGE_LINKS = {
-  all: 'products.html',
-  trending: 'category-trending.html',
-  electronics: 'category-electronics.html',
-  phones: 'category-phones.html',
-  fashion: 'category-fashion.html',
-  home: 'category-home.html',
-  beauty: 'category-beauty.html',
-  sports: 'category-sports.html',
-  dropship: 'category-dropship.html',
-  upcoming: 'upcoming.html',
+  all: '/products',
+  trending: '/category/trending',
+  electronics: '/category/electronics',
+  phones: '/category/phones',
+  fashion: '/category/fashion',
+  home: '/category/home',
+  beauty: '/category/beauty',
+  sports: '/category/sports',
+  dropship: '/category/dropship',
+  upcoming: '/upcoming',
 };
 
 let categoryProducts = [];
