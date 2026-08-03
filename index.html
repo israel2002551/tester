@@ -341,16 +341,23 @@
  <!-- Shop tab -->
  <div id="buyer-shop-tab">
  <!-- Filter bar -->
- <div class="filter-bar">
- <button class="filter-chip" onclick="showModal('filters-modal')"><i class="fa-solid fa-sliders-h"></i> Filters <span class="filter-count" id="filter-count" style="display:none">0</span></button>
- <select id="sort-select" class="form-select" style="width:auto;padding:.38rem .72rem;font-size:.78rem" onchange="sortProds()">
- <option value="newest">Newest</option>
- <option value="price-asc">Price '</option>
- <option value="price-desc">Price "</option>
- <option value="rating">Top Rated</option>
- </select>
- <div id="active-filters"></div>
- </div>
+  <div class="filter-bar">
+  <button class="filter-chip" onclick="showModal('filters-modal')"><i class="fa-solid fa-sliders-h"></i> Filters <span class="filter-count" id="filter-count" style="display:none">0</span></button>
+  <select id="sort-select" class="form-select" style="width:auto;padding:.38rem .72rem;font-size:.78rem" onchange="sortProds()">
+  <option value="newest">Newest</option>
+  <option value="price-asc">Price: Low to High</option>
+  <option value="price-desc">Price: High to Low</option>
+  <option value="rating">Top Rated</option>
+  <option value="delivery">Lowest Delivery Fee</option>
+  </select>
+  <div id="active-filters"></div>
+  </div>
+  <div class="quick-filter-row" aria-label="Quick product filters">
+  <button class="quick-filter-chip" data-quick-filter="verified" onclick="toggleQuickFilter('verified')"><i class="fa-solid fa-shield-check"></i> Trusted stores</button>
+  <button class="quick-filter-chip" data-quick-filter="freeDelivery" onclick="toggleQuickFilter('freeDelivery')"><i class="fa-solid fa-truck-fast"></i> Free delivery</button>
+  <button class="quick-filter-chip" data-quick-filter="video" onclick="toggleQuickFilter('video')"><i class="fa-solid fa-video"></i> Video products</button>
+  <button class="quick-filter-chip" data-quick-filter="inStock" onclick="toggleQuickFilter('inStock')"><i class="fa-solid fa-boxes-stacked"></i> In stock</button>
+  </div>
 
   <div class="section-header">
   <div>
@@ -369,6 +376,13 @@
   <button class="btn btn-ghost btn-sm" onclick="clearRecentlyViewed()"><i class="fa-solid fa-xmark"></i> Clear</button>
   </div>
   <div id="recently-viewed-grid" class="recently-viewed-grid"></div>
+  </section>
+  <section id="buyer-deals-section" class="recently-viewed-section hidden" aria-label="Deals under ten thousand naira">
+  <div class="mini-section-head">
+  <h3>Deals Under &#8358;10,000</h3>
+  <button class="btn btn-ghost btn-sm" onclick="applyDealFilter()"><i class="fa-solid fa-filter"></i> View All</button>
+  </div>
+  <div id="buyer-deals-grid" class="recently-viewed-grid"></div>
   </section>
 
   <div id="prods-skeleton" class="products-grid">

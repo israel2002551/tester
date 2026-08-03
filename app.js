@@ -1857,6 +1857,7 @@ function renderProducts(prods) {
  grid.classList.remove('hidden');
  grid.innerHTML = prods.map(p => prodCard(p)).join('');
  renderRecentlyViewed();
+ renderBuyerDealShelf();
 }
 
 function readRecentlyViewedIds() {
@@ -1884,13 +1885,27 @@ function renderRecentlyViewed() {
  .filter(Boolean)
  .slice(0, 8);
  section.classList.toggle('hidden', recentProducts.length === 0);
- grid.innerHTML = recentProducts.map(product => {
+ grid.innerHTML = recentProducts.map(product => compactProductButton(product)).join('');
+}
+
+function renderBuyerDealShelf() {
+ const section = document.getElementById('buyer-deals-section');
+ const grid = document.getElementById('buyer-deals-grid');
+ if (!section || !grid || !products?.length) return;
+ const deals = products
+ .filter(product => Number(product.price || 0) > 0 && Number(product.price || 0) <= 10000 && Number(product.stock_quantity ?? 1) !== 0)
+ .sort((a, b) => Number(a.price || 0) - Number(b.price || 0))
+ .slice(0, 10);
+ section.classList.toggle('hidden', deals.length === 0);
+ grid.innerHTML = deals.map(product => compactProductButton(product)).join('');
+}
+
+function compactProductButton(product) {
  const imageList = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
  const thumb = product.image_url || imageList[0] || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=300&h=240&fit=crop';
  const now = new Date();
  const displayPrice = product.flash_price && product.flash_end && new Date(product.flash_end) > now ? product.flash_price : product.price;
  return `<button class="recent-item" onclick="openProduct('${escAttr(product.id)}')"><img src="${escAttr(thumb)}" alt="${escAttr(product.name || 'Product')}" loading="lazy"><div><strong>${escHtml(product.name || 'Product')}</strong><span>${fmtN(displayPrice)}</span></div></button>`;
- }).join('');
 }
 
 function prodCard(p) {
@@ -1925,6 +1940,7 @@ function prodCard(p) {
 
  const stockPct = p.stock_quantity !== undefined ? p.stock_quantity : 999;
  const isSoldOut = stockPct === 0;
+ const stockLabel = isSoldOut ? 'Sold out' : stockPct <= 5 ? `Only ${stockPct} left` : 'In stock';
 
  const imageCount = imageList.length > 0 ? imageList.length : (p.image_url ? 1 : 0);
  const videoCount = Array.isArray(p.videos) ? p.videos.length : (p.video_url || p.has_video ? 1 : 0);
@@ -1965,6 +1981,7 @@ function prodCard(p) {
  ${p.original_price > displayPrice ? `<span class="prod-orig">${fmtN(p.original_price)}</span>` : ''}
  </div>
   <div class="prod-shipping text-xs color-text3" style="margin-top:.15rem"><i class="fa-solid fa-truck-fast"></i> BUYSELL delivery: ${fmtN(itemShippingFee(p))}</div>
+  <div class="prod-trust-line"><span><i class="fa-solid fa-shield-halved"></i> BUYSELL tracking</span><span>${escHtml(stockLabel)}</span></div>
  <div class="prod-rating-row"><span class="stars sm">${stars}</span><span class="text-xs color-text3">${p.avg_rating ? p.avg_rating.toFixed(1) : '5.0'} (${p.review_count||0})</span></div>
  <div class="prod-location"><i class="fa-solid fa-map-marker-alt" style="font-size:.6rem"></i>${escHtml(p.location||'Nigeria')}</div>
   <a class="prod-store-link ${platformProduct ? 'platform-store-link' : ''}" onclick="event.stopPropagation();viewStorefront('${p.seller_id}')"><i class="fa-solid ${platformProduct ? 'fa-shield-halved' : 'fa-store'}" style="font-size:.6rem"></i>${escHtml(sellerLabel)}</a>
@@ -2108,29 +2125,65 @@ function applyFilters() {
  renderActiveFilters();
 }
 
+function toggleQuickFilter(key) {
+ if (activeFilters[key]) delete activeFilters[key];
+ else activeFilters[key] = true;
+ syncQuickFilterChips();
+ applyCurrentFilters();
+ renderActiveFilters();
+ updateFilterCount();
+}
+
+function applyDealFilter() {
+ activeFilters.priceMax = 10000;
+ syncQuickFilterChips();
+ applyCurrentFilters();
+ renderActiveFilters();
+ updateFilterCount();
+ document.querySelector('.products-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function updateFilterCount() {
+ const count = Object.keys(activeFilters).filter(k=>!['category','search'].includes(k)).length;
+ const fc = document.getElementById('filter-count');
+ if (!fc) return;
+ fc.textContent = count;
+ fc.style.display = count ? 'flex' : 'none';
+}
+
+function syncQuickFilterChips() {
+ document.querySelectorAll('[data-quick-filter]').forEach(btn => {
+  btn.classList.toggle('active', !!activeFilters[btn.dataset.quickFilter]);
+ });
+}
+
 function renderActiveFilters() {
  const container = document.getElementById('active-filters');
  const pills = [];
  if (activeFilters.priceMin||activeFilters.priceMax) pills.push({key:'price',label:`${fmtN(activeFilters.priceMin||0)} - ${activeFilters.priceMax ? fmtN(activeFilters.priceMax) : 'Any'}`});
  if (activeFilters.minRating) pills.push({key:'minRating',label:`${activeFilters.minRating}+ ${starText(1)}`});
  if (activeFilters.condition) pills.push({key:'condition',label:activeFilters.condition});
+ if (activeFilters.verified) pills.push({key:'verified',label:'Trusted stores'});
+ if (activeFilters.freeDelivery) pills.push({key:'freeDelivery',label:'Free delivery'});
+ if (activeFilters.video) pills.push({key:'video',label:'Video products'});
+ if (activeFilters.inStock) pills.push({key:'inStock',label:'In stock'});
  container.innerHTML = pills.map(p => `<span class="active-filter-pill">${p.label}<button onclick="removeFilter('${p.key}')"><i class="fa-solid fa-times"></i></button></span>`).join('');
 }
 
 function removeFilter(key) {
  if(key==='price'){delete activeFilters.priceMin;delete activeFilters.priceMax;}
  else delete activeFilters[key];
+ syncQuickFilterChips();
  applyCurrentFilters();
  renderActiveFilters();
- const count = Object.keys(activeFilters).filter(k=>!['category','search'].includes(k)).length;
- const fc = document.getElementById('filter-count');
- fc.textContent = count; fc.style.display = count ? 'flex' : 'none';
+ updateFilterCount();
 }
 
 function clearFilters() {
  activeFilters = {};
  document.querySelectorAll('.cat-chip').forEach(c => c.classList.toggle('active', c.dataset.cat === 'all'));
- document.getElementById('filter-count').style.display = 'none';
+ syncQuickFilterChips();
+ updateFilterCount();
  document.getElementById('active-filters').innerHTML = '';
  applyCurrentFilters();
 }
@@ -2164,6 +2217,11 @@ function applyCurrentFilters() {
  if (activeFilters.priceMin) result = result.filter(p => p.price >= activeFilters.priceMin);
  if (activeFilters.priceMax) result = result.filter(p => p.price <= activeFilters.priceMax);
  if (activeFilters.minRating) result = result.filter(p => (p.avg_rating || 5) >= activeFilters.minRating);
+ if (activeFilters.condition) result = result.filter(p => String(p.condition || '').toLowerCase() === String(activeFilters.condition).toLowerCase());
+ if (activeFilters.verified) result = result.filter(p => p.seller_verified || isPlatformProduct(p) || p.profiles?.seller_verified || p.profiles?.kyc_status === 'approved' || p.profiles?.verification_status === 'verified');
+ if (activeFilters.freeDelivery) result = result.filter(p => itemShippingFee(p) === 0);
+ if (activeFilters.video) result = result.filter(p => p.has_video || p.video_url || (Array.isArray(p.videos) && p.videos.length));
+ if (activeFilters.inStock) result = result.filter(p => Number(p.stock_quantity ?? 1) !== 0);
 
  filteredProducts = result;
  sortProds();
@@ -2174,6 +2232,7 @@ function sortProds() {
  if (v==='price-asc') filteredProducts.sort((a,b)=>a.price-b.price);
  else if (v==='price-desc') filteredProducts.sort((a,b)=>b.price-a.price);
  else if (v==='rating') filteredProducts.sort((a,b)=>(b.avg_rating||5)-(a.avg_rating||5));
+ else if (v==='delivery') filteredProducts.sort((a,b)=>itemShippingFee(a)-itemShippingFee(b));
  else filteredProducts.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
  renderProducts(filteredProducts);
 }
