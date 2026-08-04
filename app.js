@@ -5258,7 +5258,10 @@ function switchAdminTab(tab) {
  if (tab === 'disputes') loadAdminDisputes();
  if (tab === 'withdrawals') loadAdminWithdrawals();
  if (tab === 'receipts') loadAdminReceipts();
- if (tab === 'broadcast') loadBroadcastHistory();
+ if (tab === 'broadcast') {
+  loadBroadcastHistory();
+  refreshBroadcastProductPreview();
+ }
  if (tab === 'ai') adminAiHistory = [];
  if (tab === 'accounts') loadAdminAccounts();
  if (tab === 'kyc') loadAdminKyc();
@@ -5898,18 +5901,125 @@ async function adminRejectWithdrawal(id) {
 }
 
 /* -- BROADCAST -- */
+function getProductThumbnail(product = {}) {
+ const imageList = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
+ return product.image_url || imageList[0] || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=320&fit=crop';
+}
+
+function productPublicLink(productId) {
+ return `${PUBLIC_SITE_URL}/?product=${encodeURIComponent(productId)}`;
+}
+
+function shortProductDescription(product = {}, max = 130) {
+ const raw = String(product.description || product.category || 'Tap to view details, price, photos, and delivery options.').replace(/\s+/g, ' ').trim();
+ return raw.length > max ? `${raw.slice(0, max - 1).trim()}...` : raw;
+}
+
+async function loadRecentBroadcastProducts(limit = 4) {
+ const { data, error } = await runSelectWithColumnFallback('products', [
+  'id','name','description','price','category','image_url','images','status','created_at','stock_quantity'
+ ], query => query
+  .eq('status', 'active')
+  .order('created_at', { ascending: false })
+  .limit(limit));
+ if (error) throw error;
+ return (data || []).filter(product => Number(product.stock_quantity ?? 1) !== 0).slice(0, limit);
+}
+
+function buildProductBroadcastBody(intro, productsForBroadcast) {
+ const lines = productsForBroadcast.map((product, index) => {
+  return `${index + 1}. ${product.name || 'Product'} - ${fmtN(product.price || 0)}
+${shortProductDescription(product, 160)}
+${productPublicLink(product.id)}`;
+ });
+ return [intro || 'Fresh products are now available on BUYSELL.', '', 'Recent products:', ...lines].join('\n');
+}
+
+function serializeBroadcastProducts(productsForBroadcast) {
+ return productsForBroadcast.map(product => ({
+  id: product.id,
+  name: product.name || 'Product',
+  description: shortProductDescription(product, 170),
+  price: Number(product.price || 0),
+  image_url: getProductThumbnail(product),
+  url: productPublicLink(product.id),
+ }));
+}
+
+function renderBroadcastProductPreview(productsForBroadcast = []) {
+ const html = productsForBroadcast.length
+ ? productsForBroadcast.map(product => broadcastProductCard(product)).join('')
+ : '<p class="text-xs color-text3">No active recent products found yet.</p>';
+ document.querySelectorAll('#bc-product-preview').forEach(el => {
+  el.innerHTML = html;
+ });
+}
+
+async function refreshBroadcastProductPreview() {
+ document.querySelectorAll('#bc-product-preview').forEach(el => {
+  el.innerHTML = '<div class="skeleton" style="height:92px;border-radius:12px"></div>';
+ });
+ try {
+  renderBroadcastProductPreview(serializeBroadcastProducts(await loadRecentBroadcastProducts(4)));
+ } catch (error) {
+  document.querySelectorAll('#bc-product-preview').forEach(el => {
+   el.innerHTML = `<p class="text-xs color-danger">Could not load recent products: ${escHtml(error.message || 'Unknown error')}</p>`;
+  });
+ }
+}
+
+function broadcastProductCard(product = {}) {
+ const image = product.image_url || getProductThumbnail(product);
+ const url = product.url || productPublicLink(product.id);
+ return `<a class="broadcast-product-card" href="${escAttr(url)}" onclick="event.preventDefault();openProduct('${escAttr(product.id)}')">
+ <img src="${escAttr(image)}" alt="${escAttr(product.name || 'Product')}" loading="lazy">
+ <div>
+ <strong>${escHtml(product.name || 'Product')}</strong>
+ <span class="broadcast-product-price">${fmtN(product.price || 0)}</span>
+ <p>${escHtml(product.description || shortProductDescription(product))}</p>
+ </div>
+ </a>`;
+}
+
+function extractBroadcastProductIds(body = '') {
+ const ids = new Set();
+ String(body || '').replace(/[?&]product=([a-zA-Z0-9_-]+)/g, (_, id) => {
+  ids.add(id);
+  return '';
+ });
+ return [...ids].slice(0, 4);
+}
+
+async function loadProductsByIds(ids = []) {
+ if (!ids.length) return [];
+ const { data, error } = await runSelectWithColumnFallback('products', [
+  'id','name','description','price','category','image_url','images','status','created_at','stock_quantity'
+ ], query => query.in('id', ids).limit(ids.length));
+ if (error) throw error;
+ const byId = new Map((data || []).map(product => [product.id, product]));
+ return ids.map(id => byId.get(id)).filter(Boolean);
+}
+
+function broadcastBodyIntro(body = '') {
+ return String(body || '').split('Recent products:')[0].trim();
+}
+
 async function sendBroadcast() {
  if (!isAdmin()) return;
  const title = document.getElementById('bc-title').value.trim();
- const body = document.getElementById('bc-body').value.trim(); // Reads text string from DOM
+ const intro = document.getElementById('bc-body').value.trim();
  const target = document.getElementById('bc-target').value;
  const type = document.querySelector('input[name="bc-type"]:checked')?.value || 'info';
- 
- if (!title || !body) { toast('Fill in title and message', '', 'warn'); return; }
- 
+  
+ if (!title) { toast('Add a broadcast title', '', 'warn'); return; }
+  
  try {
- // Passes payload keys straight to your Edge Function
- const result = await callEdge('send-broadcast', { title, body, target, type });
+ const recentProducts = await loadRecentBroadcastProducts(4);
+ if (!recentProducts.length) { toast('No Products Found', 'Add active products before sending a product broadcast.', 'warn'); return; }
+ const productDigest = serializeBroadcastProducts(recentProducts);
+ const body = buildProductBroadcastBody(intro, recentProducts);
+  // Passes payload keys straight to your Edge Function
+ const result = await callEdge('send-broadcast', { title, body, target, type, products: productDigest });
  const sent = Number(result?.sent || 0);
  const failed = Number(result?.failed || 0);
  const skipped = Number(result?.skipped || 0);
@@ -5928,6 +6038,7 @@ async function sendBroadcast() {
 
  document.getElementById('bc-title').value = '';
  document.getElementById('bc-body').value = '';
+ renderBroadcastProductPreview([]);
  loadBroadcastHistory();
 }
 
@@ -5936,19 +6047,30 @@ async function loadBroadcastHistory() {
   .select('id,title,body,type,target,created_at')
   .order('created_at',{ascending:false})
   .limit(10);
- const el = document.getElementById('bc-history');
- if (!el) return;
- const icons = { info:'Info', success:'OK', warn:'Warning', error:'' };
- el.innerHTML = (bcs||[]).length
- ? bcs.map(b => `<div class="card card-pad mb-2" style="border-left:3px solid var(--green)">
- <div class="flex justify-between items-center mb-1">
- <span class="font-600 text-sm">${icons[b.type]||'"'} ${escHtml(b.title)}</span>
- <span class="text-xs color-text3">${fmtDate(b.created_at)}</span>
- </div>
- <div class="text-xs color-text3 mb-1">To: <b>${b.target}</b></div>
- <div class="text-sm">${escHtml(b.body)}</div>
- </div>`).join('')
- : '<p class="color-text3 text-sm">None sent yet.</p>';
+  const el = document.getElementById('bc-history');
+  if (!el) return;
+  const icons = { info:'Info', success:'OK', warn:'Warning', error:'' };
+  const productIds = [...new Set((bcs || []).flatMap(b => extractBroadcastProductIds(b.body)))].slice(0, 20);
+  const linkedProducts = await loadProductsByIds(productIds).catch(() => []);
+  const productById = new Map(linkedProducts.map(product => [product.id, product]));
+  el.innerHTML = (bcs||[]).length
+  ? bcs.map(b => {
+  const cards = extractBroadcastProductIds(b.body)
+   .map(id => productById.get(id))
+   .filter(Boolean)
+   .map(product => broadcastProductCard(serializeBroadcastProducts([product])[0]))
+   .join('');
+  return `<div class="card card-pad mb-2" style="border-left:3px solid var(--green)">
+  <div class="flex justify-between items-center mb-1">
+  <span class="font-600 text-sm">${icons[b.type]||'"'} ${escHtml(b.title)}</span>
+  <span class="text-xs color-text3">${fmtDate(b.created_at)}</span>
+  </div>
+  <div class="text-xs color-text3 mb-1">To: <b>${b.target}</b></div>
+  <div class="text-sm" style="white-space:pre-line">${escHtml(broadcastBodyIntro(b.body) || b.body)}</div>
+  ${cards ? `<div class="broadcast-product-list">${cards}</div>` : ''}
+  </div>`;
+  }).join('')
+  : '<p class="color-text3 text-sm">None sent yet.</p>';
 }
 
 // ====================================================
@@ -5972,16 +6094,27 @@ async function loadBroadcastMessages(containerId, limit = 5) {
   .select('id,title,body,type,target,created_at')
  .in('target', getBroadcastTargetsForProfile())
  .order('created_at', { ascending: false })
- .limit(limit);
- if (error) throw error;
- el.innerHTML = (data || []).length
- ? data.map(b => `
- <div style="border-top:1px solid var(--border);padding:.55rem 0">
- <div class="font-600 text-sm">${escHtml(b.title || 'Admin message')}</div>
- <div class="text-xs color-text3">${escHtml(b.body || '')}</div>
- <div class="text-xs color-text3" style="margin-top:.25rem">${fmtDate(b.created_at)}</div>
- </div>`).join('')
- : '<p class="text-xs color-text3">No admin messages yet.</p>';
+  .limit(limit);
+  if (error) throw error;
+  const productIds = [...new Set((data || []).flatMap(b => extractBroadcastProductIds(b.body)))].slice(0, 12);
+  const linkedProducts = await loadProductsByIds(productIds).catch(() => []);
+  const productById = new Map(linkedProducts.map(product => [product.id, product]));
+  el.innerHTML = (data || []).length
+  ? data.map(b => {
+  const cards = extractBroadcastProductIds(b.body)
+   .map(id => productById.get(id))
+   .filter(Boolean)
+   .map(product => broadcastProductCard(serializeBroadcastProducts([product])[0]))
+   .join('');
+  return `
+  <div class="broadcast-message-card">
+  <div class="font-600 text-sm">${escHtml(b.title || 'Admin message')}</div>
+  <div class="text-xs color-text3">${escHtml(broadcastBodyIntro(b.body) || b.body || '')}</div>
+  ${cards ? `<div class="broadcast-product-list">${cards}</div>` : ''}
+  <div class="text-xs color-text3" style="margin-top:.25rem">${fmtDate(b.created_at)}</div>
+  </div>`;
+  }).join('')
+  : '<p class="text-xs color-text3">No admin messages yet.</p>';
  } catch (_) {
  el.innerHTML = '<p class="text-xs color-text3">Could not load admin messages.</p>';
  }
@@ -8937,7 +9070,7 @@ async function syncUserNotificationTokenInner() {
 
 function waitForActiveDocument() {
  return new Promise((resolve, reject) => {
-  if (document.readyState === 'complete' && !document.hidden && document.visibilityState !== 'prerender') {
+  if (isDocumentReadyForServiceWorker()) {
   resolve();
   return;
   }
@@ -8949,7 +9082,7 @@ function waitForActiveDocument() {
   window.removeEventListener('pageshow', check);
   };
   const check = () => {
-  if (document.readyState === 'complete' && !document.hidden && document.visibilityState !== 'prerender') {
+  if (isDocumentReadyForServiceWorker()) {
   cleanup();
   resolve();
   } else if (Date.now() - startedAt > 5000) {
@@ -8965,6 +9098,17 @@ function waitForActiveDocument() {
   setTimeout(check, 1200);
   setTimeout(check, 5000);
  });
+}
+
+function isDocumentReadyForServiceWorker() {
+ return document.readyState === 'complete'
+  && !document.hidden
+  && document.visibilityState !== 'prerender'
+  && document.visibilityState !== 'unloaded';
+}
+
+function isInvalidDocumentStateError(error) {
+ return /invalid state|document is not active|document is in an invalid state/i.test(String(error?.message || error || ''));
 }
 
 async function ensurePushServiceWorkerRegistration() {
@@ -9009,7 +9153,12 @@ async function registerPushServiceWorkerWithRetry(attempt = 1) {
   return readyRegistration;
  } catch (error) {
   const message = String(error?.message || error || '');
-  const aborted = error?.name === 'AbortError' || /aborted|invalid state/i.test(message);
+  const invalidDocumentState = isInvalidDocumentStateError(error);
+  const aborted = error?.name === 'AbortError' || /aborted/i.test(message);
+  if (invalidDocumentState && attempt < 3) {
+   await delay(900 * attempt);
+   return registerPushServiceWorkerWithRetry(attempt + 1);
+  }
   if (aborted && attempt < 3) {
    await resetPushServiceWorkerScope();
    await delay(700 * attempt);
@@ -9379,11 +9528,11 @@ async function requestNotificationPermission() {
  if (perm === 'granted') {
  try {
  await syncUserNotificationToken();
- } catch (error) {
- updateNotificationButtonState();
- toast('Notifications Not Saved', error.message || 'Could not save this device for notifications.', 'error');
- return;
- }
+  } catch (error) {
+  updateNotificationButtonState();
+  toast('Notifications Not Saved', friendlyNotificationError(error), 'error');
+  return;
+  }
  updateNotificationButtonState();
  toast('Notifications Enabled', 'This device will receive alerts', 'success');
  } else {
@@ -9421,11 +9570,15 @@ async function testNotification() {
   badge: '/favicon.ico',
   data: { url: '/?view=shop' },
    tag: 'buysell-test-notification',
-   });
-   toast('Local Notification Sent', 'Device notifications work. Server push may still need Edge Function configuration.', 'info', 6500);
-  } catch (error) {
-   toast('Test Failed', error.message || 'Could not show a test notification.', 'error');
-  }
+    });
+    toast('Local Notification Sent', 'Device notifications work. Server push may still need Edge Function configuration.', 'info', 6500);
+   } catch (error) {
+    if (showForegroundNotification('BUYSELL Nigeria', 'Local notification works. Keep this page open for foreground alerts.')) {
+     toast('Local Notification Sent', 'Browser notifications work here. Background push may need a page refresh.', 'info', 6500);
+     return;
+    }
+    toast('Test Failed', friendlyNotificationError(error), 'error');
+   }
 }
 
 async function testLocalNotification() {
@@ -9435,20 +9588,51 @@ async function testLocalNotification() {
   return;
  }
 
- try {
-  await syncUserNotificationToken();
-  const registration = await ensurePushServiceWorkerRegistration();
+  try {
+   await syncUserNotificationToken();
+   const registration = await ensurePushServiceWorkerRegistration();
  await registration.showNotification('BUYSELL Nigeria', {
  body: 'Notifications are working on this device.',
  icon: '/favicon.ico',
  badge: '/favicon.ico',
   data: { url: '/?view=shop' },
  tag: 'buysell-test-notification',
- });
- toast('Sent!', 'Check your notification area', 'success');
+  });
+  toast('Sent!', 'Check your notification area', 'success');
+  } catch (error) {
+  if (showForegroundNotification('BUYSELL Nigeria', 'Notifications are working on this device.')) {
+   toast('Sent!', 'Check your notification area', 'success');
+   return;
+  }
+  toast('Test Failed', friendlyNotificationError(error), 'error');
+  }
+}
+
+function showForegroundNotification(title, body) {
+ try {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return false;
+  const notification = new Notification(title, {
+   body,
+   icon: '/favicon.ico',
+   badge: '/favicon.ico',
+   tag: 'buysell-test-notification'
+  });
+  notification.onclick = () => {
+   window.focus();
+   location.hash = '#';
+  };
+  return true;
  } catch (error) {
- toast('Test Failed', error.message || 'Could not show a test notification.', 'error');
+  console.warn('[PUSH ENGINE] Foreground notification fallback failed:', error.message || error);
+  return false;
  }
+}
+
+function friendlyNotificationError(error) {
+ if (isInvalidDocumentStateError(error)) {
+  return 'The browser page is not ready for background notifications yet. Refresh once and try again.';
+ }
+ return error?.message || 'Could not show a test notification.';
 }
 
 // ====================================================

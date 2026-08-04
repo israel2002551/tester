@@ -39,7 +39,7 @@
 </script>
  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<link rel="stylesheet" href="/styles.css?v=10.3">
+<link rel="stylesheet" href="/styles.css?v=10.4">
 </head>
 <body>
 
@@ -1313,7 +1313,7 @@
  <div id="adm-tab-broadcast" class="adm-tab hidden">
  <div class="card card-pad-lg" style="max-width:600px">
  <h3 class="mb-1"><i class="fa-solid fa-bullhorn color-green"></i> Send Platform Broadcast</h3>
- <p class="text-xs color-text3 mb-3">Message shown as a toast to targeted users on next visit.</p>
+ <p class="text-xs color-text3 mb-3">Send a product digest with recent product images, descriptions, and direct links.</p>
  <div class="form-group">
  <label class="form-label">Target Audience</label>
  <select id="bc-target" class="form-select">
@@ -1325,11 +1325,14 @@
  </div>
  <div class="form-group">
  <label class="form-label">Title</label>
- <input type="text" id="bc-title" class="form-input" placeholder="e.g., Platform Update">
+ <input type="text" id="bc-title" class="form-input" placeholder="e.g., New products just landed">
  </div>
  <div class="form-group">
- <label class="form-label">Message</label>
- <textarea id="bc-body" class="form-textarea" rows="4" placeholder="Write your message here..."></textarea>
+ <label class="form-label">Intro Message</label>
+ <textarea id="bc-body" class="form-textarea" rows="3" placeholder="Write a short intro. Recent products will be added automatically."></textarea>
+</div>
+ <div class="broadcast-product-preview" id="bc-product-preview">
+ <div class="skeleton" style="height:92px;border-radius:12px"></div>
  </div>
  <div class="form-group">
  <label class="form-label">Type</label>
@@ -1340,7 +1343,7 @@
  <label class="filter-chip"><input type="radio" name="bc-type" value="error" style="display:none"> Urgent</label>
  </div>
  </div>
- <button class="btn btn-primary btn-full" onclick="sendBroadcast()"><i class="fa-solid fa-paper-plane"></i> Send Broadcast</button>
+ <button class="btn btn-primary btn-full" onclick="sendBroadcast()"><i class="fa-solid fa-paper-plane"></i> Send Product Broadcast</button>
  <div class="divider mt-4 mb-3"></div>
  <h4 class="mb-3">Recent Broadcasts</h4>
  <div id="bc-history"><p class="color-text3 text-sm">None sent yet.</p></div>
@@ -2290,7 +2293,7 @@
  <div id="adm-tab-broadcast" class="adm-tab hidden">
  <div class="card card-pad-lg" style="max-width:600px">
  <h3 class="mb-1"><i class="fa-solid fa-bullhorn color-green"></i> Send Platform Broadcast</h3>
- <p class="text-xs color-text3 mb-3">Message shown as a toast to targeted users on next visit.</p>
+ <p class="text-xs color-text3 mb-3">Send a product digest with recent product images, descriptions, and direct links.</p>
  <div class="form-group">
  <label class="form-label">Target Audience</label>
  <select id="bc-target" class="form-select">
@@ -2302,11 +2305,14 @@
  </div>
  <div class="form-group">
  <label class="form-label">Title</label>
- <input type="text" id="bc-title" class="form-input" placeholder="e.g., Platform Update">
+ <input type="text" id="bc-title" class="form-input" placeholder="e.g., New products just landed">
  </div>
  <div class="form-group">
- <label class="form-label">Message</label>
- <textarea id="bc-body" class="form-textarea" rows="4" placeholder="Write your message here..."></textarea>
+ <label class="form-label">Intro Message</label>
+ <textarea id="bc-body" class="form-textarea" rows="3" placeholder="Write a short intro. Recent products will be added automatically."></textarea>
+</div>
+ <div class="broadcast-product-preview" id="bc-product-preview">
+ <div class="skeleton" style="height:92px;border-radius:12px"></div>
  </div>
  <div class="form-group">
  <label class="form-label">Type</label>
@@ -2317,7 +2323,7 @@
  <label class="filter-chip"><input type="radio" name="bc-type" value="error" style="display:none"> Urgent</label>
  </div>
  </div>
- <button class="btn btn-primary btn-full" onclick="sendBroadcast()"><i class="fa-solid fa-paper-plane"></i> Send Broadcast</button>
+ <button class="btn btn-primary btn-full" onclick="sendBroadcast()"><i class="fa-solid fa-paper-plane"></i> Send Product Broadcast</button>
  <div class="divider mt-4 mb-3"></div>
  <h4 class="mb-3">Recent Broadcasts</h4>
   <div id="bc-history"><p class="color-text3 text-sm">None sent yet.</p></div>
@@ -2851,7 +2857,7 @@
 
 <script src="https://checkout.flutterwave.com/v3.js"></script>
 <script data-cfasync="false" src="/config.js?v=3.6"></script>
-<script src="app.js?v=10.12"></script>
+<script src="app.js?v=10.13"></script>
  <script>
  (function() {
  'use strict';
