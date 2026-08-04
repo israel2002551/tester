@@ -34,6 +34,7 @@ function createSafeStorage(storageName = 'localStorage') {
 
 const appStorage = createSafeStorage('localStorage');
 const appSessionStorage = createSafeStorage('sessionStorage');
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 function readStoredJson(key, fallback) {
  try {
  return JSON.parse(appStorage.getItem(key) || JSON.stringify(fallback));
@@ -117,12 +118,13 @@ function setCookieConsent(value = 'essential') {
 }
 
 async function refreshStaleServiceWorkerData() {
- if (!('serviceWorker' in navigator)) return;
+ if (!('serviceWorker' in navigator)) return false;
  const versionKey = 'bs_sw_app_version';
  const reloadedKey = `bs_sw_reloaded_${SERVICE_WORKER_APP_VERSION}`;
- if (appStorage.getItem(versionKey) === SERVICE_WORKER_APP_VERSION) return;
+ if (appStorage.getItem(versionKey) === SERVICE_WORKER_APP_VERSION) return false;
 
  try {
+  appStorage.setItem(versionKey, SERVICE_WORKER_APP_VERSION);
   const registrations = await navigator.serviceWorker.getRegistrations();
   await Promise.all(registrations.map(reg => reg.unregister().catch(() => false)));
 
@@ -131,14 +133,15 @@ async function refreshStaleServiceWorkerData() {
   await Promise.all(cacheNames.map(name => caches.delete(name).catch(() => false)));
   }
 
-  appStorage.setItem(versionKey, SERVICE_WORKER_APP_VERSION);
   if (!appSessionStorage.getItem(reloadedKey) && document.visibilityState !== 'hidden') {
   appSessionStorage.setItem(reloadedKey, '1');
   location.reload();
+  return true;
   }
- } catch (error) {
-  console.warn('[PUSH ENGINE] Automatic service worker cleanup failed:', error.message || error);
- }
+  } catch (error) {
+   console.warn('[PUSH ENGINE] Automatic service worker cleanup failed:', error.message || error);
+  }
+ return false;
 }
 
 function clearCacheByPrefix(prefix) {
@@ -7027,7 +7030,7 @@ function installSecurityDomGuards() {
 // ====================================================
 (async function init() {
   console.log(" Launching single-page application lifecycle...");
-  await refreshStaleServiceWorkerData();
+  if (await refreshStaleServiceWorkerData()) return;
   installSecurityDomGuards();
   showCookieConsent();
   
@@ -8969,10 +8972,25 @@ function waitForActiveDocument() {
 async function ensurePushServiceWorkerRegistration() {
  if (!('serviceWorker' in navigator)) throw new Error('Service workers are not supported on this device.');
  await waitForActiveDocument();
- const existing = await navigator.serviceWorker.getRegistration('/');
- const registration = existing || await navigator.serviceWorker.register('/sw.js', { scope: '/' });
- await registration.update().catch(() => {});
- return registration.active ? registration : await navigator.serviceWorker.ready;
+ return registerPushServiceWorkerWithRetry();
+}
+
+async function registerPushServiceWorkerWithRetry(attempt = 1) {
+ try {
+  const existing = await navigator.serviceWorker.getRegistration('/');
+  const registration = existing || await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+  if (registration.waiting) registration.waiting.postMessage?.({ type: 'SKIP_WAITING' });
+  if (!registration.active) return await navigator.serviceWorker.ready;
+  return registration;
+ } catch (error) {
+  const message = String(error?.message || error || '');
+  const aborted = error?.name === 'AbortError' || /aborted|invalid state/i.test(message);
+  if (aborted && attempt < 3) {
+   await delay(500 * attempt);
+   return registerPushServiceWorkerWithRetry(attempt + 1);
+  }
+  throw error;
+ }
 }
 
 async function loadServiceProviderReviews(providerId) {
