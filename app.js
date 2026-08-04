@@ -69,6 +69,7 @@ let deferredInstallPrompt = null, salesChart = null;
 let sellerAnalyticsChart = null;
 let carouselStartX = 0;
 let notificationSyncPromise = null;
+let pushServiceWorkerRegistrationPromise = null;
 let presenceHeartbeatTimer = null;
 let previousAppView = 'buyer';
 // MOVE THESE TWO LINES HERE (TO THE TOP VARIABLES AREA):
@@ -1319,14 +1320,8 @@ function updateNavForUser() {
  document.getElementById('nav-avatar-inner').textContent = initial;
  document.getElementById('nav-avatar-inner').style.fontSize = '.9rem';
   updateNotificationButtonState();
-  if ('Notification' in window && Notification.permission === 'granted') {
-  setTimeout(() => {
-   if (document.hidden) return;
-   syncUserNotificationToken().catch(error => {
-    console.warn('[PUSH ENGINE] Background subscription refresh failed:', error.message || error);
-   });
-  }, 2500);
-  }
+  // Keep push setup user-triggered. Some mobile browsers abort service worker
+  // registration when background and manual notification setup overlap.
  document.getElementById('dash-user-name').textContent = currentUser.profile?.name || 'Seller';
  document.getElementById('dash-user-email').textContent = currentUser.email || '';
  // Admin check
@@ -8974,8 +8969,12 @@ function waitForActiveDocument() {
 
 async function ensurePushServiceWorkerRegistration() {
  if (!('serviceWorker' in navigator)) throw new Error('Service workers are not supported on this device.');
- await waitForActiveDocument();
- return registerPushServiceWorkerWithRetry();
+ if (!pushServiceWorkerRegistrationPromise) {
+  pushServiceWorkerRegistrationPromise = registerPushServiceWorkerWithRetry().finally(() => {
+   pushServiceWorkerRegistrationPromise = null;
+  });
+ }
+ return pushServiceWorkerRegistrationPromise;
 }
 
 async function resetPushServiceWorkerScope() {
@@ -9000,7 +8999,7 @@ async function registerPushServiceWorkerWithRetry(attempt = 1) {
   }
 
   const activeRegistration = shouldRefreshWorker ? null : existing;
-  const registration = activeRegistration || await navigator.serviceWorker.register(`/sw.js?v=${encodeURIComponent(SERVICE_WORKER_APP_VERSION)}`, {
+  const registration = activeRegistration || await navigator.serviceWorker.register('/sw.js', {
    scope: '/',
    updateViaCache: 'none'
   });
