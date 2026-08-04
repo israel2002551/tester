@@ -62,6 +62,7 @@ const KYC_LIST_COLUMNS = ['id','user_id','status','document_type','document_numb
 const appCache = new Map();
 let carouselIndex = 0, carouselTimer = null;
 let selectedRating = 0, checkoutPaymentMethod = 'flutterwave';
+const WALLET_CHECKOUT_ENABLED = false;
 let deferredInstallPrompt = null, salesChart = null;
 let sellerAnalyticsChart = null;
 let carouselStartX = 0;
@@ -2786,7 +2787,7 @@ async function startCheckout() {
  const isUnderfunded = availableBalance < totalWithCommission;
 
  let walletCardHtml = '';
- if (isSeller) {
+ if (isSeller && WALLET_CHECKOUT_ENABLED) {
  walletCardHtml = `
  <div class="payment-method-card wallet-card ${isUnderfunded ? 'disabled' : ''}" 
  id="pm-wallet" onclick="if(!${isUnderfunded}){selectCheckoutPaymentMethod('wallet')}"
@@ -3001,7 +3002,8 @@ async function payWithPaystack() { return payWithFlutterwave(); }
 
 // --- NEW WALLET SELECTION METHOD AND ENGINE CORES ---
 function selectCheckoutPaymentMethod(method) {
- const nextMethod = ['flutterwave', 'paystack', 'wallet'].includes(method) ? (method === 'paystack' ? 'flutterwave' : method) : 'flutterwave';
+ const allowedMethods = WALLET_CHECKOUT_ENABLED ? ['flutterwave', 'paystack', 'wallet'] : ['flutterwave', 'paystack'];
+ const nextMethod = allowedMethods.includes(method) ? (method === 'paystack' ? 'flutterwave' : method) : 'flutterwave';
  checkoutPaymentMethod = nextMethod;
  const flutterwaveCard = document.getElementById('pm-flutterwave') || document.getElementById('pm-paystack');
  const transferCard = document.getElementById('pm-transfer');
@@ -3081,51 +3083,33 @@ async function createWalletRevenueOrder(checkoutPayload, totalAmount, walletRef)
  const productSellerId = cart[0]?.seller_id;
  if (!productSellerId) throw new Error('Seller information missing from cart.');
 
- const orderId = crypto.randomUUID();
- const orderData = {
- id: orderId,
+ try {
+ const result = await callEdge('wallet-revenue-order', {
+ ...checkoutPayload,
  buyer_id: currentUser.id,
  seller_id: productSellerId,
- items: checkoutCartItems(true),
  total_amount: totalAmount,
- status: 'pending',
- payment_method: 'wallet_revenue',
  payment_ref: walletRef,
- delivery_name: checkoutPayload.delivery_name,
- delivery_phone: checkoutPayload.delivery_phone,
- delivery_address: checkoutPayload.delivery_address,
- created_at: new Date().toISOString()
- };
-
- const insertedOrder = await insertWithMissingColumnRetry('orders', orderData);
-
- try {
- await insertWithMissingColumnRetry('wallet_transactions', {
- seller_id: currentUser.id,
- buyer_id: currentUser.id,
- order_id: insertedOrder?.id || orderId,
- amount: totalAmount,
- type: 'debit_purchase',
- reference: walletRef,
- description: 'Marketplace purchase paid with revenue wallet',
- status: 'completed',
- created_at: new Date().toISOString()
+ payment_method: 'wallet_revenue',
  });
+ if (!result?.success) throw new Error(result?.error || 'Wallet checkout failed.');
+ return result;
  } catch (err) {
- await db.from('orders')
- .update({ status: 'cancelled' })
- .eq('id', insertedOrder?.id || orderId)
- .eq('buyer_id', currentUser.id);
- throw new Error(err.message || 'Wallet debit could not be recorded.');
+ throw new Error(err.message?.includes('404') || err.message?.includes('not found')
+ ? 'Wallet checkout is being upgraded. Please use Flutterwave checkout for now.'
+ : (err.message || 'Wallet debit could not be recorded.'));
  }
-
- return { success: true, order_id: insertedOrder?.id || orderId, total_paid: totalAmount };
 }
 
 async function payWithWalletRevenue() {
  if (cart.length === 0) { toast('Cart is empty', '', 'warn'); return; }
  const rawProductTotal = cartPayableSubtotal();
  if (!currentUser) { showModal('auth-modal'); return; }
+ if (!WALLET_CHECKOUT_ENABLED) {
+ toast('Wallet Checkout Paused', 'Use Flutterwave checkout while wallet payments are secured through the server.', 'info', 7000);
+ selectCheckoutPaymentMethod('flutterwave');
+ return;
+ }
  if (!isSellerAccount()) {
  toast('Seller wallet required', 'Only sellers can pay from available revenue.', 'warn');
  return;
