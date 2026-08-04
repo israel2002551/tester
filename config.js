@@ -19,7 +19,7 @@ const ADMIN_EMAILS = [
 
 // ── Flutterwave ───────────────────────────────────────
 // Replace this with your Flutterwave public key from Dashboard > API Keys.
-const FLUTTERWAVE_PUBLIC_KEY = 'FLWPUBK_TEST-REPLACE_WITH_YOUR_PUBLIC_KEY-X';
+const FLUTTERWAVE_PUBLIC_KEY = 'FLWPUBK-829243f43712c483b33a5ff1d6afa05f-X';
 
 // ── Platform Fees ─────────────────────────────────────
 const COMMISSION_AMOUNT = 250000; // ₦2,500 in kobo
