@@ -8821,9 +8821,7 @@ async function syncUserNotificationTokenInner() {
  throw new Error('Notification permission was not granted.');
  }
 
- const registrationResult = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
- await registrationResult.update().catch(() => {});
- const registration = await navigator.serviceWorker.ready;
+ const registration = await ensurePushServiceWorkerRegistration();
  let subscription = await registration.pushManager.getSubscription();
  const VAPID_PUBLIC_KEY = "BEL_hMw0i1uDcH_jt52ReK7GbXtLW4IvVK_7pW5fGSl-2f7inbRJgednd3R8YRXas-xNles0ezQfXMkopIhuKok";
  const vapidKeyBytes = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
@@ -8881,6 +8879,47 @@ async function syncUserNotificationTokenInner() {
  console.warn('[PUSH ENGINE] Registration token sync failed: ', err.message || err);
  throw err;
  }
+}
+
+function waitForActiveDocument() {
+ return new Promise((resolve, reject) => {
+  if (document.readyState === 'complete' && !document.hidden && document.visibilityState !== 'prerender') {
+  resolve();
+  return;
+  }
+
+  const startedAt = Date.now();
+  const cleanup = () => {
+  document.removeEventListener('readystatechange', check);
+  document.removeEventListener('visibilitychange', check);
+  window.removeEventListener('pageshow', check);
+  };
+  const check = () => {
+  if (document.readyState === 'complete' && !document.hidden && document.visibilityState !== 'prerender') {
+  cleanup();
+  resolve();
+  } else if (Date.now() - startedAt > 5000) {
+  cleanup();
+  reject(new Error('Page is not ready for push setup yet. Please try again after the page finishes loading.'));
+  }
+  };
+
+  document.addEventListener('readystatechange', check);
+  document.addEventListener('visibilitychange', check);
+  window.addEventListener('pageshow', check);
+  setTimeout(check, 80);
+  setTimeout(check, 1200);
+  setTimeout(check, 5000);
+ });
+}
+
+async function ensurePushServiceWorkerRegistration() {
+ if (!('serviceWorker' in navigator)) throw new Error('Service workers are not supported on this device.');
+ await waitForActiveDocument();
+ const existing = await navigator.serviceWorker.getRegistration('/');
+ const registration = existing || await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+ await registration.update().catch(() => {});
+ return registration.active ? registration : await navigator.serviceWorker.ready;
 }
 
 async function loadServiceProviderReviews(providerId) {
@@ -9273,23 +9312,23 @@ async function testNotification() {
   });
   toast('Push Sent', `Sent to ${result?.sent || 1} device(s). Check your browser or system notification area.`, 'success', 6500);
   return;
- } catch (serverError) {
-  console.warn('[PUSH ENGINE] Server push test failed, falling back to local notification:', serverError.message || serverError);
-  toast('Server Push Not Ready', serverError.message || 'Could not send a background push yet.', 'warn', 6500);
- }
+  } catch (serverError) {
+   console.warn('[PUSH ENGINE] Server push test failed, falling back to local notification:', serverError.message || serverError);
+  }
 
- try {
-  const registration = await navigator.serviceWorker.ready;
-  await registration.showNotification('BUYSELL Nigeria', {
-  body: 'Local notification works. Server push still needs configuration.',
+  try {
+   const registration = await ensurePushServiceWorkerRegistration();
+   await registration.showNotification('BUYSELL Nigeria', {
+   body: 'Local notification works. Server push still needs configuration.',
   icon: '/favicon.ico',
   badge: '/favicon.ico',
   data: { url: '/?view=shop' },
-  tag: 'buysell-test-notification',
-  });
- } catch (error) {
-  toast('Test Failed', error.message || 'Could not show a test notification.', 'error');
- }
+   tag: 'buysell-test-notification',
+   });
+   toast('Local Notification Sent', 'Device notifications work. Server push may still need Edge Function configuration.', 'info', 6500);
+  } catch (error) {
+   toast('Test Failed', error.message || 'Could not show a test notification.', 'error');
+  }
 }
 
 async function testLocalNotification() {
@@ -9300,8 +9339,8 @@ async function testLocalNotification() {
  }
 
  try {
- await syncUserNotificationToken();
- const registration = await navigator.serviceWorker.ready;
+  await syncUserNotificationToken();
+  const registration = await ensurePushServiceWorkerRegistration();
  await registration.showNotification('BUYSELL Nigeria', {
  body: 'Notifications are working on this device.',
  icon: '/favicon.ico',
