@@ -91,6 +91,31 @@ function setCachedData(key, data) {
  return data;
 }
 
+function writeConsentCookie(value) {
+ const secure = location.protocol === 'https:' ? '; Secure' : '';
+ document.cookie = `bs_cookie_consent=${encodeURIComponent(value)}; Max-Age=31536000; Path=/; SameSite=Lax${secure}`;
+}
+
+function getCookieConsent() {
+ return appStorage.getItem('bs_cookie_consent') || '';
+}
+
+function showCookieConsent() {
+ const banner = document.getElementById('cookie-consent');
+ if (!banner || getCookieConsent()) return;
+ banner.classList.remove('hidden');
+}
+
+function setCookieConsent(value = 'essential') {
+ const choice = value === 'accepted' ? 'accepted' : 'essential';
+ appStorage.setItem('bs_cookie_consent', choice);
+ appStorage.setItem('bs_cookie_consent_at', new Date().toISOString());
+ writeConsentCookie(choice);
+ document.getElementById('cookie-consent')?.classList.add('hidden');
+ if (choice === 'accepted') toast('Cookies Accepted', 'Your marketplace preferences will be remembered.', 'success', 3500);
+ else toast('Essential Cookies Only', 'Only login, cart, and security storage will be used.', 'info', 3500);
+}
+
 async function refreshStaleServiceWorkerData() {
  if (!('serviceWorker' in navigator)) return;
  const versionKey = 'bs_sw_app_version';
@@ -7004,6 +7029,7 @@ function installSecurityDomGuards() {
   console.log(" Launching single-page application lifecycle...");
   await refreshStaleServiceWorkerData();
   installSecurityDomGuards();
+  showCookieConsent();
   
   const savedLogo = appStorage.getItem('buysell_custom_logo');
  if (savedLogo) applySiteLogo(savedLogo);

@@ -1411,6 +1411,17 @@
 
 <a id="wa-fab" href="https://wa.me/2349061484256?text=Hello%20BUYSELL" target="_blank" aria-label="WhatsApp"><i class="fa-brands fa-whatsapp"></i></a>
 <div id="toast-container"></div>
+<div id="cookie-consent" class="cookie-consent hidden" role="dialog" aria-live="polite" aria-label="Cookie notice">
+ <div class="cookie-copy">
+  <strong>Cookie Notice</strong>
+  <span>BUYSELL uses essential storage for login, cart, and security. With your consent, we also keep preferences that make the marketplace faster.</span>
+ </div>
+ <div class="cookie-actions">
+  <a href="/privacy" class="cookie-link">Privacy</a>
+  <button type="button" class="btn btn-ghost btn-sm" onclick="setCookieConsent('essential')">Essential Only</button>
+  <button type="button" class="btn btn-primary btn-sm" onclick="setCookieConsent('accepted')">Accept Cookies</button>
+ </div>
+</div>
 
 
 <!-- ==================== ALL MODALS ==================== -->
@@ -2840,7 +2851,7 @@
 
 <script src="https://checkout.flutterwave.com/v3.js"></script>
 <script data-cfasync="false" src="/config.js?v=3.6"></script>
-<script src="app.js?v=10.8"></script>
+<script src="app.js?v=10.9"></script>
  <script>
  (function() {
  'use strict';
