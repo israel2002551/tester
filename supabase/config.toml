@@ -1,0 +1,38 @@
+[functions.send-broadcast]
+verify_jwt = false
+
+[functions.notify-new-product]
+verify_jwt = false
+
+[functions.notify-seller-order]
+verify_jwt = false
+
+[functions.notify-product-digest]
+verify_jwt = false
+
+[functions.paystack-webhook]
+verify_jwt = false
+
+[functions.verify-flutterwave-payment]
+verify_jwt = true
+
+[functions.verify-flutterwave-ad-payment]
+verify_jwt = true
+
+[functions.flutterwave-webhook]
+verify_jwt = false
+
+[functions.test-push-notification]
+verify_jwt = true
+
+[functions.auto-verify-kyc]
+verify_jwt = true
+
+[functions.update-profile]
+verify_jwt = true
+
+[functions.admin-kyc]
+verify_jwt = true
+
+[functions.request-withdrawal]
+verify_jwt = true
