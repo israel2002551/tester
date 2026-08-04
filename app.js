@@ -2857,7 +2857,7 @@ function isFlutterwaveReady() {
  toast('Payment unavailable', 'Flutterwave checkout could not load. Please try again.', 'error');
  return false;
  }
- if (!FLUTTERWAVE_PUBLIC_KEY || !/^FLWPUBK_(TEST|LIVE)-/i.test(FLUTTERWAVE_PUBLIC_KEY) || FLUTTERWAVE_PUBLIC_KEY.includes('REPLACE_WITH')) {
+ if (!FLUTTERWAVE_PUBLIC_KEY || !/^FLWPUBK(?:_(?:TEST|LIVE))?-[A-Za-z0-9]+-X$/i.test(FLUTTERWAVE_PUBLIC_KEY) || FLUTTERWAVE_PUBLIC_KEY.includes('REPLACE_WITH')) {
  toast('Payment not configured', 'Set a valid Flutterwave public key in config.js.', 'error');
  return false;
  }
