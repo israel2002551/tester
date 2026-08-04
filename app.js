@@ -8157,8 +8157,40 @@ function openMessageModal(partnerId, partnerName = 'Seller', productId = null) {
 
 function getMsgMissingColumn(error) {
  const text = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`;
- const quoted = text.match(/'([^']+)' column/i) || text.match(/column "([^"]+)"/i);
+ const quoted = text.match(/'([^']+)' column/i)
+ || text.match(/column "([^"]+)"/i)
+ || text.match(/column [^.]+\.([a-zA-Z0-9_]+) does not exist/i);
  return quoted?.[1] || '';
+}
+
+function isMissingMessagesTable(error) {
+ const text = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+ return text.includes('could not find the table') || text.includes('relation "public.messages" does not exist') || text.includes('messages') && text.includes('schema cache');
+}
+
+const MESSAGE_SELECTS = [
+ 'id,sender_id,receiver_id,body,message,content,image_url,product_id,is_read,created_at',
+ 'id,sender_id,receiver_id,content,image_url,product_id,is_read,created_at',
+ 'id,sender_id,receiver_id,message,image_url,product_id,is_read,created_at',
+ 'id,sender_id,receiver_id,body,image_url,product_id,is_read,created_at',
+ 'id,sender_id,receiver_id,content,is_read,created_at',
+ 'id,sender_id,receiver_id,message,is_read,created_at',
+ 'id,sender_id,receiver_id,body,is_read,created_at',
+];
+
+async function queryMessages(buildQuery) {
+ let lastError = null;
+ for (const columns of MESSAGE_SELECTS) {
+  const { data, error } = await buildQuery(columns);
+  if (!error) return data || [];
+  lastError = error;
+  if (isMissingMessagesTable(error)) {
+  throw new Error('Messaging database table is missing. Create the messages table in Supabase to enable inbox chat.');
+  }
+  if (getMsgMissingColumn(error)) continue;
+  throw error;
+ }
+ throw lastError || new Error('Could not load messages.');
 }
 
 async function getProfilesByIds(ids) {
@@ -8190,7 +8222,7 @@ function formatMsgDay(date) {
 function normalizeMessageRows(rows) {
  return (rows || []).map(m => ({
  ...m,
- content: String(m.content || '').trim(),
+ content: String(m.content || m.message || m.body || '').trim(),
  created_at: m.created_at || new Date().toISOString(),
  is_read: !!m.is_read,
  })).filter(m => m.sender_id && m.receiver_id);
@@ -8210,12 +8242,11 @@ async function showInbox() {
  container.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
  if (!currentUser) { renderInboxEmpty(container, 'Sign in to view messages.'); return; }
  try {
-  const { data, error } = await db.from('messages')
-  .select('id,sender_id,receiver_id,body,message,content,image_url,product_id,is_read,created_at')
- .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
- .order('created_at', { ascending: false })
- .limit(120);
- if (error) throw error;
+  const data = await queryMessages((columns) => db.from('messages')
+   .select(columns)
+  .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
+  .order('created_at', { ascending: false })
+  .limit(120));
  const msgs = normalizeMessageRows(data);
  if (!msgs.length) { renderInboxEmpty(container); return; }
  const profiles = await getProfilesByIds(msgs.flatMap(m => [m.sender_id, m.receiver_id]));
@@ -8248,7 +8279,10 @@ async function showInbox() {
  ${p.unread ? `<div class="inbox-unread-dot">${p.unread}</div>` : ''}
  </div>
  </div>`).join('');
- } catch(e) { renderInboxEmpty(container, 'Messages are not available right now.'); }
+  } catch(e) {
+  console.warn('Inbox unavailable:', e);
+  renderInboxEmpty(container, e.message || 'Messages are not available right now.');
+  }
 }
 
 async function openConversation(partnerId, partnerName, productId = null) {
@@ -8264,10 +8298,9 @@ async function openConversation(partnerId, partnerName, productId = null) {
  conv.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
  await renderMessageProductCard(currentChatProductId);
  try {
-  const { data, error } = await db.from('messages').select('id,sender_id,receiver_id,body,message,content,image_url,product_id,is_read,created_at')
- .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${currentUser.id})`)
- .order('created_at', { ascending: true }).limit(100);
- if (error) throw error;
+  const data = await queryMessages((columns) => db.from('messages').select(columns)
+  .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${currentUser.id})`)
+  .order('created_at', { ascending: true }).limit(100));
  const msgs = normalizeMessageRows(data);
  const unreadIds = msgs.filter(m => m.receiver_id === currentUser.id && !m.is_read).map(m => m.id);
  if (unreadIds.length) {
@@ -8284,7 +8317,10 @@ async function openConversation(partnerId, partnerName, productId = null) {
  return `${divider}${renderMessageBubble(m)}`;
  }).join('') || '<div class="msg-empty">No messages yet. Start with a quick question below.</div>';
  conv.scrollTop = conv.scrollHeight;
- } catch(e) { conv.innerHTML = '<p class="text-center color-text3 p-3">Could not load conversation.</p>'; }
+  } catch(e) {
+  console.warn('Conversation unavailable:', e);
+  conv.innerHTML = `<p class="text-center color-text3 p-3">${escHtml(e.message || 'Could not load conversation.')}</p>`;
+  }
 }
 
 async function renderMessageProductCard(productId) {
@@ -8365,8 +8401,8 @@ try {
  // payload.metadata = {}; 
  
  let delivered = false;
- for (let attempt = 0; attempt < 8; attempt++) {
- const { error } = await db.from('messages').insert(payload);
+  for (let attempt = 0; attempt < 8; attempt++) {
+  const { error } = await db.from('messages').insert(payload);
  if (!error) {
  delivered = true;
  break;
@@ -8376,17 +8412,20 @@ try {
  const isForeignKeyViolation = errText.includes('foreign key') || errText.includes('fkey');
  const missing = missingColumn(error);
 
- if ((missing === 'product_id') || isForeignKeyViolation) {
+  if ((missing === 'product_id') || isForeignKeyViolation) {
  console.warn('Product relationship context is invalid or missing in DB. Removing product_id context and retrying plain chat delivery...');
  delete payload.product_id;
  continue;
  }
- if (missing && Object.prototype.hasOwnProperty.call(payload, missing)) {
- delete payload[missing];
- continue;
- }
- throw error;
- }
+  if (missing && Object.prototype.hasOwnProperty.call(payload, missing)) {
+  delete payload[missing];
+  continue;
+  }
+  if (isMissingMessagesTable(error)) {
+  throw new Error('Messaging database table is missing. Create the messages table in Supabase to send chats.');
+  }
+  throw error;
+  }
  if (!delivered) throw new Error('Could not save message.');
  
  clearMessageImage();
@@ -8411,12 +8450,13 @@ async function updateInboxCount() {
  .select('id', { count: 'exact', head: true })
  .eq('receiver_id', currentUser.id)
  .eq('is_read', false);
- if (error) throw error;
+  if (error) throw error;
  const unread = count || 0;
  badge.textContent = unread > 99 ? '99+' : String(unread);
  badge.classList.toggle('hidden', unread === 0);
- } catch (_) {
- badge.classList.add('hidden');
+ } catch (e) {
+  if (isMissingMessagesTable(e)) console.warn('Inbox count unavailable:', e);
+  badge.classList.add('hidden');
  }
 }
 
