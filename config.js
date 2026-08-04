@@ -17,8 +17,9 @@ const ADMIN_EMAILS = [
   'peaceomomofe34@gmail.com'
 ];
 
-// ── Paystack ──────────────────────────────────────────
-const PAYSTACK_PUBLIC_KEY = 'pk_live_4fd75c570f7fb446f06b1ea5fc32c17683547fea'; // Replace with live key for production
+// ── Flutterwave ───────────────────────────────────────
+// Replace this with your Flutterwave public key from Dashboard > API Keys.
+const FLUTTERWAVE_PUBLIC_KEY = 'FLWPUBK_TEST-REPLACE_WITH_YOUR_PUBLIC_KEY-X';
 
 // ── Platform Fees ─────────────────────────────────────
 const COMMISSION_AMOUNT = 250000; // ₦2,500 in kobo

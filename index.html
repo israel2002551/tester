@@ -87,10 +87,10 @@
  <span class="portal-badge">Most Popular</span>
  <div class="portal-icon buyer-icon"><i class="fa-solid fa-shopping-bag" style="color:#fff"></i></div>
  <h2>I'm a Buyer</h2>
- <p>Browse products from verified Nigerian sellers, check details, and pay through Paystack checkout.</p>
+ <p>Browse products from verified Nigerian sellers, check details, and pay through Flutterwave checkout.</p>
  <div class="portal-features">
  <div class="portal-feat"><i class="fa-solid fa-shield-alt"></i> Buyer Protection</div>
- <div class="portal-feat"><i class="fa-solid fa-credit-card"></i> Paystack Secure</div>
+ <div class="portal-feat"><i class="fa-solid fa-credit-card"></i> Flutterwave Secure</div>
  <div class="portal-feat"><i class="fa-brands fa-whatsapp"></i> WhatsApp Support</div>
  </div>
  <button class="btn btn-gold btn-full" type="button" onclick="event.stopPropagation(); enterSite('buyer')">Start Shopping <i class="fa-solid fa-arrow-right"></i></button>
@@ -126,7 +126,7 @@
  </main>
  <footer class="landing-footer">
  <div class="trust-pill"><i class="fa-solid fa-lock"></i> SSL Secured</div>
- <div class="trust-pill"><i class="fa-solid fa-credit-card"></i> Paystack Payments</div>
+ <div class="trust-pill"><i class="fa-solid fa-credit-card"></i> Flutterwave Payments</div>
  <div class="trust-pill"><i class="fa-brands fa-whatsapp"></i> 24/7 Support</div>
  <div class="trust-pill"><i class="fa-solid fa-shield-alt"></i> Buyer Protection</div>
  <a class="legal-footer-link" href="/terms">Terms of Service</a>
@@ -247,7 +247,7 @@
  <div class="slide-overlay"></div>
  <div class="slide-content">
  <span class="slide-tag" style="background:#0BA4DB;color:#fff"><i class="fa-solid fa-credit-card"></i> SECURE CHECKOUT</span>
- <h2>Pay with Paystack</h2>
+ <h2>Pay with Flutterwave</h2>
  <p>Cards, USSD, bank checkout & more. 100% secure.</p>
  <button class="btn btn-ghost btn-sm" onclick="openCategoryPage('all')">Browse All <i class="fa-solid fa-arrow-right"></i></button>
  </div>
@@ -482,7 +482,7 @@
  <h2 style="font-size:1.2rem;text-align:center;margin-bottom:1.4rem">Why Nigerians Trust BUYSELL</h2>
  <div class="trust-grid">
  <div class="trust-card"><div class="trust-icon" style="background:#dcfce7"><i class="fa-solid fa-shield-alt" style="color:var(--green)"></i></div><h3>Buyer Protection</h3><p>Full refund guarantee</p></div>
- <div class="trust-card"><div class="trust-icon" style="background:#dbeafe"><i class="fa-solid fa-credit-card" style="color:#3b82f6"></i></div><h3>Paystack Secure</h3><p>Cards, bank, USSD & more</p></div>
+ <div class="trust-card"><div class="trust-icon" style="background:#dbeafe"><i class="fa-solid fa-credit-card" style="color:#3b82f6"></i></div><h3>Flutterwave Secure</h3><p>Cards, bank, USSD & more</p></div>
  <div class="trust-card"><div class="trust-icon" style="background:#fef9c3"><i class="fa-solid fa-truck-fast" style="color:var(--gold)"></i></div><h3>BUYSELL Delivery Team</h3><p>We collect from sellers and control tracking</p></div>
  <div class="trust-card"><div class="trust-icon" style="background:#f3e8ff"><i class="fa-solid fa-star" style="color:var(--purple)"></i></div><h3>Verified Reviews</h3><p>Real buyer ratings</p></div>
  </div>
@@ -973,9 +973,9 @@
  </div>
  </div>
  <div style="border-top:1px solid var(--border);padding-top:1.1rem;margin-bottom:1.1rem">
- <h3 class="mb-2">Paystack Integration</h3>
- <p style="font-size:.78rem;color:var(--text3);margin-bottom:.85rem">Your public Paystack key to receive card payments from buyers.</p>
- <div class="form-group"><label class="form-label">Paystack Public Key</label><input type="text" id="s-paystack-key" class="form-input" placeholder="pk_live_xxxxxxxxxxxx"></div>
+ <h3 class="mb-2">BUYSELL Checkout</h3>
+ <p style="font-size:.78rem;color:var(--text3);margin-bottom:.85rem">Buyers pay through BUYSELL's secure Flutterwave checkout. Our team confirms payment and handles delivery tracking.</p>
+ <input type="hidden" id="s-paystack-key" value="">
  </div>
   <button type="submit" class="btn btn-primary btn-full" id="settings-save-btn"><i class="fa-solid fa-floppy-disk"></i> Save All Settings</button>
   </form>
@@ -1609,7 +1609,7 @@
 
  <h4 style="color:var(--text);margin-bottom:.4rem"><i class="fa-solid fa-shopping-bag color-green"></i> 3. Buyer Protection</h4>
  <ul style="margin-bottom:.85rem;padding-left:1.1rem">
- <li>All purchases via Paystack are protected by BUYSELL's Buyer Protection policy.</li>
+ <li>All purchases via Flutterwave are protected by BUYSELL's Buyer Protection policy.</li>
  <li>If a product doesn't match its description, buyers can open a dispute within 7 days of delivery.</li>
  <li>Bank transfer payments - buyers must upload payment proof. Disputes are resolved by admin review.</li>
  <li>Reviews must reflect genuine purchasing experiences. Fake reviews will be removed.</li>
@@ -1657,7 +1657,7 @@
  </div>
  <div style="font-size:.82rem;color:var(--text2);line-height:1.7">
  <h4 style="color:var(--text);margin-bottom:.4rem"><i class="fa-solid fa-database color-green"></i> Data We Collect</h4>
- <p style="margin-bottom:.85rem">We collect your name, email address, phone number, and transaction history to provide marketplace services. Payment data is processed securely by Paystack and never stored on our servers.</p>
+ <p style="margin-bottom:.85rem">We collect your name, email address, phone number, and transaction history to provide marketplace services. Payment data is processed securely by Flutterwave and never stored on our servers.</p>
 
  <h4 style="color:var(--text);margin-bottom:.4rem"><i class="fa-solid fa-lock color-green"></i> How We Protect Your Data</h4>
  <p style="margin-bottom:.85rem">All data is encrypted in transit (SSL/TLS) and stored securely via Supabase infrastructure. We never sell your personal information to third parties.</p>
@@ -1836,21 +1836,21 @@
  <div class="checkout-panel" id="co-p2">
  <h3 class="mb-3">Payment Method</h3>
  <div class="payment-method-grid">
- <div class="payment-method-card paystack-card selected" id="pm-paystack" onclick="selectPM('paystack')">
+ <div class="payment-method-card flutterwave-card selected" id="pm-flutterwave" onclick="selectPM('flutterwave')">
  <span class="payment-method-icon"><i class="fa-solid fa-credit-card" style="color:#0BA4DB"></i></span>
- <div class="payment-method-title">Paystack</div>
+ <div class="payment-method-title">Flutterwave</div>
  <div class="payment-method-sub">Cards, USSD, bank checkout</div>
  </div>
  </div>
- <!-- Paystack panel -->
- <div id="pm-paystack-panel">
+ <!-- Flutterwave panel -->
+ <div id="pm-flutterwave-panel">
  <div class="pay-info-box">
- <h4><i class="fa-solid fa-shield-alt"></i> Secured by Paystack</h4>
+ <h4><i class="fa-solid fa-shield-alt"></i> Secured by Flutterwave</h4>
  <div class="pay-row"><span class="label">Amount</span><span class="value highlight" id="co-pay-amount"></span></div>
  <div class="pay-row"><span class="label">Platform Commission (3%)</span><span class="value" id="co-commission"></span></div>
  <div class="pay-row"><span class="label">Email</span><span class="value" id="co-pay-email"></span></div>
  </div>
- <button class="btn btn-paystack btn-full btn-lg" onclick="payWithPaystack()"><i class="fa-solid fa-credit-card"></i> Pay Now with Paystack</button>
+ <button class="btn btn-flutterwave btn-full btn-lg" onclick="payWithFlutterwave()"><i class="fa-solid fa-credit-card"></i> Pay Now with Flutterwave</button>
  </div>
  <button class="btn btn-outline btn-sm mt-2" onclick="goCheckoutStep(1)"><i class="fa-solid fa-arrow-left"></i> Back</button>
  </div>
@@ -2019,7 +2019,7 @@
  <div class="bank-row"><span class="bk-label">Name</span><span class="bk-value">Efe Israel</span></div>
  <div class="bank-row"><span class="bk-label">Seller Access</span><span class="bk-value" style="color:var(--green);font-size:1.05rem">Free</span></div>
  </div>
- <button class="btn btn-paystack btn-full mb-2" onclick="payCommissionPaystack()"><i class="fa-solid fa-credit-card"></i> Pay via Paystack</button>
+ <button class="btn btn-flutterwave btn-full mb-2" onclick="payCommissionFlutterwave()"><i class="fa-solid fa-credit-card"></i> Pay via Flutterwave</button>
  <button class="btn btn-outline btn-full" onclick="openAdminSupportChat('Hello Admin Support, I need help restoring my seller access.')">Contact Support</button>
  <div style="margin-top:.85rem;text-align:center"><button class="btn btn-ghost btn-sm" style="color:var(--text3)" onclick="logoutUser()">Sign Out</button></div>
  </div>
@@ -2053,7 +2053,7 @@
  <h3 class="mb-2" style="font-size:.9rem">Common Questions</h3>
  <div class="faq-item mb-2">
  <div class="font-600 text-sm mb-1">' How do I buy safely?</div>
- <p class="text-xs color-text3">All sellers are verified. Pay via Paystack for 100% buyer protection. For bank transfers, always upload your receipt.</p>
+ <p class="text-xs color-text3">All sellers are verified. Pay via Flutterwave for 100% buyer protection. BUYSELL handles collection and delivery tracking.</p>
  </div>
  <div class="faq-item mb-2">
  <div class="font-600 text-sm mb-1"> How do I open a seller store?</div>
@@ -2838,9 +2838,9 @@
 </div>
 -->
 
-<script src="https://js.paystack.co/v2/inline.js"></script>
-<script data-cfasync="false" src="config.js?v=3.5"></script>
-<script src="app.js?v=10.2"></script>
+<script src="https://checkout.flutterwave.com/v3.js"></script>
+<script data-cfasync="false" src="config.js?v=3.6"></script>
+<script src="app.js?v=10.3"></script>
  <script>
  (function() {
  'use strict';

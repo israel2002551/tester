@@ -59,8 +59,8 @@ h1,h2,h3,h4,h5,h6,.heading-text{font-family:'Syne',sans-serif;line-height:1.2}
 .btn-primary:hover{background:var(--green);transform:translateY(-2px);box-shadow:var(--shadow-hover)}
 .btn-gold{background:var(--gold);color:var(--forest);box-shadow:0 4px 14px rgba(244,180,0,.3)}
 .btn-gold:hover{background:var(--gold-lt);transform:translateY(-1px)}
-.btn-paystack{background:linear-gradient(135deg,#0BA4DB,#008DD5);color:#fff;box-shadow:0 4px 14px rgba(11,164,219,.35)}
-.btn-paystack:hover{filter:brightness(1.08);transform:translateY(-1px)}
+.btn-flutterwave,.btn-paystack{background:linear-gradient(135deg,#f5a623,#f97316);color:#fff;box-shadow:0 4px 14px rgba(249,115,22,.32)}
+.btn-flutterwave:hover,.btn-paystack:hover{filter:brightness(1.08);transform:translateY(-1px)}
 .btn-outline{background:transparent;color:var(--text);border:1.5px solid var(--border2)}
 .btn-outline:hover{border-color:var(--green);color:var(--green)}
 .btn-ghost{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.2)}
@@ -1107,11 +1107,12 @@ h1,h2,h3,h4,h5,h6,.heading-text{font-family:'Syne',sans-serif;line-height:1.2}
 .copy-btn{background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border:1px solid rgba(255,255,255,.15);padding:.28rem .62rem;border-radius:6px;font-size:.7rem;cursor:pointer;display:flex;align-items:center;gap:.28rem;transition:all .2s}
 .copy-btn:hover{background:rgba(255,255,255,.2)}
 
-/* Paystack choice */
+/* Flutterwave choice */
 .payment-method-grid{display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-bottom:1rem}
 .payment-method-card{border:2px solid var(--border);border-radius:var(--radius-sm);padding:1rem;cursor:pointer;transition:all .2s;text-align:center}
 .payment-method-card:hover,.payment-method-card.selected{border-color:var(--green);background:var(--green-xlt)}
-.payment-method-card.paystack-card:hover,.payment-method-card.paystack-card.selected{border-color:#0BA4DB;background:#e0f2fe}
+.payment-method-card.flutterwave-card:hover,.payment-method-card.flutterwave-card.selected,
+.payment-method-card.paystack-card:hover,.payment-method-card.paystack-card.selected{border-color:#f97316;background:#fff7ed}
 .payment-method-icon{font-size:1.6rem;margin-bottom:.45rem;display:block}
 .payment-method-title{font-weight:700;font-size:.84rem;margin-bottom:.18rem}
 .payment-method-sub{font-size:.71rem;color:var(--text3)}

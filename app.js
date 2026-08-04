@@ -61,7 +61,7 @@ const PROFILE_COLUMNS = ['id','name','email','role','accounts','store_name','sto
 const KYC_LIST_COLUMNS = ['id','user_id','status','document_type','document_number','full_name','front_url','back_url','selfie_url','created_at','reviewed_at','admin_note'];
 const appCache = new Map();
 let carouselIndex = 0, carouselTimer = null;
-let selectedRating = 0, checkoutPaymentMethod = 'paystack';
+let selectedRating = 0, checkoutPaymentMethod = 'flutterwave';
 let deferredInstallPrompt = null, salesChart = null;
 let sellerAnalyticsChart = null;
 let carouselStartX = 0;
@@ -2804,9 +2804,9 @@ async function startCheckout() {
  if (gridContainer) {
  gridContainer.outerHTML = `
  <div class="payment-method-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap:0.7rem;">
- <div class="payment-method-card paystack-card selected" id="pm-paystack" onclick="selectCheckoutPaymentMethod('paystack')">
- <span class="payment-method-icon"><i class="fa-solid fa-credit-card" style="color:#0BA4DB"></i></span>
- <div class="payment-method-title">Paystack Checkout</div>
+ <div class="payment-method-card flutterwave-card selected" id="pm-flutterwave" onclick="selectCheckoutPaymentMethod('flutterwave')">
+ <span class="payment-method-icon"><i class="fa-solid fa-credit-card" style="color:#f97316"></i></span>
+ <div class="payment-method-title">Flutterwave Checkout</div>
  <div class="payment-method-sub">Cards, USSD, bank checkout</div>
  </div>
  ${walletCardHtml}
@@ -2815,7 +2815,7 @@ async function startCheckout() {
  }
 
  // Reset explicit gateway checkout selection state to default on entry window
- checkoutPaymentMethod = 'paystack'
+ checkoutPaymentMethod = 'flutterwave'
  
  // Order items rendering engine 
  document.getElementById('co-items').innerHTML = cart.map(c=>`
@@ -2827,7 +2827,7 @@ async function startCheckout() {
  
  const bankBox = document.getElementById('seller-bank-details-co');
  if (bankBox) {
- bankBox.innerHTML = `<p class="text-xs color-text3 p-2">Direct seller bank transfer is no longer available. Please use Paystack checkout.</p>`;
+ bankBox.innerHTML = `<p class="text-xs color-text3 p-2">Direct seller bank transfer is no longer available. Please use Flutterwave checkout so BUYSELL can manage payment and delivery tracking.</p>`;
  }
 }
 function goCheckoutStep(step) {
@@ -2851,91 +2851,57 @@ function selectPM(method) {
  selectCheckoutPaymentMethod(method);
 }
 
-function isPaystackReady() {
- if (typeof PaystackPop === 'undefined' && typeof Paystack === 'undefined') {
- toast('Payment unavailable', 'Paystack could not load. Please try again.', 'error');
+function isFlutterwaveReady() {
+ if (typeof FlutterwaveCheckout === 'undefined') {
+ toast('Payment unavailable', 'Flutterwave checkout could not load. Please try again.', 'error');
  return false;
  }
- if (!PAYSTACK_PUBLIC_KEY || !/^pk_(test|live)_/.test(PAYSTACK_PUBLIC_KEY)) {
- toast('Payment not configured', 'Set a valid Paystack public key in config.js.', 'error');
+ if (!FLUTTERWAVE_PUBLIC_KEY || !/^FLWPUBK_(TEST|LIVE)-/i.test(FLUTTERWAVE_PUBLIC_KEY) || FLUTTERWAVE_PUBLIC_KEY.includes('REPLACE_WITH')) {
+ toast('Payment not configured', 'Set a valid Flutterwave public key in config.js.', 'error');
  return false;
  }
  return true;
 }
 
-function openPaystackTransaction(options) {
- const reference = options.reference || options.ref;
- const onSuccess = options.onSuccess || options.callback;
- const onCancel = options.onCancel || options.onClose;
- const onError = options.onError || ((error) => {
- toast('Payment Error', error?.message || 'Could not initialize Paystack', 'error');
+function openFlutterwaveTransaction(options) {
+ if (!isFlutterwaveReady()) return;
+ FlutterwaveCheckout({
+ public_key: FLUTTERWAVE_PUBLIC_KEY,
+ tx_ref: options.tx_ref || options.reference,
+ amount: options.amount,
+ currency: options.currency || 'NGN',
+ payment_options: options.payment_options || 'card,banktransfer,ussd',
+ customer: options.customer,
+ customizations: {
+ title: 'BUYSELL Nigeria',
+ description: 'Marketplace checkout with BUYSELL delivery tracking',
+ logo: `${PUBLIC_SITE_URL || location.origin}/favicon.ico`,
+ ...(options.customizations || {})
+ },
+ callback: options.callback,
+ onclose: options.onclose,
+ meta: options.meta || options.metadata || {}
  });
- const commonOptions = { ...options, reference, onSuccess, onCancel, onError };
- delete commonOptions.ref;
- delete commonOptions.callback;
- delete commonOptions.onClose;
-
- if (typeof Paystack !== 'undefined') {
- const popup = new Paystack();
- if (typeof popup.newTransaction === 'function') {
- popup.newTransaction(commonOptions);
- return;
- }
- if (typeof popup.checkout === 'function') {
- popup.checkout(commonOptions);
- return;
- }
- }
-
- if (typeof PaystackPop !== 'undefined') {
- try {
- const popup = new PaystackPop();
- if (typeof popup.newTransaction === 'function') {
- popup.newTransaction(commonOptions);
- return;
- }
- if (typeof popup.checkout === 'function') {
- popup.checkout(commonOptions);
- return;
- }
- } catch (_) {
- // Older InlineJS exposes PaystackPop.setup as a static method.
- }
-
- if (typeof PaystackPop.setup === 'function') {
- const handler = PaystackPop.setup({
- ...options,
- ref: reference,
- callback: onSuccess,
- onClose: onCancel,
- });
- handler.openIframe();
- return;
- }
- }
-
- throw new Error('Paystack could not be initialized');
 }
 
-async function resolvePaystackReference(response, fallback = '') {
- return response?.reference ||
- response?.trxref ||
- response?.transaction_reference ||
+async function resolveFlutterwaveReference(response, fallback = '') {
+ return response?.tx_ref ||
+ response?.reference ||
+ response?.data?.tx_ref ||
  response?.data?.reference ||
- response?.data?.trxref ||
  fallback;
 }
 
-async function payWithPaystack() {
+async function payWithFlutterwave() {
  if (cart.length === 0) { toast('Cart is empty', '', 'warn'); return; }
  const rawProductTotal = cartPayableSubtotal();
  if (rawProductTotal <= 0) { toast('Invalid total amount', '', 'error'); return; }
  if (!currentUser) { showModal('auth-modal'); return; }
- if (!isPaystackReady()) return;
+ if (!isFlutterwaveReady()) return;
 
- const btn = document.querySelector('#pm-paystack-panel .btn-paystack');
+ const btn = document.querySelector('#pm-flutterwave-panel .btn-flutterwave') || document.querySelector('#pm-paystack-panel .btn-paystack');
  const oldHtml = btn?.innerHTML;
- if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Initializing Paystack...'; }
+ if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Initializing Flutterwave...'; }
 
  try {
  const checkoutPayload = {
@@ -2958,26 +2924,31 @@ async function payWithPaystack() {
  const hiddenTotalBillAmount = rawProductTotal + secretComm;
  
  const reference = 'bs_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
- const amountKobo = Math.round(hiddenTotalBillAmount * 100); // Send total with built-in fee to gateway
-
- openPaystackTransaction({
- key: PAYSTACK_PUBLIC_KEY,
- email: currentUser.email,
- amount: amountKobo,
+ openFlutterwaveTransaction({
+ tx_ref: reference,
+ amount: hiddenTotalBillAmount,
  currency: 'NGN',
- reference,
+ payment_options: 'card,banktransfer,ussd',
+ customer: {
+ email: currentUser.email,
+ phone_number: checkoutPayload.delivery_phone,
+ name: checkoutPayload.delivery_name,
+ },
  metadata: {
  user_id: currentUser.id,
  cart: checkoutPayload.cart,
  },
- onSuccess: async function(response) {
+ callback: async function(response) {
  toast('Verifying Payment...', 'Please do not close the window', 'info');
 
  try {
- const result = await callEdge('verify-payment', {
- reference: response.reference || response.trxref || reference,
+ const result = await callEdge('verify-flutterwave-payment', {
+ transaction_id: response.transaction_id || response.id,
+ tx_ref: response.tx_ref || reference,
+ expected_amount: hiddenTotalBillAmount,
+ currency: 'NGN',
  ...checkoutPayload,
- payment_method: 'paystack',
+ payment_method: 'flutterwave',
  });
  if (result.success) {
  const seller = cart[0]?.profiles;
@@ -2989,59 +2960,72 @@ async function payWithPaystack() {
  order_id: result.order_id,
  quantity: cart.reduce((sum,c)=>sum+(c.qty||1),0),
  amount: result.total_paid || hiddenTotalBillAmount,
- metadata: { payment_method: 'paystack' },
+ metadata: { payment_method: 'flutterwave' },
  });
  
  cart = []; saveCart();
  document.getElementById('co-order-id').textContent = result.order_id || '';
  document.getElementById('co-order-total').textContent = fmtN(result.total_paid || hiddenTotalBillAmount);
  goCheckoutStep(3);
- toast('Payment Verified!', 'Your order is confirmed', 'success');
+ toast('Payment Verified!', 'Your order is confirmed. BUYSELL delivery team will manage pickup and tracking.', 'success');
  }
  } catch (err) {
- toast('Verification Error', (err.message || 'Contact support') + ' Ref: ' + (response.reference || response.trxref || reference), 'error');
+ toast('Verification Error', (err.message || 'Contact support') + ' Ref: ' + (response.tx_ref || reference), 'error');
  } finally {
  if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
  }
  },
- onCancel: () => {
+ onclose: () => {
  if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
  toast('Payment cancelled', '', 'warn');
  }
  });
  } catch (err) {
  if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
- toast('Payment Error', err.message || 'Could not initialize Paystack', 'error');
+ toast('Payment Error', err.message || 'Could not initialize Flutterwave', 'error');
  }
 }
 
+function isPaystackReady() { return isFlutterwaveReady(); }
+function openPaystackTransaction(options) {
+ return openFlutterwaveTransaction({
+ ...options,
+ tx_ref: options.tx_ref || options.reference || options.ref,
+ amount: options.amount ? options.amount / 100 : options.amount,
+ callback: options.onSuccess || options.callback,
+ onclose: options.onCancel || options.onClose,
+ });
+}
+async function resolvePaystackReference(response, fallback = '') { return resolveFlutterwaveReference(response, fallback); }
+async function payWithPaystack() { return payWithFlutterwave(); }
+
 // --- NEW WALLET SELECTION METHOD AND ENGINE CORES ---
 function selectCheckoutPaymentMethod(method) {
- const nextMethod = ['paystack', 'wallet'].includes(method) ? method : 'paystack';
+ const nextMethod = ['flutterwave', 'paystack', 'wallet'].includes(method) ? (method === 'paystack' ? 'flutterwave' : method) : 'flutterwave';
  checkoutPaymentMethod = nextMethod;
- const paystackCard = document.getElementById('pm-paystack');
+ const flutterwaveCard = document.getElementById('pm-flutterwave') || document.getElementById('pm-paystack');
  const transferCard = document.getElementById('pm-transfer');
  const walletCard = document.getElementById('pm-wallet');
- const paystackPanel = document.getElementById('pm-paystack-panel');
+ const flutterwavePanel = document.getElementById('pm-flutterwave-panel') || document.getElementById('pm-paystack-panel');
  const transferPanel = document.getElementById('pm-transfer-panel');
 
- if (paystackCard) paystackCard.classList.toggle('selected', nextMethod === 'paystack');
+ if (flutterwaveCard) flutterwaveCard.classList.toggle('selected', nextMethod === 'flutterwave');
  if (transferCard) transferCard.classList.remove('selected');
  if (walletCard) walletCard.classList.toggle('selected', nextMethod === 'wallet');
- if (paystackPanel) paystackPanel.classList.remove('hidden');
+ if (flutterwavePanel) flutterwavePanel.classList.remove('hidden');
  if (transferPanel) transferPanel.classList.add('hidden');
  
  // Dynamically flip the submit button execution routing target
- const payBtn = document.querySelector('#pm-paystack-panel .btn-paystack') || document.querySelector('#co-p2 .btn-primary');
+ const payBtn = document.querySelector('#pm-flutterwave-panel .btn-flutterwave') || document.querySelector('#pm-paystack-panel .btn-paystack') || document.querySelector('#co-p2 .btn-primary');
  if (payBtn) {
  if (nextMethod === 'wallet') {
  payBtn.setAttribute('onclick', 'payWithWalletRevenue()');
  payBtn.innerHTML = '<i class="fa-solid fa-wallet"></i> Pay with Wallet Balance';
  payBtn.className = 'btn btn-primary btn-full btn-lg';
  } else {
- payBtn.setAttribute('onclick', 'payWithPaystack()');
- payBtn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Proceed with Paystack';
- payBtn.className = 'btn btn-paystack btn-full btn-lg';
+ payBtn.setAttribute('onclick', 'payWithFlutterwave()');
+ payBtn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Proceed with Flutterwave';
+ payBtn.className = 'btn btn-flutterwave btn-full btn-lg';
  }
  }
 }
@@ -3147,7 +3131,7 @@ async function payWithWalletRevenue() {
  return;
  }
 
- const btn = document.querySelector('#pm-paystack-panel .btn-paystack') || document.querySelector('#pm-paystack-panel .btn-primary');
+ const btn = document.querySelector('#pm-flutterwave-panel .btn-flutterwave') || document.querySelector('#pm-paystack-panel .btn-paystack') || document.querySelector('#pm-flutterwave-panel .btn-primary') || document.querySelector('#pm-paystack-panel .btn-primary');
  const oldHtml = btn?.innerHTML;
  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processing Wallet Debit...'; }
 
@@ -3228,8 +3212,8 @@ async function submitTransferOrder() {
  }
  const sellerProfile = cart[0]?.profiles || {};
  if (!sellerProfile.bank_name || !sellerProfile.account_number || !sellerProfile.account_name) {
- toast('Bank transfer unavailable', 'Please use Paystack checkout so BUYSELL can manage payment and delivery tracking.', 'warn');
- selectCheckoutPaymentMethod('paystack');
+ toast('Bank transfer unavailable', 'Please use Flutterwave checkout so BUYSELL can manage payment and delivery tracking.', 'warn');
+ selectCheckoutPaymentMethod('flutterwave');
  return;
  }
  if (!fileInput.files?.[0]) { toast('Please upload payment proof','','warn'); return; }
@@ -4234,11 +4218,15 @@ async function checkSellerCommission() {
  if (badge) { badge.className='badge badge-green'; badge.textContent='Free Seller Access'; }
 }
 
-function payCommissionPaystack() {
+function payCommissionFlutterwave() {
  if (!currentUser) return;
  closeModal('suspended-modal');
  toast('No Payment Needed', 'Seller access is now free. You can keep using your store.', 'success', 6000);
  checkSellerCommission();
+}
+
+function payCommissionPaystack() {
+ return payCommissionFlutterwave();
 }
 
 function payCommissionViaWallet() {
@@ -5020,7 +5008,7 @@ function connectAffiliateProgram(name) {
 function requestAffiliatePayout() {
  const pending = parseFloat((document.getElementById('aff-pending')?.textContent || '0').replace(/[^\d.]/g,'')) || 0;
  
- // REMOVED: Legacy account_number validation block to allow pure Paystack processing
+ // REMOVED: Legacy account_number validation block to allow platform-managed payout processing
  if (pending < 5000) { 
  toast('Not Ready Yet', 'Minimum affiliate payout is \u20A65,000.', 'warn'); 
  return; 
@@ -5030,7 +5018,7 @@ function requestAffiliatePayout() {
  if (wdAmountInput) wdAmountInput.value = pending;
  
  showDash('withdrawals');
- toast('Payout Prepared', 'Review and submit your Paystack processing request.', 'info');
+ toast('Payout Prepared', 'Review and submit your payout processing request.', 'info');
 }
 
 async function loadWithdrawalHistory() {
@@ -6338,11 +6326,11 @@ function getChatSystemPrompt(context) {
 
 function getChatFallback(message, context = {}) {
  const text = String(message || '').toLowerCase();
- if (text.includes('pay') || text.includes('payment') || text.includes('paystack')) {
- return 'You can pay with Paystack at checkout for card, bank, USSD, and other supported options. BUYSELL manages the order handoff and delivery tracking after payment.';
+ if (text.includes('pay') || text.includes('payment') || text.includes('paystack') || text.includes('flutterwave')) {
+ return 'You can pay with Flutterwave at checkout for card, bank, USSD, and other supported options. BUYSELL manages the order handoff and delivery tracking after payment.';
  }
  if (text.includes('order') || text.includes('track')) {
- return 'Open My Orders to view your order status. If you just paid with Paystack, wait for verification to finish, then your confirmed order will appear there.';
+ return 'Open My Orders to view your order status. If you just paid with Flutterwave, wait for verification to finish, then your confirmed order will appear there.';
  }
  if (text.includes('review')) {
  return 'Open the product, choose a star rating, write your experience, and submit the review. Reviews help other buyers know which sellers are reliable.';
@@ -8999,7 +8987,7 @@ async function trackAdStat(adId, type) {
 async function initiateAdPayment() {
  if (!currentUser) { showModal('auth-modal'); return; }
  const adminAd = isAdminEmail(currentUser.email) || isPlatformProfile(currentUser.profile || {});
- if (!adminAd && !isPaystackReady()) return;
+ if (!adminAd && !isFlutterwaveReady()) return;
 
  const title = document.getElementById('ad-title')?.value.trim();
  const desc = document.getElementById('ad-desc')?.value.trim();
@@ -9073,23 +9061,29 @@ async function initiateAdPayment() {
   return;
   }
 
-  // Initialize Paystack payment
- const init = await callEdge('init-ad-payment', { amount: AD_PRICE_KOBO / 100 });
- if (!init?.access_code && !init?.reference) throw new Error('Could not initialize ad payment');
- 
- const reference = init.reference;
- openPaystackTransaction({
- key: PAYSTACK_PUBLIC_KEY,
- email: currentUser.email,
- amount: AD_PRICE_KOBO,
+  // Initialize Flutterwave payment
+ const reference = 'ad_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+ openFlutterwaveTransaction({
+ tx_ref: reference,
+ amount: AD_PRICE_KOBO / 100,
  currency: 'NGN',
- reference,
- access_code: init.access_code,
+ payment_options: 'card,banktransfer,ussd',
+ customer: {
+ email: currentUser.email,
+ phone_number: currentUser.profile?.whatsapp || '',
+ name: currentUser.profile?.name || currentUser.email,
+ },
  metadata: { user_id: currentUser.id, type: 'advertisement' },
- onSuccess: async (response) => {
+ callback: async (response) => {
  try {
- const paidReference = await resolvePaystackReference(response, reference);
- await callEdge('verify-ad-payment', { reference: paidReference, adData });
+ const paidReference = await resolveFlutterwaveReference(response, reference);
+ await callEdge('verify-flutterwave-ad-payment', {
+ transaction_id: response.transaction_id || response.id,
+ tx_ref: paidReference,
+ expected_amount: AD_PRICE_KOBO / 100,
+ currency: 'NGN',
+ adData
+ });
  
  toast('Ad Submitted', 'Payment verified. Your ad is now waiting for admin approval.', 'success');
  
@@ -9099,10 +9093,10 @@ async function initiateAdPayment() {
  } catch (err) {
  toast('Verification Failed', err.message || 'Contact support', 'error');
  } finally {
- btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Submit Ad';
+  btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Submit Ad';
  }
  },
- onCancel: () => {
+ onclose: () => {
  btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Pay & Submit Ad';
  toast('Payment Cancelled', 'Your ad was not submitted.', 'info');
  }
