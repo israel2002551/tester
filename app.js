@@ -8,7 +8,7 @@ let chatHistory = [];
 let adminAiHistory = [];
 let currentUser = null, currentRole = 'buyer', currentProd = null;
 const PUBLIC_SITE_URL = 'https://buysell-marketplace.com';
-const SERVICE_WORKER_APP_VERSION = '2026-08-04-push-2';
+const SERVICE_WORKER_APP_VERSION = '2026-08-04-push-3';
 function createMemoryStorage() {
  const fallback = new Map();
  return {
@@ -1318,12 +1318,15 @@ function updateNavForUser() {
  const initial = (currentUser.profile?.name || currentUser.email || 'U')[0].toUpperCase();
  document.getElementById('nav-avatar-inner').textContent = initial;
  document.getElementById('nav-avatar-inner').style.fontSize = '.9rem';
- updateNotificationButtonState();
- if ('Notification' in window && Notification.permission === 'granted') {
- syncUserNotificationToken().catch(error => {
- console.warn('[PUSH ENGINE] Background subscription refresh failed:', error.message || error);
- });
- }
+  updateNotificationButtonState();
+  if ('Notification' in window && Notification.permission === 'granted') {
+  setTimeout(() => {
+   if (document.hidden) return;
+   syncUserNotificationToken().catch(error => {
+    console.warn('[PUSH ENGINE] Background subscription refresh failed:', error.message || error);
+   });
+  }, 2500);
+  }
  document.getElementById('dash-user-name').textContent = currentUser.profile?.name || 'Seller';
  document.getElementById('dash-user-email').textContent = currentUser.email || '';
  // Admin check
@@ -8975,18 +8978,42 @@ async function ensurePushServiceWorkerRegistration() {
  return registerPushServiceWorkerWithRetry();
 }
 
+async function resetPushServiceWorkerScope() {
+ const registration = await navigator.serviceWorker.getRegistration('/').catch(() => null);
+ if (registration) await registration.unregister().catch(() => false);
+ if ('caches' in window) {
+  const cacheNames = await caches.keys().catch(() => []);
+  await Promise.all(cacheNames.map(name => caches.delete(name).catch(() => false)));
+ }
+ await delay(400);
+}
+
 async function registerPushServiceWorkerWithRetry(attempt = 1) {
  try {
+  await waitForActiveDocument();
+  const swVersionKey = 'bs_push_sw_version';
   const existing = await navigator.serviceWorker.getRegistration('/');
-  const registration = existing || await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+  const shouldRefreshWorker = existing && appStorage.getItem(swVersionKey) !== SERVICE_WORKER_APP_VERSION;
+  if (shouldRefreshWorker) {
+   await existing.unregister().catch(() => false);
+   await delay(400);
+  }
+
+  const activeRegistration = shouldRefreshWorker ? null : existing;
+  const registration = activeRegistration || await navigator.serviceWorker.register(`/sw.js?v=${encodeURIComponent(SERVICE_WORKER_APP_VERSION)}`, {
+   scope: '/',
+   updateViaCache: 'none'
+  });
   if (registration.waiting) registration.waiting.postMessage?.({ type: 'SKIP_WAITING' });
-  if (!registration.active) return await navigator.serviceWorker.ready;
-  return registration;
+  const readyRegistration = registration.active ? registration : await navigator.serviceWorker.ready;
+  appStorage.setItem(swVersionKey, SERVICE_WORKER_APP_VERSION);
+  return readyRegistration;
  } catch (error) {
   const message = String(error?.message || error || '');
   const aborted = error?.name === 'AbortError' || /aborted|invalid state/i.test(message);
   if (aborted && attempt < 3) {
-   await delay(500 * attempt);
+   await resetPushServiceWorkerScope();
+   await delay(700 * attempt);
    return registerPushServiceWorkerWithRetry(attempt + 1);
   }
   throw error;
