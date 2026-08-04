@@ -8,6 +8,7 @@ let chatHistory = [];
 let adminAiHistory = [];
 let currentUser = null, currentRole = 'buyer', currentProd = null;
 const PUBLIC_SITE_URL = 'https://buysell-marketplace.com';
+const SERVICE_WORKER_APP_VERSION = '2026-08-04-push-2';
 function createMemoryStorage() {
  const fallback = new Map();
  return {
@@ -88,6 +89,31 @@ function getCachedData(key) {
 function setCachedData(key, data) {
  appCache.set(key, { data, time: Date.now() });
  return data;
+}
+
+async function refreshStaleServiceWorkerData() {
+ if (!('serviceWorker' in navigator)) return;
+ const versionKey = 'bs_sw_app_version';
+ const reloadedKey = `bs_sw_reloaded_${SERVICE_WORKER_APP_VERSION}`;
+ if (appStorage.getItem(versionKey) === SERVICE_WORKER_APP_VERSION) return;
+
+ try {
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(registrations.map(reg => reg.unregister().catch(() => false)));
+
+  if ('caches' in window) {
+  const cacheNames = await caches.keys();
+  await Promise.all(cacheNames.map(name => caches.delete(name).catch(() => false)));
+  }
+
+  appStorage.setItem(versionKey, SERVICE_WORKER_APP_VERSION);
+  if (!appSessionStorage.getItem(reloadedKey) && document.visibilityState !== 'hidden') {
+  appSessionStorage.setItem(reloadedKey, '1');
+  location.reload();
+  }
+ } catch (error) {
+  console.warn('[PUSH ENGINE] Automatic service worker cleanup failed:', error.message || error);
+ }
 }
 
 function clearCacheByPrefix(prefix) {
@@ -6976,6 +7002,7 @@ function installSecurityDomGuards() {
 // ====================================================
 (async function init() {
   console.log(" Launching single-page application lifecycle...");
+  await refreshStaleServiceWorkerData();
   installSecurityDomGuards();
   
   const savedLogo = appStorage.getItem('buysell_custom_logo');
