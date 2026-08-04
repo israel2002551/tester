@@ -2236,3 +2236,40 @@ button, a, input, textarea, select { touch-action: manipulation; }
 @media (max-width: 340px) {
  .products-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+@media (max-width: 900px) {
+ .mob-sidebar-overlay {
+  z-index: 1090 !important;
+  pointer-events: none;
+  touch-action: none;
+ }
+
+ .mob-sidebar-overlay.open {
+  display: block !important;
+  pointer-events: auto;
+ }
+
+ .dash-sidebar,
+ #dash-sidebar,
+ #spd-sidebar {
+  z-index: 1100 !important;
+  pointer-events: auto !important;
+  touch-action: pan-y;
+  will-change: transform;
+  -webkit-transform: translateX(-100%);
+  transform: translateX(-100%);
+ }
+
+ .dash-sidebar.open,
+ #dash-sidebar.open,
+ #spd-sidebar.open {
+  -webkit-transform: translateX(0) !important;
+  transform: translateX(0) !important;
+ }
+
+ .dash-sidebar *,
+ #dash-sidebar *,
+ #spd-sidebar * {
+  pointer-events: auto;
+ }
+}
