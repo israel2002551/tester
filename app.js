@@ -7,7 +7,7 @@
 let chatHistory = []; 
 let adminAiHistory = [];
 let currentUser = null, currentRole = 'buyer', currentProd = null;
-const PUBLIC_SITE_URL = 'https://buysell-markerplace.com';
+const PUBLIC_SITE_URL = 'https://buysell-marketplace.com';
 function createMemoryStorage() {
  const fallback = new Map();
  return {

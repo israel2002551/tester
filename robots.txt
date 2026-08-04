@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://buysell-markerplace.com/sitemap.xml
+Sitemap: https://buysell-marketplace.com/sitemap.xml
