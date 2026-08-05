@@ -4863,6 +4863,340 @@ async function loadDropshipData() {
  </tr>`).join('');
 }
 
+// 1688 sourcing integration overrides the earlier generic supplier UI.
+const source1688Catalog = [
+ { id:'1688-shoes', category:'Fashion', title:'Sheepskin French-style wedge slip-on shoes', price:'CNY 79.00-99.00', moq:'MOQ 1 pair', supplier:'Huizhou Shunbuda Shoes Co.', tags:['Real 1688 page','Quality assurance'], image:'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?auto=format&fit=crop&w=700&q=80', url:'https://detail.1688.com/offer/1051231740308.html' },
+ { id:'1688-fashion', category:'Fashion', title:'Fashion and apparel sourcing', price:'Open 1688', moq:'Search clothing', supplier:'1688 category search', tags:['Clothing','Private label'], image:'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=700&q=80', url:'https://s.1688.com/selloffer/offer_search.htm?keywords=clothing' },
+ { id:'1688-electronics', category:'Electronics', title:'Electronics and phone accessories', price:'Open 1688', moq:'Search gadgets', supplier:'1688 category search', tags:['Power banks','Phone parts'], image:'https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?auto=format&fit=crop&w=700&q=80', url:'https://s.1688.com/selloffer/offer_search.htm?keywords=electronics' },
+ { id:'1688-home', category:'Home', title:'Home, kitchen, and daily goods', price:'Open 1688', moq:'Search home goods', supplier:'1688 category search', tags:['Kitchen','Homeware'], image:'https://images.unsplash.com/photo-1516594798947-e65505dbb29d?auto=format&fit=crop&w=700&q=80', url:'https://s.1688.com/selloffer/offer_search.htm?keywords=home%20goods' },
+ { id:'1688-beauty', category:'Beauty', title:'Beauty and personal care supplies', price:'Open 1688', moq:'Search beauty', supplier:'1688 category search', tags:['Cosmetics','Tools'], image:'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=700&q=80', url:'https://s.1688.com/selloffer/offer_search.htm?keywords=beauty' },
+ { id:'1688-packaging', category:'Packaging', title:'Packaging materials and mailers', price:'Open 1688', moq:'Bulk packs', supplier:'1688 category search', tags:['Bags','Boxes'], image:'https://images.unsplash.com/photo-1607344645866-009c320f6ab0?auto=format&fit=crop&w=700&q=80', url:'https://s.1688.com/selloffer/offer_search.htm?keywords=packaging' },
+ { id:'1688-factory', category:'Factory', title:'Find factories on 1688', price:'Factory access', moq:'Browse makers', supplier:'1688 Find Factory', tags:['Factories','Manufacturers'], image:'https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?auto=format&fit=crop&w=700&q=80', url:'https://mind.1688.com/1688pc/pc-home/r3Dc8JjQaK4BfAz5xyw7/index.html?wh_pha=true&wh_pid=3650667' },
+ { id:'1688-industrial', category:'Industrial', title:'Industrial supplies and tools', price:'Industrial access', moq:'Business buying', supplier:'1688 industrial channel', tags:['Industrial','B2B'], image:'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=700&q=80', url:'https://mind.1688.com/1688pc/pc-home/wkjhxWbz6dfhkixKdyrW/index.html?wh_pha=true&wh_pid=3590995' },
+ { id:'1688-ai-industrial', category:'Industrial', title:'AI industrial product finder', price:'Open 1688', moq:'Image search', supplier:'1688 industry AI', tags:['AI finder','Parameters'], image:'https://images.unsplash.com/photo-1581090700227-1e37b190418e?auto=format&fit=crop&w=700&q=80', url:'https://industrybot.1688.com/#/pc?from=home-center-card' },
+ { id:'1688-main', category:'all', title:'Main 1688 homepage', price:'Open 1688', moq:'All products', supplier:'1688.com', tags:['Homepage','All categories'], image:'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=700&q=80', url:'https://www.1688.com/' }
+];
+const DS_1688_CART_KEY = 'bs_1688_sourcing_cart';
+let active1688Category = 'all';
+let extracted1688Product = null;
+let source1688Cart = readStoredJson(DS_1688_CART_KEY, []);
+
+function renderDropshipSection() {
+ const section = document.getElementById('ds-dropshipping');
+ if (!section || section.dataset.enhanced === '1688') return;
+ section.dataset.enhanced = '1688';
+ section.innerHTML = `
+ <h1 class="dash-page-title">1688 Sourcing Desk</h1>
+ <p class="dash-page-sub">BUYSELL helps sellers source from 1688, confirm products, coordinate payment, and handle delivery tracking.</p>
+
+ <div class="dropship-hero ds-1688-hero mb-4">
+ <div><h2>Paste a 1688 link. BUYSELL handles sourcing and delivery.</h2><p>Sellers browse 1688, submit product links, publish dropship listings, and send sourcing requests to the BUYSELL team.</p></div>
+ <div class="ds-1688-hero-actions"><button class="btn btn-primary" onclick="document.getElementById('ds-1688-url')?.focus()"><i class="fa-solid fa-link"></i> Submit 1688 Link</button><a class="btn btn-ghost" href="https://www.1688.com/" target="_blank" rel="noopener"><i class="fa-solid fa-up-right-from-square"></i> Open 1688</a></div>
+ </div>
+
+ <div class="dropship-stats mb-4">
+ <div class="stat-card"><div class="stat-value color-green" id="ds-imported">0</div><div class="stat-label">1688 Listings</div></div>
+ <div class="stat-card"><div class="stat-value" id="ds-cart-count">0</div><div class="stat-label">Sourcing Cart</div></div>
+ <div class="stat-card"><div class="stat-value color-gold" id="ds-sales">₦0</div><div class="stat-label">Delivered Sales</div></div>
+ <div class="stat-card"><div class="stat-value color-text3" id="ds-pending">0</div><div class="stat-label">Admin Delivery Orders</div></div>
+ </div>
+
+ <div class="card card-pad mb-4">
+ <form class="ds-1688-search" onsubmit="open1688Search(event)">
+ <select id="ds-1688-search-mode" class="form-select" aria-label="1688 search type"><option>1688 Search</option><option>Factories</option><option>Industrial</option></select>
+ <input id="ds-1688-search" class="form-input" type="search" placeholder="Search 1688: shoes, bags, electronics, packaging...">
+ <button class="btn btn-primary" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Open 1688</button>
+ </form>
+ </div>
+
+ <div class="dash-two-col mb-4 ds-1688-grid">
+ <div class="card card-pad">
+ <h3 class="mb-2">Smart 1688 Extractor</h3>
+ <p class="text-xs color-text3 mb-3">Paste a 1688 product URL or copied product-page code. BUYSELL will use it to prepare your listing and sourcing request.</p>
+ <textarea id="ds-1688-url" class="form-textarea" rows="5" placeholder="Paste https://detail.1688.com/offer/... or copied 1688 page code"></textarea>
+ <div class="form-grid form-grid-2 mt-2">
+ <div class="form-group"><label class="form-label">Desired selling price (₦)</label><input id="ds-1688-sell-price" class="form-input" type="number" inputmode="numeric" placeholder="e.g. 35000" oninput="updateDropshipCalculator()"></div>
+ <div class="form-group"><label class="form-label">Quantity</label><input id="ds-1688-qty" class="form-input" type="number" min="1" value="1" inputmode="numeric"></div>
+ </div>
+ <div class="flex gap-2 wrap mt-2"><button class="btn btn-primary" onclick="extract1688Product(event)"><i class="fa-solid fa-wand-magic-sparkles"></i> Extract Details</button><button class="btn btn-outline" onclick="addExtracted1688ToCart()"><i class="fa-solid fa-cart-plus"></i> Add to Cart</button></div>
+ <div id="ds-1688-preview" class="ds-1688-preview mt-3"></div>
+ </div>
+
+ <div class="card card-pad">
+ <h3 class="mb-3">BUYSELL Price Helper</h3>
+ <div class="form-grid form-grid-2"><div class="form-group"><label class="form-label">Estimated 1688 cost (₦)</label><input type="number" id="ds-calc-cost" class="form-input" value="12000" inputmode="numeric" oninput="updateDropshipCalculator()"></div><div class="form-group"><label class="form-label">Your selling price (₦)</label><input type="number" id="ds-calc-price" class="form-input" value="35000" inputmode="numeric" oninput="updateDropshipCalculator()"></div></div>
+ <div class="form-grid form-grid-2"><div class="form-group"><label class="form-label">BUYSELL sourcing/delivery estimate (₦)</label><input type="number" id="ds-calc-ship" class="form-input" value="5000" inputmode="numeric" oninput="updateDropshipCalculator()"></div><div class="form-group"><label class="form-label">Marketplace fee (%)</label><input type="number" id="ds-calc-fee" class="form-input" value="3" inputmode="numeric" oninput="updateDropshipCalculator()"></div></div>
+ <div class="profit-result"><span>Net Profit</span><strong id="ds-calc-profit">₦0</strong><small id="ds-calc-margin">0% margin</small></div>
+ <div class="ds-1688-note mt-3"><i class="fa-solid fa-truck-fast"></i><span>BUYSELL sourcing and delivery team handles collection, shipping updates, and tracking for 1688 orders.</span></div>
+ </div>
+ </div>
+
+ <div class="card card-pad mb-4">
+ <div class="flex justify-between items-center mb-3 gap-2 wrap"><h3>1688 Access Links</h3><div class="flex gap-2 wrap" id="ds-1688-tabs">${['all','Fashion','Electronics','Home','Beauty','Factory','Industrial','Packaging'].map(cat => `<button class="btn ${cat === 'all' ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="set1688Category('${cat}')">${cat === 'all' ? 'All' : cat}</button>`).join('')}</div></div>
+ <div class="hot-items-grid ds-1688-catalog" id="dropship-catalog"></div>
+ </div>
+
+ <div class="dash-two-col mb-4 ds-1688-grid">
+ <div class="card card-pad">
+ <div class="flex justify-between items-center mb-3 gap-2 wrap"><h3>1688 Sourcing Cart</h3><button class="btn btn-outline btn-sm" onclick="clear1688Cart()"><i class="fa-solid fa-trash"></i> Clear</button></div>
+ <div id="ds-1688-cart" class="ds-1688-cart"></div>
+ <div class="form-grid form-grid-2 mt-3"><input id="ds-1688-contact" class="form-input" placeholder="Seller phone/WhatsApp"><input id="ds-1688-destination" class="form-input" placeholder="Delivery city/country"></div>
+ <textarea id="ds-1688-request-note" class="form-textarea mt-2" rows="3" placeholder="Extra sourcing notes: color, size, model, budget, buyer deadline..."></textarea>
+ <button class="btn btn-primary btn-full mt-2" onclick="submit1688SourcingRequest(event)"><i class="fa-solid fa-paper-plane"></i> Send to BUYSELL Sourcing Team</button>
+ </div>
+ <div class="card card-pad">
+ <h3 class="mb-2">How BUYSELL Handles 1688 Orders</h3>
+ <div class="ds-1688-steps"><div><strong>1. Seller submits link</strong><span>Paste URL, variant, quantity, and desired selling price.</span></div><div><strong>2. Admin confirms source</strong><span>BUYSELL checks supplier, cost, MOQ, shipping, and availability.</span></div><div><strong>3. BUYSELL handles delivery</strong><span>We coordinate collection, shipping, updates, and order tracking.</span></div></div>
+ <button class="btn btn-outline btn-full mt-3" onclick="showDash('orders')"><i class="fa-solid fa-truck-fast"></i> View Order Tracking</button>
+ </div>
+ </div>
+
+ <div class="card overflow-hidden"><div class="card-pad flex justify-between items-center gap-2 wrap" style="border-bottom:1px solid var(--border)"><h3>BUYSELL 1688 Listings</h3><button class="btn btn-outline btn-sm" onclick="loadDropshipData()"><i class="fa-solid fa-rotate"></i> Reload</button></div><div class="overflow-x"><table class="data-table"><thead><tr><th>Product</th><th>Price</th><th>Stock</th><th>Status</th><th>Action</th></tr></thead><tbody id="ds-imported-table"><tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">No 1688 listings yet</td></tr></tbody></table></div></div>`;
+}
+
+function build1688SearchUrl(query, mode = '1688 Search') {
+ const term = String(query || '').trim() || 'wholesale';
+ if (mode === 'Factories') return 'https://mind.1688.com/1688pc/pc-home/r3Dc8JjQaK4BfAz5xyw7/index.html?wh_pha=true&wh_pid=3650667';
+ if (mode === 'Industrial') return query.trim() ? `https://s.1688.com/selloffer/offer_search.htm?keywords=${encodeURIComponent(`${term} industrial`)}` : 'https://mind.1688.com/1688pc/pc-home/wkjhxWbz6dfhkixKdyrW/index.html?wh_pha=true&wh_pid=3590995';
+ return `https://s.1688.com/selloffer/offer_search.htm?keywords=${encodeURIComponent(term)}`;
+}
+
+function open1688Search(event) {
+ event?.preventDefault();
+ window.open(build1688SearchUrl(document.getElementById('ds-1688-search')?.value || '', document.getElementById('ds-1688-search-mode')?.value || '1688 Search'), '_blank', 'noopener');
+}
+
+function set1688Category(category = 'all') {
+ active1688Category = category;
+ renderDropshipCatalog();
+}
+
+function renderDropshipCatalog() {
+ const grid = document.getElementById('dropship-catalog');
+ if (!grid) return;
+ document.querySelectorAll('#ds-1688-tabs .btn').forEach(btn => {
+  const isActive = btn.textContent.trim() === (active1688Category === 'all' ? 'All' : active1688Category);
+  btn.classList.toggle('btn-primary', isActive);
+  btn.classList.toggle('btn-outline', !isActive);
+ });
+ const items = source1688Catalog.filter(item => active1688Category === 'all' || item.category === active1688Category);
+ grid.innerHTML = items.map(p => `<div class="hot-item dropship-product-card ds-1688-card"><img src="${escAttr(p.image)}" alt="${escAttr(p.title)}" loading="lazy"><div class="hot-item-body"><div class="flex justify-between gap-2"><div class="font-600 text-sm">${escHtml(p.title)}</div><span class="badge badge-green">${escHtml(p.category)}</span></div><div class="text-xs color-text3 mt-1">${escHtml(p.supplier)} - ${escHtml(p.moq)}</div><div class="dropship-price-row"><span>${escHtml(p.price)}</span><strong>1688</strong></div><div class="tag-row">${p.tags.map(tag => `<span class="badge badge-gray">${escHtml(tag)}</span>`).join('')}</div><div class="flex gap-2 mt-2"><a class="btn btn-outline btn-sm" href="${escAttr(p.url)}" target="_blank" rel="noopener"><i class="fa-solid fa-up-right-from-square"></i> Open</a><button class="btn btn-primary btn-sm" onclick="prepare1688CatalogItem('${escAttr(p.id)}')"><i class="fa-solid fa-cart-plus"></i> Use</button></div></div></div>`).join('');
+}
+
+function readMatch(text, pattern) {
+ const match = String(text || '').match(pattern);
+ return match ? match[1].replace(/\\u002F/g, '/').replace(/\\"/g, '"').trim() : '';
+}
+
+function normalize1688Url(value = '') {
+ const text = String(value || '').trim();
+ const offerId = text.match(/offer[\/=](\d+)/i)?.[1] || text.match(/offerId["'=:%20]+(\d+)/i)?.[1] || text.match(/"offerId":(\d+)/)?.[1];
+ return offerId ? `https://detail.1688.com/offer/${offerId}.html` : text;
+}
+
+function extractProductDetails(raw) {
+ const text = String(raw || '').trim();
+ const title = readMatch(text, /"subject":"([^"]+)"/) || readMatch(text, /<title>(.*?)\s*-\s*[^<]*<\/title>/is) || readMatch(text, /<title>(.*?)<\/title>/is) || '1688 product request';
+ const image = readMatch(text, /"fullPathImageURI":"([^"]+)"/) || readMatch(text, /"imageUrl":"(https?:\/\/[^"]+)"/) || readMatch(text, /(https?:\/\/cbu01\.alicdn\.com\/[^"'<\s]+?\.(?:jpg|jpeg|png|webp))/i);
+ const price = readMatch(text, /"priceDisplay":"([^"]+)"/) || readMatch(text, /"originalPriceDisplay":"([^"]+)"/);
+ const supplier = readMatch(text, /"companyName":"([^"]+)"/) || readMatch(text, /"loginId":"([^"]+)"/) || '1688 supplier';
+ const moqAmount = readMatch(text, /"beginAmount":(\d+)/);
+ return normalize1688Product({ title, name: title, image, image_url: image, price: price ? `CNY ${price}` : 'Price on request', supplier, moq: moqAmount ? `MOQ ${moqAmount}` : 'MOQ to confirm', url: normalize1688Url(text), note: 'BUYSELL sourcing team will confirm price, MOQ, supplier, and shipping before order placement.' });
+}
+
+function normalize1688Product(product = {}) {
+ const title = product.title || product.name || product.subject || '1688 product request';
+ const image = product.image || product.image_url || product.mainImage || 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=700&q=80';
+ return { id: product.id || `1688-${Date.now()}`, title, name: title, category: product.category || 'dropship', price: product.price || product.priceDisplay || 'Price on request', supplier: product.supplier || product.supplier_name || '1688 supplier', moq: product.moq || 'MOQ to confirm', variant: product.variant || '', note: product.note || '', image, url: product.url || product.link || '', quantity: Number(product.quantity || document.getElementById('ds-1688-qty')?.value || 1) || 1 };
+}
+
+function sync1688PriceFields(product = {}) {
+ const sellInput = document.getElementById('ds-1688-sell-price');
+ const calcPrice = document.getElementById('ds-calc-price');
+ if (sellInput?.value && calcPrice) calcPrice.value = sellInput.value;
+ const cny = String(product.price || '').match(/(\d+(?:\.\d+)?)/)?.[1];
+ const calcCost = document.getElementById('ds-calc-cost');
+ if (cny && calcCost) calcCost.value = Math.round(Number(cny) * 230);
+ updateDropshipCalculator();
+}
+
+function render1688ExtractPreview(product) {
+ const el = document.getElementById('ds-1688-preview');
+ if (!el) return;
+ if (!product) { el.innerHTML = ''; return; }
+ el.innerHTML = `<div class="ds-1688-preview-card"><img src="${escAttr(product.image || '')}" alt="${escAttr(product.title || '1688 product')}" loading="lazy"><div><h3>${escHtml(product.title || '1688 product')}</h3><div class="preview-meta"><span>${escHtml(product.price || 'Price on request')}</span><span>${escHtml(product.moq || 'MOQ to confirm')}</span><span>${escHtml(product.supplier || '1688 supplier')}</span>${product.variant ? `<span>${escHtml(product.variant)}</span>` : ''}</div><div class="flex gap-2 wrap mt-2"><button class="btn btn-primary btn-sm" onclick="publish1688Product(event)"><i class="fa-solid fa-store"></i> Publish BUYSELL Listing</button><button class="btn btn-outline btn-sm" onclick="addExtracted1688ToCart()"><i class="fa-solid fa-cart-plus"></i> Add to Cart</button>${product.url ? `<a class="btn btn-ghost btn-sm" href="${escAttr(product.url)}" target="_blank" rel="noopener">Open 1688</a>` : ''}</div></div></div>`;
+}
+
+async function extract1688Product(event) {
+ if (!currentUser) { showModal('auth-modal'); return; }
+ const raw = document.getElementById('ds-1688-url')?.value.trim() || '';
+ if (!raw) { toast('Missing 1688 Link', 'Paste a 1688 product URL or copied page code first.', 'warn'); return; }
+ const btn = event?.currentTarget;
+ const oldHtml = btn?.innerHTML || '';
+ if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-dark"></span> Extracting...'; }
+ try {
+  const looksLikeHtml = /<html|window\.context|<title|fullPathImageURI|priceDisplay/i.test(raw);
+  const result = await callEdge('extract-1688-product', looksLikeHtml ? { html: raw } : { url: raw });
+  extracted1688Product = normalize1688Product(result.product || extractProductDetails(raw));
+  toast('1688 Details Extracted', 'Review before publishing or sending to BUYSELL.', 'success');
+ } catch (err) {
+  extracted1688Product = extractProductDetails(raw);
+  toast('Local Extraction Used', 'The server extractor is unavailable, so BUYSELL captured the link details locally.', 'info', 6500);
+ } finally {
+  render1688ExtractPreview(extracted1688Product);
+  sync1688PriceFields(extracted1688Product);
+  if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
+ }
+}
+
+function prepare1688CatalogItem(id) {
+ const item = source1688Catalog.find(product => product.id === id);
+ if (!item) return;
+ extracted1688Product = normalize1688Product({ ...item, name: item.title, note: 'Prepared from BUYSELL 1688 access links.' });
+ document.getElementById('ds-1688-url').value = item.url;
+ render1688ExtractPreview(extracted1688Product);
+ addExtracted1688ToCart();
+}
+
+function addExtracted1688ToCart() {
+ if (!extracted1688Product) { toast('Extract First', 'Extract or choose a 1688 product before adding to cart.', 'warn'); return; }
+ const qty = Math.max(1, Number(document.getElementById('ds-1688-qty')?.value || extracted1688Product.quantity || 1));
+ const item = { ...extracted1688Product, quantity: qty, desired_price: Number(document.getElementById('ds-1688-sell-price')?.value || 0) };
+ source1688Cart = [item, ...source1688Cart.filter(product => product.url !== item.url && product.title !== item.title)].slice(0, 20);
+ appStorage.setItem(DS_1688_CART_KEY, JSON.stringify(source1688Cart));
+ render1688Cart();
+ toast('Added to Sourcing Cart', 'BUYSELL can now review this 1688 item.', 'success');
+}
+
+function render1688Cart() {
+ const el = document.getElementById('ds-1688-cart');
+ const countEl = document.getElementById('ds-cart-count');
+ if (countEl) countEl.textContent = source1688Cart.reduce((sum, item) => sum + Number(item.quantity || 1), 0);
+ if (!el) return;
+ if (!source1688Cart.length) { el.innerHTML = '<div class="empty-state compact"><i class="fa-solid fa-cart-shopping"></i><p>No 1688 products added yet.</p></div>'; return; }
+ el.innerHTML = source1688Cart.map((item, index) => `<div class="ds-1688-cart-item"><img src="${escAttr(item.image)}" alt="${escAttr(item.title)}"><div><strong>${escHtml(item.title)}</strong><span>${escHtml(item.price)} - Qty ${Number(item.quantity || 1)}</span>${item.desired_price ? `<span>Sell at ${fmtN(item.desired_price)}</span>` : ''}<div class="flex gap-2 mt-1"><a href="${escAttr(item.url)}" target="_blank" rel="noopener">Open 1688</a><button onclick="remove1688CartItem(${index})">Remove</button></div></div></div>`).join('');
+}
+
+function remove1688CartItem(index) {
+ source1688Cart.splice(index, 1);
+ appStorage.setItem(DS_1688_CART_KEY, JSON.stringify(source1688Cart));
+ render1688Cart();
+}
+
+function clear1688Cart() {
+ source1688Cart = [];
+ appStorage.setItem(DS_1688_CART_KEY, JSON.stringify(source1688Cart));
+ render1688Cart();
+}
+
+async function publish1688Product(event) {
+ if (!currentUser) { showModal('auth-modal'); return; }
+ if (!extracted1688Product) { toast('Extract First', 'Choose or extract a 1688 product before publishing.', 'warn'); return; }
+ const btn = event?.currentTarget;
+ const oldHtml = btn?.innerHTML || '';
+ const price = Number(document.getElementById('ds-1688-sell-price')?.value || document.getElementById('ds-calc-price')?.value || 0);
+ if (!price || price < 100) { toast('Add Selling Price', 'Enter your BUYSELL selling price before publishing.', 'warn'); return; }
+ const productData = {
+  name: extracted1688Product.title,
+  description: `${extracted1688Product.note || ''}\n\n1688 source: ${extracted1688Product.url}\nSupplier: ${extracted1688Product.supplier}\nMOQ: ${extracted1688Product.moq}\nBUYSELL sourcing and delivery team handles confirmation, collection, shipping updates, and tracking.`,
+  price,
+  original_price: price,
+  shipping_fee: Number(document.getElementById('ds-calc-ship')?.value || 0),
+  shipping_cost: Number(document.getElementById('ds-calc-ship')?.value || 0),
+  category: 'dropship',
+  condition: 'new',
+  location: 'BUYSELL 1688 sourcing',
+  stock_quantity: 999,
+  low_stock_alert: 3,
+  image_url: extracted1688Product.image,
+  images: extracted1688Product.image ? [extracted1688Product.image] : [],
+  negotiable: true
+ };
+ try {
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-dark"></span> Publishing...'; }
+  await callEdge('manage-product', { action: 'create', data: productData });
+  toast('1688 Listing Published', 'The product is now connected to BUYSELL sourcing and delivery.', 'success');
+  loadDropshipData();
+  loadSellerProds();
+ } catch (error) {
+  toast('Publish Failed', error.message || 'Could not publish this 1688 listing.', 'error');
+ } finally {
+  if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
+ }
+}
+
+async function submit1688SourcingRequest(event) {
+ if (!currentUser) { showModal('auth-modal'); return; }
+ if (!source1688Cart.length) { toast('Cart Empty', 'Add at least one 1688 product before sending.', 'warn'); return; }
+ const contact = document.getElementById('ds-1688-contact')?.value.trim() || currentUser.profile?.whatsapp || currentUser.email || '';
+ const destination = document.getElementById('ds-1688-destination')?.value.trim() || 'Nigeria';
+ const note = document.getElementById('ds-1688-request-note')?.value.trim() || '';
+ const lines = source1688Cart.map(item => `Qty ${item.quantity || 1}: ${item.title} | ${item.price} | Sell: ${item.desired_price ? fmtN(item.desired_price) : 'to confirm'} | ${item.url}`).join('\n');
+ const payload = { name: currentUser.profile?.name || currentUser.email || 'BUYSELL seller', contact, destination, request: `BUYSELL 1688 sourcing request\n${lines}\n\n${note}` };
+ const btn = event?.currentTarget;
+ const oldHtml = btn?.innerHTML || '';
+ try {
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-dark"></span> Sending...'; }
+  await callEdge('order-workflow', { action: 'create_order', ...payload });
+  toast('Sent to BUYSELL Team', 'Admin will confirm cost, sourcing, and delivery tracking.', 'success', 6500);
+  clear1688Cart();
+ } catch (error) {
+  const localRequests = readStoredJson('bs_1688_sourcing_requests', []);
+  localRequests.unshift({ ...payload, id: `local-${Date.now()}`, created_at: new Date().toISOString(), status: 'Submitted locally' });
+  appStorage.setItem('bs_1688_sourcing_requests', JSON.stringify(localRequests));
+  toast('Saved Locally', 'Supabase workflow is unavailable. The request was saved on this device.', 'warn', 7000);
+ } finally {
+  if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
+ }
+}
+
+async function importFromUrl(event) {
+ await extract1688Product(event);
+ if (extracted1688Product) await publish1688Product(event);
+}
+
+async function importDropshipById(id) {
+ prepare1688CatalogItem(id);
+ return publish1688Product();
+}
+
+async function importDropship(itemOrName, cost, price, emoji) {
+ extracted1688Product = normalize1688Product(typeof itemOrName === 'object' ? itemOrName : { title: itemOrName, price: price ? fmtN(price) : 'Price on request' });
+ render1688ExtractPreview(extracted1688Product);
+ addExtracted1688ToCart();
+}
+
+async function loadDropshipData() {
+ if (!currentUser) return;
+ ensureGrowthSections();
+ renderDropshipCatalog();
+ render1688Cart();
+ updateDropshipCalculator();
+ const { data: products } = await db.from('products')
+ .select('id,name,price,image_url,stock_quantity,status,created_at')
+ .eq('seller_id', currentUser.id)
+ .eq('category', 'dropship')
+ .order('created_at', { ascending:false })
+ .limit(DASHBOARD_PAGE_SIZE);
+ const dropshipProducts = products || [];
+ const importedEl = document.getElementById('ds-imported');
+ if (importedEl) importedEl.textContent = dropshipProducts.length;
+ const { data: orders } = await db.from('orders').select('id,total_amount,status,items,created_at,seller_id').eq('seller_id', currentUser.id);
+ const sales = (orders || []).filter(o => o.status === 'delivered').reduce((s,o)=>s + (o.total_amount || 0), 0);
+ const pending = (orders || []).filter(o => !['delivered','cancelled','refunded'].includes(o.status)).length;
+ const salesEl = document.getElementById('ds-sales');
+ const pendingEl = document.getElementById('ds-pending');
+ if (salesEl) salesEl.textContent = fmtN(sales);
+ if (pendingEl) pendingEl.textContent = pending;
+ const tbody = document.getElementById('ds-imported-table');
+ if (!tbody) return;
+ if (!dropshipProducts.length) {
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">No 1688 listings yet</td></tr>';
+  return;
+ }
+ tbody.innerHTML = dropshipProducts.map(p => `<tr><td><div class="flex items-center gap-2"><img src="${escAttr(p.image_url || 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=120')}" alt="" style="width:42px;height:42px;border-radius:8px;object-fit:cover"><div><div class="font-600 text-sm">${escHtml(p.name)}</div><div class="text-xs color-text3">BUYSELL 1688 sourcing - ${fmtDate(p.created_at)}</div></div></div></td><td class="font-bold color-green">${fmtN(p.price)}</td><td>${p.stock_quantity ?? 'N/A'}</td><td><span class="badge ${p.status === 'active' ? 'badge-green' : 'badge-gold'}">${escHtml(p.status || 'draft')}</span></td><td><button class="btn btn-outline btn-sm" onclick="editProduct('${p.id}')"><i class="fa-solid fa-pen"></i> Edit</button></td></tr>`).join('');
+}
+
 // ====================================================
 // AFFILIATE
 // ====================================================
