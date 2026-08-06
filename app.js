@@ -1769,6 +1769,20 @@ function closeMobSidebar() {
  document.body.classList.remove('sidebar-open');
 }
 
+function handleSellerSidebarTap(event) {
+ const item = event.target.closest?.('#dash-sidebar [data-dash-section]');
+ if (!item) return;
+ const section = item.dataset.dashSection;
+ if (!section) return;
+ event.preventDefault();
+ event.stopPropagation();
+ showDash(section);
+ closeMobSidebar();
+}
+
+document.addEventListener('click', handleSellerSidebarTap, true);
+document.addEventListener('touchend', handleSellerSidebarTap, { capture: true, passive: false });
+
 // ====================================================
 // CAROUSEL
 // ====================================================

@@ -39,7 +39,7 @@
 </script>
  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<link rel="stylesheet" href="/styles.css?v=10.10">
+<link rel="stylesheet" href="/styles.css?v=10.11">
 </head>
 <body>
 
@@ -539,34 +539,34 @@
  <nav class="dash-nav">
  <div class="dash-nav-section">
  <div class="dash-nav-label">Main</div>
- <a class="dash-nav-item active" onclick="showDash('overview');closeMobSidebar()"><i class="fa-solid fa-chart-pie"></i> Overview</a>
- <a class="dash-nav-item" onclick="showDash('products');closeMobSidebar()"><i class="fa-solid fa-box"></i> My Products</a>
- <a class="dash-nav-item" onclick="showDash('add-product');closeMobSidebar()"><i class="fa-solid fa-plus-circle"></i> Add Product</a>
- <a class="dash-nav-item" onclick="showDash('orders');closeMobSidebar()"><i class="fa-solid fa-receipt"></i> Orders <span class="nav-badge hidden" id="orders-badge">0</span></a>
+ <a class="dash-nav-item active" data-dash-section="overview" onclick="showDash('overview');closeMobSidebar()"><i class="fa-solid fa-chart-pie"></i> Overview</a>
+ <a class="dash-nav-item" data-dash-section="products" onclick="showDash('products');closeMobSidebar()"><i class="fa-solid fa-box"></i> My Products</a>
+ <a class="dash-nav-item" data-dash-section="add-product" onclick="showDash('add-product');closeMobSidebar()"><i class="fa-solid fa-plus-circle"></i> Add Product</a>
+ <a class="dash-nav-item" data-dash-section="orders" onclick="showDash('orders');closeMobSidebar()"><i class="fa-solid fa-receipt"></i> Orders <span class="nav-badge hidden" id="orders-badge">0</span></a>
  </div>
  <div class="dash-nav-section">
  <div class="dash-nav-label">Grow</div>
- <a class="dash-nav-item" onclick="showDash('dropshipping');closeMobSidebar()"><i class="fa-solid fa-globe"></i> Dropshipping <span class="nav-new">HOT</span></a>
- <a class="dash-nav-item" onclick="showDash('affiliate');closeMobSidebar()"><i class="fa-solid fa-link"></i> Affiliate</a>
- <a class="dash-nav-item" onclick="showDash('advertise');closeMobSidebar()"><i class="fa-solid fa-bullhorn"></i> Advertise <span class="nav-new" style="background:#ea580c">AD</span></a>
- <a class="dash-nav-item" onclick="showDash('reviews');closeMobSidebar()"><i class="fa-solid fa-star"></i> Reviews</a>
- <a class="dash-nav-item" onclick="showDash('analytics');closeMobSidebar()"><i class="fa-solid fa-chart-line"></i> Analytics</a>
+ <a class="dash-nav-item" data-dash-section="dropshipping" onclick="showDash('dropshipping');closeMobSidebar()"><i class="fa-solid fa-globe"></i> Dropshipping <span class="nav-new">HOT</span></a>
+ <a class="dash-nav-item" data-dash-section="affiliate" onclick="showDash('affiliate');closeMobSidebar()"><i class="fa-solid fa-link"></i> Affiliate</a>
+ <a class="dash-nav-item" data-dash-section="advertise" onclick="showDash('advertise');closeMobSidebar()"><i class="fa-solid fa-bullhorn"></i> Advertise <span class="nav-new" style="background:#ea580c">AD</span></a>
+ <a class="dash-nav-item" data-dash-section="reviews" onclick="showDash('reviews');closeMobSidebar()"><i class="fa-solid fa-star"></i> Reviews</a>
+ <a class="dash-nav-item" data-dash-section="analytics" onclick="showDash('analytics');closeMobSidebar()"><i class="fa-solid fa-chart-line"></i> Analytics</a>
  </div>
  <div class="dash-nav-section">
  <div class="dash-nav-label">Marketing</div>
- <a class="dash-nav-item" onclick="showDash('coupons');closeMobSidebar()"><i class="fa-solid fa-ticket"></i> Coupons</a>
- <a class="dash-nav-item" onclick="showDash('flash');closeMobSidebar()"><i class="fa-solid fa-bolt"></i> Flash Sales</a>
+ <a class="dash-nav-item" data-dash-section="coupons" onclick="showDash('coupons');closeMobSidebar()"><i class="fa-solid fa-ticket"></i> Coupons</a>
+ <a class="dash-nav-item" data-dash-section="flash" onclick="showDash('flash');closeMobSidebar()"><i class="fa-solid fa-bolt"></i> Flash Sales</a>
  </div>
  <div class="dash-nav-section">
  <div class="dash-nav-label">Finance</div>
- <a class="dash-nav-item" onclick="showDash('withdrawals');closeMobSidebar()"><i class="fa-solid fa-exchange-alt"></i> Withdrawals</a>
- <a class="dash-nav-item" onclick="showDash('commission');closeMobSidebar()"><i class="fa-solid fa-circle-check"></i> Free Access</a>
+ <a class="dash-nav-item" data-dash-section="withdrawals" onclick="showDash('withdrawals');closeMobSidebar()"><i class="fa-solid fa-exchange-alt"></i> Withdrawals</a>
+ <a class="dash-nav-item" data-dash-section="commission" onclick="showDash('commission');closeMobSidebar()"><i class="fa-solid fa-circle-check"></i> Free Access</a>
  </div>
  <div class="dash-nav-section">
  <div class="dash-nav-label">Account</div>
- <a class="dash-nav-item" onclick="showDash('settings');closeMobSidebar()"><i class="fa-solid fa-gear"></i> Store Settings</a>
- <a class="dash-nav-item" onclick="showDash('support');closeMobSidebar()"><i class="fa-solid fa-headset"></i> Support</a>
- <a class="dash-nav-item admin-item hidden" id="admin-nav-item" onclick="showDash('admin');closeMobSidebar()"><i class="fa-solid fa-shield-alt"></i> Super Admin</a>
+ <a class="dash-nav-item" data-dash-section="settings" onclick="showDash('settings');closeMobSidebar()"><i class="fa-solid fa-gear"></i> Store Settings</a>
+ <a class="dash-nav-item" data-dash-section="support" onclick="showDash('support');closeMobSidebar()"><i class="fa-solid fa-headset"></i> Support</a>
+ <a class="dash-nav-item admin-item hidden" id="admin-nav-item" data-dash-section="admin" onclick="showDash('admin');closeMobSidebar()"><i class="fa-solid fa-shield-alt"></i> Super Admin</a>
  </div>
  </nav>
  <div class="dash-sidebar-footer">
@@ -2872,7 +2872,7 @@
 
 <script src="https://checkout.flutterwave.com/v3.js"></script>
 <script data-cfasync="false" src="/config.js?v=3.6"></script>
-<script src="app.js?v=10.19"></script>
+<script src="app.js?v=10.20"></script>
  <script>
  (function() {
  'use strict';

@@ -2696,8 +2696,10 @@ button, a, input, textarea, select { touch-action: manipulation; }
  }
 
  .mob-sidebar-overlay.open {
-  display: block !important;
-  pointer-events: auto;
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
  }
 
  .dash-sidebar,
@@ -2726,11 +2728,22 @@ button, a, input, textarea, select { touch-action: manipulation; }
  #spd-sidebar.open {
   -webkit-transform: translateX(0) !important;
   transform: translateX(0) !important;
+  z-index: 2147483000 !important;
  }
 
  .dash-sidebar *,
  #dash-sidebar *,
  #spd-sidebar * {
-  pointer-events: auto;
+  pointer-events: auto !important;
+  touch-action: manipulation;
+ }
+
+ body.sidebar-open .dash-main {
+  pointer-events: none;
+ }
+
+ body.sidebar-open #dash-sidebar,
+ body.sidebar-open #dash-sidebar * {
+  pointer-events: auto !important;
  }
 }
