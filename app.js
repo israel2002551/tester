@@ -4818,12 +4818,34 @@ function updateDropshipCalculator() {
  const price = parseFloat(document.getElementById('ds-calc-price')?.value) || 0;
  const ship = parseFloat(document.getElementById('ds-calc-ship')?.value) || 0;
  const feePct = parseFloat(document.getElementById('ds-calc-fee')?.value) || 0;
- const profit = price - cost - ship - (price * feePct / 100);
+ const links = Math.max(1, parseFloat(document.getElementById('ds-calc-links')?.value) || source1688Cart.length || 1);
+ const yuanRate = parseFloat(document.getElementById('ds-calc-yuan-rate')?.value) || 0;
+ const kg = Math.max(1, parseFloat(document.getElementById('ds-calc-kg')?.value) || 1);
+ const usdPerKg = parseFloat(document.getElementById('ds-calc-usd-per-kg')?.value) || 0;
+ const usdRate = parseFloat(document.getElementById('ds-calc-usd-rate')?.value) || 0;
+ const repack = parseFloat(document.getElementById('ds-calc-repack')?.value) || 0;
+ const linkChargeYuan = get1688LinkChargeYuan(links);
+ const linkChargeNgn = linkChargeYuan * yuanRate;
+ const internationalShipping = kg * usdPerKg * usdRate;
+ const fee = price * feePct / 100;
+ const totalCost = cost + ship + linkChargeNgn + internationalShipping + repack + fee;
+ const profit = price - totalCost;
  const margin = price > 0 ? Math.round((profit / price) * 100) : 0;
  const profitEl = document.getElementById('ds-calc-profit');
  const marginEl = document.getElementById('ds-calc-margin');
+ const breakdownEl = document.getElementById('ds-cost-breakdown');
  if (profitEl) profitEl.textContent = fmtN(profit);
  if (marginEl) marginEl.textContent = `${margin}% margin`;
+ if (breakdownEl) {
+  breakdownEl.innerHTML = `<div><span>Link handling</span><strong>${linkChargeYuan} yuan (${fmtN(linkChargeNgn)})</strong></div><div><span>International shipping</span><strong>${kg}kg x $${usdPerKg}/kg = ${fmtN(internationalShipping)}</strong></div><div><span>Repacking</span><strong>${fmtN(repack)}</strong></div><div><span>Total estimated cost</span><strong>${fmtN(totalCost)}</strong></div>`;
+ }
+}
+
+function get1688LinkChargeYuan(linkCount = 1) {
+ const count = Math.max(1, Number(linkCount) || 1);
+ if (count <= 10) return 35;
+ if (count <= 20) return 60;
+ return 90;
 }
 
 async function loadDropshipData() {
@@ -4931,6 +4953,22 @@ function renderDropshipSection() {
  <div class="profit-result"><span>Net Profit</span><strong id="ds-calc-profit">₦0</strong><small id="ds-calc-margin">0% margin</small></div>
  <div class="ds-1688-note mt-3"><i class="fa-solid fa-truck-fast"></i><span>BUYSELL sourcing and delivery team handles collection, shipping updates, and tracking for 1688 orders.</span></div>
  </div>
+ </div>
+
+ <div class="card card-pad mb-4">
+ <div class="flex justify-between items-start gap-3 wrap mb-3">
+ <div><h3 class="mb-1">1688 Service Charges</h3><p class="text-xs color-text3">Structured estimate for link handling, shipping weight, and repacking before BUYSELL confirms the final quote.</p></div>
+ <span class="badge badge-green">Minimum 1kg shipping</span>
+ </div>
+ <div class="ds-fee-tier-grid mb-3">
+ <div><strong>1-10 links</strong><span>35 yuan</span></div>
+ <div><strong>11-20 links</strong><span>60 yuan</span></div>
+ <div><strong>21-40 links</strong><span>90 yuan</span></div>
+ </div>
+ <div class="form-grid form-grid-2"><div class="form-group"><label class="form-label">Number of 1688 links</label><input type="number" id="ds-calc-links" class="form-input" min="1" value="1" inputmode="numeric" oninput="updateDropshipCalculator()"></div><div class="form-group"><label class="form-label">Yuan to NGN rate</label><input type="number" id="ds-calc-yuan-rate" class="form-input" value="220" inputmode="numeric" oninput="updateDropshipCalculator()"></div></div>
+ <div class="form-grid form-grid-2"><div class="form-group"><label class="form-label">Shipping weight (kg)</label><input type="number" id="ds-calc-kg" class="form-input" min="1" step="0.1" value="1" inputmode="decimal" oninput="updateDropshipCalculator()"><small class="form-hint">Shipping is charged from 1kg minimum.</small></div><div class="form-group"><label class="form-label">Shipping cost per kg (USD)</label><input type="number" id="ds-calc-usd-per-kg" class="form-input" step="0.1" value="12" inputmode="decimal" oninput="updateDropshipCalculator()"><small class="form-hint">Tommy base: $9.4/kg. BUYSELL estimate can be $12/kg or lower after confirmation.</small></div></div>
+ <div class="form-grid form-grid-2"><div class="form-group"><label class="form-label">USD to NGN rate</label><input type="number" id="ds-calc-usd-rate" class="form-input" value="1600" inputmode="numeric" oninput="updateDropshipCalculator()"></div><div class="form-group"><label class="form-label">Repacking fee (NGN)</label><input type="number" id="ds-calc-repack" class="form-input" value="0" inputmode="numeric" oninput="updateDropshipCalculator()"></div></div>
+ <div class="ds-cost-breakdown" id="ds-cost-breakdown"></div>
  </div>
 
  <div class="card card-pad mb-4">
@@ -5076,7 +5114,11 @@ function addExtracted1688ToCart() {
 function render1688Cart() {
  const el = document.getElementById('ds-1688-cart');
  const countEl = document.getElementById('ds-cart-count');
+ const cartLinks = source1688Cart.length;
  if (countEl) countEl.textContent = source1688Cart.reduce((sum, item) => sum + Number(item.quantity || 1), 0);
+ const linkInput = document.getElementById('ds-calc-links');
+ if (linkInput && (!linkInput.value || Number(linkInput.value) < cartLinks)) linkInput.value = cartLinks || 1;
+ updateDropshipCalculator();
  if (!el) return;
  if (!source1688Cart.length) { el.innerHTML = '<div class="empty-state compact"><i class="fa-solid fa-cart-shopping"></i><p>No 1688 products added yet.</p></div>'; return; }
  el.innerHTML = source1688Cart.map((item, index) => `<div class="ds-1688-cart-item"><img src="${escAttr(item.image)}" alt="${escAttr(item.title)}"><div><strong>${escHtml(item.title)}</strong><span>${escHtml(item.price)} - Qty ${Number(item.quantity || 1)}</span>${item.desired_price ? `<span>Sell at ${fmtN(item.desired_price)}</span>` : ''}<div class="flex gap-2 mt-1"><a href="${escAttr(item.url)}" target="_blank" rel="noopener">Open 1688</a><button onclick="remove1688CartItem(${index})">Remove</button></div></div></div>`).join('');
@@ -5136,12 +5178,21 @@ async function submit1688SourcingRequest(event) {
  const contact = document.getElementById('ds-1688-contact')?.value.trim() || currentUser.profile?.whatsapp || currentUser.email || '';
  const destination = document.getElementById('ds-1688-destination')?.value.trim() || 'Nigeria';
  const note = document.getElementById('ds-1688-request-note')?.value.trim() || '';
+ const linkCount = Math.max(1, Number(document.getElementById('ds-calc-links')?.value || source1688Cart.length || 1));
+ const linkCharge = get1688LinkChargeYuan(linkCount);
+ const shippingKg = Math.max(1, Number(document.getElementById('ds-calc-kg')?.value || 1));
+ const shippingUsdRate = Number(document.getElementById('ds-calc-usd-per-kg')?.value || 12);
+ const repackingFee = Number(document.getElementById('ds-calc-repack')?.value || 0);
  const lines = source1688Cart.map(item => `Qty ${item.quantity || 1}: ${item.title} | ${item.price} | Sell: ${item.desired_price ? fmtN(item.desired_price) : 'to confirm'} | ${item.url}`).join('\n');
  const sellerName = currentUser.profile?.name || currentUser.email || 'BUYSELL seller';
  const requestText = `BUYSELL 1688 sourcing request
 Seller ID: ${currentUser.id}
 Seller Email: ${currentUser.email || ''}
 Seller Name: ${sellerName}
+Links submitted: ${linkCount}
+BUYSELL link handling charge: ${linkCharge} yuan
+International shipping estimate: ${shippingKg}kg minimum x $${shippingUsdRate}/kg
+Repacking fee estimate: ${fmtN(repackingFee)}
 
 ${lines}
 

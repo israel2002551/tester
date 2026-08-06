@@ -111,6 +111,49 @@
  line-height: 1.4;
 }
 
+.ds-fee-tier-grid,
+.ds-cost-breakdown {
+ display: grid;
+ grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+ gap: 10px;
+}
+
+.ds-fee-tier-grid > div,
+.ds-cost-breakdown > div {
+ border: 1px solid var(--border-subtle);
+ border-radius: var(--radius-sm);
+ background: var(--bg-main);
+ padding: 12px;
+}
+
+.ds-fee-tier-grid strong,
+.ds-fee-tier-grid span,
+.ds-cost-breakdown span,
+.ds-cost-breakdown strong {
+ display: block;
+}
+
+.ds-fee-tier-grid strong,
+.ds-cost-breakdown strong {
+ color: var(--text-main);
+ font-size: .9rem;
+}
+
+.ds-fee-tier-grid span,
+.ds-cost-breakdown span {
+ color: var(--text-muted);
+ font-size: .78rem;
+ margin-bottom: 4px;
+}
+
+.form-hint {
+ display: block;
+ margin-top: 6px;
+ color: var(--text-muted);
+ font-size: .75rem;
+ line-height: 1.35;
+}
+
 @media (max-width: 640px) {
  .admin-dropship-request-card {
   padding: 14px;
