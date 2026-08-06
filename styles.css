@@ -24,6 +24,102 @@
  --shadow-lg:0 20px 60px rgba(0,0,0,.18);
  --mob-nav-h:60px;
 }
+
+.admin-dropship-requests-list {
+ display: grid;
+ gap: 16px;
+}
+
+.admin-dropship-request-card {
+ background: var(--bg-card);
+ border: 1px solid var(--border-subtle);
+ border-radius: var(--radius);
+ box-shadow: var(--shadow);
+ padding: 18px;
+ transition: var(--transition);
+}
+
+.admin-dropship-request-card:hover {
+ box-shadow: var(--shadow-hover);
+ transform: translateY(-2px);
+}
+
+.admin-dropship-request-head,
+.admin-dropship-meta {
+ display: flex;
+ align-items: flex-start;
+ justify-content: space-between;
+ gap: 12px;
+ flex-wrap: wrap;
+}
+
+.admin-dropship-request-head h4 {
+ margin: 0 0 4px;
+ font-family: 'Syne', sans-serif;
+ color: var(--text-main);
+}
+
+.admin-dropship-request-head p,
+.admin-dropship-meta {
+ color: var(--text-muted);
+ font-size: .84rem;
+}
+
+.admin-dropship-request-card pre {
+ margin: 14px 0;
+ padding: 14px;
+ max-height: 180px;
+ overflow: auto;
+ white-space: pre-wrap;
+ word-break: break-word;
+ background: var(--bg-main);
+ border: 1px solid var(--border-subtle);
+ border-radius: var(--radius-sm);
+ color: var(--text-main);
+ font-family: 'DM Sans', sans-serif;
+ font-size: .84rem;
+ line-height: 1.45;
+}
+
+.ds-1688-updates {
+ display: grid;
+ gap: 10px;
+}
+
+.ds-1688-update-card {
+ border: 1px solid var(--border-subtle);
+ border-radius: var(--radius-sm);
+ background: var(--bg-main);
+ padding: 12px;
+}
+
+.ds-1688-update-card strong,
+.ds-1688-update-card span {
+ display: block;
+}
+
+.ds-1688-update-card strong {
+ color: var(--text-main);
+ font-size: .9rem;
+ margin-bottom: 4px;
+}
+
+.ds-1688-update-card span,
+.ds-1688-update-card small {
+ color: var(--text-muted);
+ font-size: .78rem;
+ line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+ .admin-dropship-request-card {
+  padding: 14px;
+ }
+
+ .admin-dropship-request-card .form-grid {
+  grid-template-columns: 1fr;
+ }
+}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
 body{font-family:'DM Sans',sans-serif;background:var(--bg-main);color:var(--text-main);-webkit-font-smoothing:antialiased;overflow-x:hidden}

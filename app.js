@@ -58,6 +58,8 @@ const PRODUCT_MINIMAL_COLUMNS = ['id','seller_id','name','price','category','sta
 const PRODUCT_PROFILE_HYDRATE_COLUMNS = ['id','name','email','role','accounts','store_name','store_description','whatsapp','bank_name','account_number','account_name','paystack_key','logo_url','store_address'];
 const SELLER_PRODUCT_COLUMNS = 'id,name,price,shipping_fee,shipping_cost,image_url,has_video,stock_quantity,status,created_at';
 const ORDER_LIST_COLUMNS = ['id','status','total_amount','created_at','delivery_name','delivery_address','items','payment_method','proof_url','payment_proof_url','seller_id','buyer_id'];
+const DROPSHIP_REQUEST_COLUMNS = ['id','status','total_amount','created_at','delivery_name','delivery_address','items','payment_method','seller_id','buyer_id','name','contact','destination','request','admin_note','tracking_update','updated_at'];
+const MESSAGE_LIST_COLUMNS = ['id','sender_id','receiver_id','content','message','body','order_id','is_read','created_at'];
 const SELLER_ADMIN_COLUMNS = ['id','name','email','role','accounts','store_name','whatsapp','created_at','is_suspended','commission_paid','trial_end','kyc_status','last_login_at','last_seen_at','login_count'];
 const PROFILE_COLUMNS = ['id','name','email','role','accounts','store_name','store_description','whatsapp','bank_name','account_number','account_name','paystack_key','commission_paid','trial_end','is_suspended','kyc_status','verification_status','seller_verified','logo_url','store_address','login_count','last_login_at','last_seen_at','created_at'];
 const KYC_LIST_COLUMNS = ['id','user_id','status','document_type','document_number','full_name','front_url','back_url','selfie_url','created_at','reviewed_at','admin_note'];
@@ -4944,12 +4946,15 @@ function renderDropshipSection() {
  <textarea id="ds-1688-request-note" class="form-textarea mt-2" rows="3" placeholder="Extra sourcing notes: color, size, model, budget, buyer deadline..."></textarea>
  <button class="btn btn-primary btn-full mt-2" onclick="submit1688SourcingRequest(event)"><i class="fa-solid fa-paper-plane"></i> Send to BUYSELL Sourcing Team</button>
  </div>
- <div class="card card-pad">
- <h3 class="mb-2">How BUYSELL Handles 1688 Orders</h3>
- <div class="ds-1688-steps"><div><strong>1. Seller submits link</strong><span>Paste URL, variant, quantity, and desired selling price.</span></div><div><strong>2. Admin confirms source</strong><span>BUYSELL checks supplier, cost, MOQ, shipping, and availability.</span></div><div><strong>3. BUYSELL handles delivery</strong><span>We coordinate collection, shipping, updates, and order tracking.</span></div></div>
- <button class="btn btn-outline btn-full mt-3" onclick="showDash('orders')"><i class="fa-solid fa-truck-fast"></i> View Order Tracking</button>
- </div>
- </div>
+  <div class="card card-pad">
+  <h3 class="mb-2">How BUYSELL Handles 1688 Orders</h3>
+  <div class="ds-1688-steps"><div><strong>1. Seller submits link</strong><span>Paste URL, variant, quantity, and desired selling price.</span></div><div><strong>2. Admin confirms source</strong><span>BUYSELL checks supplier, cost, MOQ, shipping, and availability.</span></div><div><strong>3. BUYSELL handles delivery</strong><span>We coordinate collection, shipping, updates, and order tracking.</span></div></div>
+  <button class="btn btn-outline btn-full mt-3" onclick="showDash('orders')"><i class="fa-solid fa-truck-fast"></i> View Order Tracking</button>
+  <div class="divider mt-3 mb-3"></div>
+  <h4 class="mb-2">BUYSELL Admin Updates</h4>
+  <div id="ds-1688-updates" class="ds-1688-updates"><p class="text-xs color-text3">No admin updates yet.</p></div>
+  </div>
+  </div>
 
  <div class="card overflow-hidden"><div class="card-pad flex justify-between items-center gap-2 wrap" style="border-bottom:1px solid var(--border)"><h3>BUYSELL 1688 Listings</h3><button class="btn btn-outline btn-sm" onclick="loadDropshipData()"><i class="fa-solid fa-rotate"></i> Reload</button></div><div class="overflow-x"><table class="data-table"><thead><tr><th>Product</th><th>Price</th><th>Stock</th><th>Status</th><th>Action</th></tr></thead><tbody id="ds-imported-table"><tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">No 1688 listings yet</td></tr></tbody></table></div></div>`;
 }
@@ -5132,7 +5137,25 @@ async function submit1688SourcingRequest(event) {
  const destination = document.getElementById('ds-1688-destination')?.value.trim() || 'Nigeria';
  const note = document.getElementById('ds-1688-request-note')?.value.trim() || '';
  const lines = source1688Cart.map(item => `Qty ${item.quantity || 1}: ${item.title} | ${item.price} | Sell: ${item.desired_price ? fmtN(item.desired_price) : 'to confirm'} | ${item.url}`).join('\n');
- const payload = { name: currentUser.profile?.name || currentUser.email || 'BUYSELL seller', contact, destination, request: `BUYSELL 1688 sourcing request\n${lines}\n\n${note}` };
+ const sellerName = currentUser.profile?.name || currentUser.email || 'BUYSELL seller';
+ const requestText = `BUYSELL 1688 sourcing request
+Seller ID: ${currentUser.id}
+Seller Email: ${currentUser.email || ''}
+Seller Name: ${sellerName}
+
+${lines}
+
+${note}`;
+ const payload = {
+  name: sellerName,
+  contact,
+  destination,
+  seller_id: currentUser.id,
+  buyer_id: currentUser.id,
+  user_id: currentUser.id,
+  items: source1688Cart,
+  request: requestText
+ };
  const btn = event?.currentTarget;
  const oldHtml = btn?.innerHTML || '';
  try {
@@ -5140,6 +5163,7 @@ async function submit1688SourcingRequest(event) {
   await callEdge('order-workflow', { action: 'create_order', ...payload });
   toast('Sent to BUYSELL Team', 'Admin will confirm cost, sourcing, and delivery tracking.', 'success', 6500);
   clear1688Cart();
+  loadSellerDropshipUpdates();
  } catch (error) {
   const localRequests = readStoredJson('bs_1688_sourcing_requests', []);
   localRequests.unshift({ ...payload, id: `local-${Date.now()}`, created_at: new Date().toISOString(), status: 'Submitted locally' });
@@ -5171,7 +5195,8 @@ async function loadDropshipData() {
  ensureGrowthSections();
  renderDropshipCatalog();
  render1688Cart();
- updateDropshipCalculator();
+ loadSellerDropshipUpdates();
+  updateDropshipCalculator();
  const { data: products } = await db.from('products')
  .select('id,name,price,image_url,stock_quantity,status,created_at')
  .eq('seller_id', currentUser.id)
@@ -5195,6 +5220,189 @@ async function loadDropshipData() {
   return;
  }
  tbody.innerHTML = dropshipProducts.map(p => `<tr><td><div class="flex items-center gap-2"><img src="${escAttr(p.image_url || 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=120')}" alt="" style="width:42px;height:42px;border-radius:8px;object-fit:cover"><div><div class="font-600 text-sm">${escHtml(p.name)}</div><div class="text-xs color-text3">BUYSELL 1688 sourcing - ${fmtDate(p.created_at)}</div></div></div></td><td class="font-bold color-green">${fmtN(p.price)}</td><td>${p.stock_quantity ?? 'N/A'}</td><td><span class="badge ${p.status === 'active' ? 'badge-green' : 'badge-gold'}">${escHtml(p.status || 'draft')}</span></td><td><button class="btn btn-outline btn-sm" onclick="editProduct('${p.id}')"><i class="fa-solid fa-pen"></i> Edit</button></td></tr>`).join('');
+}
+
+function rowText(row = {}) {
+ return [row.request, row.delivery_name, row.delivery_address, row.status, safeStringify(row.items)].filter(Boolean).join(' ');
+}
+
+function safeStringify(value) {
+ try {
+  return typeof value === 'string' ? value : JSON.stringify(value || '');
+ } catch {
+  return '';
+ }
+}
+
+function is1688Request(row = {}) {
+ return /1688|dropship|sourcing/i.test(rowText(row));
+}
+
+function parseSellerIdFromRequest(row = {}) {
+ const text = rowText(row);
+ return row.seller_id || row.buyer_id || text.match(/seller id:\s*([a-f0-9-]{24,})/i)?.[1] || '';
+}
+
+function getDropshipRequestTitle(row = {}) {
+ if (row.name) return row.name;
+ const itemText = safeStringify(row.items);
+ const firstTitle = itemText.match(/"title"\s*:\s*"([^"]+)"/i)?.[1] || itemText.match(/"name"\s*:\s*"([^"]+)"/i)?.[1];
+ return firstTitle || row.delivery_name || '1688 sourcing request';
+}
+
+function buildDropshipRequestSummary(row = {}) {
+ const text = row.request || safeStringify(row.items) || row.delivery_address || 'No request details available.';
+ return String(text).slice(0, 1000);
+}
+
+async function updateRowWithColumnFallback(table, id, payload) {
+ let remaining = { ...payload };
+ let lastError = null;
+ for (let attempt = 0; attempt < 8 && Object.keys(remaining).length; attempt++) {
+  const { error } = await db.from(table).update(remaining).eq('id', id);
+  if (!error) return true;
+  lastError = error;
+  const missing = missingColumn(error);
+  if (missing && Object.prototype.hasOwnProperty.call(remaining, missing)) {
+   delete remaining[missing];
+   continue;
+  }
+  break;
+ }
+ throw lastError || new Error(`Could not update ${table}`);
+}
+
+async function insertMessageWithFallback(payload) {
+ const variants = [
+  { ...payload },
+  { sender_id: payload.sender_id, receiver_id: payload.receiver_id, message: payload.content, order_id: payload.order_id, is_read: false },
+  { sender_id: payload.sender_id, receiver_id: payload.receiver_id, body: payload.content, order_id: payload.order_id, is_read: false },
+  { sender_id: payload.sender_id, receiver_id: payload.receiver_id, content: payload.content, is_read: false }
+ ];
+ let lastError = null;
+ for (const base of variants) {
+  let remaining = Object.fromEntries(Object.entries(base).filter(([, value]) => value !== undefined && value !== ''));
+  for (let attempt = 0; attempt < 8 && Object.keys(remaining).length; attempt++) {
+   const { error } = await db.from('messages').insert(remaining);
+   if (!error) return true;
+   lastError = error;
+   const missing = missingColumn(error);
+   if (missing && Object.prototype.hasOwnProperty.call(remaining, missing)) {
+    delete remaining[missing];
+    continue;
+   }
+   break;
+  }
+ }
+ throw lastError || new Error('Could not send admin message');
+}
+
+async function loadSellerDropshipUpdates() {
+ const el = document.getElementById('ds-1688-updates');
+ if (!el || !currentUser) return;
+ try {
+  const [{ data: messages = [] }, { data: orders = [] }] = await Promise.all([
+   runSelectWithColumnFallback('messages', MESSAGE_LIST_COLUMNS, q => q.eq('receiver_id', currentUser.id).order('created_at', { ascending: false }).limit(12)).catch(() => ({ data: [] })),
+   runSelectWithColumnFallback('orders', DROPSHIP_REQUEST_COLUMNS, q => q.order('created_at', { ascending: false }).limit(80)).catch(() => ({ data: [] }))
+  ]);
+  const requestUpdates = (orders || []).filter(row => is1688Request(row) && (row.seller_id === currentUser.id || row.buyer_id === currentUser.id || parseSellerIdFromRequest(row) === currentUser.id)).slice(0, 4);
+  const adminMessages = (messages || []).filter(row => /1688|dropship|sourcing|BUYSELL delivery/i.test(row.content || row.message || row.body || '')).slice(0, 4);
+  const updates = [
+   ...requestUpdates.map(row => ({ type: 'status', title: getDropshipRequestTitle(row), body: row.admin_note || row.tracking_update || buildDropshipRequestSummary(row), status: row.status || 'Submitted', date: row.updated_at || row.created_at })),
+   ...adminMessages.map(row => ({ type: 'message', title: 'Message from BUYSELL Admin', body: row.content || row.message || row.body || '', status: 'Admin update', date: row.created_at }))
+  ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)).slice(0, 5);
+  if (!updates.length) {
+   el.innerHTML = '<p class="text-xs color-text3">No admin updates yet. BUYSELL will message you here when your request is being reviewed.</p>';
+   return;
+  }
+  el.innerHTML = updates.map(item => `<div class="ds-1688-update-card"><div><strong>${escHtml(item.title)}</strong><span>${escHtml(String(item.body || '').slice(0, 220))}</span></div><div class="flex justify-between items-center gap-2 mt-1"><span class="badge badge-green">${escHtml(item.status)}</span><small>${fmtDate(item.date)}</small></div></div>`).join('');
+ } catch (error) {
+  el.innerHTML = '<p class="text-xs color-text3">Updates will appear here when BUYSELL admin responds.</p>';
+ }
+}
+
+async function loadAdminDropshipRequests() {
+ const lists = document.querySelectorAll('#admin-dropship-requests-list');
+ if (!lists.length) return;
+ lists.forEach(el => { el.innerHTML = '<div class="skeleton" style="height:120px;border-radius:12px"></div>'; });
+ try {
+  const { data = [] } = await runSelectWithColumnFallback('orders', DROPSHIP_REQUEST_COLUMNS, q => q.order('created_at', { ascending: false }).limit(120));
+  const rows = (data || []).filter(is1688Request);
+  window.__adminDropshipRequests = rows;
+  const html = rows.length ? rows.map(row => renderAdminDropshipRequestCard(row)).join('') : '<div class="empty-state compact"><i class="fa-solid fa-truck-ramp-box"></i><p>No 1688 dropshipping requests found yet.</p></div>';
+  lists.forEach(el => { el.innerHTML = html; });
+ } catch (error) {
+  const msg = escHtml(error.message || 'Could not load 1688 dropshipping requests.');
+  lists.forEach(el => { el.innerHTML = `<div class="empty-state compact"><i class="fa-solid fa-triangle-exclamation"></i><p>${msg}</p></div>`; });
+ }
+}
+
+function renderAdminDropshipRequestCard(row = {}) {
+ const id = escAttr(row.id || '');
+ const title = getDropshipRequestTitle(row);
+ const sellerId = parseSellerIdFromRequest(row);
+ const note = row.admin_note || row.tracking_update || '';
+ const status = row.status || 'submitted';
+ const options = ['submitted','reviewing','quote sent','awaiting payment','sourcing','in transit','delivered','cancelled']
+  .map(opt => `<option value="${escAttr(opt)}" ${String(status).toLowerCase() === opt ? 'selected' : ''}>${escHtml(opt.replace(/\b\w/g, letter => letter.toUpperCase()))}</option>`).join('');
+ return `<article class="admin-dropship-request-card">
+ <div class="admin-dropship-request-head">
+ <div><h4>${escHtml(title)}</h4><p>${escHtml(row.contact || row.destination || row.delivery_address || 'No contact details')}</p></div>
+ <span class="badge badge-green">${escHtml(status)}</span>
+ </div>
+ <pre>${escHtml(buildDropshipRequestSummary(row))}</pre>
+ <div class="admin-dropship-meta"><span><i class="fa-solid fa-user"></i> ${escHtml(sellerId || 'Seller unknown')}</span><span><i class="fa-solid fa-location-dot"></i> ${escHtml(row.destination || row.delivery_address || 'Destination not set')}</span><span><i class="fa-regular fa-clock"></i> ${fmtDate(row.created_at)}</span></div>
+ <div class="form-grid form-grid-2 mt-3">
+ <select class="form-select" id="ds-admin-status-${id}">${options}</select>
+ <input class="form-input" id="ds-admin-message-${id}" value="${escAttr(note)}" placeholder="Message/update for seller">
+ </div>
+ <div class="flex gap-2 wrap mt-2">
+ <button class="btn btn-primary btn-sm" onclick="adminUpdateDropshipRequest('${id}')"><i class="fa-solid fa-paper-plane"></i> Save & Message</button>
+ <button class="btn btn-outline btn-sm" onclick="adminMessageDropshipper('${id}')"><i class="fa-solid fa-message"></i> Message Only</button>
+ </div>
+ </article>`;
+}
+
+function findRenderedDropshipRequest(id) {
+ return window.__adminDropshipRequests?.find(row => String(row.id) === String(id)) || null;
+}
+
+function getAdminDropshipInput(id, type) {
+ const selector = `[id="ds-admin-${type}-${id}"]`;
+ return Array.from(document.querySelectorAll(selector)).find(el => !el.closest('.adm-tab.hidden')) || document.querySelector(selector);
+}
+
+async function adminUpdateDropshipRequest(id) {
+ const status = getAdminDropshipInput(id, 'status')?.value || 'reviewing';
+ const message = getAdminDropshipInput(id, 'message')?.value.trim() || '';
+ try {
+  await updateRowWithColumnFallback('orders', id, { status, admin_note: message, tracking_update: message, updated_at: new Date().toISOString() });
+  if (message) await adminMessageDropshipper(id, false);
+  toast('1688 Request Updated', 'The seller can now see the BUYSELL update.', 'success');
+  loadAdminDropshipRequests();
+ } catch (error) {
+  toast('Update Failed', error.message || 'Could not update the dropshipping request.', 'error');
+ }
+}
+
+async function adminMessageDropshipper(id, showSuccess = true) {
+ const row = findRenderedDropshipRequest(id);
+ const recipientId = parseSellerIdFromRequest(row || {});
+ const message = getAdminDropshipInput(id, 'message')?.value.trim() || '';
+ if (!message) { toast('Add Message', 'Write an update before messaging the dropshipper.', 'warn'); return; }
+ if (!recipientId) { toast('Seller Missing', 'This request has no seller ID. Ask the seller to submit a new 1688 request from their account.', 'warn', 7000); return; }
+ try {
+  await insertMessageWithFallback({
+   sender_id: currentUser.id,
+   receiver_id: recipientId,
+   content: `[1688 request update] ${message}`,
+   order_id: id,
+   is_read: false
+  });
+  if (showSuccess) toast('Message Sent', 'The seller will see this in BUYSELL messages and 1688 updates.', 'success');
+ } catch (error) {
+  toast('Message Not Sent', error.message || 'Could not send the seller update.', 'error');
+ }
 }
 
 // ====================================================
@@ -5589,6 +5797,7 @@ function switchAdminTab(tab) {
  if (tab === 'overview') loadAdminOverview();
  if (tab === 'sellers') loadAdminSellers();
  if (tab === 'orders') loadAdminOrders();
+ if (tab === 'dropship-requests') loadAdminDropshipRequests();
  if (tab === 'disputes') loadAdminDisputes();
  if (tab === 'withdrawals') loadAdminWithdrawals();
  if (tab === 'receipts') loadAdminReceipts();

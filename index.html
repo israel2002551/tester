@@ -39,7 +39,7 @@
 </script>
  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<link rel="stylesheet" href="/styles.css?v=10.7">
+<link rel="stylesheet" href="/styles.css?v=10.8">
 </head>
 <body>
 
@@ -1017,6 +1017,7 @@
  <button class="buyer-tab" id="atab-accounts" data-admin-tab="accounts" onclick="switchAdminTab('accounts')"><i class="fa-solid fa-user-gear"></i> Account Management</button>
  <button class="buyer-tab" id="atab-sellers" data-admin-tab="sellers" onclick="switchAdminTab('sellers')"><i class="fa-solid fa-store"></i> Sellers</button>
  <button class="buyer-tab" id="atab-orders" data-admin-tab="orders" onclick="switchAdminTab('orders')"><i class="fa-solid fa-box"></i> Orders</button>
+ <button class="buyer-tab" id="atab-dropship-requests" data-admin-tab="dropship-requests" onclick="switchAdminTab('dropship-requests')"><i class="fa-solid fa-truck-ramp-box"></i> 1688 Requests</button>
  <button class="buyer-tab" id="atab-disputes" data-admin-tab="disputes" onclick="switchAdminTab('disputes')"><i class="fa-solid fa-scale-balanced"></i> Disputes</button>
  <button class="buyer-tab" id="atab-withdrawals" data-admin-tab="withdrawals" onclick="switchAdminTab('withdrawals')"><i class="fa-solid fa-money-bill-transfer"></i> Payouts</button>
  <button class="buyer-tab" id="atab-receipts" data-admin-tab="receipts" onclick="switchAdminTab('receipts')"><i class="fa-solid fa-receipt"></i> Receipts</button>
@@ -1115,6 +1116,7 @@
   <button onclick="switchAdminTab('accounts')"><i class="fa-solid fa-user-check"></i><span>Accounts</span></button>
   <button onclick="switchAdminTab('online')"><i class="fa-solid fa-signal"></i><span>Online</span></button>
   <button onclick="switchAdminTab('kyc')"><i class="fa-solid fa-id-card"></i><span>KYC</span></button>
+  <button onclick="switchAdminTab('dropship-requests')"><i class="fa-solid fa-truck-ramp-box"></i><span>1688</span></button>
   <button onclick="switchAdminTab('broadcast')"><i class="fa-solid fa-bullhorn"></i><span>Broadcast</span></button>
   <button onclick="showSellerDashboard().then(()=>showDash('advertise'))"><i class="fa-solid fa-rectangle-ad"></i><span>Free Admin Ads</span></button>
   </div>
@@ -1288,6 +1290,20 @@
  <p class="text-xs color-text3 mb-3">Review seller access, reactivate accounts, or pause accounts that need admin review.</p>
  <div class="flex gap-2 mb-3 flex-wrap"><input type="text" id="acct-trial-search" class="form-input" placeholder="Search seller..." style="width:220px" oninput="filterTrialExtensions()"></div>
  <div class="overflow-x" style="max-height:430px;overflow-y:auto"><table class="data-table"><thead><tr><th>Seller</th><th>Email</th><th>Trial Ends</th><th>Status</th><th>Actions</th></tr></thead><tbody id="acct-trials-list"><tr><td colspan="5" class="text-center text-sm color-text3 p-3">Loading...</td></tr></tbody></table></div>
+ </div>
+ </div>
+ <div id="adm-tab-dropship-requests" class="adm-tab hidden">
+ <div class="card card-pad-lg">
+ <div class="flex justify-between items-start gap-3 wrap mb-3">
+ <div>
+ <h3 class="mb-1"><i class="fa-solid fa-truck-ramp-box color-green"></i> 1688 Dropshipping Requests</h3>
+ <p class="text-xs color-text3">Review seller sourcing requests, update the status, and message the seller from BUYSELL.</p>
+ </div>
+ <button class="btn btn-outline btn-sm" onclick="loadAdminDropshipRequests()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+ </div>
+ <div id="admin-dropship-requests-list" class="admin-dropship-requests-list">
+ <div class="skeleton" style="height:120px;border-radius:12px"></div>
+ </div>
  </div>
  </div>
  <div id="adm-tab-broadcast" class="adm-tab hidden">
@@ -2078,6 +2094,7 @@
  <a href="#" class="dash-nav-item active" id="ap-nav-overview" onclick="switchAdminTab('overview');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-chart-pie"></i> Overview</a>
  <a href="#" class="dash-nav-item" id="ap-nav-sellers" onclick="switchAdminTab('sellers');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-store"></i> Sellers</a>
  <a href="#" class="dash-nav-item" id="ap-nav-orders" onclick="switchAdminTab('orders');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-receipt"></i> Orders</a>
+ <a href="#" class="dash-nav-item" id="ap-nav-dropship-requests" onclick="switchAdminTab('dropship-requests');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-truck-ramp-box"></i> 1688 Requests</a>
  <a href="#" class="dash-nav-item" id="ap-nav-disputes" onclick="switchAdminTab('disputes');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-gavel"></i> Disputes</a>
  <a href="#" class="dash-nav-item" id="ap-nav-withdrawals" onclick="switchAdminTab('withdrawals');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-coins"></i> Payouts</a>
  <a href="#" class="dash-nav-item" id="ap-nav-receipts" onclick="switchAdminTab('receipts');event.preventDefault()" style="margin-bottom:.3rem;display:flex"><i class="fa-solid fa-file-invoice"></i> Receipts</a>
@@ -2111,6 +2128,7 @@
  <button class="buyer-tab" data-admin-tab="accounts" onclick="switchAdminTab('accounts')"><i class="fa-solid fa-user-gear"></i> Accounts</button>
  <button class="buyer-tab" data-admin-tab="sellers" onclick="switchAdminTab('sellers')"><i class="fa-solid fa-store"></i> Sellers</button>
  <button class="buyer-tab" data-admin-tab="orders" onclick="switchAdminTab('orders')"><i class="fa-solid fa-box"></i> Orders</button>
+ <button class="buyer-tab" data-admin-tab="dropship-requests" onclick="switchAdminTab('dropship-requests')"><i class="fa-solid fa-truck-ramp-box"></i> 1688</button>
  <button class="buyer-tab" data-admin-tab="disputes" onclick="switchAdminTab('disputes')"><i class="fa-solid fa-scale-balanced"></i> Disputes</button>
  <button class="buyer-tab" data-admin-tab="withdrawals" onclick="switchAdminTab('withdrawals')"><i class="fa-solid fa-money-bill-transfer"></i> Payouts</button>
   <button class="buyer-tab" data-admin-tab="receipts" onclick="switchAdminTab('receipts')"><i class="fa-solid fa-receipt"></i> Receipts</button>
@@ -2132,6 +2150,7 @@
   <button onclick="switchAdminTab('accounts')"><i class="fa-solid fa-user-check"></i><span>Accounts</span></button>
   <button onclick="switchAdminTab('online')"><i class="fa-solid fa-signal"></i><span>Online</span></button>
   <button onclick="switchAdminTab('kyc')"><i class="fa-solid fa-id-card"></i><span>KYC</span></button>
+  <button onclick="switchAdminTab('dropship-requests')"><i class="fa-solid fa-truck-ramp-box"></i><span>1688</span></button>
   <button onclick="switchAdminTab('broadcast')"><i class="fa-solid fa-bullhorn"></i><span>Broadcast</span></button>
   <button onclick="showSellerDashboard().then(()=>showDash('advertise'))"><i class="fa-solid fa-rectangle-ad"></i><span>Free Admin Ads</span></button>
   </div>
@@ -2266,6 +2285,22 @@
  <div id="adm-kyc-empty" class="hidden text-center" style="padding:3rem">
  <i class="fa-solid fa-shield-check" style="font-size:2.5rem;color:var(--green);display:block;margin-bottom:.75rem"></i>
  <p class="color-text3">No pending KYC verifications</p>
+ </div>
+ </div>
+
+ <!-- 1688 DROPSHIPPING REQUESTS TAB -->
+ <div id="adm-tab-dropship-requests" class="adm-tab hidden">
+ <div class="card card-pad-lg">
+ <div class="flex justify-between items-start gap-3 wrap mb-3">
+ <div>
+ <h3 class="mb-1"><i class="fa-solid fa-truck-ramp-box color-green"></i> 1688 Dropshipping Requests</h3>
+ <p class="text-xs color-text3">Review seller sourcing requests, update the status, and message the seller from BUYSELL.</p>
+ </div>
+ <button class="btn btn-outline btn-sm" onclick="loadAdminDropshipRequests()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+ </div>
+ <div id="admin-dropship-requests-list" class="admin-dropship-requests-list">
+ <div class="skeleton" style="height:120px;border-radius:12px"></div>
+ </div>
  </div>
  </div>
 
@@ -2837,7 +2872,7 @@
 
 <script src="https://checkout.flutterwave.com/v3.js"></script>
 <script data-cfasync="false" src="/config.js?v=3.6"></script>
-<script src="app.js?v=10.16"></script>
+<script src="app.js?v=10.17"></script>
  <script>
  (function() {
  'use strict';
