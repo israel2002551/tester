@@ -1755,13 +1755,18 @@ function renderWithdrawalHistory(withdrawals) {
 // SIDEBAR (MOBILE)
 // ====================================================
 function openMobSidebar() {
- document.getElementById('dash-sidebar').classList.add('open');
- document.getElementById('mob-overlay').classList.add('open');
- document.getElementById('mob-sidebar-close').style.display = 'block';
+ const sidebar = document.getElementById('dash-sidebar');
+ const overlay = document.getElementById('mob-overlay');
+ const closeBtn = document.getElementById('mob-sidebar-close');
+ sidebar?.classList.add('open');
+ overlay?.classList.add('open');
+ document.body.classList.add('sidebar-open');
+ if (closeBtn) closeBtn.style.display = 'block';
 }
 function closeMobSidebar() {
- document.getElementById('dash-sidebar').classList.remove('open');
- document.getElementById('mob-overlay').classList.remove('open');
+ document.getElementById('dash-sidebar')?.classList.remove('open');
+ document.getElementById('mob-overlay')?.classList.remove('open');
+ document.body.classList.remove('sidebar-open');
 }
 
 // ====================================================
