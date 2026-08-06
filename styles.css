@@ -2323,7 +2323,26 @@ button, a, input, textarea, select { touch-action: manipulation; }
 }
 
 .ds-1688-hero {
- background: linear-gradient(135deg, var(--forest), var(--green));
+ min-height: 320px;
+ align-items: flex-end;
+ background:
+  linear-gradient(90deg, rgba(27, 67, 50, .94), rgba(46, 125, 50, .76)),
+  url("https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1600&q=80") center/cover;
+ position: relative;
+ overflow: hidden;
+}
+
+.ds-1688-hero h2 {
+ max-width: 620px;
+ font-size: clamp(2.4rem, 6vw, 4.8rem);
+ line-height: .96;
+ letter-spacing: 0;
+ color: #fff;
+}
+
+.ds-1688-hero p {
+ max-width: 680px;
+ color: rgba(255, 255, 255, .86);
 }
 
 .ds-1688-hero-actions,

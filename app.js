@@ -4890,7 +4890,7 @@ function renderDropshipSection() {
  <p class="dash-page-sub">BUYSELL helps sellers source from 1688, confirm products, coordinate payment, and handle delivery tracking.</p>
 
  <div class="dropship-hero ds-1688-hero mb-4">
- <div><h2>Paste a 1688 link. BUYSELL handles sourcing and delivery.</h2><p>Sellers browse 1688, submit product links, publish dropship listings, and send sourcing requests to the BUYSELL team.</p></div>
+ <div><h2>Find products on 1688. Send us the link. We help you order and deliver.</h2><p>Sellers browse 1688, submit product links, publish dropship listings, and send sourcing requests to the BUYSELL team.</p></div>
  <div class="ds-1688-hero-actions"><button class="btn btn-primary" onclick="document.getElementById('ds-1688-url')?.focus()"><i class="fa-solid fa-link"></i> Submit 1688 Link</button><a class="btn btn-ghost" href="https://www.1688.com/" target="_blank" rel="noopener"><i class="fa-solid fa-up-right-from-square"></i> Open 1688</a></div>
  </div>
 
