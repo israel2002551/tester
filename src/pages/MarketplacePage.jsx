@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { marketplaceHtml } from '../legacy/marketplaceHtml.js';
-import { loadClassicScript } from '../lib/browserConfig.js';
+import { ensureRuntimeConfig, loadClassicScript } from '../lib/browserConfig.js';
 
 let runtimePromise;
 
@@ -17,7 +17,7 @@ export function loadMarketplaceRuntime() {
         return false;
       }
     };
-    runtimePromise = loadClassicScript('/config.js?v=3.4').then(() => loadClassicScript('/app.js?v=10.20'));
+    runtimePromise = ensureRuntimeConfig().then(() => loadClassicScript('/app.js?v=10.20'));
   }
   return runtimePromise;
 }

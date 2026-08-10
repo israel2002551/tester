@@ -6,6 +6,51 @@ export function readGlobalConst(name, fallback = '') {
   }
 }
 
+export function runtimeConfig() {
+  const env = import.meta.env || {};
+  return {
+    SB_URL: env.VITE_SUPABASE_URL || readGlobalConst('SB_URL'),
+    SB_KEY: env.VITE_SUPABASE_ANON_KEY || readGlobalConst('SB_KEY'),
+    FLUTTERWAVE_PUBLIC_KEY: env.VITE_FLUTTERWAVE_PUBLIC_KEY || readGlobalConst('FLUTTERWAVE_PUBLIC_KEY'),
+    ADMIN_EMAIL: env.VITE_ADMIN_EMAIL || readGlobalConst('ADMIN_EMAIL'),
+  };
+}
+
+function envRuntimeConfig() {
+  const env = import.meta.env || {};
+  return {
+    SB_URL: env.VITE_SUPABASE_URL || '',
+    SB_KEY: env.VITE_SUPABASE_ANON_KEY || '',
+    FLUTTERWAVE_PUBLIC_KEY: env.VITE_FLUTTERWAVE_PUBLIC_KEY || '',
+    ADMIN_EMAIL: env.VITE_ADMIN_EMAIL || '',
+  };
+}
+
+export function installRuntimeGlobals() {
+  const config = runtimeConfig();
+  window.BUYSELL_CONFIG = { ...(window.BUYSELL_CONFIG || {}), ...config };
+  window.SB_URL = config.SB_URL || window.SB_URL || '';
+  window.SB_KEY = config.SB_KEY || window.SB_KEY || '';
+  window.FLUTTERWAVE_PUBLIC_KEY = config.FLUTTERWAVE_PUBLIC_KEY || window.FLUTTERWAVE_PUBLIC_KEY || '';
+  window.ADMIN_EMAIL = config.ADMIN_EMAIL || window.ADMIN_EMAIL || '';
+
+  // The legacy script reads classic global identifiers, so define them for app.js.
+  if (!readGlobalConst('SB_URL') && config.SB_URL && config.SB_KEY) {
+    (0, eval)(`
+      var SB_URL = window.SB_URL;
+      var SB_KEY = window.SB_KEY;
+      var FLUTTERWAVE_PUBLIC_KEY = window.FLUTTERWAVE_PUBLIC_KEY;
+      var ADMIN_EMAIL = window.ADMIN_EMAIL;
+      var ADMIN_EMAILS = window.ADMIN_EMAILS || (window.ADMIN_EMAIL ? [window.ADMIN_EMAIL] : []);
+      var EDGE_URL = window.SB_URL ? window.SB_URL + '/functions/v1' : '';
+      var CLAUDE_EDGE_URL = EDGE_URL ? EDGE_URL + '/smooth-handler' : '';
+      var COMMISSION_AMOUNT = Number(window.COMMISSION_AMOUNT || 250000);
+      var PLATFORM_FEE_PCT = Number(window.PLATFORM_FEE_PCT || 0.03);
+    `);
+  }
+  return config;
+}
+
 export function loadClassicScript(src) {
   return new Promise((resolve, reject) => {
     const existing = document.querySelector(`script[data-react-loader="${src}"]`);
@@ -26,14 +71,21 @@ export function loadClassicScript(src) {
 }
 
 export async function ensureRuntimeConfig() {
-  if (readGlobalConst('SB_URL')) return;
-  await loadClassicScript('/config.js?v=3.4');
+  const envConfig = envRuntimeConfig();
+  if (envConfig.SB_URL && envConfig.SB_KEY) {
+    installRuntimeGlobals();
+    return;
+  }
+  if (readGlobalConst('SB_URL') && readGlobalConst('SB_KEY')) return;
+  await loadClassicScript('/config.js?v=3.4').catch(() => {});
+  installRuntimeGlobals();
 }
 
 export async function createSupabaseClient() {
   await ensureRuntimeConfig();
-  const url = readGlobalConst('SB_URL');
-  const key = readGlobalConst('SB_KEY');
+  const config = runtimeConfig();
+  const url = config.SB_URL || readGlobalConst('SB_URL');
+  const key = config.SB_KEY || readGlobalConst('SB_KEY');
   if (!window.supabase || !url || !key) throw new Error('Supabase config unavailable');
   return window.supabase.createClient(url, key);
 }

@@ -8,12 +8,24 @@ pages into React components.
 ## Local Setup
 
 1. Copy `config.example.js` to `config.js`.
-2. Fill in your Supabase anon key, Supabase URL, Paystack public key, and admin email.
+2. Fill in your Supabase anon key, Supabase URL, Flutterwave public key, and admin email.
 3. Install dependencies with `npm install --cache .\.npm-cache`.
 4. Run the React dev server with `npm run dev`.
 5. Build production assets with `npm run build`.
 
 `config.js` is intentionally ignored by Git because it contains local keys.
+
+## Production Environment
+
+Set these variables in Vercel before deploying:
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_FLUTTERWAVE_PUBLIC_KEY`
+- `VITE_ADMIN_EMAIL`
+
+The build generates `dist/config.js` from those values so both the React pages
+and the preserved legacy marketplace runtime can load the same backend config.
 
 ## Supabase Setup
 
@@ -41,4 +53,4 @@ the frontend currently calls functions such as `admin-action`, `manage-product`,
 - Rotate any API keys that were pasted into local scripts before publishing.
 - Commit `config.example.js` instead of real credentials.
 - Confirm every Edge Function above is deployed in Supabase.
-- Use live Paystack keys only after payment verification is handled server-side.
+- Use live Flutterwave keys only after payment verification is handled server-side.
