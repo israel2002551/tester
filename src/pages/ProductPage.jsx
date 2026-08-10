@@ -22,6 +22,11 @@ function cartCount() {
   return readJson('bs_cart', []).reduce((sum, item) => sum + (Number(item.qty) || 1), 0);
 }
 
+function isConfigError(error) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return message.includes('invalid api key') || message.includes('supabase config unavailable') || message.includes('jwt');
+}
+
 async function fetchSellerProfile(db, sellerId) {
   if (!sellerId) return null;
   for (const columns of profileColumnFallbacks) {
@@ -81,7 +86,7 @@ export default function ProductPage() {
         }
       } catch (error) {
         console.warn('Product page load failed:', error);
-        if (!cancelled) setStatus('error');
+        if (!cancelled) setStatus(isConfigError(error) ? 'config-error' : 'error');
       }
     }
     loadProduct();
@@ -141,7 +146,11 @@ export default function ProductPage() {
   }
 
   if (status !== 'ready') {
-    const message = status === 'missing' ? 'Product not found.' : 'Could not load product.';
+    const isConfigIssue = status === 'config-error';
+    const message = status === 'missing' ? 'Product not found.' : isConfigIssue ? 'Marketplace config needs attention.' : 'Could not load product.';
+    const detail = isConfigIssue
+      ? 'The public Supabase key on this deployment is invalid, so products cannot be loaded yet.'
+      : 'This listing may have been removed or is temporarily unavailable.';
     return (
       <>
         <ProductHeader count={count} />
@@ -149,7 +158,7 @@ export default function ProductPage() {
           <section className="product-page-error">
             <i className="fa-solid fa-box-open" />
             <h1>{message}</h1>
-            <p>This listing may have been removed or is temporarily unavailable.</p>
+            <p>{detail}</p>
             <div className="product-page-error-actions">
               <a className="btn btn-primary" href="/">Market Landing</a>
               <a className="btn btn-outline" href="/products">Browse Products</a>
