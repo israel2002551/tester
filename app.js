@@ -748,7 +748,28 @@ function openEntryAuth(role = 'buyer', mode = 'login') {
 function profileHasSellerAccess(profile = currentUser?.profile) {
  const role = profile?.role;
  const accounts = profile?.accounts;
- return role === 'seller' || role === 'admin' || role === 'both' || role === 'service_provider' || accounts === 'seller' || accounts === 'both' || accounts === 'service_provider';
+ return role === 'seller' || role === 'admin' || role === 'both' || role === 'service_provider' || accounts === 'seller' || accounts === 'both' || accounts === 'service_provider' || !!profile?.seller_access_category;
+}
+
+async function resolveSellerStaffPermission(email = currentUser?.email) {
+ const normalizedEmail = String(email || '').trim().toLowerCase();
+ if (!normalizedEmail) return null;
+ const local = getLocalSellerPermissions().find(row => String(row.email || '').toLowerCase() === normalizedEmail && row.status !== 'revoked');
+ if (local) return local;
+ try {
+  const { data, error } = await db.from('seller_staff_permissions')
+  .select('id,seller_id,email,category,note,status,created_at')
+  .eq('email', normalizedEmail)
+  .eq('status', 'active')
+  .order('created_at', { ascending: false })
+  .limit(1)
+  .maybeSingle();
+  if (error) throw error;
+  return data || null;
+ } catch (error) {
+  console.info('Seller staff permission lookup skipped:', error.message || error);
+  return null;
+ }
 }
 
 async function ensureSellerProfileRole() {
@@ -764,7 +785,13 @@ async function ensureSellerProfileRole() {
  }
 
  if (!profileHasSellerAccess(profile)) {
- throw new Error('Seller account required. Please sign in with a seller account.');
+  const staffAccess = await resolveSellerStaffPermission(currentUser.email);
+  if (staffAccess) {
+   currentUser.profile = { ...profile, role: 'seller', accounts: 'seller', seller_access_category: staffAccess.category, delegated_seller_id: staffAccess.seller_id };
+   currentRole = 'seller';
+   return true;
+  }
+  throw new Error('Seller account required. Please sign in with a seller account.');
  }
  const legacyAccessPatch = {
   commission_paid: true,
@@ -822,6 +849,8 @@ function hasAuthRedirectParams() {
 function hasAppRouteParams() {
  const params = new URLSearchParams(window.location.search);
  return params.get('view') === 'shop' ||
+ params.has('entry') ||
+ params.has('mode') ||
  params.get('dashboard') === 'seller' ||
  params.has('product') ||
  params.has('store') ||
@@ -832,6 +861,13 @@ function hasAppRouteParams() {
 async function continueUrlRoute() {
  const params = new URLSearchParams(window.location.search);
  appStorage.removeItem('bs_manual_navigation_pass');
+
+ const entryRole = params.get('entry');
+ const entryMode = params.get('mode') === 'signup' ? 'signup' : 'login';
+ if (entryRole) {
+  openEntryAuth(entryRole, entryMode);
+  return;
+ }
 
  if (params.get('dashboard') === 'seller') {
   if (!currentUser) {
@@ -1252,10 +1288,14 @@ async function onAuthSuccess(user, options = {}) {
  name: user.user_metadata?.name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
  email: user.email
  };
- } else {
- currentUser.profile = profile;
- }
- appStorage.removeItem('bs_google_profile_hint');
+  } else {
+  currentUser.profile = profile;
+  }
+  const staffAccess = await resolveSellerStaffPermission(user.email);
+  if (staffAccess && !profileHasSellerAccess(currentUser.profile)) {
+  currentUser.profile = { ...(currentUser.profile || {}), role: 'seller', accounts: 'seller', seller_access_category: staffAccess.category, delegated_seller_id: staffAccess.seller_id };
+  }
+  appStorage.removeItem('bs_google_profile_hint');
 
  currentRole = currentUser.profile?.role || 'buyer';
  await recordProfilePresence({ countLogin: options.countLogin === true });
@@ -1494,7 +1534,7 @@ function handleLandingAuthClick() {
  }
 }
 
-function enterSite(mode) {
+function __legacyDuplicate_enterSite_1528(mode) {
  const entryRole = setPendingEntryRole(mode);
  console.log(" Manual selection pass triggered for role:", mode);
  
@@ -1620,9 +1660,10 @@ async function showSellerDashboard() {
  const adminNavItem = document.getElementById('admin-nav-item');
  if (adminNavItem) adminNavItem.style.setProperty('display', (isAdminEmail() ? 'flex' : 'none'), 'important');
  
- document.body.classList.add('in-seller');
- currentRole = 'seller';
- updatePlatformSellerDashboardChrome();
+  document.body.classList.add('in-seller');
+  currentRole = 'seller';
+  updatePlatformSellerDashboardChrome();
+  updateSellerAccessChrome();
  
  if (typeof stopCarousel === 'function') stopCarousel();
  if (typeof checkSellerCommission === 'function') checkSellerCommission();
@@ -1702,9 +1743,148 @@ function handleNavBrand(e) {
  else loadProducts();
 }
 
+const SELLER_ACCESS_CATEGORIES = {
+ store_manager: {
+  label: 'Store Manager',
+  sections: ['overview','orders','dropshipping','affiliate','advertise','reviews','analytics','coupons','flash','settings','support']
+ },
+ product_manager: {
+  label: 'Product Manager',
+  sections: ['overview','products','add-product','dropshipping','reviews','analytics','support']
+ },
+ full_admin: {
+  label: 'Full Admin Access',
+  sections: ['overview','products','add-product','orders','dropshipping','affiliate','advertise','reviews','analytics','coupons','flash','withdrawals','commission','settings','permissions','support','admin']
+ }
+};
+
+function normalizeSellerAccessCategory(value = '') {
+ const key = String(value || '').toLowerCase().replace(/[\s-]+/g, '_');
+ return SELLER_ACCESS_CATEGORIES[key] ? key : 'full_admin';
+}
+
+function getLocalSellerPermissions() {
+ return readStoredJson(SELLER_PERMISSIONS_KEY, []);
+}
+
+function saveLocalSellerPermissions(rows) {
+ appStorage.setItem(SELLER_PERMISSIONS_KEY, JSON.stringify(rows || []));
+}
+
+function currentSellerAccessCategory() {
+ if (!currentUser) return 'full_admin';
+ if (isAdminEmail() || isPlatformProfile(currentUser.profile || {})) return 'full_admin';
+ const profile = currentUser.profile || {};
+ const direct = profile.seller_access_category || profile.access_category || profile.team_role || profile.staff_role || profile.permission_category;
+ if (direct) return normalizeSellerAccessCategory(direct);
+ const localMatch = getLocalSellerPermissions().find(row => String(row.email || '').toLowerCase() === String(currentUser.email || '').toLowerCase() && row.status !== 'revoked');
+ return normalizeSellerAccessCategory(localMatch?.category || 'full_admin');
+}
+
+function canAccessSellerSection(section) {
+ const category = currentSellerAccessCategory();
+ return (SELLER_ACCESS_CATEGORIES[category]?.sections || SELLER_ACCESS_CATEGORIES.full_admin.sections).includes(section);
+}
+
+function updateSellerAccessChrome() {
+ const category = currentSellerAccessCategory();
+ document.querySelectorAll('.dash-nav-item[data-dash-section]').forEach(item => {
+  const section = item.dataset.dashSection;
+  const allowed = (!section || canAccessSellerSection(section)) && (section !== 'admin' || isAdminEmail() || isPlatformProfile(currentUser?.profile || {}));
+  item.classList.toggle('hidden', !allowed);
+  item.style.display = allowed ? '' : 'none';
+ });
+ const nameEl = document.getElementById('dash-user-name');
+ if (nameEl && currentUser) {
+  const label = SELLER_ACCESS_CATEGORIES[category]?.label || 'Full Admin Access';
+  nameEl.title = label;
+ }
+}
+
+function renderSellerPermissions(rows = getLocalSellerPermissions()) {
+ const list = document.getElementById('seller-permissions-list');
+ if (!list) return;
+ const visible = (rows || []).filter(row => row.status !== 'revoked');
+ if (!visible.length) {
+  list.innerHTML = '<p class="text-xs color-text3">No team access records yet.</p>';
+  return;
+ }
+ list.innerHTML = visible.map(row => {
+  const category = normalizeSellerAccessCategory(row.category);
+  return `<div class="seller-permission-row"><div><strong>${escHtml(row.email)}</strong><span>${escHtml(SELLER_ACCESS_CATEGORIES[category].label)}${row.note ? ` - ${escHtml(row.note)}` : ''}</span></div><button class="btn btn-outline btn-sm" onclick="revokeSellerPermission('${escAttr(row.id || row.email)}')"><i class="fa-solid fa-user-slash"></i> Revoke</button></div>`;
+ }).join('');
+}
+
+async function loadSellerPermissions() {
+ if (!currentUser) return;
+ renderSellerPermissions();
+ try {
+  const { data, error } = await db.from('seller_staff_permissions')
+  .select('id,seller_id,email,category,note,status,created_at')
+  .eq('seller_id', currentUser.id)
+  .neq('status', 'revoked')
+  .order('created_at', { ascending: false });
+  if (error) throw error;
+  const rows = data || [];
+  saveLocalSellerPermissions(rows);
+  renderSellerPermissions(rows);
+ } catch (error) {
+  console.info('Seller permissions using local fallback:', error.message || error);
+ }
+}
+
+async function saveSellerPermission(event) {
+ event.preventDefault();
+ if (!currentUser) { showModal('auth-modal'); return; }
+ const email = document.getElementById('perm-email')?.value.trim().toLowerCase();
+ const category = normalizeSellerAccessCategory(document.getElementById('perm-role')?.value);
+ const note = document.getElementById('perm-note')?.value.trim() || '';
+ if (!email) { toast('Email Required', 'Add the team member email address first.', 'warn'); return; }
+ const row = { id: `perm-${Date.now()}`, seller_id: currentUser.id, email, category, note, status: 'active', created_at: new Date().toISOString() };
+ try {
+  const { data, error } = await db.from('seller_staff_permissions').upsert({
+   seller_id: currentUser.id,
+   email,
+   category,
+   note,
+   status: 'active'
+  }, { onConflict: 'seller_id,email' }).select('id,seller_id,email,category,note,status,created_at').single();
+  if (error) throw error;
+  const rows = [data, ...getLocalSellerPermissions().filter(item => String(item.email).toLowerCase() !== email)];
+  saveLocalSellerPermissions(rows);
+ } catch (error) {
+  const rows = [row, ...getLocalSellerPermissions().filter(item => String(item.email).toLowerCase() !== email)];
+  saveLocalSellerPermissions(rows);
+  toast('Saved Locally', 'Apply the seller_staff_permissions migration to sync team access in Supabase.', 'info', 7000);
+ }
+ event.currentTarget.reset();
+ loadSellerPermissions();
+ toast('Access Saved', `${SELLER_ACCESS_CATEGORIES[category].label} access is ready for ${email}.`, 'success');
+}
+
+async function revokeSellerPermission(idOrEmail) {
+ if (!currentUser) return;
+ const rows = getLocalSellerPermissions().map(row => (String(row.id) === String(idOrEmail) || String(row.email) === String(idOrEmail)) ? { ...row, status: 'revoked' } : row);
+ saveLocalSellerPermissions(rows);
+ renderSellerPermissions(rows);
+ try {
+  const row = rows.find(item => String(item.id) === String(idOrEmail) || String(item.email) === String(idOrEmail));
+  if (row?.id && !String(row.id).startsWith('perm-')) await db.from('seller_staff_permissions').update({ status: 'revoked' }).eq('id', row.id);
+  else if (row?.email) await db.from('seller_staff_permissions').update({ status: 'revoked' }).eq('seller_id', currentUser.id).eq('email', row.email);
+ } catch (error) {
+  console.info('Permission revoke kept locally:', error.message || error);
+ }
+ toast('Access Revoked', 'This team member no longer has active seller access.', 'info');
+}
+
 function showDash(section) {
- document.querySelectorAll('.dash-section').forEach(s => s.classList.remove('active'));
- document.querySelectorAll('.dash-nav-item').forEach(n => n.classList.remove('active'));
+  if (!canAccessSellerSection(section)) {
+  const label = SELLER_ACCESS_CATEGORIES[currentSellerAccessCategory()]?.label || 'Seller Access';
+  toast('Access Restricted', `${label} cannot open this seller section.`, 'warn', 6500);
+  section = 'overview';
+ }
+  document.querySelectorAll('.dash-section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.dash-nav-item').forEach(n => n.classList.remove('active'));
  const el = document.getElementById(`ds-${section}`);
  if (el) el.classList.add('active');
  const navItems = document.querySelectorAll('.dash-nav-item');
@@ -1723,8 +1903,10 @@ function showDash(section) {
  loadFlashSaleProducts();
 }
  if (section === 'analytics') loadSellerAnalytics();
- if (section === 'support') loadBroadcastMessages('seller-broadcast-list');
- updatePlatformSellerDashboardChrome();
+  if (section === 'support') loadBroadcastMessages('seller-broadcast-list');
+  if (section === 'permissions') loadSellerPermissions();
+  updatePlatformSellerDashboardChrome();
+  updateSellerAccessChrome();
 }
 
 function setMobActive(btn) {
@@ -2326,7 +2508,15 @@ function updatePriceDisplay() {
 // ====================================================
 // PRODUCT DETAIL - FLUID MULTI-MEDIA GALLERY UNIFIED
 // ====================================================
+function productDetailPageUrl(productId) {
+ return `/product.html?id=${encodeURIComponent(productId)}`;
+}
+
 async function openProduct(id) {
+ if (id) {
+  window.location.href = productDetailPageUrl(id);
+  return;
+ }
  currentProd = products.find(p => p.id === id);
  if (!currentProd) return;
  const p = currentProd;
@@ -2509,53 +2699,6 @@ async function openProduct(id) {
  trackAnalytics({ event_type: 'product_view', product_id: p.id, seller_id: p.seller_id });
 }
  
-async function loadProductReviews(productId) {
- let { data, error } = await db.from('reviews').select('*,profiles!reviewer_id(name)').eq('product_id', productId).order('created_at', { ascending: false }).limit(10);
- if (error) {
- ({ data } = await db.from('reviews').select('*,profiles!buyer_id(name)').eq('product_id', productId).order('created_at', { ascending: false }).limit(10));
- }
- const reviews = data || [];
- latestProductReviews = reviews;
- const count = reviews.length;
- document.getElementById('modal-review-count').textContent = `${count} review${count!==1?'s':''}`;
- document.getElementById('modal-verified-count').textContent = count;
-
- // Calculate average and star distribution
- const avg = count ? (reviews.reduce((s,r)=>s+r.rating,0)/count) : 0;
- document.getElementById('modal-avg-rating').textContent = avg.toFixed(1);
- document.getElementById('modal-stars').textContent = starText(avg);
-
- // Star distribution bars (5->1)
- const barsEl = document.getElementById('modal-rating-bars');
- barsEl.innerHTML = [5,4,3,2,1].map(star => {
- const starCount = reviews.filter(r => r.rating === star).length;
- const pct = count ? Math.round((starCount / count) * 100) : 0;
- return `<div style="display:flex;align-items:center;gap:.4rem">
- <span style="font-size:.62rem;color:var(--text3);width:12px;text-align:right">${star}</span>
- <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
- <div style="width:${pct}%;height:100%;background:${star>=4?'var(--green)':star>=3?'var(--gold)':'var(--red)'};border-radius:3px;transition:width .3s"></div>
- </div>
- <span style="font-size:.58rem;color:var(--text3);width:18px">${starCount}</span>
- </div>`;
- }).join('');
-
- // Review list
- const list = document.getElementById('modal-reviews-list');
- if (!count) { list.innerHTML = '<p class="color-text3 text-sm" style="padding:.5rem 0">No reviews yet. Be the first to share your experience!</p>'; return; }
- list.innerHTML = reviews.map(r => `
- <div class="review-card">
- <div class="flex justify-between items-center">
- <div style="display:flex;align-items:center;gap:.4rem">
- <div style="width:26px;height:26px;border-radius:50%;background:var(--green-xlt);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:var(--green)">${(r.profiles?.name||'B')[0].toUpperCase()}</div>
- <span class="reviewer-name">${escHtml(r.profiles?.name||'Verified Buyer')}</span>
- </div>
- <div class="stars sm">${starIcons(r.rating)}</div>
- </div>
- <p class="review-text">${escHtml(r.review_text || r.comment || '')}</p>
- <span class="text-xs color-text3"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i> Verified Purchase - ${fmtDate(r.created_at)}</span>
- </div>`).join('');
-}
-
 async function loadProductReviews(productId) {
  let { data, error } = await db.from('reviews').select('*,profiles!reviewer_id(name)').eq('product_id', productId).order('created_at', { ascending: false }).limit(20);
  if (error) {
@@ -3629,7 +3772,7 @@ function switchBuyerTab(tab) {
  if (tab==='services') loadServiceGigs();
 }
 
-async function loadBuyerOrders() {
+async function __legacyDuplicate_loadBuyerOrders_3766() {
  if (!currentUser) { document.getElementById('buyer-orders-empty').classList.remove('hidden'); document.getElementById('buyer-orders-skeleton').classList.add('hidden'); return; }
  document.getElementById('buyer-orders-skeleton').classList.remove('hidden');
  document.getElementById('buyer-orders-list').classList.add('hidden');
@@ -4594,7 +4737,7 @@ function ensureGrowthSections() {
  renderAffiliateSection();
 }
 
-function renderDropshipSection() {
+function __legacyDuplicate_renderDropshipSection_4731() {
  const section = document.getElementById('ds-dropshipping');
  if (!section || section.dataset.enhanced === 'true') return;
  section.dataset.enhanced = 'true';
@@ -4729,7 +4872,7 @@ function updateSupplierCards() {
  });
 }
 
-async function renderDropshipCatalog() {
+async function __legacyDuplicate_renderDropshipCatalog_4866() {
  const grid = document.getElementById('dropship-catalog');
  if (!grid) return;
  const filter = document.getElementById('ds-filter')?.value || 'all';
@@ -4756,7 +4899,7 @@ async function renderDropshipCatalog() {
  }).join('');
 }
 
-async function importFromUrl(event) {
+async function __legacyDuplicate_importFromUrl_4893(event) {
  if (!currentUser) { showModal('auth-modal'); return; }
  
  const urlInput = document.getElementById('ds-import-url');
@@ -4796,13 +4939,13 @@ async function importFromUrl(event) {
  }
 }
 
-async function importDropshipById(id) {
+async function __legacyDuplicate_importDropshipById_4933(id) {
  const item = activeDropshipCatalog.find(p => p.id === id) || dropshipCatalog.find(p => p.id === id);
  if (!item) return;
  return importDropship(item);
 }
 
-async function importDropship(itemOrName, cost, price, emoji) {
+async function __legacyDuplicate_importDropship_4939(itemOrName, cost, price, emoji) {
  if (!currentUser) { showModal('auth-modal'); return; }
  const item = typeof itemOrName === 'object'
  ? itemOrName
@@ -4867,7 +5010,7 @@ function get1688LinkChargeYuan(linkCount = 1) {
  return 90;
 }
 
-async function loadDropshipData() {
+async function __legacyDuplicate_loadDropshipData_5004() {
  if (!currentUser) return;
  ensureGrowthSections();
  await renderDropshipCatalog();
@@ -4920,9 +5063,12 @@ const source1688Catalog = [
  { id:'1688-main', category:'all', title:'Main 1688 homepage', price:'Open 1688', moq:'All products', supplier:'1688.com', tags:['Homepage','All categories'], image:'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=700&q=80', url:'https://www.1688.com/' }
 ];
 const DS_1688_CART_KEY = 'bs_1688_sourcing_cart';
+const DS_1688_BULK_QUEUE_KEY = 'bs_1688_bulk_queue';
+const SELLER_PERMISSIONS_KEY = 'bs_seller_permissions';
 let active1688Category = 'all';
 let extracted1688Product = null;
 let source1688Cart = readStoredJson(DS_1688_CART_KEY, []);
+let bulk1688Rows = readStoredJson(DS_1688_BULK_QUEUE_KEY, []);
 
 function renderDropshipSection() {
  const section = document.getElementById('ds-dropshipping');
@@ -4944,15 +5090,28 @@ function renderDropshipSection() {
  <div class="stat-card"><div class="stat-value color-text3" id="ds-pending">0</div><div class="stat-label">Admin Delivery Orders</div></div>
  </div>
 
- <div class="card card-pad mb-4">
- <form class="ds-1688-search" onsubmit="open1688Search(event)">
+  <div class="card card-pad mb-4">
+  <form class="ds-1688-search" onsubmit="open1688Search(event)">
  <select id="ds-1688-search-mode" class="form-select" aria-label="1688 search type"><option>1688 Search</option><option>Factories</option><option>Industrial</option></select>
  <input id="ds-1688-search" class="form-input" type="search" placeholder="Search 1688: shoes, bags, electronics, packaging...">
  <button class="btn btn-primary" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Open 1688</button>
- </form>
- </div>
+  </form>
+  </div>
 
- <div class="dash-two-col mb-4 ds-1688-grid">
+  <div class="card card-pad mb-4">
+  <div class="flex justify-between items-start gap-3 wrap mb-3">
+  <div><h3 class="mb-1">Bulk 1688 Links</h3><p class="text-xs color-text3">Upload a CSV of product links, review the queue, add everything to cart, then export CSV or Excel for supplier ordering.</p></div>
+  <button class="btn btn-outline btn-sm" onclick="download1688BulkTemplate()"><i class="fa-solid fa-download"></i> Template</button>
+  </div>
+  <div class="form-grid form-grid-2">
+  <div class="form-group"><label class="form-label">CSV File</label><input id="ds-1688-bulk-file" class="form-input" type="file" accept=".csv,text/csv" onchange="handle1688BulkCsv(this)"></div>
+  <div class="form-group"><label class="form-label">Paste Links</label><textarea id="ds-1688-bulk-paste" class="form-textarea" rows="3" placeholder="One 1688 link per line, or title,link,qty"></textarea></div>
+  </div>
+  <div class="flex gap-2 wrap"><button class="btn btn-primary btn-sm" onclick="addPasted1688Links()"><i class="fa-solid fa-list-check"></i> Add Pasted Links</button><button class="btn btn-outline btn-sm" onclick="add1688BulkQueueToCart()"><i class="fa-solid fa-cart-plus"></i> Add Queue to Cart</button><button class="btn btn-outline btn-sm" onclick="export1688Cart('csv')"><i class="fa-solid fa-file-csv"></i> Export CSV</button><button class="btn btn-outline btn-sm" onclick="export1688Cart('xls')"><i class="fa-solid fa-file-excel"></i> Export Excel</button></div>
+  <div id="ds-1688-bulk-preview" class="ds-1688-bulk-preview mt-3"></div>
+  </div>
+
+  <div class="dash-two-col mb-4 ds-1688-grid">
  <div class="card card-pad">
  <h3 class="mb-2">Smart 1688 Extractor</h3>
  <p class="text-xs color-text3 mb-3">Paste a 1688 product URL or copied product-page code. BUYSELL will use it to prepare your listing and sourcing request.</p>
@@ -4997,7 +5156,7 @@ function renderDropshipSection() {
 
  <div class="dash-two-col mb-4 ds-1688-grid">
  <div class="card card-pad">
- <div class="flex justify-between items-center mb-3 gap-2 wrap"><h3>1688 Sourcing Cart</h3><button class="btn btn-outline btn-sm" onclick="clear1688Cart()"><i class="fa-solid fa-trash"></i> Clear</button></div>
+  <div class="flex justify-between items-center mb-3 gap-2 wrap"><h3>1688 Sourcing Cart</h3><div class="flex gap-2 wrap"><button class="btn btn-outline btn-sm" onclick="export1688Cart('csv')"><i class="fa-solid fa-file-csv"></i> CSV</button><button class="btn btn-outline btn-sm" onclick="export1688Cart('xls')"><i class="fa-solid fa-file-excel"></i> Excel</button><button class="btn btn-outline btn-sm" onclick="clear1688Cart()"><i class="fa-solid fa-trash"></i> Clear</button></div></div>
  <div id="ds-1688-cart" class="ds-1688-cart"></div>
  <div class="form-grid form-grid-2 mt-3"><input id="ds-1688-contact" class="form-input" placeholder="Seller phone/WhatsApp"><input id="ds-1688-destination" class="form-input" placeholder="Delivery city/country"></div>
  <textarea id="ds-1688-request-note" class="form-textarea mt-2" rows="3" placeholder="Extra sourcing notes: color, size, model, budget, buyer deadline..."></textarea>
@@ -5155,6 +5314,166 @@ function clear1688Cart() {
  render1688Cart();
 }
 
+function csvCell(value = '') {
+ const text = String(value ?? '');
+ return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function __legacyDuplicate_parseCsvLine_5313(line = '') {
+ const cells = [];
+ let cell = '';
+ let quoted = false;
+ for (let i = 0; i < line.length; i++) {
+  const ch = line[i];
+  if (ch === '"' && line[i + 1] === '"') { cell += '"'; i++; continue; }
+  if (ch === '"') { quoted = !quoted; continue; }
+  if (ch === ',' && !quoted) { cells.push(cell.trim()); cell = ''; continue; }
+  cell += ch;
+ }
+ cells.push(cell.trim());
+ return cells;
+}
+
+function normalize1688BulkRow(row = {}, index = 0) {
+ const title = row.title || row.name || row.product || `1688 product ${index + 1}`;
+ const url = normalize1688Url(row.url || row.link || row.product_url || row['1688_link'] || row['1688 url'] || '');
+ return normalize1688Product({
+  id: row.id || `bulk-1688-${Date.now()}-${index}`,
+  title,
+  name: title,
+  url,
+  image: row.image || row.image_url || '',
+  price: row.price || row.cost || 'Price to confirm',
+  supplier: row.supplier || '1688 supplier',
+  moq: row.moq || 'MOQ to confirm',
+  variant: row.variant || row.options || '',
+  note: row.note || row.notes || '',
+  quantity: row.quantity || row.qty || 1
+ });
+}
+
+function parse1688BulkText(text = '') {
+ const lines = String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+ if (!lines.length) return [];
+ const first = parseCsvLine(lines[0]).map(h => h.toLowerCase().replace(/\s+/g, '_'));
+ const hasHeader = first.some(h => ['url','link','product_url','1688_link','title','name','qty','quantity'].includes(h));
+ const headers = hasHeader ? first : ['url', 'title', 'quantity', 'variant', 'note'];
+ const dataLines = hasHeader ? lines.slice(1) : lines;
+ return dataLines.map((line, index) => {
+  const cells = parseCsvLine(line);
+  const row = {};
+  headers.forEach((header, i) => { row[header] = cells[i] || ''; });
+  if (!hasHeader && /^https?:\/\//i.test(cells[0] || '')) {
+   row.url = cells[0];
+   row.title = cells[1] || `1688 product ${index + 1}`;
+  }
+  return normalize1688BulkRow(row, index);
+ }).filter(item => item.url || item.title);
+}
+
+function save1688BulkQueue(rows = bulk1688Rows) {
+ bulk1688Rows = rows.slice(0, 500);
+ appStorage.setItem(DS_1688_BULK_QUEUE_KEY, JSON.stringify(bulk1688Rows));
+ render1688BulkPreview();
+}
+
+function render1688BulkPreview() {
+ const el = document.getElementById('ds-1688-bulk-preview');
+ if (!el) return;
+ if (!bulk1688Rows.length) {
+  el.innerHTML = '<div class="empty-state compact"><i class="fa-solid fa-file-csv"></i><p>No bulk 1688 links queued yet.</p></div>';
+  return;
+ }
+ el.innerHTML = `<div class="ds-1688-bulk-head"><strong>${bulk1688Rows.length} queued link${bulk1688Rows.length === 1 ? '' : 's'}</strong><button class="btn btn-ghost btn-sm" onclick="save1688BulkQueue([])">Clear Queue</button></div>
+ <div class="ds-1688-bulk-list">${bulk1688Rows.slice(0, 8).map(item => `<div><strong>${escHtml(item.title)}</strong><span>Qty ${Number(item.quantity || 1)} - ${escHtml(item.url || 'No URL')}</span></div>`).join('')}${bulk1688Rows.length > 8 ? `<p class="text-xs color-text3 mt-2">+${bulk1688Rows.length - 8} more rows</p>` : ''}</div>`;
+}
+
+function handle1688BulkCsv(input) {
+ const file = input?.files?.[0];
+ if (!file) return;
+ const reader = new FileReader();
+ reader.onload = () => {
+  const rows = parse1688BulkText(reader.result || '');
+  save1688BulkQueue([...rows, ...bulk1688Rows]);
+  toast('Bulk Links Loaded', `${rows.length} 1688 link${rows.length === 1 ? '' : 's'} added to the queue.`, 'success');
+ };
+ reader.onerror = () => toast('CSV Error', 'Could not read the selected CSV file.', 'error');
+ reader.readAsText(file);
+}
+
+function addPasted1688Links() {
+ const input = document.getElementById('ds-1688-bulk-paste');
+ const rows = parse1688BulkText(input?.value || '');
+ if (!rows.length) { toast('No Links Found', 'Paste one 1688 link per line or CSV rows first.', 'warn'); return; }
+ save1688BulkQueue([...rows, ...bulk1688Rows]);
+ if (input) input.value = '';
+ toast('Links Queued', `${rows.length} row${rows.length === 1 ? '' : 's'} ready for cart or export.`, 'success');
+}
+
+function add1688BulkQueueToCart() {
+ if (!bulk1688Rows.length) { toast('Queue Empty', 'Upload or paste 1688 links first.', 'warn'); return; }
+ const merged = [...bulk1688Rows, ...source1688Cart];
+ const seen = new Set();
+ source1688Cart = merged.filter(item => {
+  const key = `${item.url || ''}|${item.title || ''}`.toLowerCase();
+  if (seen.has(key)) return false;
+  seen.add(key);
+  return true;
+ }).slice(0, 500);
+ appStorage.setItem(DS_1688_CART_KEY, JSON.stringify(source1688Cart));
+ render1688Cart();
+ toast('Queue Added to Cart', 'Bulk 1688 products are ready for supplier export or BUYSELL sourcing.', 'success');
+}
+
+function downloadTextFile(filename, content, type = 'text/plain') {
+ const blob = new Blob([content], { type });
+ const url = URL.createObjectURL(blob);
+ const a = document.createElement('a');
+ a.href = url;
+ a.download = filename;
+ a.click();
+ URL.revokeObjectURL(url);
+}
+
+function build1688ExportRows() {
+ return (source1688Cart.length ? source1688Cart : bulk1688Rows).map((item, index) => ({
+  no: index + 1,
+  title: item.title || item.name || '',
+  url: item.url || '',
+  quantity: Number(item.quantity || 1),
+  variant: item.variant || '',
+  price: item.price || '',
+  desired_price: item.desired_price || '',
+  supplier: item.supplier || '',
+  moq: item.moq || '',
+  note: item.note || ''
+ }));
+}
+
+function export1688Cart(format = 'csv') {
+ const rows = build1688ExportRows();
+ if (!rows.length) { toast('Nothing to Export', 'Add 1688 products to the cart or bulk queue first.', 'warn'); return; }
+ const headers = ['No','Product Title','1688 URL','Quantity','Variant','1688 Price','Desired Selling Price','Supplier','MOQ','Notes'];
+ const body = rows.map(row => [row.no,row.title,row.url,row.quantity,row.variant,row.price,row.desired_price,row.supplier,row.moq,row.note].map(csvCell).join(',')).join('\n');
+ const csv = `${headers.map(csvCell).join(',')}\n${body}`;
+ const stamp = new Date().toISOString().slice(0, 10);
+ if (format === 'xls' || format === 'xlsx') {
+  const htmlRows = [headers, ...rows.map(row => [row.no,row.title,row.url,row.quantity,row.variant,row.price,row.desired_price,row.supplier,row.moq,row.note])]
+   .map(cells => `<tr>${cells.map(cell => `<td>${escHtml(cell)}</td>`).join('')}</tr>`).join('');
+  const html = `<html><head><meta charset="utf-8"></head><body><table>${htmlRows}</table></body></html>`;
+  downloadTextFile(`buysell_1688_supplier_order_${stamp}.xls`, html, 'application/vnd.ms-excel');
+  toast('Excel Export Ready', 'Supplier order sheet downloaded.', 'success');
+  return;
+ }
+ downloadTextFile(`buysell_1688_supplier_order_${stamp}.csv`, csv, 'text/csv;charset=utf-8');
+ toast('CSV Export Ready', 'Supplier order CSV downloaded.', 'success');
+}
+
+function download1688BulkTemplate() {
+ const template = 'title,url,quantity,variant,price,supplier,moq,note\nSample shoes,https://detail.1688.com/offer/1051231740308.html,2,Black size 40,CNY 79,Huizhou Shunbuda Shoes Co.,MOQ 1 pair,Confirm stock before ordering\n';
+ downloadTextFile('buysell_1688_bulk_template.csv', template, 'text/csv;charset=utf-8');
+}
+
 async function publish1688Product(event) {
  if (!currentUser) { showModal('auth-modal'); return; }
  if (!extracted1688Product) { toast('Extract First', 'Choose or extract a 1688 product before publishing.', 'warn'); return; }
@@ -5203,6 +5522,10 @@ async function submit1688SourcingRequest(event) {
  const shippingUsdRate = Number(document.getElementById('ds-calc-usd-per-kg')?.value || 12);
  const repackingFee = Number(document.getElementById('ds-calc-repack')?.value || 0);
  const lines = source1688Cart.map(item => `Qty ${item.quantity || 1}: ${item.title} | ${item.price} | Sell: ${item.desired_price ? fmtN(item.desired_price) : 'to confirm'} | ${item.url}`).join('\n');
+ const supplierCsv = [
+  'Product Title,1688 URL,Quantity,Variant,1688 Price,Desired Selling Price,Supplier,MOQ,Notes',
+  ...build1688ExportRows().map(row => [row.title,row.url,row.quantity,row.variant,row.price,row.desired_price,row.supplier,row.moq,row.note].map(csvCell).join(','))
+ ].join('\n');
  const sellerName = currentUser.profile?.name || currentUser.email || 'BUYSELL seller';
  const requestText = `BUYSELL 1688 sourcing request
 Seller ID: ${currentUser.id}
@@ -5214,6 +5537,9 @@ International shipping estimate: ${shippingKg}kg minimum x $${shippingUsdRate}/k
 Repacking fee estimate: ${fmtN(repackingFee)}
 
 ${lines}
+
+Supplier CSV:
+${supplierCsv}
 
 ${note}`;
  const payload = {
@@ -5265,6 +5591,7 @@ async function loadDropshipData() {
  ensureGrowthSections();
  renderDropshipCatalog();
  render1688Cart();
+ render1688BulkPreview();
  loadSellerDropshipUpdates();
   updateDropshipCalculator();
  const { data: products } = await db.from('products')
@@ -5526,7 +5853,7 @@ function copyRef() {
  navigator.clipboard.writeText(link).then(()=>toast('Referral Link Copied!','Share to earn \u20A6500 per referral','success'));
 }
 
-async function loadFlashSaleProducts() {
+async function __legacyDuplicate_loadFlashSaleProducts_5847() {
  if (!currentUser) {
  console.warn("Flash Sale: No current user");
  return;
@@ -6520,7 +6847,7 @@ function getProductThumbnail(product = {}) {
 }
 
 function productPublicLink(productId) {
- return `${PUBLIC_SITE_URL}/?product=${encodeURIComponent(productId)}`;
+ return `${PUBLIC_SITE_URL}/product.html?id=${encodeURIComponent(productId)}`;
 }
 
 function shortProductDescription(product = {}, max = 130) {
@@ -7300,7 +7627,7 @@ async function importCsvProducts() {
 // SHARE PRODUCT
 // ====================================================
 function shareProduct(prod) {
- const url = `${window.location.origin}${window.location.pathname}?product=${prod.id}`;
+ const url = `${window.location.origin}${productDetailPageUrl(prod.id)}`;
  const text = `Check out "${prod.name}" for ${fmtN(prod.price)} on BUYSELL Nigeria!`;
  if (navigator.share) {
  navigator.share({ title: prod.name, text, url });
@@ -7310,20 +7637,21 @@ function shareProduct(prod) {
  }
 }
 
-// Handle ?product= in URL for direct product links
+// Handle direct links for product, store, category, referral, and cart routes.
 async function handleDeepLink() {
  const params = new URLSearchParams(window.location.search);
  const productId = params.get('product');
  const storeId = params.get('store');
  const category = params.get('category');
  const refCode = params.get('ref');
+ const shouldOpenCart = params.get('cart') === 'open';
  if (productId) {
-  await loadProducts();
   openProduct(productId);
+  return;
   }
-  if (storeId) {
-  viewStorefront(storeId);
-  }
+   if (storeId) {
+   viewStorefront(storeId);
+   }
  if (category && !productId && !storeId) {
   await loadProducts();
   filterCat(category, { scroll: true });
@@ -7331,7 +7659,10 @@ async function handleDeepLink() {
  }
  if (refCode) {
  // Track referral click
- appStorage.setItem('bs_ref', refCode);
+  appStorage.setItem('bs_ref', refCode);
+  }
+ if (shouldOpenCart) {
+  openCart();
  }
 }
 
@@ -7997,7 +8328,7 @@ function renderServiceCards(gigs) {
  <p style="font-size:.78rem;color:var(--text2);line-height:1.55;margin-bottom:.65rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escHtml(g.description || 'No description provided.')}</p>
  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
  <div>
- <div style="font-size:.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Starting from</div>
+ <div style="font-size:.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:0">Starting from</div>
  <div style="font-size:1.1rem;font-weight:800;color:var(--green)">${fmtN(g.starting_rate || g.price || 0)}</div>
  </div>
  <div style="display:flex;align-items:center;gap:.35rem">
@@ -8496,7 +8827,7 @@ async function submitKycLegacy(event) {
  return;
  }
 
- async function uploadKycFile(file, label) {
+ async function __legacyDuplicate_uploadKycFile_8821(file, label) {
  const ext = file.name.split('.').pop();
  const path = `kyc/${currentUser.id}/${label}_${Date.now()}.${ext}`;
  const { error } = await db.storage.from('uploads').upload(path, file);
@@ -8673,6 +9004,22 @@ async function exportAdminReport() {
 // ====================================================
 function dismissInstallBar() {
  document.getElementById('pwa-banner')?.classList.remove('show');
+}
+
+async function installPWA() {
+ if (!deferredInstallPrompt) {
+  dismissInstallBar();
+  toast('Install unavailable', 'Use your browser menu to add BUYSELL to your home screen.', 'info', 5000);
+  return;
+ }
+ deferredInstallPrompt.prompt();
+ await deferredInstallPrompt.userChoice.catch(() => null);
+ deferredInstallPrompt = null;
+ dismissInstallBar();
+}
+
+function dismissPWA() {
+ dismissInstallBar();
 }
 
 // ====================================================
@@ -9069,6 +9416,10 @@ async function showInbox() {
   }
 }
 
+function openInbox() {
+ return showInbox();
+}
+
 async function openConversation(partnerId, partnerName, productId = null) {
  if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
  currentChatPartner = partnerId;
@@ -9348,7 +9699,7 @@ function removeCoupon() {
 // FLASH SALES
 // ====================================================
 
-async function loadFlashSaleProducts() {
+async function __legacyDuplicate_loadFlashSaleProducts_9673() {
  if (!currentUser) return;
  
  const selectEl = document.getElementById('flash-product');

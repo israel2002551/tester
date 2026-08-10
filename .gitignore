@@ -11,6 +11,9 @@ auth_hits.txt
 role_hits.txt
 signup_hits.txt
 supabase/.temp/
+node_modules/
+.npm-cache/
+dist/
 
 # Supabase project files stay local
 supabase/

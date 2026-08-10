@@ -58,6 +58,30 @@ function categoryProductImage(product) {
   return product.image_url || images[0] || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=600&h=600&fit=crop';
 }
 
+function ensureCategoryTrustBar() {
+  const hero = document.querySelector('.category-hero');
+  if (!hero || document.querySelector('.category-trust-bar')) return;
+  const trust = document.createElement('section');
+  trust.className = 'category-trust-bar';
+  trust.setAttribute('aria-label', 'BUYSELL marketplace benefits');
+  trust.innerHTML = `
+    <div><i class="fa-solid fa-truck-fast"></i><strong>BUYSELL Delivery</strong><span>Pickup and tracking help</span></div>
+    <div><i class="fa-solid fa-lock"></i><strong>Secure Checkout</strong><span>Protected online payments</span></div>
+    <div><i class="fa-solid fa-message"></i><strong>Seller Chat</strong><span>Ask before you buy</span></div>
+    <div><i class="fa-solid fa-globe"></i><strong>1688 Sourcing</strong><span>Bulk links and supplier sheets</span></div>
+  `;
+  hero.insertAdjacentElement('afterend', trust);
+}
+
+function ensureCategoryHeroKicker(config) {
+  const title = document.getElementById('category-title');
+  if (!title || document.querySelector('.category-hero-kicker')) return;
+  const kicker = document.createElement('span');
+  kicker.className = 'category-hero-kicker';
+  kicker.textContent = currentCategory === 'upcoming' ? 'Launch Preview' : 'BUYSELL Collection';
+  title.insertAdjacentElement('beforebegin', kicker);
+}
+
 function categoryProductCard(product) {
   if (currentCategory === 'upcoming') return upcomingCategoryProductCard(product);
   const image = categoryProductImage(product);
@@ -66,7 +90,7 @@ function categoryProductCard(product) {
   const rating = Number(product.avg_rating || 5).toFixed(1);
   const seller = product.profiles?.store_name || product.profiles?.name || 'Seller';
   return `
-    <article class="cat-product-card" onclick="location.href='index.html?view=shop&product=${categoryEsc(product.id)}'">
+    <article class="cat-product-card" onclick="location.href='/product.html?id=${categoryEsc(product.id)}'">
       <div class="cat-product-media">
         <img src="${categoryEsc(image)}" alt="${categoryEsc(product.name || 'Product')}" loading="lazy">
         <div class="cat-product-badges">
@@ -223,6 +247,8 @@ function initCategoryPage() {
   document.getElementById('category-title').textContent = config.title;
   document.getElementById('category-subtitle').textContent = config.subtitle;
   document.getElementById('category-icon').className = `fa-solid ${config.icon}`;
+  ensureCategoryHeroKicker(config);
+  ensureCategoryTrustBar();
   document.querySelectorAll('[data-category-nav]').forEach(link => {
     link.classList.toggle('active', link.dataset.categoryNav === currentCategory);
   });

@@ -1,13 +1,17 @@
 # BUYSELL.NG
 
-Static marketplace frontend for BUYSELL Nigeria, backed by Supabase tables,
-storage, auth, and Edge Functions.
+React/Vite marketplace frontend for BUYSELL Nigeria, backed by Supabase tables,
+storage, auth, and Edge Functions. The current migration preserves the existing
+visual system and CSS while moving route ownership and the product/category/legal
+pages into React components.
 
 ## Local Setup
 
 1. Copy `config.example.js` to `config.js`.
 2. Fill in your Supabase anon key, Supabase URL, Paystack public key, and admin email.
-3. Open `index.html` in a browser, or serve the folder with a static server.
+3. Install dependencies with `npm install --cache .\.npm-cache`.
+4. Run the React dev server with `npm run dev`.
+5. Build production assets with `npm run build`.
 
 `config.js` is intentionally ignored by Git because it contains local keys.
 
