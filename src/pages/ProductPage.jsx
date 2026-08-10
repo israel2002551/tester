@@ -5,8 +5,47 @@ import { money } from '../lib/format.js';
 import { productColumns, productMedia, shippingFee } from '../lib/productData.js';
 import { readJson, writeJson } from '../lib/storage.js';
 
+const productColumnFallbacks = [
+  productColumns,
+  'id,seller_id,name,description,price,original_price,shipping_fee,shipping_cost,category,condition,location,images,videos,image_url,video_url,has_video,stock_quantity,status,created_at,avg_rating,review_count,negotiable',
+  'id,seller_id,name,description,price,original_price,category,condition,location,images,image_url,stock_quantity,status,created_at,avg_rating,review_count',
+  'id,seller_id,name,description,price,category,condition,location,image_url,status,created_at',
+];
+
+const profileColumnFallbacks = [
+  'id,name,email,role,accounts,store_name,store_description,whatsapp,logo_url,store_address,seller_verified,kyc_status',
+  'id,name,email,role,store_name,store_description,whatsapp,logo_url,store_address,seller_verified',
+  'id,name,email,role,store_name',
+];
+
 function cartCount() {
   return readJson('bs_cart', []).reduce((sum, item) => sum + (Number(item.qty) || 1), 0);
+}
+
+async function fetchSellerProfile(db, sellerId) {
+  if (!sellerId) return null;
+  for (const columns of profileColumnFallbacks) {
+    const { data, error } = await db.from('profiles').select(columns).eq('id', sellerId).maybeSingle();
+    if (!error) return data || null;
+  }
+  return null;
+}
+
+async function fetchProductById(db, productId) {
+  let lastError = null;
+  for (const columns of productColumnFallbacks) {
+    const { data, error } = await db.from('products').select(columns).eq('id', productId).maybeSingle();
+    if (error) {
+      lastError = error;
+      continue;
+    }
+    if (!data) return null;
+    if (!data.profiles && data.seller_id) {
+      data.profiles = await fetchSellerProfile(db, data.seller_id);
+    }
+    return data;
+  }
+  throw lastError || new Error('Product lookup failed');
 }
 
 export default function ProductPage() {
@@ -30,8 +69,7 @@ export default function ProductPage() {
       }
       try {
         const db = await createSupabaseClient();
-        const { data, error } = await db.from('products').select(productColumns).eq('id', productId).maybeSingle();
-        if (error) throw error;
+        const data = await fetchProductById(db, productId);
         if (!data) {
           setStatus('missing');
           return;
@@ -112,7 +150,10 @@ export default function ProductPage() {
             <i className="fa-solid fa-box-open" />
             <h1>{message}</h1>
             <p>This listing may have been removed or is temporarily unavailable.</p>
-            <a className="btn btn-primary" href="/products">Browse Products</a>
+            <div className="product-page-error-actions">
+              <a className="btn btn-primary" href="/">Market Landing</a>
+              <a className="btn btn-outline" href="/products">Browse Products</a>
+            </div>
           </section>
         </main>
       </>
@@ -188,8 +229,9 @@ export default function ProductPage() {
 function ProductHeader({ count }) {
   return (
     <header className="product-page-header">
-      <a className="category-brand" href="/?view=shop">BUY<span>SELL</span></a>
+      <a className="category-brand" href="/">BUY<span>SELL</span></a>
       <nav>
+        <a href="/">Home</a>
         <a href="/products">Collections</a>
         <a href="/category/dropship">1688 Sourcing</a>
         <a href="/?view=shop">Marketplace</a>
