@@ -7,6 +7,12 @@ import { CategoryProductCard, UpcomingProductCard } from '../components/Category
 import { createSupabaseClient } from '../lib/browserConfig.js';
 import { categoryConfig, categoryProductColumns, upcomingColumns } from '../lib/categoryData.js';
 
+const categoryColumnFallbacks = [
+  categoryProductColumns,
+  'id,seller_id,name,description,price,original_price,category,condition,location,images,videos,image_url,video_url,has_video,stock_quantity,status,created_at,avg_rating,review_count',
+  'id,seller_id,name,description,price,category,condition,location,image_url,status,created_at',
+];
+
 function sortItems(items, sort, isUpcoming) {
   const sorted = [...items];
   if (sort === 'price-asc') sorted.sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
@@ -20,6 +26,35 @@ function sortItems(items, sort, isUpcoming) {
     });
   } else sorted.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   return sorted;
+}
+
+function matchesCategory(product, category) {
+  if (category === 'all' || category === 'trending') return true;
+  const value = String(product.category || '').toLowerCase();
+  if (category === 'phones') return ['phones', 'phone', 'mobile', 'gadgets', 'electronics'].some(term => value.includes(term));
+  if (category === 'home') return ['home', 'furniture', 'kitchen', 'appliance'].some(term => value.includes(term));
+  if (category === 'beauty') return ['beauty', 'skincare', 'cosmetic', 'fragrance', 'perfume'].some(term => value.includes(term));
+  if (category === 'sports') return ['sport', 'fitness', 'gym'].some(term => value.includes(term));
+  if (category === 'dropship') return ['dropship', '1688', 'sourcing'].some(term => value.includes(term));
+  return value === category || value.includes(category);
+}
+
+async function fetchCategoryRows(db, category) {
+  let lastError = null;
+  for (const columns of categoryColumnFallbacks) {
+    for (const status of ['active', 'approved']) {
+      let query = db.from('products').select(columns).eq('status', status).order('created_at', { ascending: false }).limit(160);
+      const { data, error } = await query;
+      if (error) {
+        lastError = error;
+        continue;
+      }
+      const rows = (data || []).filter(product => matchesCategory(product, category));
+      if (rows.length || category === 'all' || category === 'trending') return rows;
+    }
+  }
+  if (lastError) throw lastError;
+  return [];
 }
 
 export default function CategoryPage({ category = 'all' }) {
@@ -42,25 +77,29 @@ export default function CategoryPage({ category = 'all' }) {
       setStatus('loading');
       try {
         const db = await createSupabaseClient();
-        let query;
         if (isUpcoming) {
-          query = db.from('upcoming_products').select(upcomingColumns).eq('status', 'active').order('priority', { ascending: false }).order('created_at', { ascending: false }).limit(120);
+          const query = db.from('upcoming_products').select(upcomingColumns).eq('status', 'active').order('priority', { ascending: false }).order('created_at', { ascending: false }).limit(120);
+          const { data, error } = await query;
+          if (error) throw error;
+          if (!cancelled) {
+            setItems(data || []);
+            setStatus('ready');
+          }
+          return;
         } else {
-          query = db.from('products').select(categoryProductColumns).eq('status', 'approved').order('created_at', { ascending: false }).limit(120);
-          if (category !== 'all' && category !== 'trending') query = query.eq('category', category);
-        }
-        const { data, error } = await query;
-        if (error) throw error;
-        const rows = category === 'trending'
-          ? [...(data || [])].sort((a, b) => {
-              const bScore = Number(b.review_count || 0) * 3 + Number(b.avg_rating || 0) + (b.has_video ? 2 : 0);
-              const aScore = Number(a.review_count || 0) * 3 + Number(a.avg_rating || 0) + (a.has_video ? 2 : 0);
-              return bScore - aScore;
-            })
-          : data || [];
-        if (!cancelled) {
-          setItems(rows);
-          setStatus('ready');
+          const data = await fetchCategoryRows(db, category);
+          const rows = category === 'trending'
+            ? [...(data || [])].sort((a, b) => {
+                const bScore = Number(b.review_count || 0) * 3 + Number(b.avg_rating || 0) + (b.has_video ? 2 : 0);
+                const aScore = Number(a.review_count || 0) * 3 + Number(a.avg_rating || 0) + (a.has_video ? 2 : 0);
+                return bScore - aScore;
+              })
+            : data || [];
+          if (!cancelled) {
+            setItems(rows);
+            setStatus('ready');
+          }
+          return;
         }
       } catch (error) {
         console.warn('Category page load failed:', error);
