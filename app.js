@@ -644,8 +644,65 @@ function toast(title, msg='', type='success', dur=3500) {
 // ====================================================
 // MODAL HELPERS
 // ====================================================
-function showModal(id) { const m = document.getElementById(id); if(m){ m.classList.add('open'); document.body.classList.add('modal-open'); } }
-function closeModal(id) { const m = document.getElementById(id); if(m){ m.classList.remove('open'); document.body.classList.remove('modal-open'); } }
+const PAGE_SURFACE_IDS = new Set(['cart-modal', 'checkout-modal', 'inbox-modal', 'message-modal']);
+let activePageSurface = '';
+
+function setSurfaceRoute(page) {
+ const url = new URL(window.location.href);
+ url.searchParams.set('view', 'shop');
+ if (page) url.searchParams.set('page', page);
+ else url.searchParams.delete('page');
+ url.searchParams.delete('cart');
+ url.searchParams.delete('checkout');
+ history.pushState({ page: page || 'shop' }, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+function clearPageSurfaceRoute() {
+ const url = new URL(window.location.href);
+ url.searchParams.delete('page');
+ url.searchParams.delete('cart');
+ url.searchParams.delete('checkout');
+ history.pushState({ view: url.searchParams.get('view') || 'shop' }, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+function preparePageSurface(id, page) {
+ PAGE_SURFACE_IDS.forEach(surfaceId => {
+  if (surfaceId !== id) document.getElementById(surfaceId)?.classList.remove('app-page-surface', 'cart-page-surface', 'checkout-page-surface', 'messages-page-surface', 'conversation-page-surface', 'open');
+ });
+ const surface = document.getElementById(id);
+ if (!surface) return;
+ surface.classList.add('app-page-surface');
+ surface.classList.toggle('cart-page-surface', page === 'cart');
+ surface.classList.toggle('checkout-page-surface', page === 'checkout');
+ surface.classList.toggle('messages-page-surface', page === 'messages');
+ surface.classList.toggle('conversation-page-surface', page === 'conversation');
+ activePageSurface = id;
+ document.body.classList.add('surface-page-open');
+ setSurfaceRoute(page === 'conversation' ? 'messages' : page);
+}
+
+function showModal(id, options = {}) {
+ const m = document.getElementById(id);
+ if(m){
+  if (options.page) preparePageSurface(id, options.page);
+  m.classList.add('open');
+  document.body.classList.add('modal-open');
+ }
+}
+
+function closeModal(id) {
+ const m = document.getElementById(id);
+ if(m){
+  const wasPageSurface = m.classList.contains('app-page-surface');
+  m.classList.remove('open', 'app-page-surface', 'cart-page-surface', 'checkout-page-surface', 'messages-page-surface', 'conversation-page-surface');
+  if (wasPageSurface && activePageSurface === id) {
+   activePageSurface = '';
+   document.body.classList.remove('surface-page-open');
+   clearPageSurfaceRoute();
+  }
+  if (!document.querySelector('.modal-overlay.open')) document.body.classList.remove('modal-open');
+ }
+}
 document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if(e.target===m) closeModal(m.id); }));
 
 function hideAccountPage() {
@@ -1358,6 +1415,7 @@ function updateNavForUser() {
  if (!currentUser) return;
  document.getElementById('nav-auth-btns').classList.add('hidden');
  document.getElementById('nav-user-btns').classList.remove('hidden');
+ ensureNavLogoutButton();
  const initial = (currentUser.profile?.name || currentUser.email || 'U')[0].toUpperCase();
  document.getElementById('nav-avatar-inner').textContent = initial;
  document.getElementById('nav-avatar-inner').style.fontSize = '.9rem';
@@ -1425,11 +1483,13 @@ async function logoutUser() {
  db.removeChannel(messageChannel);
  messageChannel = null;
  }
- currentUser = null;
- currentChatPartner = null;
- currentChatProductId = null;
- document.getElementById('nav-auth-btns').classList.remove('hidden');
- document.getElementById('nav-user-btns').classList.add('hidden');
+  currentUser = null;
+  currentChatPartner = null;
+  currentChatProductId = null;
+  PAGE_SURFACE_IDS.forEach(id => document.getElementById(id)?.classList.remove('open', 'app-page-surface', 'cart-page-surface', 'checkout-page-surface', 'messages-page-surface', 'conversation-page-surface'));
+  document.body.classList.remove('surface-page-open', 'modal-open');
+  document.getElementById('nav-auth-btns').classList.remove('hidden');
+  document.getElementById('nav-user-btns').classList.add('hidden');
  updateInboxCount();
  enterSite('buyer');
  toast('Signed Out', '', 'info');
@@ -2862,14 +2922,29 @@ function changeCartQty(id, delta) {
 }
 
 function updateCartCount() {
- const count = cart.reduce((s,c)=>s+(c.qty||1),0);
- document.getElementById('cart-count').textContent = count;
- document.getElementById('cart-count').style.display = count ? 'flex' : 'none';
+  const count = cart.reduce((s,c)=>s+(c.qty||1),0);
+  document.getElementById('cart-count').textContent = count;
+  document.getElementById('cart-count').style.display = count ? 'flex' : 'none';
 }
 
-function openCart() {
- renderCartItems();
- showModal('cart-modal');
+function ensureNavLogoutButton() {
+ const navUserBtns = document.getElementById('nav-user-btns');
+ if (!navUserBtns || document.getElementById('nav-logout-btn')) return;
+ const btn = document.createElement('button');
+ btn.type = 'button';
+ btn.id = 'nav-logout-btn';
+ btn.className = 'cart-btn nav-logout-btn';
+ btn.title = 'Log out';
+ btn.setAttribute('aria-label', 'Log out');
+ btn.innerHTML = '<i class="fa-solid fa-right-from-bracket"></i>';
+ btn.addEventListener('click', logoutUser);
+ navUserBtns.appendChild(btn);
+}
+
+function openCart(options = {}) {
+  renderCartItems();
+  const pageMode = options.page !== false;
+  showModal('cart-modal', pageMode ? { page: 'cart' } : {});
 }
 
 function renderCartItems() {
@@ -2977,7 +3052,7 @@ async function startCheckout() {
  });
  
  goCheckoutStep(1);
- showModal('checkout-modal');
+  showModal('checkout-modal', { page: 'checkout' });
  
  // Pre-fill user profile info
  const p = currentUser.profile || {};
@@ -7642,9 +7717,11 @@ async function handleDeepLink() {
  const params = new URLSearchParams(window.location.search);
  const productId = params.get('product');
  const storeId = params.get('store');
- const category = params.get('category');
- const refCode = params.get('ref');
- const shouldOpenCart = params.get('cart') === 'open';
+  const category = params.get('category');
+  const refCode = params.get('ref');
+  const page = params.get('page');
+  const shouldOpenCart = params.get('cart') === 'open';
+  const shouldOpenCheckout = params.get('checkout') === 'open';
  if (productId) {
   openProduct(productId);
   return;
@@ -7661,9 +7738,15 @@ async function handleDeepLink() {
  // Track referral click
   appStorage.setItem('bs_ref', refCode);
   }
- if (shouldOpenCart) {
-  openCart();
- }
+  if (page === 'cart' || shouldOpenCart) {
+   openCart({ page: true });
+  }
+  if (page === 'checkout' || shouldOpenCheckout) {
+   startCheckout();
+  }
+  if (page === 'messages' || page === 'chat') {
+   openInbox();
+  }
 }
 
 // ====================================================
@@ -9368,7 +9451,7 @@ function renderInboxEmpty(container, text = 'No messages yet.') {
 }
 
 async function showInbox() {
- showModal('inbox-modal');
+ showModal('inbox-modal', { page: 'messages' });
  const container = document.getElementById('inbox-list');
  container.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
  if (!currentUser) { renderInboxEmpty(container, 'Sign in to view messages.'); return; }
@@ -9428,7 +9511,7 @@ async function openConversation(partnerId, partnerName, productId = null) {
  document.getElementById('msg-partner-name').textContent = partnerName || 'User';
  document.getElementById('msg-partner-avatar').textContent = (partnerName || 'U')[0].toUpperCase();
  document.getElementById('msg-partner-meta').textContent = 'Loading conversation...';
- showModal('message-modal');
+ showModal('message-modal', { page: 'conversation' });
  const conv = document.getElementById('msg-conversation');
  conv.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
  await renderMessageProductCard(currentChatProductId);

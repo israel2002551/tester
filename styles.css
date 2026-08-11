@@ -1429,12 +1429,45 @@ body[data-category="upcoming"] .category-hero{background-image:linear-gradient(9
 .msg-image-preview img{width:48px;height:48px;border-radius:8px;object-fit:cover;border:1px solid var(--border)}
 .msg-image-preview span{font-size:.76rem;color:var(--text2);min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .msg-image-preview button{width:30px;height:30px;border:0;border-radius:50%;background:#fee2e2;color:var(--danger);cursor:pointer}
+.app-page-surface.modal-overlay{position:fixed;inset:0;z-index:190;display:none;align-items:stretch;justify-content:center;overflow-y:auto;padding:clamp(1rem,3vw,2.2rem);background:linear-gradient(135deg,rgba(11,31,20,.96),rgba(13,13,13,.92));backdrop-filter:none}
+.app-page-surface.modal-overlay.open{display:flex}
+.app-page-surface::before{content:"";position:fixed;inset:0;background:linear-gradient(90deg,rgba(11,31,20,.94),rgba(11,31,20,.7),rgba(255,183,0,.12)),url("https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=1800&q=82") center/cover;opacity:.55;pointer-events:none}
+.cart-page-surface::before{background:linear-gradient(90deg,rgba(11,31,20,.95),rgba(11,31,20,.76),rgba(255,183,0,.12)),url("https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1800&q=82") center/cover}
+.checkout-page-surface::before{background:linear-gradient(90deg,rgba(11,31,20,.95),rgba(11,31,20,.74),rgba(249,115,22,.12)),url("https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=1800&q=82") center/cover}
+.messages-page-surface::before,.conversation-page-surface::before{background:linear-gradient(90deg,rgba(11,31,20,.96),rgba(11,31,20,.74),rgba(11,164,219,.12)),url("https://images.unsplash.com/photo-1611606063065-ee7946f0787a?w=1800&q=82") center/cover}
+.app-page-surface .modal-box{position:relative;z-index:1;margin:auto;width:min(100%,1120px);max-height:none;border-radius:18px;background:rgba(255,255,255,.96);border:1px solid rgba(255,255,255,.45);box-shadow:0 30px 90px rgba(0,0,0,.34);animation:fadeUp .25s ease both}
+.app-page-surface .modal-box::before{content:"";display:block;height:7px;background:linear-gradient(90deg,var(--green),var(--gold),#f97316);border-radius:18px 18px 0 0;margin:-1px -1px 1rem}
+.app-page-surface .modal-close{position:sticky;top:.3rem;margin-left:auto;z-index:3;background:#fff;box-shadow:0 10px 28px rgba(0,0,0,.12)}
+.cart-page-surface .modal-box{max-width:980px;padding:1.35rem}
+.cart-page-surface #cart-items-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:.75rem}
+.cart-page-surface .cart-item{margin-bottom:0;background:#fff}
+.cart-page-surface .cart-item img{width:74px;height:74px}
+.cart-page-surface .cart-summary-box{background:linear-gradient(135deg,#fff,#f7f5f0);padding:1.1rem}
+.checkout-page-surface .modal-box{max-width:1080px;padding:1.35rem}
+.checkout-page-surface .checkout-panel.active{min-height:420px}
+.checkout-page-surface #co-p1.active{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,.74fr);gap:1.2rem;align-items:start}
+.checkout-page-surface #co-p1.active::after{content:"BUYSELL coordinates seller handoff, payment confirmation, pickup, and delivery tracking from one checkout workspace.";display:block;padding:1.2rem;border-radius:16px;background:linear-gradient(135deg,var(--forest),#123d28);color:#fff;font-weight:700;line-height:1.55;box-shadow:0 18px 42px rgba(11,31,20,.18)}
+.messages-page-surface .inbox-box{max-width:920px;padding:1.2rem}
+.messages-page-surface #inbox-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:.75rem}
+.messages-page-surface .inbox-thread{border-color:var(--border);background:#fff;box-shadow:0 10px 26px rgba(11,31,20,.06)}
+.conversation-page-surface .message-box{width:min(100%,1040px);max-width:1040px;height:calc(100dvh - 4rem);border-radius:18px;display:flex}
+.conversation-page-surface .message-head{padding:1rem 1.15rem;background:linear-gradient(135deg,var(--forest),#0f3c28)}
+.conversation-page-surface .msg-conversation{background:linear-gradient(180deg,#f7f5f0,#fff);padding:1.1rem}
+.conversation-page-surface .msg-input-row,.conversation-page-surface .msg-quick-row,.conversation-page-surface .msg-image-preview{padding-left:1rem;padding-right:1rem}
+.nav-logout-btn{background:#fff1f2;color:#dc2626}
+.nav-logout-btn:hover{background:#fee2e2;color:#b91c1c;transform:translateY(-1px)}
 @media(max-width:600px){
  .inbox-box{max-width:calc(100vw - 1.5rem)}
  .message-box{height:88vh;max-width:calc(100vw - 1rem);border-radius:16px}
  .message-head{grid-template-columns:32px 38px minmax(0,1fr) 32px;padding:.72rem}
  .message-avatar,.inbox-avatar{width:38px;height:38px}
  .msg-bubble{max-width:86%}
+ .app-page-surface.modal-overlay{padding:.65rem;align-items:flex-start}
+ .app-page-surface .modal-box{border-radius:16px;width:100%}
+ .checkout-page-surface #co-p1.active{display:block}
+ .checkout-page-surface #co-p1.active::after{margin-top:1rem;font-size:.86rem}
+ .messages-page-surface #inbox-list{grid-template-columns:1fr}
+ .conversation-page-surface .message-box{height:calc(100dvh - 1.3rem)}
 }
 .product-actions{display:flex;gap:.6rem;flex-wrap:wrap}
 .product-actions .btn-primary{flex:1;min-width:110px}
