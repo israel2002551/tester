@@ -19,6 +19,31 @@ for (const file of files) {
   fs.copyFileSync(source, path.join(dist, file));
 }
 
+const cleanRouteCopies = [
+  ['product.html', 'product/index.html'],
+  ['products.html', 'products/index.html'],
+  ['upcoming.html', 'upcoming/index.html'],
+  ['terms.html', 'terms/index.html'],
+  ['privacy.html', 'privacy/index.html'],
+  ['marketing.html', 'marketing/index.html'],
+  ['category-trending.html', 'category/trending/index.html'],
+  ['category-phones.html', 'category/phones/index.html'],
+  ['category-fashion.html', 'category/fashion/index.html'],
+  ['category-home.html', 'category/home/index.html'],
+  ['category-electronics.html', 'category/electronics/index.html'],
+  ['category-beauty.html', 'category/beauty/index.html'],
+  ['category-sports.html', 'category/sports/index.html'],
+  ['category-dropship.html', 'category/dropship/index.html'],
+];
+
+for (const [sourceFile, cleanRouteFile] of cleanRouteCopies) {
+  const source = path.join(dist, sourceFile);
+  if (!fs.existsSync(source)) continue;
+  const target = path.join(dist, cleanRouteFile);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.copyFileSync(source, target);
+}
+
 const localConfig = path.join(root, 'config.js');
 const distConfig = path.join(dist, 'config.js');
 const hasEnvConfig = process.env.VITE_SUPABASE_URL && process.env.VITE_SUPABASE_ANON_KEY;
