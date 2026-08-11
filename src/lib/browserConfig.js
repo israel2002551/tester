@@ -1,9 +1,5 @@
 export function readGlobalConst(name, fallback = '') {
-  try {
-    return (0, eval)(name) ?? fallback;
-  } catch (_) {
-    return fallback;
-  }
+  return window.BUYSELL_CONFIG?.[name] ?? window[name] ?? fallback;
 }
 
 export function runtimeConfig() {
@@ -13,6 +9,7 @@ export function runtimeConfig() {
     SB_KEY: env.VITE_SUPABASE_ANON_KEY || readGlobalConst('SB_KEY'),
     FLUTTERWAVE_PUBLIC_KEY: env.VITE_FLUTTERWAVE_PUBLIC_KEY || readGlobalConst('FLUTTERWAVE_PUBLIC_KEY'),
     ADMIN_EMAIL: env.VITE_ADMIN_EMAIL || readGlobalConst('ADMIN_EMAIL'),
+    ADMIN_EMAILS: (env.VITE_ADMIN_EMAILS || readGlobalConst('ADMIN_EMAILS', '') || '').toString(),
   };
 }
 
@@ -23,31 +20,23 @@ function envRuntimeConfig() {
     SB_KEY: env.VITE_SUPABASE_ANON_KEY || '',
     FLUTTERWAVE_PUBLIC_KEY: env.VITE_FLUTTERWAVE_PUBLIC_KEY || '',
     ADMIN_EMAIL: env.VITE_ADMIN_EMAIL || '',
+    ADMIN_EMAILS: env.VITE_ADMIN_EMAILS || '',
   };
 }
 
 export function installRuntimeGlobals() {
   const config = runtimeConfig();
+  const adminEmails = Array.isArray(config.ADMIN_EMAILS)
+    ? config.ADMIN_EMAILS
+    : String(config.ADMIN_EMAILS || config.ADMIN_EMAIL || '').split(',').map(email => email.trim()).filter(Boolean);
   window.BUYSELL_CONFIG = { ...(window.BUYSELL_CONFIG || {}), ...config };
   window.SB_URL = config.SB_URL || window.SB_URL || '';
   window.SB_KEY = config.SB_KEY || window.SB_KEY || '';
   window.FLUTTERWAVE_PUBLIC_KEY = config.FLUTTERWAVE_PUBLIC_KEY || window.FLUTTERWAVE_PUBLIC_KEY || '';
   window.ADMIN_EMAIL = config.ADMIN_EMAIL || window.ADMIN_EMAIL || '';
-
-  // The legacy script reads classic global identifiers, so define them for app.js.
-  if (!readGlobalConst('SB_URL') && config.SB_URL && config.SB_KEY) {
-    (0, eval)(`
-      var SB_URL = window.SB_URL;
-      var SB_KEY = window.SB_KEY;
-      var FLUTTERWAVE_PUBLIC_KEY = window.FLUTTERWAVE_PUBLIC_KEY;
-      var ADMIN_EMAIL = window.ADMIN_EMAIL;
-      var ADMIN_EMAILS = window.ADMIN_EMAILS || (window.ADMIN_EMAIL ? [window.ADMIN_EMAIL] : []);
-      var EDGE_URL = window.SB_URL ? window.SB_URL + '/functions/v1' : '';
-      var CLAUDE_EDGE_URL = EDGE_URL ? EDGE_URL + '/smooth-handler' : '';
-      var COMMISSION_AMOUNT = Number(window.COMMISSION_AMOUNT || 250000);
-      var PLATFORM_FEE_PCT = Number(window.PLATFORM_FEE_PCT || 0.03);
-    `);
-  }
+  window.ADMIN_EMAILS = adminEmails.length ? adminEmails : window.ADMIN_EMAILS || [];
+  window.EDGE_URL = window.SB_URL ? `${window.SB_URL}/functions/v1` : window.EDGE_URL || '';
+  window.CLAUDE_EDGE_URL = window.EDGE_URL ? `${window.EDGE_URL}/smooth-handler` : window.CLAUDE_EDGE_URL || '';
   return config;
 }
 
@@ -72,12 +61,10 @@ export function loadClassicScript(src) {
 
 export async function ensureRuntimeConfig() {
   const envConfig = envRuntimeConfig();
-  if (envConfig.SB_URL && envConfig.SB_KEY) {
-    installRuntimeGlobals();
-    return;
+  if (!readGlobalConst('SB_URL') || !readGlobalConst('SB_KEY')) {
+    await loadClassicScript('/config.js?v=3.5').catch(() => {});
   }
-  if (readGlobalConst('SB_URL') && readGlobalConst('SB_KEY')) return;
-  await loadClassicScript('/config.js?v=3.4').catch(() => {});
+  if (envConfig.SB_URL || envConfig.SB_KEY) window.BUYSELL_CONFIG = { ...(window.BUYSELL_CONFIG || {}), ...envConfig };
   installRuntimeGlobals();
 }
 

@@ -23,6 +23,7 @@ Set these variables in Vercel before deploying:
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_FLUTTERWAVE_PUBLIC_KEY`
 - `VITE_ADMIN_EMAIL`
+- `VITE_ADMIN_EMAILS`
 
 The build generates `dist/config.js` from those values so both the React pages
 and the preserved legacy marketplace runtime can load the same backend config.
