@@ -283,7 +283,7 @@ h1,h2,h3,h4,h5,h6,.heading-text{font-family:'Syne',sans-serif;line-height:1.2}
 .landing-bg{position:absolute;inset:0;overflow:hidden;pointer-events:none;background:linear-gradient(105deg,rgba(7,21,14,.94) 0%,rgba(7,21,14,.72) 44%,rgba(10,34,45,.48) 70%,rgba(91,48,11,.5) 100%),url("https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=2200&h=1400&fit=crop&q=84") center/cover}
 .landing-bg::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 18% 24%,rgba(244,180,0,.2),transparent 28%),linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);background-size:auto,84px 84px,84px 84px;mask-image:linear-gradient(to bottom,rgba(0,0,0,.82),rgba(0,0,0,.16))}
 .landing-bg::after{content:"";position:absolute;inset:auto 0 0;height:46%;background:linear-gradient(to top,#07150e 4%,rgba(7,21,14,.72) 45%,transparent)}
-.landing-announcement{position:relative;z-index:3;display:flex;justify-content:center;gap:1rem;flex-wrap:wrap;padding:.48rem 1rem;background:rgba(13,13,13,.86);color:rgba(255,255,255,.82);font-size:.74rem;font-weight:800;border-bottom:1px solid rgba(255,255,255,.1)}
+.landing-announcement{display:none!important}
 .landing-announcement span{display:inline-flex;align-items:center;gap:.42rem}
 .landing-announcement i{color:var(--gold)}
 .landing-header{position:relative;z-index:2;padding:1.1rem clamp(1rem,3vw,2.4rem);display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.12);background:rgba(7,21,14,.56);backdrop-filter:blur(20px)}

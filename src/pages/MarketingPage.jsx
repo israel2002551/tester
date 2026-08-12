@@ -89,11 +89,6 @@ export default function MarketingPage() {
 
   return (
     <main className="bs-landing bs-lux">
-      <div className="bs-lux-announcement">
-        <i className="fa-solid fa-truck-fast" />
-        <span>BUYSELL sourcing, checkout, seller dashboards, and delivery support for Nigerian commerce</span>
-      </div>
-
       <header className="bs-lux-nav" aria-label="BUYSELL landing navigation">
         <a className="bs-lux-brand" href="/">
           <span className="bs-lux-mark">B</span>
