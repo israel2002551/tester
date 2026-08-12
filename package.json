@@ -15,7 +15,7 @@
     "dev:frontend": "npm run dev --workspace @buysell/frontend",
     "dev:backend": "npm run dev --workspace @buysell/backend",
     "build": "npm run db:generate && npm run build --workspace @buysell/backend && npm run build --workspace @buysell/frontend && npm run verify:public && npm run verify:bundle",
-    "test": "npm run test --workspace @buysell/backend && npm run test --workspace @buysell/frontend && npm run test:migration",
+    "test": "npm run db:generate && npm run test --workspace @buysell/backend && npm run test --workspace @buysell/frontend && npm run test:migration",
     "test:migration": "node --test scripts/migration/test/*.test.mjs",
     "lint": "npm run lint --workspace @buysell/backend && npm run lint --workspace @buysell/frontend",
     "db:generate": "npm run prisma:generate --workspace @buysell/backend",
