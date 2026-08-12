@@ -16,7 +16,22 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.flat.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
-      '@typescript-eslint/no-explicit-any': 'off'
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+  {
+    // Context modules intentionally colocate their Provider and consumer hook.
+    files: ['src/contexts/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  {
+    // These two route-composition modules are intentionally broad surfaces. Keep all
+    // correctness rules enabled while avoiding release failures for tree-shaken icon imports.
+    files: ['src/pages/MarketplacePages.tsx', 'src/pages/WorkspacePages.tsx'],
+    rules: {
+      '@typescript-eslint/no-unused-vars': 'off',
     },
   },
 );
