@@ -57,14 +57,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (demoMode || !supabase) return;
+    const authClient = supabase;
 
     registerAccessTokenProvider(async () => {
-      const { data } = await supabase.auth.getSession();
+      const { data } = await authClient.auth.getSession();
       return data.session?.access_token ?? null;
     });
 
     let active = true;
-    void supabase.auth.getSession().then(({ data }) => {
+    void authClient.auth.getSession().then(({ data }) => {
       if (!active) return;
       const nextUser = data.session?.user ?? null;
       setAuthUser(nextUser);
@@ -73,7 +74,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       else setViewer(null);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = authClient.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
       const nextUser = session?.user ?? null;
       setAuthUser(nextUser);
