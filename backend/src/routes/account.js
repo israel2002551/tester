@@ -204,7 +204,19 @@ export function createAccountRouter() {
     const preference = await req.db.notificationPreference.findUnique({ where: { userId: req.user.id } });
     return success(res, notificationPreferenceDto(preference));
   }));
-  router.put('/account/notification-preferences', ...requireAuth(), validate(z.object({ emailOrderUpdates: z.boolean(), pushMessages: z.boolean(), marketingEmail: z.boolean() })), asyncRoute(async (req, res) => success(res, notificationPreferenceDto(await req.db.notificationPreference.upsert({ where: { userId: req.user.id }, update: req.body, create: { userId: req.user.id, ...req.body } }))));
+  router.put(
+    '/account/notification-preferences',
+    ...requireAuth(),
+    validate(z.object({ emailOrderUpdates: z.boolean(), pushMessages: z.boolean(), marketingEmail: z.boolean() })),
+    asyncRoute(async (req, res) => {
+      const preference = await req.db.notificationPreference.upsert({
+        where: { userId: req.user.id },
+        update: req.body,
+        create: { userId: req.user.id, ...req.body },
+      });
+      return success(res, notificationPreferenceDto(preference));
+    }),
+  );
   router.post('/account/push-subscriptions', ...requireAuth(), validate(z.object({ endpoint: z.string().url().max(2048), p256dh: z.string().min(1).max(512), auth: z.string().min(1).max(512), provider: z.string().max(60).optional(), deviceMeta: z.record(z.string(), z.unknown()).optional() })), asyncRoute(async (req, res) => created(res, await req.db.pushSubscription.upsert({ where: { userId_endpoint: { userId: req.user.id, endpoint: req.body.endpoint } }, update: { ...req.body, lastUsedAt: new Date() }, create: { userId: req.user.id, ...req.body } }))));
   return router;
 }
