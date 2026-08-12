@@ -28,18 +28,37 @@ const categoryRoutes = {
   '/upcoming.html': 'upcoming',
 };
 
-function routeFor(pathname) {
+const marketplaceQueryKeys = [
+  'view',
+  'entry',
+  'mode',
+  'store',
+  'product',
+  'cart',
+  'checkout',
+  'page',
+  'category',
+  'seller',
+  'order',
+];
+
+function routeFor(pathname, search = '') {
   const path = pathname.replace(/\/index\.html$/, '') || '/';
   if (path === '/product' || path === '/product.html') return { type: 'product' };
   if (path === '/privacy' || path === '/privacy.html') return { type: 'legal', page: 'privacy' };
   if (path === '/terms' || path === '/terms.html') return { type: 'legal', page: 'terms' };
   if (path === '/marketing' || path === '/marketing.html') return { type: 'marketing' };
   if (categoryRoutes[path]) return { type: 'category', category: categoryRoutes[path] };
+  if (path === '/') {
+    const params = new URLSearchParams(search);
+    const hasMarketplaceIntent = marketplaceQueryKeys.some(key => params.has(key));
+    return hasMarketplaceIntent ? { type: 'marketplace' } : { type: 'marketing' };
+  }
   return { type: 'marketplace' };
 }
 
 export default function App() {
-  const route = routeFor(window.location.pathname);
+  const route = routeFor(window.location.pathname, window.location.search);
   if (route.type === 'product') return <ProductPage />;
   if (route.type === 'category') return <CategoryPage category={route.category} />;
   if (route.type === 'legal') return <LegalPage page={route.page} />;
