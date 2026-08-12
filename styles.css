@@ -335,7 +335,7 @@ h1,h2,h3,h4,h5,h6,.heading-text{font-family:'Syne',sans-serif;line-height:1.2}
 ==================================================== */
 
 #main-nav{position:sticky;top:0;z-index:40;background:#fff;border-bottom:1px solid var(--border);box-shadow:0 2px 20px rgba(0,0,0,.06);display:none}
-.nav-announcement{display:flex;justify-content:center;gap:1.1rem;flex-wrap:wrap;padding:.42rem .8rem;background:var(--lux-oled);color:rgba(255,255,255,.82);font-size:.72rem;font-weight:800}
+.nav-announcement{display:none!important}
 .nav-announcement span{display:inline-flex;align-items:center;gap:.4rem}
 .nav-announcement i{color:var(--lux-accent)}
 .nav-inner{max-width:1400px;margin:0 auto;padding:0 1rem;height:58px;display:flex;align-items:center;gap:.8rem}
