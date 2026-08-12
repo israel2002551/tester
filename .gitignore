@@ -1,5 +1,10 @@
 # Secrets - never commit
 config.js
+.env
+.env.*
+!.env.example
+!backend/.env.example
+!frontend/.env.example
 
 # Python cache
 __pycache__/
@@ -14,6 +19,9 @@ supabase/.temp/
 node_modules/
 .npm-cache/
 dist/
+frontend/dist/
+backend/coverage/
+migration-data/
 
 # Supabase project files stay local
 supabase/

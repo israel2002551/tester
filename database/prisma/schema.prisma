@@ -1,0 +1,1601 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum AuthProvider {
+  SUPABASE
+  IMPORTED
+}
+
+enum PlatformRole {
+  SUPPORT_ADMIN
+  CONTENT_ADMIN
+  OPERATIONS_ADMIN
+  SOURCING_MANAGER
+  FINANCE_ADMIN
+  SUPER_ADMIN
+}
+
+enum StoreStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum StoreRole {
+  OWNER
+  ADMIN
+  MANAGER
+  PRODUCT_MANAGER
+  ORDER_MANAGER
+  FINANCE_MANAGER
+  SUPPORT_AGENT
+}
+
+enum StorePermission {
+  STORE_READ
+  STORE_UPDATE
+  PRODUCT_READ
+  PRODUCT_WRITE
+  INVENTORY_WRITE
+  ORDER_READ
+  ORDER_FULFIL
+  CUSTOMER_READ
+  MESSAGE_WRITE
+  FINANCE_READ
+  PAYOUT_REQUEST
+  STAFF_MANAGE
+  AD_MANAGE
+}
+
+enum SupplierStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  OUT_OF_STOCK
+  REJECTED
+  ARCHIVED
+}
+
+enum ProductCondition {
+  NEW
+  USED
+  REFURBISHED
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+  DOCUMENT
+}
+
+enum MediaAccess {
+  PUBLIC
+  PRIVATE
+}
+
+enum QuoteStatus {
+  ACTIVE
+  CONSUMED
+  EXPIRED
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAYMENT_PROCESSING
+  PAID
+  PROCESSING
+  READY
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  DISPUTED
+  REFUND_PENDING
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUND_PENDING
+  REFUNDED
+}
+
+enum PaymentAttemptStatus {
+  CREATED
+  INITIALIZED
+  VERIFIED
+  FAILED
+}
+
+enum WebhookProcessingStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
+enum ReservationStatus {
+  RESERVED
+  COMMITTED
+  RELEASED
+  EXPIRED
+}
+
+enum InventoryMovementType {
+  STOCK_IN
+  STOCK_OUT
+  RESERVE
+  RELEASE
+  SALE_COMMIT
+  RETURN
+  ADJUSTMENT
+}
+
+enum LedgerEntryType {
+  SALE_CREDIT
+  COMMISSION_DEBIT
+  REFUND_DEBIT
+  PAYOUT_HOLD
+  PAYOUT_DEBIT
+  PAYOUT_REVERSAL
+  ADJUSTMENT
+}
+
+enum PayoutStatus {
+  REQUESTED
+  UNDER_REVIEW
+  APPROVED
+  PROCESSING
+  PAID
+  REJECTED
+  CANCELLED
+}
+
+enum ConversationType {
+  DIRECT
+  ORDER
+  SOURCING
+  SUPPORT
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  SYSTEM
+}
+
+enum ReviewStatus {
+  PUBLISHED
+  HIDDEN
+  REMOVED
+}
+
+enum KycSubjectType {
+  USER
+  STORE
+  SUPPLIER
+}
+
+enum KycStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  AWAITING_BUYER
+  AWAITING_SELLER
+  RESOLVED_BUYER
+  RESOLVED_SELLER
+  CLOSED
+}
+
+enum AdStatus {
+  DRAFT
+  AWAITING_PAYMENT
+  PENDING_REVIEW
+  ACTIVE
+  REJECTED
+  PAUSED
+  COMPLETED
+}
+
+enum AdEventType {
+  IMPRESSION
+  CLICK
+}
+
+enum SourcingStatus {
+  DRAFT
+  REQUEST_SUBMITTED
+  UNDER_REVIEW
+  MORE_INFO_REQUIRED
+  QUOTE_READY
+  AWAITING_PAYMENT
+  PAYMENT_CONFIRMED
+  PROCUREMENT_IN_PROGRESS
+  PROCURED
+  INTERNATIONAL_TRANSIT
+  ARRIVED_IN_COUNTRY
+  LOCAL_FULFILMENT
+  COMPLETED
+  CANCELLED
+}
+
+enum SourcePlatform {
+  INTERNAL_SUPPLIER
+  DIRECT_FACTORY
+  EXTERNAL_MARKETPLACE
+  OTHER
+}
+
+enum ServiceBookingStatus {
+  REQUESTED
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum DeliveryStatus {
+  ASSIGNED
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILED
+  CANCELLED
+}
+
+enum RfqStatus {
+  DRAFT
+  OPEN
+  QUOTING
+  AWARDED
+  CLOSED
+  CANCELLED
+}
+
+enum BroadcastStatus {
+  DRAFT
+  SCHEDULED
+  PROCESSING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+model User {
+  id                    String                   @id @default(uuid()) @db.Uuid
+  email                 String?                  @unique @db.Citext
+  status                UserStatus               @default(ACTIVE)
+  lastLoginAt           DateTime?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  deletedAt             DateTime?
+  profile               UserProfile?
+  authIdentities        AuthIdentity[]
+  platformRoles         PlatformRoleAssignment[]
+  storeMemberships      StoreMembership[]
+  ownedStores           Store[]                  @relation("StoreOwner")
+  addresses             Address[]
+  cart                  Cart?
+  orders                Order[]                  @relation("BuyerOrders")
+  conversations         ConversationMember[]
+  sentMessages          Message[]                @relation("MessageSender")
+  reviews               Review[]
+  notifications         Notification[]
+  notificationPreference NotificationPreference?
+  pushSubscriptions     PushSubscription[]
+  mediaAssets           MediaAsset[]             @relation("MediaOwner")
+  kycSubmissions        KycSubmission[]           @relation("KycSubmitter")
+  reviewedKyc           KycSubmission[]           @relation("KycReviewer")
+  openedDisputes        Dispute[]                 @relation("DisputeOpener")
+  assignedDisputes      Dispute[]                 @relation("DisputeAssignee")
+  disputeMessages       DisputeMessage[]
+  referrals             ReferralCode[]
+  referralVisits        ReferralVisit[]
+  auditLogs             AuditLog[]                @relation("AuditActor")
+  sourcingRequests      SourcingRequest[]         @relation("SourcingRequester")
+  assignedSourcing      SourcingRequest[]         @relation("SourcingAssignee")
+  supplierProfile       SupplierProfile?
+  checkoutQuotes        CheckoutQuote[]
+  wishlists             Wishlist[]
+  serviceListings       ServiceListing[]           @relation("ServiceProvider")
+  serviceBookings       ServiceBooking[]           @relation("ServiceCustomer")
+  deliveryAssignments   DeliveryAssignment[]       @relation("DeliveryRider")
+  updatedSettings       SiteSetting[]
+  broadcastsCreated     BroadcastCampaign[]
+  broadcastDeliveries   BroadcastDelivery[]
+  rfqRequests           RfqRequest[]              @relation("RfqRequester")
+}
+
+model UserProfile {
+  userId      String   @id @db.Uuid
+  displayName String?
+  firstName   String?
+  lastName    String?
+  phone       String?
+  avatarId    String?  @db.Uuid
+  location    String?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  avatar      MediaAsset? @relation("ProfileAvatar", fields: [avatarId], references: [id], onDelete: SetNull)
+}
+
+model AuthIdentity {
+  id              String       @id @default(uuid()) @db.Uuid
+  userId          String       @db.Uuid
+  provider        AuthProvider
+  providerSubject String
+  providerEmail   String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerSubject])
+  @@index([userId])
+}
+
+model PlatformRoleAssignment {
+  userId    String       @db.Uuid
+  role      PlatformRole
+  grantedBy String?      @db.Uuid
+  createdAt DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, role])
+}
+
+model Store {
+  id                String            @id @default(uuid()) @db.Uuid
+  ownerId           String            @db.Uuid
+  slug              String            @unique
+  name              String
+  description       String?
+  status            StoreStatus       @default(PENDING)
+  logoAssetId       String?           @db.Uuid
+  bannerAssetId     String?           @db.Uuid
+  supportEmail      String?
+  supportPhone      String?
+  location          String?
+  metadata          Json              @default("{}")
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  owner             User              @relation("StoreOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  logo              MediaAsset?       @relation("StoreLogo", fields: [logoAssetId], references: [id], onDelete: SetNull)
+  banner            MediaAsset?       @relation("StoreBanner", fields: [bannerAssetId], references: [id], onDelete: SetNull)
+  memberships       StoreMembership[]
+  products          Product[]
+  storeOrders       StoreOrder[]
+  ledgerAccount     LedgerAccount?
+  payoutDestinations PayoutDestination[]
+  coupons           Coupon[]
+  adCampaigns       AdCampaign[]
+  supplierConnections SupplierConnection[]
+  settings            StoreSetting?
+
+  @@index([status, createdAt])
+}
+
+model StoreSetting {
+  storeId                  String   @id @db.Uuid
+  notificationPreferences  Json     @default("{}")
+  commerceSettings         Json     @default("{}")
+  fulfilmentSettings       Json     @default("{}")
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  store                    Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+}
+
+model StoreMembership {
+  id          String                      @id @default(uuid()) @db.Uuid
+  storeId     String                      @db.Uuid
+  userId      String                      @db.Uuid
+  role        StoreRole
+  status      String                      @default("ACTIVE")
+  joinedAt    DateTime                    @default(now())
+  store       Store                       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user        User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissions StoreMembershipPermission[]
+
+  @@unique([storeId, userId])
+  @@index([userId, status])
+}
+
+model StoreMembershipPermission {
+  membershipId String          @db.Uuid
+  permission   StorePermission
+  membership   StoreMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@id([membershipId, permission])
+}
+
+model SupplierProfile {
+  id           String         @id @default(uuid()) @db.Uuid
+  userId       String         @unique @db.Uuid
+  slug         String         @unique
+  displayName  String
+  description  String?
+  status       SupplierStatus @default(PENDING)
+  country      String?
+  contactEmail String?
+  metadata     Json           @default("{}")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  user         User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  products     SupplierProduct[]
+  connections  SupplierConnection[]
+  procurements SourcingProcurement[]
+  rfqQuotes    RfqQuote[]
+}
+
+model SupplierConnection {
+  id         String          @id @default(uuid()) @db.Uuid
+  supplierId String          @db.Uuid
+  storeId    String          @db.Uuid
+  status     String          @default("PENDING")
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  supplier   SupplierProfile @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  store      Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, storeId])
+}
+
+model SupplierProduct {
+  id             String          @id @default(uuid()) @db.Uuid
+  supplierId     String          @db.Uuid
+  sku            String
+  name           String
+  description    String?
+  costKobo       BigInt
+  suggestedKobo  BigInt?
+  stockQuantity  Int?
+  sourceUrl      String?
+  active         Boolean         @default(true)
+  metadata       Json            @default("{}")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  supplier       SupplierProfile @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, sku])
+  @@index([supplierId, active])
+}
+
+model Category {
+  id          String     @id @default(uuid()) @db.Uuid
+  parentId    String?    @db.Uuid
+  slug        String     @unique
+  name        String
+  description String?
+  active      Boolean    @default(true)
+  sortOrder   Int        @default(0)
+  parent      Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Category[] @relation("CategoryTree")
+  products    Product[]
+
+  @@index([parentId, active, sortOrder])
+}
+
+model Brand {
+  id          String       @id @default(uuid()) @db.Uuid
+  slug        String       @unique
+  name        String       @unique
+  logoAssetId String?      @db.Uuid
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  logo        MediaAsset?  @relation("BrandLogo", fields: [logoAssetId], references: [id], onDelete: SetNull)
+  products    Product[]
+
+  @@index([active, name])
+}
+
+model Product {
+  id               String           @id @default(uuid()) @db.Uuid
+  storeId          String           @db.Uuid
+  categoryId       String?          @db.Uuid
+  brandId          String?          @db.Uuid
+  slug             String
+  name             String
+  description      String?
+  condition        ProductCondition @default(NEW)
+  status           ProductStatus    @default(DRAFT)
+  shippingFeeKobo  BigInt           @default(0)
+  negotiable       Boolean          @default(false)
+  metadata         Json             @default("{}")
+  publishedAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  deletedAt        DateTime?
+  store            Store            @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  category         Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  brand            Brand?           @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  variants         ProductVariant[]
+  options          ProductOption[]
+  media            ProductMedia[]
+  reviews          Review[]
+  referralConversions ReferralConversion[]
+  wishlistItems    WishlistItem[]
+
+  @@unique([storeId, slug])
+  @@index([status, categoryId, createdAt])
+  @@index([brandId, status])
+  @@index([storeId, status])
+}
+
+model ProductOption {
+  id        String               @id @default(uuid()) @db.Uuid
+  productId String               @db.Uuid
+  name      String
+  sortOrder Int                  @default(0)
+  product   Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  values    ProductOptionValue[]
+
+  @@unique([productId, name])
+}
+
+model ProductOptionValue {
+  id        String                      @id @default(uuid()) @db.Uuid
+  optionId  String                      @db.Uuid
+  value     String
+  sortOrder Int                         @default(0)
+  option    ProductOption               @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  variants  ProductVariantOptionValue[]
+
+  @@unique([optionId, value])
+}
+
+model ProductVariantOptionValue {
+  variantId String             @db.Uuid
+  valueId   String             @db.Uuid
+  variant   ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  value     ProductOptionValue @relation(fields: [valueId], references: [id], onDelete: Cascade)
+
+  @@id([variantId, valueId])
+}
+
+model ProductVariant {
+  id             String        @id @default(uuid()) @db.Uuid
+  productId      String        @db.Uuid
+  sku            String
+  name           String?
+  priceKobo      BigInt
+  compareAtKobo  BigInt?
+  attributes     Json          @default("{}")
+  active         Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  product        Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventory      InventoryItem?
+  cartItems      CartItem[]
+  quoteItems     CheckoutQuoteItem[]
+  orderItems     OrderItem[]
+  optionValues   ProductVariantOptionValue[]
+
+  @@unique([productId, sku])
+  @@index([productId, active])
+}
+
+model InventoryItem {
+  variantId        String                 @id @db.Uuid
+  onHand           Int                    @default(0)
+  reserved         Int                    @default(0)
+  reorderPoint     Int                    @default(0)
+  version          Int                    @default(0)
+  updatedAt        DateTime               @updatedAt
+  variant          ProductVariant         @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  reservations     InventoryReservation[]
+  movements        InventoryMovement[]
+}
+
+model InventoryReservation {
+  id          String            @id @default(uuid()) @db.Uuid
+  inventoryId String            @db.Uuid
+  orderId     String            @db.Uuid
+  orderItemId String            @unique @db.Uuid
+  quantity    Int
+  status      ReservationStatus @default(RESERVED)
+  expiresAt   DateTime
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  inventory   InventoryItem     @relation(fields: [inventoryId], references: [variantId], onDelete: Restrict)
+  order       Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItem   OrderItem         @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@index([status, expiresAt])
+  @@index([orderId])
+}
+
+model InventoryMovement {
+  id               String                @id @default(uuid()) @db.Uuid
+  inventoryId      String                @db.Uuid
+  type             InventoryMovementType
+  onHandDelta      Int                   @default(0)
+  reservedDelta    Int                   @default(0)
+  referenceType    String?
+  referenceId      String?
+  actorId          String?               @db.Uuid
+  note             String?
+  createdAt        DateTime              @default(now())
+  inventory        InventoryItem         @relation(fields: [inventoryId], references: [variantId], onDelete: Restrict)
+
+  @@index([inventoryId, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+model MediaAsset {
+  id              String       @id @default(uuid()) @db.Uuid
+  ownerId         String       @db.Uuid
+  provider        String
+  providerAssetId String       @unique
+  kind            MediaKind
+  mimeType        String
+  bytes           Int
+  width           Int?
+  height          Int?
+  durationMs      Int?
+  access          MediaAccess
+  publicUrl       String?
+  metadata        Json         @default("{}")
+  createdAt       DateTime     @default(now())
+  owner           User         @relation("MediaOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  profileAvatars  UserProfile[] @relation("ProfileAvatar")
+  storeLogos      Store[]       @relation("StoreLogo")
+  storeBanners    Store[]       @relation("StoreBanner")
+  products        ProductMedia[]
+  messages        Message[]
+  kycDocuments    KycDocument[]
+  disputeEvidence DisputeEvidence[]
+  sourcingItems   SourcingItem[]
+  adCampaigns     AdCampaign[]
+  brandLogos      Brand[]       @relation("BrandLogo")
+  serviceListings ServiceListing[]
+
+  @@index([ownerId, access])
+}
+
+model ProductMedia {
+  productId String     @db.Uuid
+  assetId   String     @db.Uuid
+  sortOrder Int        @default(0)
+  product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  asset     MediaAsset @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@id([productId, assetId])
+  @@index([productId, sortOrder])
+}
+
+model Address {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid
+  recipientName String
+  phone         String
+  line1         String
+  line2         String?
+  city          String
+  state         String
+  postalCode    String?
+  country       String   @default("Nigeria")
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quotes        CheckoutQuote[]
+
+  @@index([userId, isDefault])
+}
+
+model Cart {
+  id        String     @id @default(uuid()) @db.Uuid
+  userId    String     @unique @db.Uuid
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+}
+
+model CartItem {
+  id        String         @id @default(uuid()) @db.Uuid
+  cartId    String         @db.Uuid
+  variantId String         @db.Uuid
+  quantity  Int
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  cart      Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, variantId])
+}
+
+model Wishlist {
+  id        String         @id @default(uuid()) @db.Uuid
+  userId    String         @db.Uuid
+  name      String         @default("Saved items")
+  isDefault Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     WishlistItem[]
+
+  @@unique([userId, name])
+  @@index([userId, isDefault])
+}
+
+model WishlistItem {
+  wishlistId String   @db.Uuid
+  productId  String   @db.Uuid
+  createdAt  DateTime @default(now())
+  wishlist   Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([wishlistId, productId])
+  @@index([productId])
+}
+
+model CheckoutQuote {
+  id                    String              @id @default(uuid()) @db.Uuid
+  userId                String              @db.Uuid
+  addressId             String              @db.Uuid
+  status                QuoteStatus         @default(ACTIVE)
+  currency              String              @default("NGN")
+  subtotalKobo          BigInt
+  shippingKobo          BigInt
+  discountKobo          BigInt              @default(0)
+  platformFeeKobo       BigInt              @default(0)
+  totalKobo             BigInt
+  couponId              String?             @db.Uuid
+  deliveryMethod        String
+  pricingVersion        String
+  expiresAt             DateTime
+  consumedAt            DateTime?
+  createdAt             DateTime            @default(now())
+  user                  User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address               Address             @relation(fields: [addressId], references: [id], onDelete: Restrict)
+  coupon                Coupon?             @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  items                 CheckoutQuoteItem[]
+  order                 Order?
+
+  @@index([userId, status, expiresAt])
+}
+
+model CheckoutQuoteItem {
+  id               String         @id @default(uuid()) @db.Uuid
+  quoteId          String         @db.Uuid
+  variantId        String         @db.Uuid
+  storeId          String         @db.Uuid
+  productName      String
+  variantName      String?
+  sku              String
+  unitPriceKobo    BigInt
+  shippingUnitKobo BigInt
+  quantity         Int
+  quote            CheckoutQuote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  variant          ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@unique([quoteId, variantId])
+  @@index([storeId])
+}
+
+model Order {
+  id                String          @id @default(uuid()) @db.Uuid
+  orderNumber       String          @unique
+  idempotencyKey    String          @unique
+  buyerId           String          @db.Uuid
+  quoteId           String          @unique @db.Uuid
+  status            OrderStatus     @default(PENDING_PAYMENT)
+  paymentStatus     PaymentStatus   @default(PENDING)
+  currency          String          @default("NGN")
+  subtotalKobo      BigInt
+  shippingKobo      BigInt
+  discountKobo      BigInt          @default(0)
+  platformFeeKobo   BigInt          @default(0)
+  totalKobo         BigInt
+  deliveryMethod    String
+  addressSnapshot   Json
+  placedAt          DateTime        @default(now())
+  paidAt            DateTime?
+  cancelledAt       DateTime?
+  deliveredAt       DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  buyer             User            @relation("BuyerOrders", fields: [buyerId], references: [id], onDelete: Restrict)
+  quote             CheckoutQuote   @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  storeOrders       StoreOrder[]
+  items             OrderItem[]
+  events            OrderStatusEvent[]
+  payments          Payment[]
+  reservations      InventoryReservation[]
+  conversations     Conversation[]
+  disputes          Dispute[]
+
+  @@index([buyerId, createdAt])
+  @@index([status, createdAt])
+}
+
+model StoreOrder {
+  id                String       @id @default(uuid()) @db.Uuid
+  orderId           String       @db.Uuid
+  storeId           String       @db.Uuid
+  status            OrderStatus  @default(PENDING_PAYMENT)
+  subtotalKobo      BigInt
+  shippingKobo      BigInt
+  discountKobo      BigInt       @default(0)
+  platformFeeKobo   BigInt       @default(0)
+  commissionKobo    BigInt       @default(0)
+  sellerNetKobo     BigInt       @default(0)
+  totalKobo         BigInt
+  trackingNumber    String?
+  trackingNote      String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  order             Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  store             Store        @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  items             OrderItem[]
+  ledgerEntries     LedgerEntry[]
+  delivery          DeliveryAssignment?
+
+  @@unique([orderId, storeId])
+  @@index([storeId, status, createdAt])
+}
+
+model OrderItem {
+  id                String              @id @default(uuid()) @db.Uuid
+  orderId           String              @db.Uuid
+  storeOrderId      String              @db.Uuid
+  variantId         String              @db.Uuid
+  productId         String              @db.Uuid
+  productName       String
+  variantName       String?
+  sku               String
+  unitPriceKobo     BigInt
+  shippingUnitKobo  BigInt
+  quantity          Int
+  totalKobo         BigInt
+  sellerAmountKobo  BigInt
+  platformCommissionKobo BigInt
+  createdAt         DateTime            @default(now())
+  order             Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  storeOrder        StoreOrder          @relation(fields: [storeOrderId], references: [id], onDelete: Cascade)
+  variant           ProductVariant      @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  reservation       InventoryReservation?
+  review            Review?
+
+  @@index([orderId])
+  @@index([storeOrderId])
+}
+
+model OrderStatusEvent {
+  id         String      @id @default(uuid()) @db.Uuid
+  orderId    String      @db.Uuid
+  fromStatus OrderStatus?
+  toStatus   OrderStatus
+  actorId    String?     @db.Uuid
+  note       String?
+  metadata   Json        @default("{}")
+  createdAt  DateTime    @default(now())
+  order      Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}
+
+model Coupon {
+  id                String              @id @default(uuid()) @db.Uuid
+  storeId           String              @db.Uuid
+  code              String              @db.Citext
+  percentOffBps     Int?
+  fixedOffKobo      BigInt?
+  minimumKobo       BigInt              @default(0)
+  maxUses           Int?
+  usedCount         Int                 @default(0)
+  startsAt          DateTime?
+  expiresAt         DateTime?
+  active            Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  store             Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  quotes            CheckoutQuote[]
+  redemptions       CouponRedemption[]
+
+  @@unique([storeId, code])
+  @@index([code, active])
+}
+
+model CouponRedemption {
+  id             String   @id @default(uuid()) @db.Uuid
+  couponId       String   @db.Uuid
+  userId         String   @db.Uuid
+  orderId        String   @unique @db.Uuid
+  discountKobo   BigInt
+  createdAt      DateTime @default(now())
+  coupon         Coupon   @relation(fields: [couponId], references: [id], onDelete: Restrict)
+
+  @@index([couponId, userId])
+}
+
+model Payment {
+  id                    String        @id @default(uuid()) @db.Uuid
+  orderId               String        @db.Uuid
+  provider              String
+  internalReference     String        @unique
+  providerReference     String?       @unique
+  providerTransactionId String?       @unique
+  amountKobo            BigInt
+  currency              String        @default("NGN")
+  status                PaymentStatus @default(PENDING)
+  verifiedAt            DateTime?
+  refundedAt            DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  order                 Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  attempts              PaymentAttempt[]
+
+  @@index([orderId, status])
+}
+
+model PaymentAttempt {
+  id              String               @id @default(uuid()) @db.Uuid
+  paymentId       String               @db.Uuid
+  internalRef     String               @unique
+  status          PaymentAttemptStatus @default(CREATED)
+  failureReason   String?
+  providerPayload Json                 @default("{}")
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  payment         Payment              @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+}
+
+model PaymentWebhookEvent {
+  id               String                    @id @default(uuid()) @db.Uuid
+  provider         String
+  providerEventId  String
+  eventType        String
+  payloadHash      String
+  payload          Json
+  status           WebhookProcessingStatus   @default(RECEIVED)
+  failureReason    String?
+  processedAt      DateTime?
+  createdAt        DateTime                  @default(now())
+
+  @@unique([provider, providerEventId])
+  @@index([status, createdAt])
+}
+
+model LedgerAccount {
+  id        String        @id @default(uuid()) @db.Uuid
+  storeId   String        @unique @db.Uuid
+  currency  String        @default("NGN")
+  createdAt DateTime      @default(now())
+  store     Store         @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  entries   LedgerEntry[]
+  payouts   PayoutRequest[]
+}
+
+model LedgerEntry {
+  id             String          @id @default(uuid()) @db.Uuid
+  accountId      String          @db.Uuid
+  storeOrderId   String?         @db.Uuid
+  type           LedgerEntryType
+  amountKobo     BigInt
+  idempotencyKey String          @unique
+  description    String?
+  availableAt    DateTime        @default(now())
+  metadata       Json            @default("{}")
+  createdAt      DateTime        @default(now())
+  account        LedgerAccount   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  storeOrder     StoreOrder?     @relation(fields: [storeOrderId], references: [id], onDelete: SetNull)
+
+  @@index([accountId, availableAt, createdAt])
+}
+
+model PayoutDestination {
+  id               String          @id @default(uuid()) @db.Uuid
+  storeId          String          @db.Uuid
+  bankCode         String
+  accountNumberEnc String
+  accountName      String
+  fingerprint      String
+  verifiedAt       DateTime?
+  active           Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  store            Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  payouts          PayoutRequest[]
+
+  @@unique([storeId, fingerprint])
+}
+
+model PayoutRequest {
+  id              String            @id @default(uuid()) @db.Uuid
+  accountId       String            @db.Uuid
+  destinationId   String            @db.Uuid
+  requestedBy     String            @db.Uuid
+  amountKobo      BigInt
+  status          PayoutStatus      @default(REQUESTED)
+  decisionReason  String?
+  decidedBy       String?           @db.Uuid
+  decidedAt       DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  account         LedgerAccount     @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  destination     PayoutDestination @relation(fields: [destinationId], references: [id], onDelete: Restrict)
+  transactions    PayoutTransaction[]
+
+  @@index([accountId, status, createdAt])
+}
+
+model PayoutTransaction {
+  id                String        @id @default(uuid()) @db.Uuid
+  payoutId          String        @db.Uuid
+  provider          String
+  providerReference String?       @unique
+  status            PayoutStatus
+  payload            Json          @default("{}")
+  createdAt          DateTime      @default(now())
+  payout             PayoutRequest @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+}
+
+model Conversation {
+  id                String               @id @default(uuid()) @db.Uuid
+  type              ConversationType
+  orderId           String?              @db.Uuid
+  sourcingRequestId String?              @db.Uuid
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  order             Order?               @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  sourcingRequest   SourcingRequest?     @relation(fields: [sourcingRequestId], references: [id], onDelete: SetNull)
+  members           ConversationMember[]
+  messages          Message[]
+
+  @@index([orderId])
+  @@index([sourcingRequestId])
+}
+
+model ConversationMember {
+  conversationId String       @db.Uuid
+  userId         String       @db.Uuid
+  lastReadAt     DateTime?
+  joinedAt       DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId, joinedAt])
+}
+
+model Message {
+  id             String       @id @default(uuid()) @db.Uuid
+  conversationId String       @db.Uuid
+  senderId       String       @db.Uuid
+  body           String
+  type           MessageType  @default(TEXT)
+  mediaAssetId   String?      @db.Uuid
+  createdAt      DateTime     @default(now())
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Restrict)
+  mediaAsset     MediaAsset?  @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+}
+
+model Review {
+  id          String       @id @default(uuid()) @db.Uuid
+  orderItemId String       @unique @db.Uuid
+  productId   String       @db.Uuid
+  buyerId     String       @db.Uuid
+  rating      Int
+  body        String?
+  status      ReviewStatus @default(PUBLISHED)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  orderItem   OrderItem    @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  product     Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  buyer       User         @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+
+  @@index([productId, status, createdAt])
+}
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  type      String
+  title     String
+  body      String
+  data      Json     @default("{}")
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+}
+
+model NotificationPreference {
+  userId            String  @id @db.Uuid
+  emailOrderUpdates Boolean @default(true)
+  pushMessages      Boolean @default(true)
+  marketingEmail    Boolean @default(false)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PushSubscription {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  endpoint   String
+  p256dh     String?
+  auth       String?
+  provider   String?
+  deviceMeta Json     @default("{}")
+  lastUsedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint])
+}
+
+model KycSubmission {
+  id             String         @id @default(uuid()) @db.Uuid
+  subjectType    KycSubjectType
+  subjectId      String
+  submittedById  String         @db.Uuid
+  status         KycStatus      @default(DRAFT)
+  submittedAt    DateTime?
+  reviewedAt     DateTime?
+  reviewedById   String?        @db.Uuid
+  decisionReason String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  submittedBy    User           @relation("KycSubmitter", fields: [submittedById], references: [id], onDelete: Restrict)
+  reviewedBy     User?          @relation("KycReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  documents      KycDocument[]
+
+  @@index([subjectType, subjectId, status])
+}
+
+model KycDocument {
+  id           String        @id @default(uuid()) @db.Uuid
+  submissionId String        @db.Uuid
+  documentType String
+  mediaAssetId String        @db.Uuid
+  createdAt    DateTime      @default(now())
+  submission   KycSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  mediaAsset   MediaAsset    @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
+
+  @@unique([submissionId, documentType, mediaAssetId])
+}
+
+model Dispute {
+  id              String        @id @default(uuid()) @db.Uuid
+  orderId         String        @db.Uuid
+  openedById      String        @db.Uuid
+  reason          String
+  description     String
+  status          DisputeStatus @default(OPEN)
+  assignedAdminId String?       @db.Uuid
+  resolution      String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  order           Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  openedBy        User          @relation("DisputeOpener", fields: [openedById], references: [id], onDelete: Restrict)
+  assignedAdmin   User?         @relation("DisputeAssignee", fields: [assignedAdminId], references: [id], onDelete: SetNull)
+  messages        DisputeMessage[]
+  evidence        DisputeEvidence[]
+
+  @@index([orderId, status])
+  @@index([status, createdAt])
+}
+
+model DisputeMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  disputeId String   @db.Uuid
+  authorId  String   @db.Uuid
+  body      String
+  createdAt DateTime @default(now())
+  dispute   Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([disputeId, createdAt])
+}
+
+model DisputeEvidence {
+  id           String     @id @default(uuid()) @db.Uuid
+  disputeId    String     @db.Uuid
+  mediaAssetId String     @db.Uuid
+  description  String?
+  createdAt    DateTime   @default(now())
+  dispute      Dispute    @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  mediaAsset   MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
+
+  @@unique([disputeId, mediaAssetId])
+}
+
+model AdCampaign {
+  id              String     @id @default(uuid()) @db.Uuid
+  storeId         String     @db.Uuid
+  name            String
+  placement       String
+  headline        String
+  body            String?
+  destinationUrl  String
+  mediaAssetId    String?    @db.Uuid
+  startsAt        DateTime?
+  endsAt          DateTime?
+  status          AdStatus   @default(DRAFT)
+  budgetKobo      BigInt
+  currency        String     @default("NGN")
+  paymentId       String?    @db.Uuid
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  store           Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  mediaAsset      MediaAsset? @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  events          AdEvent[]
+
+  @@index([status, placement, startsAt, endsAt])
+}
+
+model AdEvent {
+  id          BigInt      @id @default(autoincrement())
+  campaignId  String      @db.Uuid
+  type        AdEventType
+  userId      String?     @db.Uuid
+  anonymousId String?
+  createdAt   DateTime    @default(now())
+  campaign    AdCampaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, type, createdAt])
+}
+
+model SourcingRequest {
+  id                 String            @id @default(uuid()) @db.Uuid
+  requestNumber      String            @unique
+  requesterId        String            @db.Uuid
+  assignedAdminId    String?           @db.Uuid
+  status             SourcingStatus    @default(DRAFT)
+  currency           String            @default("NGN")
+  deliveryLocation   String?
+  desiredDeliveryAt  DateTime?
+  notes              String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  requester          User              @relation("SourcingRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  assignedAdmin      User?             @relation("SourcingAssignee", fields: [assignedAdminId], references: [id], onDelete: SetNull)
+  items              SourcingItem[]
+  quotes             SourcingQuote[]
+  procurement        SourcingProcurement?
+  history            SourcingStatusHistory[]
+  conversations      Conversation[]
+
+  @@index([requesterId, createdAt])
+  @@index([status, createdAt])
+}
+
+model SourcingItem {
+  id             String           @id @default(uuid()) @db.Uuid
+  requestId      String           @db.Uuid
+  title          String
+  description    String?
+  specifications Json             @default("{}")
+  quantity       Int
+  referenceUrl   String?
+  imageAssetId   String?          @db.Uuid
+  targetBudgetKobo BigInt?
+  quotedUnitKobo BigInt?
+  request        SourcingRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  imageAsset     MediaAsset?      @relation(fields: [imageAssetId], references: [id], onDelete: SetNull)
+
+  @@index([requestId])
+}
+
+model SourcingQuote {
+  id           String           @id @default(uuid()) @db.Uuid
+  requestId    String           @db.Uuid
+  subtotalKobo BigInt
+  serviceKobo  BigInt
+  shippingKobo BigInt
+  totalKobo    BigInt
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  estimatedDeliveryAt DateTime?
+  terms        String?
+  createdById  String           @db.Uuid
+  createdAt    DateTime         @default(now())
+  request      SourcingRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId, createdAt])
+}
+
+model SourcingProcurement {
+  id                    String          @id @default(uuid()) @db.Uuid
+  requestId             String          @unique @db.Uuid
+  sourcePlatform        SourcePlatform
+  providerCode          String?
+  sourceUrl             String?
+  supplierId            String?         @db.Uuid
+  supplierReference     String?
+  supplierProductId     String?
+  supplierOrderId       String?
+  sourceCurrency        String?
+  sourceUnitCostMinor   BigInt?
+  sourceShippingMinor   BigInt?
+  exchangeRate          Decimal?        @db.Decimal(18, 8)
+  internationalShippingKobo BigInt?
+  localDeliveryKobo     BigInt?
+  internalStatus        String?
+  procurementNotes      String?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  request               SourcingRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  supplier              SupplierProfile? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@index([sourcePlatform, internalStatus])
+  @@index([supplierId])
+}
+
+model SourcingStatusHistory {
+  id        String           @id @default(uuid()) @db.Uuid
+  requestId String           @db.Uuid
+  from      SourcingStatus?
+  to        SourcingStatus
+  actorId   String           @db.Uuid
+  note      String?
+  createdAt DateTime         @default(now())
+  request   SourcingRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId, createdAt])
+}
+
+model RfqRequest {
+  id              String       @id @default(uuid()) @db.Uuid
+  requestNumber   String       @unique
+  requesterId     String       @db.Uuid
+  title           String
+  description     String
+  specifications  Json         @default("{}")
+  quantity        Int
+  targetBudgetKobo BigInt?
+  deliveryLocation String?
+  responseDeadline DateTime?
+  status          RfqStatus    @default(DRAFT)
+  awardedQuoteId  String?      @unique @db.Uuid
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  requester       User         @relation("RfqRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  quotes          RfqQuote[]    @relation("RfqQuotes")
+  awardedQuote    RfqQuote?     @relation("AwardedRfqQuote", fields: [awardedQuoteId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([requesterId, createdAt])
+}
+
+model RfqQuote {
+  id               String          @id @default(uuid()) @db.Uuid
+  requestId        String          @db.Uuid
+  supplierId       String          @db.Uuid
+  unitPriceKobo    BigInt
+  shippingKobo     BigInt          @default(0)
+  leadTimeDays     Int
+  minimumOrderQty  Int             @default(1)
+  terms            String?
+  expiresAt        DateTime
+  createdAt        DateTime        @default(now())
+  request          RfqRequest      @relation("RfqQuotes", fields: [requestId], references: [id], onDelete: Cascade)
+  awardedFor       RfqRequest?     @relation("AwardedRfqQuote")
+  supplier         SupplierProfile @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  @@unique([requestId, supplierId])
+  @@index([supplierId, createdAt])
+}
+
+model ServiceListing {
+  id             String       @id @default(uuid()) @db.Uuid
+  providerId     String       @db.Uuid
+  slug           String       @unique
+  title          String
+  description    String
+  category       String
+  location       String?
+  startingKobo   BigInt?
+  active         Boolean      @default(true)
+  coverAssetId   String?      @db.Uuid
+  metadata       Json         @default("{}")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  provider       User         @relation("ServiceProvider", fields: [providerId], references: [id], onDelete: Restrict)
+  coverAsset     MediaAsset?  @relation(fields: [coverAssetId], references: [id], onDelete: SetNull)
+  bookings       ServiceBooking[]
+
+  @@index([active, category, createdAt])
+  @@index([providerId, active])
+}
+
+model ServiceBooking {
+  id             String               @id @default(uuid()) @db.Uuid
+  listingId      String               @db.Uuid
+  customerId     String               @db.Uuid
+  status         ServiceBookingStatus @default(REQUESTED)
+  agreedKobo     BigInt?
+  scheduledFor   DateTime?
+  notes          String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  listing        ServiceListing       @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  customer       User                 @relation("ServiceCustomer", fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@index([customerId, status, createdAt])
+  @@index([listingId, status])
+}
+
+model FulfilmentHub {
+  id          String               @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String               @unique
+  address     Json
+  latitude    Decimal?             @db.Decimal(9, 6)
+  longitude   Decimal?             @db.Decimal(9, 6)
+  active      Boolean              @default(true)
+  createdAt   DateTime             @default(now())
+  assignments DeliveryAssignment[]
+}
+
+model DeliveryAssignment {
+  id             String         @id @default(uuid()) @db.Uuid
+  storeOrderId   String         @unique @db.Uuid
+  riderId        String?        @db.Uuid
+  hubId          String?        @db.Uuid
+  status         DeliveryStatus @default(ASSIGNED)
+  trackingCode   String         @unique
+  pickupAt       DateTime?
+  deliveredAt    DateTime?
+  proofMetadata  Json           @default("{}")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  storeOrder     StoreOrder     @relation(fields: [storeOrderId], references: [id], onDelete: Restrict)
+  rider          User?          @relation("DeliveryRider", fields: [riderId], references: [id], onDelete: SetNull)
+  hub            FulfilmentHub? @relation(fields: [hubId], references: [id], onDelete: SetNull)
+
+  @@index([riderId, status, createdAt])
+  @@index([hubId, status])
+}
+
+model BroadcastCampaign {
+  id          String          @id @default(uuid()) @db.Uuid
+  createdById String          @db.Uuid
+  subject     String
+  previewText String?
+  content     String
+  channel     String
+  audience    Json
+  status      BroadcastStatus @default(DRAFT)
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  createdBy   User            @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  deliveries  BroadcastDelivery[]
+
+  @@index([status, scheduledAt])
+}
+
+model BroadcastDelivery {
+  id          String            @id @default(uuid()) @db.Uuid
+  campaignId  String            @db.Uuid
+  userId      String            @db.Uuid
+  channel     String
+  status      String            @default("PENDING")
+  providerId  String?
+  errorCode   String?
+  deliveredAt DateTime?
+  createdAt   DateTime          @default(now())
+  campaign    BroadcastCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId, channel])
+  @@index([status, createdAt])
+}
+
+model ReferralCode {
+  id        String               @id @default(uuid()) @db.Uuid
+  ownerId   String               @db.Uuid
+  code      String               @unique @db.Citext
+  active    Boolean              @default(true)
+  createdAt DateTime             @default(now())
+  owner     User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  visits    ReferralVisit[]
+  conversions ReferralConversion[]
+}
+
+model ReferralVisit {
+  id          String       @id @default(uuid()) @db.Uuid
+  codeId      String       @db.Uuid
+  visitorId   String?      @db.Uuid
+  anonymousId String?
+  landingPath String?
+  createdAt   DateTime     @default(now())
+  code        ReferralCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
+  visitor     User?        @relation(fields: [visitorId], references: [id], onDelete: SetNull)
+
+  @@index([codeId, createdAt])
+}
+
+model ReferralConversion {
+  id          String       @id @default(uuid()) @db.Uuid
+  codeId      String       @db.Uuid
+  productId   String?      @db.Uuid
+  orderId     String       @db.Uuid
+  earningKobo BigInt       @default(0)
+  createdAt   DateTime     @default(now())
+  code        ReferralCode @relation(fields: [codeId], references: [id], onDelete: Restrict)
+  product     Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@unique([codeId, orderId])
+}
+
+model SiteSetting {
+  key         String   @id
+  value       Json
+  description String?
+  updatedById String   @db.Uuid
+  updatedAt   DateTime @updatedAt
+  updatedBy   User     @relation(fields: [updatedById], references: [id], onDelete: Restrict)
+}
+
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  actorId    String?  @db.Uuid
+  action     String
+  targetType String?
+  targetId   String?
+  before     Json?
+  after      Json?
+  requestId  String?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([targetType, targetId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model OutboxEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  topic       String
+  aggregateId String?
+  payload     Json
+  attempts    Int      @default(0)
+  availableAt DateTime @default(now())
+  processedAt DateTime?
+  lastError   String?
+  createdAt   DateTime @default(now())
+
+  @@index([processedAt, availableAt])
+}

@@ -1,0 +1,50 @@
+services:
+  - type: web
+    name: buysell-api-v1-2
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npm run db:migrate
+    startCommand: npm run start
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: buysell-postgres-v1-2
+          property: connectionString
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: FLUTTERWAVE_SECRET_KEY
+        sync: false
+      - key: FLUTTERWAVE_WEBHOOK_SECRET
+        sync: false
+      - key: AD_PRICE_KOBO
+        value: 500000
+      - key: PUBLIC_MARKETPLACE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: STORAGE_DRIVER
+        value: s3
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        value: auto
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_PUBLIC_BASE_URL
+        sync: false
+
+databases:
+  - name: buysell-postgres-v1-2
+    plan: free
+    databaseName: buysell
+    user: buysell

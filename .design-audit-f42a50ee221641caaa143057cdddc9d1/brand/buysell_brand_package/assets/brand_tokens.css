@@ -1,0 +1,23 @@
+:root {
+  --buysell-forest: #0B6B3A;
+  --buysell-action: #31A24C;
+  --buysell-deep: #073E26;
+  --buysell-ink: #111614;
+  --buysell-black: #0B0D0C;
+  --buysell-white: #FFFFFF;
+  --buysell-mint: #EAF6EE;
+  --buysell-mint-strong: #D9F0E0;
+  --buysell-surface: #F5F7F5;
+  --buysell-border: #DFE6E1;
+  --buysell-muted: #68716B;
+  --buysell-warm-neutral: #F3F1EA;
+  --buysell-deal-yellow: #F4B942;
+  --buysell-error: #E34D59;
+
+  --buysell-font-logo: "Comfortaa", system-ui, sans-serif;
+  --buysell-font-ui: "Inter", system-ui, sans-serif;
+  --buysell-radius-sm: 12px;
+  --buysell-radius-md: 18px;
+  --buysell-radius-lg: 28px;
+  --buysell-shadow-card: 0 10px 30px rgba(8, 39, 25, 0.08);
+}

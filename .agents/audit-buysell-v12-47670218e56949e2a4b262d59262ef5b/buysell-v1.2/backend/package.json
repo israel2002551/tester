@@ -1,0 +1,30 @@
+{
+  "name": "@buysell/api",
+  "version": "1.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "build": "node --check src/server.js",
+    "db:migrate": "node src/db/migrate.js up",
+    "db:status": "node src/db/migrate.js status",
+    "db:import:supabase": "node scripts/import-supabase-export.mjs",
+    "db:migrate:media": "node scripts/migrate-supabase-media.mjs"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "multer": "^2.0.2",
+    "pg": "^8.16.3",
+    "zod": "^4.0.17"
+  },
+  "engines": {
+    "node": ">=20 <23"
+  }
+}

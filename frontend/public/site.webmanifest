@@ -1,0 +1,9 @@
+{
+  "name": "BUYSELL Marketplace",
+  "short_name": "BUYSELL",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F5F7F5",
+  "theme_color": "#073E26",
+  "icons": []
+}

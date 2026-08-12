@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.*
+!.env.example
+dist/
+coverage/
+*.log
+.DS_Store
+.vercel/
+backend/storage/uploads/*
+!backend/storage/uploads/.gitkeep
+backend/legacy-export/
+*.dump
+*.sql.gz

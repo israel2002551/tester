@@ -1,0 +1,9 @@
+{
+  "name":"BUYSELL Nigeria",
+  "short_name":"BUYSELL",
+  "start_url":"/shop",
+  "display":"standalone",
+  "background_color":"#f5f7f4",
+  "theme_color":"#0c3b25",
+  "description":"Buy, sell, message, pay and track orders on BUYSELL Nigeria."
+}

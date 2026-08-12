@@ -1,0 +1,1 @@
+export function StatusCard({title,value,sub}){return <div className="status-card"><span>{title}</span><strong>{value}</strong>{sub&&<small>{sub}</small>}</div>}

@@ -1,0 +1,21 @@
+{
+  "name": "buysell-v1.2",
+  "private": true,
+  "workspaces": [
+    "frontend/apps/*",
+    "frontend/packages/*",
+    "backend"
+  ],
+  "scripts": {
+    "dev:marketplace": "npm --workspace @buysell/marketplace run dev",
+    "dev:landing": "npm --workspace @buysell/landing run dev",
+    "dev:api": "npm --workspace @buysell/api run dev",
+    "build": "npm run build:marketplace && npm run build:landing && npm run build:api",
+    "build:marketplace": "npm --workspace @buysell/marketplace run build",
+    "build:landing": "npm --workspace @buysell/landing run build",
+    "build:api": "npm --workspace @buysell/api run build",
+    "db:migrate": "npm --workspace @buysell/api run db:migrate",
+    "db:status": "npm --workspace @buysell/api run db:status"
+  },
+  "engines": {"node": ">=20 <23"}
+}

@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="./image-slot.js"></script>
+<style>
+  body { margin:0; background:#E9EDE9; font-family:'Manrope',system-ui,sans-serif; }
+  a { color:#0B6B3A; text-decoration:none; }
+  a:hover { color:#31A24C; }
+  @keyframes bsSheet { from { transform:translateY(100%) } to { transform:translateY(0) } }
+  @keyframes bsFade { from { opacity:0 } to { opacity:1 } }
+  @keyframes bsGrow { from { transform:scaleY(0) } to { transform:scaleY(1) } }
+</style>
+</helmet>
+
+<section style="padding:56px 64px 96px;display:flex;flex-direction:column;gap:36px">
+  <div style="display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;justify-content:center;height:34px;padding:0 14px;border-radius:999px;background:#0B6B3A;color:#fff;font-weight:800;font-size:14px;letter-spacing:.4px">7a</div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div style="font-size:30px;font-weight:800;color:#161A17;letter-spacing:-.4px">BuySell — remaining buyer screens</div>
+      <div style="font-size:16px;color:#6B756E;max-width:840px;text-wrap:pretty">Everything the buyer touches beyond the main shopping flow: discovery entry points, the seller storefront, order aftercare, and the full account surface.</div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start">
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="font-size:14px;font-weight:800;color:#161A17">01 · Search landing</div>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+        <div style="min-height:874px;background:#fff;padding:56px 0 0;box-sizing:border-box;font-family:'Manrope',system-ui,sans-serif;display:flex;flex-direction:column">
+          <div style="padding:0 16px;display:flex;align-items:center;gap:12px">
+            <div style="flex:1;height:48px;border-radius:15px;border:1.5px solid #0B6B3A;box-shadow:0 0 0 4px rgba(11,107,58,.1);display:flex;align-items:center;gap:10px;padding:0 14px">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="#0B6B3A" stroke-width="2"></circle><path d="M16 16l4 4" stroke="#0B6B3A" stroke-width="2" stroke-linecap="round"></path></svg>
+              <span style="flex:1;font-size:15px;font-weight:700;color:#161A17">earbud</span>
+              <div style="width:20px;height:20px;border-radius:50%;background:#EDF1EE;display:flex;align-items:center;justify-content:center">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="#6B756E" stroke-width="3" stroke-linecap="round"></path></svg>
+              </div>
+            </div>
+            <span style="font-size:14.5px;font-weight:800;color:#6B756E">Cancel</span>
+          </div>
+          <div style="padding:16px;display:flex;flex-direction:column;gap:0">
+            <sc-for list="{{ suggestions }}" as="s" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;gap:13px;padding:13px 0;border-bottom:1px solid #F2F5F2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><circle cx="11" cy="11" r="6.5" stroke="#9AA39D" stroke-width="1.9"></circle><path d="M16 16l4 4" stroke="#9AA39D" stroke-width="1.9" stroke-linecap="round"></path></svg>
+                <div style="flex:1;display:flex;flex-direction:column;gap:2px;min-width:0">
+                  <span style="font-size:14.5px;color:#161A17"><b style="font-weight:800">{{ s.match }}</b>{{ s.rest }}</span>
+                  <sc-if value="{{ s.meta }}" hint-placeholder-val="{{ true }}">
+                    <span style="font-size:11.5px;color:#9AA39D">{{ s.meta }}</span>
+                  </sc-if>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><path d="M17 7v10M17 7H7M17 7L7 17" stroke="#9AA39D" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+              </div>
+            </sc-for>
+          </div>
+          <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:14.5px;font-weight:800;color:#161A17">Recent searches</span>
+              <span style="font-size:12.5px;font-weight:800;color:#0B6B3A">Clear</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <sc-for list="{{ recents }}" as="r" hint-placeholder-count="6">
+                <span style="display:flex;align-items:center;gap:8px;padding:10px 13px;border-radius:12px;background:#F2F5F2;font-size:13px;font-weight:700;color:#161A17">{{ r.label }}
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="#9AA39D" stroke-width="3" stroke-linecap="round"></path></svg>
+                </span>
+              </sc-for>
+            </div>
+          </div>
+          <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:12px">
+            <span style="font-size:14.5px;font-weight:800;color:#161A17">Trending in Lagos</span>
+            <div style="display:flex;flex-direction:column;gap:0">
+              <sc-for list="{{ trending }}" as="t" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;gap:13px;padding:11px 0">
+                  <span style="{{ t.rankStyle }}">{{ t.rank }}</span>
+                  <span style="flex:1;font-size:14px;font-weight:700;color:#161A17">{{ t.label }}</span>
+                  <span style="{{ t.deltaStyle }}">{{ t.delta }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="font-size:14px;font-weight:800;color:#161A17">02 · All categories, and category page</div>
+      <div style="display:flex;gap:20px">
+        <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+          <div style="min-height:874px;background:#fff;display:flex;flex-direction:column;font-family:'Manrope',system-ui,sans-serif">
+            <div style="padding:56px 16px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #EDF1EE">
+              <span style="font-size:26px;font-weight:800;color:#161A17;letter-spacing:-.5px">Categories</span>
+              <div style="width:42px;height:42px;border-radius:12px;background:#F2F5F2;display:flex;align-items:center;justify-content:center">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="#161A17" stroke-width="1.9"></circle><path d="M16 16l4 4" stroke="#161A17" stroke-width="1.9" stroke-linecap="round"></path></svg>
+              </div>
+            </div>
+            <div style="flex:1;display:flex;min-height:0">
+              <div style="width:104px;flex-shrink:0;background:#F7F9F7;display:flex;flex-direction:column">
+                <sc-for list="{{ catRail }}" as="c" hint-placeholder-count="9">
+                  <div style="{{ c.style }}">{{ c.label }}</div>
+                </sc-for>
+              </div>
+              <div style="flex:1;padding:16px;display:flex;flex-direction:column;gap:16px">
+                <div style="height:96px;border-radius:16px;overflow:hidden;background:#F2F5F2"><image-slot id="bs-cat-banner" shape="rect" placeholder="Category banner"></image-slot></div>
+                <sc-for list="{{ catGroups }}" as="g" hint-placeholder-count="3">
+                  <div style="display:flex;flex-direction:column;gap:11px">
+                    <span style="font-size:14px;font-weight:800;color:#161A17">{{ g.title }}</span>
+                    <div style="display:flex;flex-wrap:wrap;gap:12px">
+                      <sc-for list="{{ g.items }}" as="i" hint-placeholder-count="6">
+                        <div style="width:calc(33.333% - 8px);box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:7px">
+                          <div style="width:100%;aspect-ratio:1;border-radius:14px;overflow:hidden;background:#F2F5F2"><image-slot id="{{ i.slot }}" shape="rect" placeholder="•"></image-slot></div>
+                          <span style="font-size:11px;font-weight:700;color:#161A17;text-align:center;line-height:1.3">{{ i.label }}</span>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <dc-import name="BuySell Bottom Nav" active="Categories" hint-size="100%,80px"></dc-import>
+          </div>
+        </x-import>
+
+        <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+          <div style="min-height:874px;background:#F7F9F7;display:flex;flex-direction:column;font-family:'Manrope',system-ui,sans-serif">
+            <div style="background:#fff;padding:56px 16px 0">
+              <div style="display:flex;align-items:center;gap:12px">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#161A17" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                <span style="flex:1;font-size:19px;font-weight:800;color:#161A17;letter-spacing:-.3px">Phones &amp; Tablets</span>
+                <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="#161A17" stroke-width="1.9"></circle><path d="M16 16l4 4" stroke="#161A17" stroke-width="1.9" stroke-linecap="round"></path></svg>
+              </div>
+              <div style="display:flex;gap:9px;margin-top:14px;padding-bottom:14px;overflow:hidden">
+                <sc-for list="{{ subChips }}" as="c" hint-placeholder-count="6">
+                  <span style="{{ c.style }}">{{ c.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+            <div style="padding:14px 16px;display:flex;flex-direction:column;gap:14px">
+              <div style="height:118px;border-radius:18px;overflow:hidden;background:#0F2B1A;position:relative;display:flex;align-items:center;padding:0 18px">
+                <div style="flex:1;display:flex;flex-direction:column;gap:7px;z-index:1">
+                  <span style="font-size:19px;font-weight:800;color:#fff;letter-spacing:-.4px">Phone week</span>
+                  <span style="font-size:12.5px;color:rgba(255,255,255,.6)">Up to 30% off flagship models</span>
+                  <span style="align-self:flex-start;margin-top:3px;padding:8px 14px;border-radius:11px;background:#31A24C;color:#fff;font-size:12px;font-weight:800">Shop deals</span>
+                </div>
+                <div style="width:104px;height:96px;border-radius:14px;overflow:hidden;flex-shrink:0"><image-slot id="bs-cat-promo" shape="rect" placeholder="Phone"></image-slot></div>
+              </div>
+              <div style="display:flex;align-items:center;gap:9px">
+                <span style="flex:1;font-size:12.5px;font-weight:700;color:#6B756E">2,847 products</span>
+                <span style="display:flex;align-items:center;gap:6px;padding:9px 13px;border-radius:11px;background:#fff;border:1px solid #E4E8E5;font-size:12.5px;font-weight:800;color:#161A17">Recommended
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#161A17" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                </span>
+                <span style="display:flex;align-items:center;gap:6px;padding:9px 13px;border-radius:11px;background:#0B6B3A;color:#fff;font-size:12.5px;font-weight:800">Filters
+                  <span style="width:17px;height:17px;border-radius:50%;background:rgba(255,255,255,.24);font-size:10px;display:flex;align-items:center;justify-content:center">2</span>
+                </span>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:12px">
+                <sc-for list="{{ catProducts }}" as="p" hint-placeholder-count="6">
+                  <div style="width:calc(50% - 6px);box-sizing:border-box;background:#fff;border-radius:18px;border:1px solid #EDF1EE;overflow:hidden;display:flex;flex-direction:column">
+                    <div style="position:relative;height:158px;background:#F2F5F2">
+                      <image-slot id="{{ p.slot }}" shape="rect" placeholder="Product"></image-slot>
+                      <div style="position:absolute;top:9px;right:9px;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.94);display:flex;align-items:center;justify-content:center">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 20s-7-4.6-7-9.4A4.1 4.1 0 0112 8.4a4.1 4.1 0 017 2.2c0 4.8-7 9.4-7 9.4z" stroke="#6B756E" stroke-width="1.9" stroke-linejoin="round"></path></svg>
+                      </div>
+                      <sc-if value="{{ p.badge }}" hint-placeholder-val="{{ true }}">
+                        <span style="position:absolute;top:9px;left:9px;padding:5px 9px;border-radius:8px;background:#C0392B;color:#fff;font-size:10.5px;font-weight:800">{{ p.badge }}</span>
+                      </sc-if>
+                    </div>
+                    <div style="padding:11px 12px 13px;display:flex;flex-direction:column;gap:6px">
+                      <span style="font-size:13px;line-height:1.35;font-weight:600;color:#161A17;height:36px;overflow:hidden">{{ p.name }}</span>
+                      <div style="display:flex;align-items:baseline;gap:7px">
+                        <span style="font-size:16px;font-weight:800;color:#161A17;letter-spacing:-.3px">{{ p.price }}</span>
+                        <sc-if value="{{ p.was }}" hint-placeholder-val="{{ true }}">
+                          <span style="font-size:11.5px;color:#9AA39D;text-decoration:line-through">{{ p.was }}</span>
+                        </sc-if>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:5px">
+                        <svg width="12" height="12" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6L3.4 9.9l6-.8L12 3.5z" fill="#E8A317"></path></svg>
+                        <span style="font-size:11px;font-weight:700;color:#6B756E">{{ p.rating }}</span>
+                        <span style="font-size:11px;color:#9AA39D">· {{ p.sold }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="flex:1"></div>
+            <dc-import name="BuySell Bottom Nav" active="Categories" hint-size="100%,80px"></dc-import>
+          </div>
+        </x-import>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="font-size:14px;font-weight:800;color:#161A17">03 · Seller storefront</div>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+        <div style="min-height:874px;background:#F7F9F7;display:flex;flex-direction:column;font-family:'Manrope',system-ui,sans-serif">
+          <div style="position:relative;height:168px;background:#F2F5F2">
+            <image-slot id="bs-store-cover" shape="rect" placeholder="Store cover"></image-slot>
+            <div style="position:absolute;top:56px;left:16px;right:16px;display:flex;align-items:center;justify-content:space-between">
+              <div style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+              </div>
+              <div style="display:flex;gap:9px">
+                <div style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M12 15V4M8 8l4-4 4 4" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                </div>
+                <div style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="5.5" r="1.6" fill="#fff"></circle><circle cx="12" cy="12" r="1.6" fill="#fff"></circle><circle cx="12" cy="18.5" r="1.6" fill="#fff"></circle></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="background:#fff;padding:0 16px 16px;border-bottom:1px solid #EDF1EE">
+            <div style="display:flex;align-items:flex-end;gap:14px;margin-top:-32px">
+              <div style="width:76px;height:76px;border-radius:22px;overflow:hidden;background:#F2F5F2;border:3px solid #fff;flex-shrink:0"><image-slot id="bs-store-logo" shape="rect" placeholder="Logo"></image-slot></div>
+              <div style="flex:1;padding-bottom:6px;display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="font-size:19px;font-weight:800;color:#161A17;letter-spacing:-.3px">Lagos Gadget Hub</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#0B6B3A" stroke-width="2"></circle><path d="M8 12.4l2.6 2.6L16 9.6" stroke="#0B6B3A" stroke-width="2" stroke-linecap="round"></path></svg>
+                </div>
+                <span style="font-size:12px;color:#6B756E">Ikeja, Lagos · Joined Feb 2023</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:14px">
+              <div style="flex:1;height:46px;border-radius:14px;background:#0B6B3A;color:#fff;font-size:14.5px;font-weight:800;display:flex;align-items:center;justify-content:center">Follow</div>
+              <div style="flex:1;height:46px;border-radius:14px;border:1px solid #E4E8E5;color:#161A17;font-size:14.5px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:7px">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4.5 6.5a2 2 0 012-2h11a2 2 0 012 2v8a2 2 0 01-2 2H10l-4 3.5V16.5H6.5a2 2 0 01-2-2v-8z" stroke="#161A17" stroke-width="1.9" stroke-linejoin="round"></path></svg>
+                Message
+              </div>
+            </div>
+            <div style="display:flex;margin-top:16px;padding:14px 0;border-radius:16px;background:#F7F9F7">
+              <sc-for list="{{ storeStats }}" as="s" hint-placeholder-count="4">
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+                  <span style="font-size:16px;font-weight:800;color:#161A17;letter-spacing:-.3px">{{ s.value }}</span>
+                  <span style="font-size:10.5px;font-weight:700;color:#6B756E">{{ s.label }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:20px;margin-top:16px;overflow:hidden">
+              <span style="padding-bottom:2px;border-bottom:2.5px solid #0B6B3A;font-size:13.5px;font-weight:800;color:#0B6B3A;flex-shrink:0;white-space:nowrap">Products</span>
+              <span style="font-size:13.5px;font-weight:700;color:#9AA39D;flex-shrink:0;white-space:nowrap">Deals</span>
+              <span style="font-size:13.5px;font-weight:700;color:#9AA39D;flex-shrink:0;white-space:nowrap">Reviews</span>
+              <span style="font-size:13.5px;font-weight:700;color:#9AA39D;flex-shrink:0;white-space:nowrap">About</span>
+            </div>
+          </div>
+          <div style="padding:14px 16px;display:flex;flex-wrap:wrap;gap:12px">
+            <sc-for list="{{ storeProducts }}" as="p" hint-placeholder-count="4">
+              <div style="width:calc(50% - 6px);box-sizing:border-box;background:#fff;border-radius:18px;border:1px solid #EDF1EE;overflow:hidden;display:flex;flex-direction:column">
+                <div style="height:158px;background:#F2F5F2"><image-slot id="{{ p.slot }}" shape="rect" placeholder="Product"></image-slot></div>
+                <div style="padding:11px 12px 13px;display:flex;flex-direction:column;gap:6px">
+                  <span style="font-size:13px;line-height:1.35;font-weight:600;color:#161A17;height:36px;overflow:hidden">{{ p.name }}</span>
+                  <span style="font-size:16px;font-weight:800;color:#161A17;letter-spacing:-.3px">{{ p.price }}</span>
+                  <span style="font-size:11px;color:#9AA39D">{{ p.sold }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="font-size:14px;font-weight:800;color:#161A17">04 · Order detail, and return request</div>
+      <div style="display:flex;gap:20px">
+        <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+          <div style="position:relative;min-height:874px;background:#F7F9F7;font-family:'Manrope',system-ui,sans-serif;padding-bottom:100px;box-sizing:border-box">
+            <div style="background:#fff;padding:56px 16px 16px;border-bottom:1px solid #EDF1EE;display:flex;align-items:center;gap:12px">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#161A17" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+              <div style="flex:1;display:flex;flex-direction:column;gap:2px">
+                <span style="font-size:17px;font-weight:800;color:#161A17">BS-87903</span>
+                <span style="font-size:11.5px;color:#6B756E">Placed 30 July · 3 items</span>
+              </div>
+              <span style="padding:6px 11px;border-radius:9px;background:#E9F5EC;color:#0B6B3A;font-size:11.5px;font-weight:800">Delivered</span>
+            </div>
+            <div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+              <div style="background:#fff;border-radius:18px;border:1px solid #EDF1EE;padding:16px;display:flex;flex-direction:column;gap:14px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="width:34px;height:34px;border-radius:10px;overflow:hidden;background:#F2F5F2;flex-shrink:0"><image-slot id="bs-od-store" shape="rect" placeholder="S"></image-slot></div>
+                  <span style="flex:1;font-size:14px;font-weight:800;color:#161A17">Lagos Gadget Hub</span>
+                  <span style="font-size:12.5px;font-weight:800;color:#0B6B3A">Visit store</span>
+                </div>
+                <div style="height:1px;background:#EDF1EE"></div>
+                <sc-for list="{{ orderItems }}" as="i" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <div style="width:56px;height:56px;border-radius:13px;overflow:hidden;background:#F2F5F2;flex-shrink:0"><image-slot id="{{ i.slot }}" shape="rect" placeholder="Item"></image-slot></div>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:4px;min-width:0">
+                      <span style="font-size:13.5px;font-weight:700;color:#161A17">{{ i.name }}</span>
+                      <span style="font-size:11.5px;color:#9AA39D">{{ i.variant }} · Qty {{ i.qty }}</span>
+                    </div>
+                    <span style="font-size:14px;font-weight:800;color:#161A17">{{ i.price }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="background:#fff;border-radius:18px;border:1px solid #EDF1EE;padding:16px;display:flex;flex-direction:column;gap:13px">
+                <span style="font-size:14.5px;font-weight:800;color:#161A17">Payment summary</span>
+                <sc-for list="{{ paySummary }}" as="p" hint-placeholder-count="5">
+                  <div style="display:flex;justify-content:space-between">
+                    <span style="{{ p.kStyle }}">{{ p.k }}</span>
+                    <span style="{{ p.vStyle }}">{{ p.v }}</span>
+                  </div>
+                </sc-for>
+                <div style="display:flex;align-items:center;gap:10px;padding-top:12px;border-top:1px solid #EDF1EE">
+                  <div style="width:34px;height:34px;border-radius:9px;background:#F2F5F2;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="12" rx="2.5" stroke="#161A17" stroke-width="1.8"></rect><path d="M3 10h18" stroke="#161A17" stroke-width="1.8"></path></svg>
+                  </div>
+                  <span style="flex:1;font-size:13px;color:#6B756E">Verve card ending 4821</span>
+                  <span style="font-size:12.5px;font-weight:800;color:#0B6B3A">Receipt</span>
+                </div>
+              </div>
+              <div style="background:#fff;border-radius:18px;border:1px solid #EDF1EE;padding:16px;display:flex;flex-direction:column;gap:14px">
+                <span style="font-size:14.5px;font-weight:800;color:#161A17">Delivery</span>
+                <div style="display:flex;flex-direction:column;gap:3px">
+                  <span style="font-size:13px;font-weight:700;color:#161A17">Chidinma Okeke</span>
+                  <span style="font-size:12.5px;line-height:1.5;color:#6B756E">14 Herbert Macaulay Way, Yaba, Lagos · +234 803 411 2288</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:0">
+                  <sc-for list="{{ orderTimeline }}" as="t" hint-placeholder-count="4">
+                    <div style="display:flex;gap:12px">
+                      <div style="display:flex;flex-direction:column;align-items:center;width:16px;flex-shrink:0">
+                        <span style="{{ t.dot }}"></span>
+                        <sc-if value="{{ t.line }}" hint-placeholder-val="{{ true }}">
+                          <span style="flex:1;width:2px;background:#DDE3DE"></span>
+                        </sc-if>
+                      </div>
+                      <div style="flex:1;padding-bottom:16px;display:flex;flex-direction:column;gap:3px">
+                        <span style="{{ t.titleStyle }}">{{ t.title }}</span>
+                        <span style="font-size:11.5px;color:#9AA39D">{{ t.time }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+            <div style="position:absolute;left:0;right:0;bottom:0;display:flex;gap:10px;padding:14px 16px 26px;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-top:1px solid #EDF1EE">
+              <div style="flex:1;height:54px;border-radius:15px;border:1px solid #E4E8E5;color:#161A17;font-size:14.5px;font-weight:800;display:flex;align-items:center;justify-content:center">Return item</div>
+              <div style="flex:1;height:54px;border-radius:15px;background:#0B6B3A;color:#fff;font-size:15px;font-weight:800;display:flex;align-items:center;justify-content:center">Buy again</div>
+            </div>
+          </div>
+        </x-import>
+
+        <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+          <div style="position:relative;min-height:874px;background:#fff;font-family:'Manrope',system-ui,sans-serif;padding-bottom:100px;box-sizing:border-box">
+            <div style="padding:56px 16px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #EDF1EE">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#161A17" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+              <span style="flex:1;font-size:16px;font-weight:800;color:#161A17">Request a return</span>
+            </div>
+            <div style="padding:18px 16px;display:flex;flex-direction:column;gap:20px">
+              <div style="display:flex;align-items:center;gap:13px;padding:14px;border-radius:16px;background:#F7F9F7">
+                <div style="width:54px;height:54px;border-radius:13px;overflow:hidden;background:#EDF1EE;flex-shrink:0"><image-slot id="bs-ret-item" shape="rect" placeholder="Item"></image-slot></div>
+                <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+                  <span style="font-size:13.5px;font-weight:700;color:#161A17">Nexa 65W GaN Charger, 2-port</span>
+                  <span style="font-size:12px;color:#6B756E">₦9,400 · Qty 1 · Delivered 2 Aug</span>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:11px">
+                <span style="font-size:13.5px;font-weight:800;color:#161A17">Why are you returning it?</span>
+                <div style="display:flex;flex-direction:column;gap:9px">
+                  <sc-for list="{{ returnReasons }}" as="r" hint-placeholder-count="5">
+                    <div style="{{ r.row }}">
+                      <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                        <span style="font-size:14px;font-weight:700;color:#161A17">{{ r.label }}</span>
+                        <sc-if value="{{ r.note }}" hint-placeholder-val="{{ true }}">
+                          <span style="font-size:11.5px;color:#6B756E">{{ r.note }}</span>
+                        </sc-if>
+                      </div>
+                      <div style="{{ r.radio }}"><sc-if value="{{ r.on }}" hint-placeholder-val="{{ true }}"><span style="width:10px;height:10px;border-radius:50%;background:#0B6B3A"></span></sc-if></div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <span style="font-size:13.5px;font-weight:800;color:#161A17">Tell the seller what happened</span>
+                <div style="min-height:92px;border-radius:15px;border:1px solid #E4E8E5;background:#F7F9F7;padding:14px;font-size:14px;line-height:1.55;color:#161A17">Only one of the two ports charges. The USB-C side does nothing with three different cables.</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:11px">
+                <span style="font-size:13.5px;font-weight:800;color:#161A17">Add photos <span style="font-weight:600;color:#6B756E">(required for faults)</span></span>
+                <div style="display:flex;gap:10px">
+                  <div style="width:78px;height:78px;border-radius:14px;overflow:hidden;background:#F2F5F2"><image-slot id="bs-ret-p1" shape="rect" placeholder="Photo"></image-slot></div>
+                  <div style="width:78px;height:78px;border-radius:14px;border:1.5px dashed #CBD3CD;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px">
+                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#6B756E" stroke-width="2" stroke-linecap="round"></path></svg>
+                    <span style="font-size:10.5px;font-weight:700;color:#6B756E">Add</span>
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:11px">
+                <span style="font-size:13.5px;font-weight:800;color:#161A17">Preferred resolution</span>
+                <div style="display:flex;gap:9px">
+                  <div style="flex:1;padding:14px;border-radius:14px;border:1.5px solid #0B6B3A;background:#F4FAF6;display:flex;flex-direction:column;gap:4px">
+                    <span style="font-size:13.5px;font-weight:800;color:#161A17">Refund</span>
+                    <span style="font-size:11.5px;color:#6B756E">To wallet in 3 days</span>
+                  </div>
+                  <div style="flex:1;padding:14px;border-radius:14px;border:1px solid #E4E8E5;display:flex;flex-direction:column;gap:4px">
+                    <span style="font-size:13.5px;font-weight:800;color:#161A17">Replacement</span>
+                    <span style="font-size:11.5px;color:#6B756E">Subject to stock</span>
+                  </div>
+                </div>
+              </div>
+              <div style="padding:14px 16px;border-radius:15px;background:#F4FAF6;display:flex;gap:11px">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><path d="M12 3.5l7 3v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9v-5l7-3z" stroke="#0B6B3A" stroke-width="1.8" stroke-linejoin="round"></path></svg>
+                <span style="flex:1;font-size:12px;line-height:1.5;color:#0B6B3A">Buyer protection covers this order until 16 August. Free pickup from your delivery address.</span>
+              </div>
+            </div>
+            <div style="position:absolute;left:0;right:0;bottom:0;padding:14px 16px 26px;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-top:1px solid #EDF1EE">
+              <div style="height:56px;border-radius:16px;background:#0B6B3A;color:#fff;font-size:16.5px;font-weight:800;display:flex;align-items:center;justify-content:center">Submit return request</div>
+            </div>
+          </div>
+        </x-import>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="font-size:14px;font-weight:800;color:#161A17">05 · Wallet, and addresses</div>
+      <div style="display:flex;gap:20px">
+        <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+          <div style="min-height:874px;background:#F7F9F7;font-family:'Manrope',system-ui,sans-serif;display:flex;flex-direction:column">
+            <div style="background:#0F2B1A;padding:56px 16px 56px;display:flex;flex-direction:column;gap:20px">
+              <div style="display:flex;align-items:center;gap:12px">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                <span style="flex:1;font-size:17px;font-weight:800;color:#fff">Wallet</span>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="rgba(255,255,255,.7)" stroke-width="1.8"></circle><path d="M12 11v5.5M12 7.8v.6" stroke="rgba(255,255,255,.7)" stroke-width="2" stroke-linecap="round"></path></svg>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:7px">
+                <span style="font-size:12px;color:rgba(255,255,255,.55)">Available balance</span>
+                <span style="font-size:36px;font-weight:800;color:#fff;letter-spacing:-1.2px">₦24,380</span>
+                <span style="font-size:11.5px;color:rgba(255,255,255,.45)">₦18,500 refund credited 2 Aug</span>
+              </div>
+              <div style="display:flex;gap:10px">
+                <div style="flex:1;height:48px;border-radius:14px;background:#31A24C;color:#fff;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center">Top up</div>
+                <div style="flex:1;height:48px;border-radius:14px;background:rgba(255,255,255,.14);color:#fff;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center">Withdraw</div>
+              </div>
+            </div>
+            <div style="margin-top:-40px;padding:0 16px;display:flex;gap:12px">
+              <sc-for list="{{ walletTiles }}" as="w" hint-placeholder-count="2">
+                <div style="flex:1;background:#fff;border-radius:18px;border:1px solid #EDF1EE;padding:14px;display:flex;flex-direction:column;gap:7px">
+                  <span style="font-size:11.5px;font-weight:700;color:#6B756E">{{ w.label }}</span>
+                  <span style="font-size:20px;font-weight:800;color:#161A17;letter-spacing:-.5px">{{ w.value }}</span>
+                  <span style="font-size:11.5px;font-weight:800;color:#0B6B3A">{{ w.note }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+              <div style="background:#fff;border-radius:18px;border:1px solid #EDF1EE;padding:16px;display:flex;flex-direction:column;gap:15px">
+                <div style="display:flex;align-items:center;justify-content:space-between">
+                  <span style="font-size:15px;font-weight:800;color:#161A17">Transactions</span>
+                  <span style="font-size:12.5px;font-weight:800;color:#0B6B3A">See all</span>
+                </div>
+                <sc-for list="{{ txns }}" as="t" hint-placeholder-count="6">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <div style="{{ t.iconWrap }}">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" style="{{ t.arrow }}"><path d="M12 5v14M6 13l6 6 6-6" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                    </div>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:3px;min-width:0">
+                      <span style="font-size:13.5px;font-weight:700;color:#161A17">{{ t.label }}</span>
+                      <span style="font-size:11.5px;color:#9AA39D">{{ t.time }}</span>
+                    </div>
+                    <span style="{{ t.amtStyle }}">{{ t.amount }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </x-import>
+
+        <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+          <div style="position:relative;min-height:874px;background:#F7F9F7;font-family:'Manrope',system-ui,sans-serif;padding-bottom:100px;box-sizing:border-box">
+            <div style="background:#fff;padding:56px 16px 16px;border-bottom:1px solid #EDF1EE;display:flex;align-items:center;gap:12px">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#161A17" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+              <span style="flex:1;font-size:17px;font-weight:800;color:#161A17">Delivery addresses</span>
+            </div>
+            <div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+              <sc-for list="{{ addresses }}" as="a" hint-placeholder-count="3">
+                <div style="{{ a.card }}">
+                  <div style="display:flex;align-items:flex-start;gap:12px">
+                    <div style="{{ a.iconWrap }}">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 21s7-5.4 7-11a7 7 0 10-14 0c0 5.6 7 11 7 11z" stroke="currentColor" stroke-width="1.8"></path><circle cx="12" cy="10" r="2.6" stroke="currentColor" stroke-width="1.8"></circle></svg>
+                    </div>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:5px;min-width:0">
+                      <div style="display:flex;align-items:center;gap:8px">
+                        <span style="font-size:14.5px;font-weight:800;color:#161A17">{{ a.label }}</span>
+                        <sc-if value="{{ a.default }}" hint-placeholder-val="{{ true }}">
+                          <span style="padding:4px 8px;border-radius:7px;background:#E9F5EC;color:#0B6B3A;font-size:10.5px;font-weight:800">Default</span>
+                        </sc-if>
+                      </div>
+                      <span style="font-size:13px;line-height:1.5;color:#6B756E;text-wrap:pretty">{{ a.line }}</span>
+                      <span style="font-size:12.5px;color:#9AA39D">{{ a.phone }}</span>
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:8px;margin-top:13px;padding-top:13px;border-top:1px solid #F2F5F2">
+                    <span style="flex:1;text-align:center;font-size:12.5px;font-weight:800;color:#161A17">Edit</span>
+                    <span style="width:1px;background:#F2F5F2"></span>
+                    <span style="flex:1;text-align:center;font-size:12.5px;font-weight:800;color:#161A17">Set default</span>
+                    <span style="width:1px;background:#F2F5F2"></span>
+                    <span style="flex:1;text-align:center;font-size:12.5px;font-weight:800;color:#C0392B">Delete</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="position:absolute;left:0;right:0;bottom:0;padding:14px 16px 26px;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-top:1px solid #EDF1EE">
+              <div style="height:56px;border-radius:16px;background:#0B6B3A;color:#fff;font-size:16.5px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:9px">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.4" stroke-linecap="round"></path></svg>
+                Add new address
+              </div>
+            </div>
+          </div>
+        </x-import>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="font-size:14px;font-weight:800;color:#161A17">06 · Payment methods, and coupons</div>
+      <div style="display:flex;gap:20px">
+        <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+          <div style="min-height:874px;background:#F7F9F7;font-family:'Manrope',system-ui,sans-serif">
+            <div style="background:#fff;padding:56px 16px 16px;border-bottom:1px solid #EDF1EE;display:flex;align-items:center;gap:12px">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#161A17" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+              <span style="flex:1;font-size:17px;font-weight:800;color:#161A17">Payment methods</span>
+            </div>
+            <div style="padding:16px;display:flex;flex-direction:column;gap:18px">
+              <div style="display:flex;flex-direction:column;gap:11px">
+                <span style="font-size:12px;font-weight:800;color:#6B756E;letter-spacing:.4px">SAVED CARDS</span>
+                <sc-for list="{{ cards }}" as="c" hint-placeholder-count="2">
+                  <div style="{{ c.card }}">
+                    <div style="display:flex;align-items:center;gap:13px">
+                      <div style="width:46px;height:32px;border-radius:8px;background:{{ c.brandBg }};display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                        <span style="font-size:10px;font-weight:800;color:#fff;letter-spacing:.3px">{{ c.brand }}</span>
+                      </div>
+                      <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                        <span style="font-size:14.5px;font-weight:800;color:#161A17">•••• {{ c.last4 }}</span>
+                        <span style="font-size:11.5px;color:#6B756E">{{ c.name }} · expires {{ c.exp }}</span>
+                      </div>
+                      <sc-if value="{{ c.default }}" hint-placeholder-val="{{ true }}">
+                        <span style="padding:5px 9px;border-radius:7px;background:#E9F5EC;color:#0B6B3A;font-size:10.5px;font-weight:800">Default</span>
+                      </sc-if>
+                    </div>
+                  </div>
+                </sc-for>
+                <div style="height:52px;border-radius:15px;border:1.5px dashed #CBD3CD;display:flex;align-items:center;justify-content:center;gap:9px;font-size:14px;font-weight:800;color:#161A17">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#161A17" stroke-width="2.2" stroke-linecap="round"></path></svg>
+                  Add a card
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:11px">
+                <span style="font-size:12px;font-weight:800;color:#6B756E;letter-spacing:.4px">OTHER METHODS</span>
+                <sc-for list="{{ otherPay }}" as="o" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:13px;padding:15px;border-radius:16px;background:#fff;border:1px solid #EDF1EE">
+                    <div style="width:40px;height:40px;border-radius:11px;background:#F2F5F2;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#161A17">
+                      <sc-if value="{{ o.isBank }}" hint-placeholder-val="{{ true }}">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M4 10h16M5 10v8M19 10v8M9 10v8M15 10v8M3 20h18M12 3.5L20 8H4l8-4.5z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                      </sc-if>
+                      <sc-if value="{{ o.isWallet }}" hint-placeholder-val="{{ true }}">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="13" rx="3" stroke="currentColor" stroke-width="1.8"></rect><path d="M16 12.5h2.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"></path></svg>
+                      </sc-if>
+                      <sc-if value="{{ o.isPod }}" hint-placeholder-val="{{ true }}">
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.8"></rect><path d="M17 11h2.5l1.5 3v3h-4" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"></path></svg>
+                      </sc-if>
+                    </div>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                      <span style="font-size:14px;font-weight:700;color:#161A17">{{ o.label }}</span>
+                      <span style="font-size:11.5px;color:#6B756E">{{ o.note }}</span>
+                    </div>
+                    <div style="{{ o.toggle }}"><span style="width:22px;height:22px;border-radius:50%;background:#fff"></span></div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </x-import>
+
+        <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+          <div style="min-height:874px;background:#F7F9F7;font-family:'Manrope',system-ui,sans-serif">
+            <div style="background:#fff;padding:56px 16px 0;border-bottom:1px solid #EDF1EE">
+              <div style="display:flex;align-items:center;gap:12px">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#161A17" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                <span style="flex:1;font-size:17px;font-weight:800;color:#161A17">Vouchers</span>
+              </div>
+              <div style="display:flex;gap:20px;margin-top:14px;overflow:hidden">
+                <span style="padding-bottom:12px;border-bottom:2.5px solid #0B6B3A;font-size:13.5px;font-weight:800;color:#0B6B3A;flex-shrink:0;white-space:nowrap">Available 4</span>
+                <span style="padding-bottom:12px;font-size:13.5px;font-weight:700;color:#9AA39D;flex-shrink:0;white-space:nowrap">Used</span>
+                <span style="padding-bottom:12px;font-size:13.5px;font-weight:700;color:#9AA39D;flex-shrink:0;white-space:nowrap">Expired</span>
+              </div>
+            </div>
+            <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;gap:9px">
+                <div style="flex:1;height:50px;border-radius:14px;background:#fff;border:1px solid #E4E8E5;display:flex;align-items:center;padding:0 15px;font-size:14px;color:#9AA39D">Enter voucher code</div>
+                <div style="width:88px;height:50px;border-radius:14px;background:#0B6B3A;color:#fff;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center">Apply</div>
+              </div>
+              <sc-for list="{{ coupons }}" as="c" hint-placeholder-count="4">
+                <div style="display:flex;border-radius:18px;overflow:hidden;background:#fff;border:1px solid #EDF1EE">
+                  <div style="{{ c.stub }}">
+                    <span style="font-size:22px;font-weight:800;letter-spacing:-.6px">{{ c.amount }}</span>
+                    <span style="font-size:10.5px;font-weight:700;opacity:.75">{{ c.kind }}</span>
+                  </div>
+                  <div style="flex:1;padding:14px 15px;display:flex;flex-direction:column;gap:5px;min-width:0">
+                    <span style="font-size:14px;font-weight:800;color:#161A17">{{ c.title }}</span>
+                    <span style="font-size:11.5px;line-height:1.45;color:#6B756E">{{ c.terms }}</span>
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+                      <span style="{{ c.expiryStyle }}">{{ c.expiry }}</span>
+                      <span style="flex:1"></span>
+                      <span style="font-size:12px;font-weight:800;color:#0B6B3A">Use now</span>
+                    </div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </x-import>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="font-size:14px;font-weight:800;color:#161A17">07 · Settings, and delete account</div>
+      <div style="display:flex;gap:20px">
+        <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+          <div style="min-height:874px;background:#F7F9F7;font-family:'Manrope',system-ui,sans-serif">
+            <div style="background:#fff;padding:56px 16px 16px;border-bottom:1px solid #EDF1EE;display:flex;align-items:center;gap:12px">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#161A17" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+              <span style="flex:1;font-size:17px;font-weight:800;color:#161A17">Settings</span>
+            </div>
+            <div style="padding:16px;display:flex;flex-direction:column;gap:18px">
+              <sc-for list="{{ settingGroups }}" as="g" hint-placeholder-count="4">
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <span style="font-size:12px;font-weight:800;color:#6B756E;letter-spacing:.4px">{{ g.title }}</span>
+                  <div style="background:#fff;border-radius:18px;border:1px solid #EDF1EE;overflow:hidden">
+                    <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+                      <div style="{{ r.row }}">
+                        <div style="flex:1;display:flex;flex-direction:column;gap:3px;min-width:0">
+                          <span style="{{ r.labelStyle }}">{{ r.label }}</span>
+                          <sc-if value="{{ r.note }}" hint-placeholder-val="{{ true }}">
+                            <span style="font-size:11.5px;line-height:1.4;color:#6B756E">{{ r.note }}</span>
+                          </sc-if>
+                        </div>
+                        <sc-if value="{{ r.isToggle }}" hint-placeholder-val="{{ true }}">
+                          <div style="{{ r.toggle }}"><span style="width:22px;height:22px;border-radius:50%;background:#fff"></span></div>
+                        </sc-if>
+                        <sc-if value="{{ r.value }}" hint-placeholder-val="{{ true }}">
+                          <span style="font-size:13px;font-weight:700;color:#9AA39D;flex-shrink:0">{{ r.value }}</span>
+                        </sc-if>
+                        <sc-if value="{{ r.chevron }}" hint-placeholder-val="{{ true }}">
+                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><path d="M9 5l7 7-7 7" stroke="#CBD3CD" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                        </sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+              <div style="height:54px;border-radius:16px;background:#fff;border:1px solid #EDF1EE;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#C0392B">Log out</div>
+            </div>
+          </div>
+        </x-import>
+
+        <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+          <div style="position:relative;min-height:874px;background:#F7F9F7;font-family:'Manrope',system-ui,sans-serif">
+            <div style="background:#fff;padding:56px 16px 16px;border-bottom:1px solid #EDF1EE;display:flex;align-items:center;gap:12px;filter:blur(1px);opacity:.45">
+              <div style="width:120px;height:14px;border-radius:5px;background:#EDF1EE"></div>
+            </div>
+            <div style="padding:16px;display:flex;flex-direction:column;gap:12px;filter:blur(1px);opacity:.45">
+              <div style="height:70px;border-radius:18px;background:#fff;border:1px solid #EDF1EE"></div>
+              <div style="height:130px;border-radius:18px;background:#fff;border:1px solid #EDF1EE"></div>
+              <div style="height:96px;border-radius:18px;background:#fff;border:1px solid #EDF1EE"></div>
+            </div>
+            <div style="position:absolute;left:0;right:0;top:0;bottom:0;background:rgba(10,14,11,.42);animation:bsFade .3s both"></div>
+            <div style="position:absolute;left:0;right:0;bottom:0;border-radius:26px 26px 0 0;background:#fff;padding:12px 16px 26px;animation:bsSheet .38s cubic-bezier(.22,1,.36,1) both">
+              <div style="width:40px;height:4.5px;border-radius:3px;background:#DDE3DE;margin:0 auto 18px"></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
+                <div style="width:64px;height:64px;border-radius:19px;background:#FDECEA;display:flex;align-items:center;justify-content:center">
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M6.5 7.5h11l-1 12.5h-9l-1-12.5z" stroke="#C0392B" stroke-width="1.9" stroke-linejoin="round"></path><path d="M9.5 7.5V5.8a2.5 2.5 0 015 0v1.7M4.5 7.5h15" stroke="#C0392B" stroke-width="1.9" stroke-linecap="round"></path></svg>
+                </div>
+                <span style="font-size:21px;font-weight:800;color:#161A17;letter-spacing:-.4px;text-align:center">Delete your BuySell account?</span>
+                <span style="font-size:14px;line-height:1.55;color:#6B756E;text-align:center;text-wrap:pretty">This removes your orders, saved items, reviews and wallet history. It cannot be undone.</span>
+              </div>
+              <div style="margin-top:18px;padding:15px;border-radius:16px;background:#FFF8EC;border:1px solid #FAE6C0;display:flex;flex-direction:column;gap:9px">
+                <span style="font-size:13px;font-weight:800;color:#8A6412">Before you go</span>
+                <sc-for list="{{ deleteWarnings }}" as="w" hint-placeholder-count="3">
+                  <div style="display:flex;gap:9px;align-items:flex-start">
+                    <span style="width:5px;height:5px;border-radius:50%;background:#B4780C;flex-shrink:0;margin-top:7px"></span>
+                    <span style="flex:1;font-size:12.5px;line-height:1.45;color:#8A6412">{{ w.text }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:10px;margin-top:18px">
+                <div style="flex:1;height:56px;border-radius:16px;background:#0B6B3A;color:#fff;font-size:15.5px;font-weight:800;display:flex;align-items:center;justify-content:center">Keep account</div>
+                <div style="flex:1;height:56px;border-radius:16px;border:1px solid #F0C2BB;color:#C0392B;font-size:15.5px;font-weight:800;display:flex;align-items:center;justify-content:center">Delete</div>
+              </div>
+            </div>
+          </div>
+        </x-import>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="font-size:14px;font-weight:800;color:#161A17">08 · Help centre, and recently viewed</div>
+      <div style="display:flex;gap:20px">
+        <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+          <div style="min-height:874px;background:#F7F9F7;font-family:'Manrope',system-ui,sans-serif">
+            <div style="background:#fff;padding:56px 16px 20px;border-bottom:1px solid #EDF1EE;display:flex;flex-direction:column;gap:16px">
+              <div style="display:flex;align-items:center;gap:12px">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#161A17" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                <span style="flex:1;font-size:17px;font-weight:800;color:#161A17">Help &amp; support</span>
+              </div>
+              <div style="height:50px;border-radius:15px;background:#F7F9F7;border:1px solid #E4E8E5;display:flex;align-items:center;gap:10px;padding:0 15px">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="#9AA39D" stroke-width="1.9"></circle><path d="M16 16l4 4" stroke="#9AA39D" stroke-width="1.9" stroke-linecap="round"></path></svg>
+                <span style="font-size:14.5px;color:#9AA39D">Search help topics</span>
+              </div>
+            </div>
+            <div style="padding:16px;display:flex;flex-direction:column;gap:16px">
+              <div style="padding:16px;border-radius:18px;background:#0F2B1A;display:flex;align-items:center;gap:14px">
+                <div style="width:46px;height:46px;border-radius:13px;background:rgba(49,162,76,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4.5 6.5a2 2 0 012-2h11a2 2 0 012 2v8a2 2 0 01-2 2H10l-4 3.5V16.5H6.5a2 2 0 01-2-2v-8z" stroke="#31A24C" stroke-width="1.9" stroke-linejoin="round"></path></svg>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+                  <span style="font-size:14.5px;font-weight:800;color:#fff">Chat with support</span>
+                  <span style="font-size:12px;color:rgba(255,255,255,.55)">Average reply under 4 minutes</span>
+                </div>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 5l7 7-7 7" stroke="rgba(255,255,255,.6)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:11px">
+                <span style="font-size:14.5px;font-weight:800;color:#161A17">Common topics</span>
+                <div style="display:flex;flex-wrap:wrap;gap:12px">
+                  <sc-for list="{{ helpTopics }}" as="h" hint-placeholder-count="6">
+                    <div style="width:calc(50% - 6px);box-sizing:border-box;padding:16px 14px;border-radius:16px;background:#fff;border:1px solid #EDF1EE;display:flex;flex-direction:column;gap:9px">
+                      <div style="{{ h.iconWrap }}">
+                        <sc-if value="{{ h.isOrder }}" hint-placeholder-val="{{ true }}">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 8h12l-1 12H7L6 8z" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"></path><path d="M9.5 8V6.5a2.5 2.5 0 015 0V8" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path></svg>
+                        </sc-if>
+                        <sc-if value="{{ h.isPay }}" hint-placeholder-val="{{ true }}">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="12" rx="2.5" stroke="currentColor" stroke-width="1.8"></rect><path d="M3 10h18" stroke="currentColor" stroke-width="1.8"></path></svg>
+                        </sc-if>
+                        <sc-if value="{{ h.isRet }}" hint-placeholder-val="{{ true }}">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 9h11a5 5 0 110 10h-5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path><path d="M7.5 5.5L4 9l3.5 3.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                        </sc-if>
+                        <sc-if value="{{ h.isAcct }}" hint-placeholder-val="{{ true }}">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="currentColor" stroke-width="1.9"></circle><path d="M5 20c1.4-3.4 4-5 7-5s5.6 1.6 7 5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path></svg>
+                        </sc-if>
+                        <sc-if value="{{ h.isSell }}" hint-placeholder-val="{{ true }}">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 20V9l8-5 8 5v11a1 1 0 01-1 1H5a1 1 0 01-1-1z" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"></path></svg>
+                        </sc-if>
+                        <sc-if value="{{ h.isSafe }}" hint-placeholder-val="{{ true }}">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 3.5l7 3v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9v-5l7-3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"></path></svg>
+                        </sc-if>
+                      </div>
+                      <span style="font-size:13.5px;font-weight:800;color:#161A17">{{ h.label }}</span>
+                      <span style="font-size:11.5px;line-height:1.4;color:#6B756E">{{ h.note }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:11px">
+                <span style="font-size:14.5px;font-weight:800;color:#161A17">Popular questions</span>
+                <div style="background:#fff;border-radius:18px;border:1px solid #EDF1EE;overflow:hidden">
+                  <sc-for list="{{ faqs }}" as="f" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:center;gap:12px;padding:15px;border-bottom:1px solid #F2F5F2">
+                      <span style="flex:1;font-size:13.5px;font-weight:600;color:#161A17;line-height:1.4">{{ f.q }}</span>
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><path d="M9 5l7 7-7 7" stroke="#CBD3CD" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+        </x-import>
+
+        <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+          <div style="min-height:874px;background:#F7F9F7;font-family:'Manrope',system-ui,sans-serif;display:flex;flex-direction:column">
+            <div style="background:#fff;padding:56px 16px 16px;border-bottom:1px solid #EDF1EE;display:flex;align-items:center;gap:12px">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#161A17" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+              <span style="flex:1;font-size:17px;font-weight:800;color:#161A17">Recently viewed</span>
+              <span style="font-size:12.5px;font-weight:800;color:#0B6B3A">Clear</span>
+            </div>
+            <div style="padding:16px;display:flex;flex-direction:column;gap:18px">
+              <sc-for list="{{ recentGroups }}" as="g" hint-placeholder-count="2">
+                <div style="display:flex;flex-direction:column;gap:11px">
+                  <span style="font-size:12px;font-weight:800;color:#6B756E;letter-spacing:.4px">{{ g.title }}</span>
+                  <div style="display:flex;flex-wrap:wrap;gap:12px">
+                    <sc-for list="{{ g.items }}" as="p" hint-placeholder-count="4">
+                      <div style="width:calc(50% - 6px);box-sizing:border-box;background:#fff;border-radius:18px;border:1px solid #EDF1EE;overflow:hidden;display:flex;flex-direction:column">
+                        <div style="position:relative;height:148px;background:#F2F5F2">
+                          <image-slot id="{{ p.slot }}" shape="rect" placeholder="Product"></image-slot>
+                          <sc-if value="{{ p.gone }}" hint-placeholder-val="{{ true }}">
+                            <div style="position:absolute;left:0;right:0;top:0;bottom:0;background:rgba(255,255,255,.72);display:flex;align-items:center;justify-content:center">
+                              <span style="padding:7px 12px;border-radius:9px;background:#161A17;color:#fff;font-size:11px;font-weight:800">Sold out</span>
+                            </div>
+                          </sc-if>
+                        </div>
+                        <div style="padding:11px 12px 13px;display:flex;flex-direction:column;gap:6px">
+                          <span style="font-size:13px;line-height:1.35;font-weight:600;color:#161A17;height:36px;overflow:hidden">{{ p.name }}</span>
+                          <span style="{{ p.priceStyle }}">{{ p.price }}</span>
+                          <span style="font-size:11px;color:#9AA39D">{{ p.seen }}</span>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="flex:1"></div>
+            <dc-import name="BuySell Bottom Nav" active="Account" hint-size="100%,80px"></dc-import>
+          </div>
+        </x-import>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  renderVals() {
+    const suggestions = [
+      { match: 'earbud', rest: 's', meta: '2,140 results' },
+      { match: 'earbud', rest: 's wireless bluetooth' },
+      { match: 'earbud', rest: 's with noise cancelling', meta: 'in Electronics' },
+      { match: 'earbud', rest: ' case cover' },
+      { match: 'earbud', rest: 's for android' },
+      { match: 'earbud', rest: 's under 20000', meta: 'Popular filter' },
+    ];
+
+    const recents = ['ankara fabric', 'air fryer', 'iphone 14 pro', 'shea butter', 'gaming chair', 'baby stroller'].map(l => ({ label: l }));
+
+    const trending = [
+      { label: 'Wireless earbuds', delta: '+34%', up: true },
+      { label: 'Solar inverter', delta: '+28%', up: true },
+      { label: 'Ankara two-piece', delta: '+19%', up: true },
+      { label: 'Rechargeable fan', delta: '+12%', up: true },
+      { label: 'Air fryer 5L', delta: '−4%', up: false },
+    ].map((t, i) => ({
+      ...t,
+      rank: String(i + 1),
+      rankStyle: 'width:24px;height:24px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:800;flex-shrink:0;background:' + (i < 3 ? '#0B6B3A' : '#F2F5F2') + ';color:' + (i < 3 ? '#fff' : '#6B756E'),
+      deltaStyle: 'font-size:11.5px;font-weight:800;color:' + (t.up ? '#0B6B3A' : '#9AA39D'),
+    }));
+
+    const railItems = ['Phones', 'Electronics', 'Fashion', 'Beauty', 'Home', 'Grocery', 'Computing', 'Baby', 'Vehicles'];
+    const catRail = railItems.map((label, i) => ({
+      label,
+      style: 'padding:16px 8px;text-align:center;font-size:11.5px;font-weight:' + (i === 0 ? '800' : '600') + ';line-height:1.3;color:' + (i === 0 ? '#0B6B3A' : '#6B756E') + ';background:' + (i === 0 ? '#fff' : 'transparent') + ';border-left:3px solid ' + (i === 0 ? '#0B6B3A' : 'transparent'),
+    }));
+
+    let sIdx = 0;
+    const grp = (title, items) => ({
+      title,
+      items: items.map(label => ({ label, slot: 'bs-cg-' + (sIdx++) })),
+    });
+    const catGroups = [
+      grp('Popular', ['Smartphones', 'Tablets', 'Feature phones', 'Refurbished', 'Accessories', 'Power banks']),
+      grp('Accessories', ['Cases', 'Screen guards', 'Chargers', 'Cables', 'Earphones', 'Holders']),
+      grp('By brand', ['Samsung', 'Tecno', 'Infinix', 'Xiaomi', 'itel', 'Oppo']),
+    ];
+
+    const chipOn = 'padding:10px 15px;border-radius:12px;background:#0B6B3A;color:#fff;font-size:13px;font-weight:700;flex-shrink:0;white-space:nowrap';
+    const chipOff = 'padding:10px 15px;border-radius:12px;border:1px solid #E4E8E5;color:#161A17;font-size:13px;font-weight:700;flex-shrink:0;white-space:nowrap';
+    const subChips = [
+      { label: 'All', on: true }, { label: 'Smartphones' }, { label: 'Tablets' }, { label: 'Refurbished' }, { label: 'Accessories' }, { label: 'Power banks' },
+    ].map(c => ({ ...c, style: c.on ? chipOn : chipOff }));
+
+    const catProducts = [
+      { name: 'Tecno Camon 30 Pro, 256GB Dual SIM', price: '₦412,000', was: '₦465,000', badge: '−11%', rating: '4.6', sold: '1.2k sold' },
+      { name: 'Samsung Galaxy A35 5G, 128GB', price: '₦389,900', rating: '4.7', sold: '840 sold' },
+      { name: 'Infinix Note 40, 256GB, Titan Gold', price: '₦298,500', was: '₦325,000', badge: '−8%', rating: '4.5', sold: '2.1k sold' },
+      { name: 'Xiaomi Redmi 13C, 128GB', price: '₦168,000', rating: '4.4', sold: '3.4k sold' },
+      { name: 'itel S24, 256GB, 8GB RAM', price: '₦142,000', rating: '4.2', sold: '910 sold' },
+      { name: 'Oppo A79 5G, 256GB, Glowing Purple', price: '₦276,000', was: '₦299,000', badge: '−8%', rating: '4.5', sold: '520 sold' },
+    ].map((p, i) => ({ ...p, slot: 'bs-cp-' + i }));
+
+    const storeStats = [
+      { value: '4.8', label: 'Rating' }, { value: '12.4k', label: 'Followers' }, { value: '96%', label: 'Response' }, { value: '8.2k', label: 'Orders' },
+    ];
+
+    const storeProducts = [
+      { name: 'Aurora Earbuds Pro — Midnight Black', price: '₦66,500', sold: '1.4k sold' },
+      { name: 'Nexa 65W GaN Charger, 2-port', price: '₦9,400', sold: '3.1k sold' },
+      { name: 'Vantage Smart Watch S6, 46mm', price: '₦131,000', sold: '620 sold' },
+      { name: 'Pulse Buds Air 3, white', price: '₦22,800', sold: '2.7k sold' },
+    ].map((p, i) => ({ ...p, slot: 'bs-sp-' + i }));
+
+    const orderItems = [
+      { name: 'Aurora Earbuds Pro', variant: 'Midnight Black', qty: '1', price: '₦66,500' },
+      { name: 'Nexa 65W GaN Charger', variant: '2-port', qty: '1', price: '₦9,400' },
+      { name: 'Braided USB-C Cable, 2m', variant: 'Black', qty: '2', price: '₦4,800' },
+    ].map((i, n) => ({ ...i, slot: 'bs-oi-' + n }));
+
+    const kMuted = 'font-size:13px;color:#6B756E';
+    const vNorm = 'font-size:13px;font-weight:700;color:#161A17';
+    const paySummary = [
+      { k: 'Subtotal', v: '₦80,700', kStyle: kMuted, vStyle: vNorm },
+      { k: 'Delivery', v: '₦1,500', kStyle: kMuted, vStyle: vNorm },
+      { k: 'Voucher NEW500', v: '−₦500', kStyle: kMuted, vStyle: 'font-size:13px;font-weight:700;color:#0B6B3A' },
+      { k: 'Total paid', v: '₦81,700', kStyle: 'font-size:14.5px;font-weight:800;color:#161A17', vStyle: 'font-size:16px;font-weight:800;color:#161A17;letter-spacing:-.3px' },
+    ];
+
+    const orderTimeline = [
+      { title: 'Delivered', time: '2 Aug, 16:22 · signed by Chidinma', done: true, line: true },
+      { title: 'Out for delivery', time: '2 Aug, 09:40', done: true, line: true },
+      { title: 'Shipped from Lagos hub', time: '1 Aug, 18:05', done: true, line: true },
+      { title: 'Order placed', time: '30 Jul, 11:12', done: true, line: false },
+    ].map((t, i) => ({
+      ...t,
+      dot: 'width:11px;height:11px;border-radius:50%;flex-shrink:0;margin-top:4px;background:' + (i === 0 ? '#0B6B3A' : '#CBE6D4'),
+      titleStyle: 'font-size:13.5px;font-weight:' + (i === 0 ? '800' : '700') + ';color:' + (i === 0 ? '#161A17' : '#6B756E'),
+    }));
+
+    const returnReasons = [
+      { label: 'Item is faulty', note: 'Does not work as it should', on: true },
+      { label: 'Wrong item sent', note: 'Different from what I ordered' },
+      { label: 'Not as described', note: 'Colour, size or specs differ' },
+      { label: 'Damaged in transit', note: 'Arrived broken or dented' },
+      { label: 'Changed my mind', note: 'Return fee may apply' },
+    ].map(r => ({
+      ...r,
+      row: 'display:flex;align-items:center;gap:12px;padding:15px;border-radius:14px;border:1px solid ' + (r.on ? '#0B6B3A' : '#EDF1EE') + ';background:' + (r.on ? '#F4FAF6' : '#fff'),
+      radio: 'width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:2px solid ' + (r.on ? '#0B6B3A' : '#DDE3DE'),
+    }));
+
+    const walletTiles = [
+      { label: 'Pending refunds', value: '₦9,400', note: '1 return in review' },
+      { label: 'Cashback earned', value: '₦3,120', note: 'This year' },
+    ];
+
+    const txns = [
+      { label: 'Refund · BS-87821', time: '2 Aug, 14:02', amount: '+₦18,500', in: true },
+      { label: 'Order BS-87903', time: '30 Jul, 11:12', amount: '−₦81,700', in: false },
+      { label: 'Wallet top-up · Verve 4821', time: '29 Jul, 08:45', amount: '+₦100,000', in: true },
+      { label: 'Order BS-87640', time: '24 Jul, 19:30', amount: '−₦24,500', in: false },
+      { label: 'Review voucher credited', time: '20 Jul, 10:04', amount: '+₦500', in: true },
+      { label: 'Order BS-87201', time: '18 Jul, 15:22', amount: '−₦13,900', in: false },
+    ].map(t => ({
+      ...t,
+      iconWrap: 'width:38px;height:38px;border-radius:11px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:' + (t.in ? '#E9F5EC' : '#F2F5F2') + ';color:' + (t.in ? '#0B6B3A' : '#6B756E'),
+      arrow: t.in ? 'transform:rotate(180deg)' : '',
+      amtStyle: 'font-size:14px;font-weight:800;color:' + (t.in ? '#0B6B3A' : '#161A17'),
+    }));
+
+    const addresses = [
+      { label: 'Home', line: '14 Herbert Macaulay Way, Yaba, Lagos State', phone: '+234 803 411 2288', default: true },
+      { label: 'Office', line: 'Plot 7 Adeola Odeku Street, Victoria Island, Lagos State', phone: '+234 803 411 2288' },
+      { label: "Mum's place", line: '22 Nnamdi Azikiwe Road, Enugu North, Enugu State', phone: '+234 806 720 5510' },
+    ].map(a => ({
+      ...a,
+      card: 'background:#fff;border-radius:18px;border:' + (a.default ? '1.5px solid #0B6B3A' : '1px solid #EDF1EE') + ';padding:16px',
+      iconWrap: 'width:40px;height:40px;border-radius:11px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:' + (a.default ? '#E9F5EC' : '#F2F5F2') + ';color:' + (a.default ? '#0B6B3A' : '#6B756E'),
+    }));
+
+    const cards = [
+      { brand: 'VERVE', brandBg: '#161A17', last4: '4821', name: 'Chidinma Okeke', exp: '09/28', default: true },
+      { brand: 'MASTER', brandBg: '#2F5FA8', last4: '9034', name: 'Chidinma Okeke', exp: '02/27' },
+    ].map(c => ({ ...c, card: 'padding:15px;border-radius:16px;background:#fff;border:' + (c.default ? '1.5px solid #0B6B3A' : '1px solid #EDF1EE') }));
+
+    const tgOn = 'width:48px;height:28px;border-radius:999px;background:#0B6B3A;display:flex;align-items:center;padding:3px;box-sizing:border-box;justify-content:flex-end;flex-shrink:0';
+    const tgOff = 'width:48px;height:28px;border-radius:999px;background:#DDE3DE;display:flex;align-items:center;padding:3px;box-sizing:border-box;justify-content:flex-start;flex-shrink:0';
+
+    const otherPay = [
+      { label: 'Bank transfer', note: 'Pay to a one-time BuySell account number', kind: 'bank', on: true },
+      { label: 'BuySell wallet', note: 'Balance ₦24,380', kind: 'wallet', on: true },
+      { label: 'Pay on delivery', note: 'Available in Lagos and Abuja only', kind: 'pod', on: false },
+    ].map(o => ({
+      ...o,
+      isBank: o.kind === 'bank',
+      isWallet: o.kind === 'wallet',
+      isPod: o.kind === 'pod',
+      toggle: o.on ? tgOn : tgOff,
+    }));
+
+    const coupons = [
+      { amount: '₦2,000', kind: 'OFF', title: 'New customer welcome', terms: 'On orders above ₦20,000. Electronics and fashion.', expiry: 'Expires in 6 days', soon: false },
+      { amount: '15%', kind: 'OFF', title: 'Lagos Gadget Hub store voucher', terms: 'Max discount ₦10,000. Selected items only.', expiry: 'Expires tomorrow', soon: true },
+      { amount: '₦500', kind: 'OFF', title: 'Review reward', terms: 'Any order above ₦5,000.', expiry: 'Expires in 24 days' },
+      { amount: 'FREE', kind: 'SHIPPING', title: 'Free delivery within Lagos', terms: 'Orders above ₦15,000 from verified sellers.', expiry: 'Expires in 11 days' },
+    ].map(c => ({
+      ...c,
+      stub: 'width:104px;flex-shrink:0;background:' + (c.soon ? '#C0392B' : '#0B6B3A') + ';color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:0 8px;text-align:center',
+      expiryStyle: 'font-size:11px;font-weight:800;color:' + (c.soon ? '#C0392B' : '#9AA39D'),
+    }));
+
+    const mkRow = r => ({
+      ...r,
+      row: 'display:flex;align-items:center;gap:12px;padding:15px;border-bottom:1px solid #F2F5F2',
+      labelStyle: 'font-size:14px;font-weight:700;color:' + (r.danger ? '#C0392B' : '#161A17'),
+      isToggle: r.toggle !== undefined,
+      toggle: r.toggle ? tgOn : tgOff,
+    });
+
+    const settingGroups = [
+      {
+        title: 'ACCOUNT',
+        rows: [
+          { label: 'Personal information', chevron: true },
+          { label: 'Phone number', value: '+234 803 •••• 288', chevron: true },
+          { label: 'Email address', value: 'c.okeke@mail.com', chevron: true },
+        ].map(mkRow),
+      },
+      {
+        title: 'SECURITY',
+        rows: [
+          { label: 'Change password', chevron: true },
+          { label: 'Face ID sign-in', note: 'Unlock BuySell with Face ID', toggle: true },
+          { label: 'Two-factor authentication', note: 'Code by SMS on new devices', toggle: true },
+          { label: 'Active sessions', value: '3 devices', chevron: true },
+        ].map(mkRow),
+      },
+      {
+        title: 'NOTIFICATIONS',
+        rows: [
+          { label: 'Order updates', toggle: true },
+          { label: 'Price drops on saved items', toggle: true },
+          { label: 'Promotions and deals', toggle: false },
+          { label: 'Seller messages', toggle: true },
+        ].map(mkRow),
+      },
+      {
+        title: 'PREFERENCES',
+        rows: [
+          { label: 'Language', value: 'English', chevron: true },
+          { label: 'Currency', value: '₦ NGN', chevron: true },
+          { label: 'Delivery location', value: 'Yaba, Lagos', chevron: true },
+          { label: 'Privacy and data', chevron: true },
+          { label: 'Delete account', danger: true, chevron: true },
+        ].map(mkRow),
+      },
+    ];
+
+    const deleteWarnings = [
+      { text: 'Your wallet balance of ₦24,380 will be forfeited. Withdraw it first.' },
+      { text: '1 return request is still open and will be cancelled.' },
+      { text: 'You can deactivate instead and come back any time.' },
+    ];
+
+    const helpIcon = (bg, c) => 'width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;background:' + bg + ';color:' + c;
+    const helpTopics = [
+      { label: 'Orders & delivery', note: 'Track, change or cancel an order', kind: 'order', bg: '#E9F5EC', c: '#0B6B3A' },
+      { label: 'Payments', note: 'Cards, transfers and wallet', kind: 'pay', bg: '#E8F1FD', c: '#2F5FA8' },
+      { label: 'Returns & refunds', note: 'How returns work and timelines', kind: 'ret', bg: '#FFF4E0', c: '#B4780C' },
+      { label: 'My account', note: 'Sign-in, security and data', kind: 'acct', bg: '#F2F5F2', c: '#6B756E' },
+      { label: 'Selling on BuySell', note: 'Open a store and list products', kind: 'sell', bg: '#E9F5EC', c: '#0B6B3A' },
+      { label: 'Safety & fraud', note: 'Report a scam or fake listing', kind: 'safe', bg: '#FDECEA', c: '#C0392B' },
+    ].map(h => ({
+      ...h,
+      iconWrap: helpIcon(h.bg, h.c),
+      isOrder: h.kind === 'order',
+      isPay: h.kind === 'pay',
+      isRet: h.kind === 'ret',
+      isAcct: h.kind === 'acct',
+      isSell: h.kind === 'sell',
+      isSafe: h.kind === 'safe',
+    }));
+
+    const faqs = [
+      { q: 'How long does delivery take within Lagos?' },
+      { q: 'When will my refund reach my bank account?' },
+      { q: 'What does buyer protection actually cover?' },
+      { q: 'A seller asked me to pay outside BuySell — what do I do?' },
+    ];
+
+    let rIdx = 0;
+    const rgrp = (title, items) => ({
+      title,
+      items: items.map(p => ({
+        ...p,
+        slot: 'bs-rv-' + (rIdx++),
+        priceStyle: 'font-size:16px;font-weight:800;letter-spacing:-.3px;color:' + (p.gone ? '#9AA39D' : '#161A17'),
+      })),
+    });
+    const recentGroups = [
+      rgrp('TODAY', [
+        { name: 'Aurora Earbuds Pro — Midnight Black', price: '₦62,000', seen: 'Viewed 2 hours ago' },
+        { name: 'Vantage Smart Watch S6, 46mm', price: '₦131,000', seen: 'Viewed 3 hours ago' },
+        { name: 'Rechargeable Standing Fan, 18in', price: '₦58,400', seen: 'Viewed 5 hours ago' },
+        { name: 'Ankara Print Midi Dress, handmade', price: '₦24,500', seen: 'Viewed 6 hours ago' },
+      ]),
+      rgrp('EARLIER THIS WEEK', [
+        { name: 'Solar Inverter 2.5kVA with battery', price: '₦742,000', seen: 'Viewed Tuesday' },
+        { name: 'Nexa 65W GaN Charger, 2-port', price: '₦9,400', seen: 'Viewed Monday', gone: true },
+      ]),
+    ];
+
+    return {
+      suggestions, recents, trending, catRail, catGroups, subChips, catProducts,
+      storeStats, storeProducts, orderItems, paySummary, orderTimeline, returnReasons,
+      walletTiles, txns, addresses, cards, otherPay, coupons, settingGroups,
+      deleteWarnings, helpTopics, faqs, recentGroups,
+    };
+  }
+}
+</script>
+</body>
+</html>

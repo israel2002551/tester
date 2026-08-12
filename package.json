@@ -1,18 +1,41 @@
 {
-  "name": "buysell-nigeria-react",
-  "version": "1.0.0",
+  "name": "buysell-marketplace",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.12 <25"
+  },
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "vite build && node scripts/copy-static.cjs",
-    "preview": "vite preview --host 127.0.0.1"
+    "dev": "concurrently --kill-others --names API,WEB --prefix-colors green,cyan \"npm run dev --workspace @buysell/backend\" \"npm run dev --workspace @buysell/frontend\"",
+    "dev:frontend": "npm run dev --workspace @buysell/frontend",
+    "dev:backend": "npm run dev --workspace @buysell/backend",
+    "build": "npm run db:generate && npm run build --workspace @buysell/backend && npm run build --workspace @buysell/frontend && npm run verify:public && npm run verify:bundle",
+    "test": "npm run test --workspace @buysell/backend && npm run test --workspace @buysell/frontend && npm run test:migration",
+    "test:migration": "node --test scripts/migration/test/*.test.mjs",
+    "lint": "npm run lint --workspace @buysell/backend && npm run lint --workspace @buysell/frontend",
+    "db:generate": "npm run prisma:generate --workspace @buysell/backend",
+    "db:validate": "npm run prisma:validate --workspace @buysell/backend",
+    "db:migrate": "npm run db:migrate --workspace @buysell/backend",
+    "db:status": "npm run db:status --workspace @buysell/backend",
+    "db:seed": "npm run db:seed --workspace @buysell/backend",
+    "migration:inventory": "node scripts/migration/source-inventory.mjs",
+    "migration:schema": "node scripts/migration/inventory-source-schema.mjs",
+    "migration:export": "node scripts/migration/export-source.mjs",
+    "migration:transform": "node scripts/migration/transform-source.mjs",
+    "migration:load": "node scripts/migration/load-target.mjs",
+    "migration:media:inventory": "node scripts/migration/inventory-media.mjs",
+    "migration:media:copy": "node scripts/migration/migrate-media.mjs",
+    "migration:validate": "node scripts/migration/validate-target.mjs",
+    "verify:public": "node scripts/verification/check-public-boundary.mjs",
+    "verify:bundle": "node scripts/verification/check-bundle-budget.mjs",
+    "verify:secrets": "node scripts/verification/check-secrets.mjs"
   },
-  "dependencies": {
-    "@vitejs/plugin-react": "^5.0.0",
-    "vite": "^7.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
-  },
-  "devDependencies": {}
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
 }
