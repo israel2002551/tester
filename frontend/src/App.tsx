@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AlertTriangle, ArrowRight, ShieldX } from 'lucide-react';
-import { Suspense, type PropsWithChildren } from 'react';
+import { lazy, Suspense, type PropsWithChildren } from 'react';
 import { Link, Navigate, Outlet, RouterProvider, createBrowserRouter } from 'react-router-dom';
 import { PageLoader } from './components/States';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -9,18 +9,42 @@ import { ToastProvider } from './contexts/ToastContext';
 import { MarketplaceLayout } from './layouts/MarketplaceLayout';
 import { WorkspaceLayout } from './layouts/WorkspaceLayout';
 import { demoMode } from './lib/api';
-import { AuthCallbackPage, AuthPage, SignupChoicePage } from './pages/AuthPages';
-import {
-  AccountPage, BuyerCollectionPage, CartPage, CatalogPage, CheckoutPage,
-  CheckoutSuccessPage, ConversationPage, HelpArticlePage, HomePage, InfoPage,
-  NotFoundPage, OrderDetailPage, OrdersPage, ProductPage, RfqPage,
-  ServiceDetailPage, ServicesPage, SourcingPage, StorePage, UpcomingPage,
-} from './pages/MarketplacePages';
-import {
-  AdminBroadcastEditorPage, AdminListPage, DashboardPage, FinancePage,
-  ProductEditorPage, SellerOnboardingPage, SellerSourcingEditorPage,
-  SellerStorePage, WorkspaceDetailPage, WorkspaceListPage,
-} from './pages/WorkspacePages';
+
+const AuthCallbackPage = lazy(() => import('./pages/AuthPages').then((module) => ({ default: module.AuthCallbackPage })));
+const AuthPage = lazy(() => import('./pages/AuthPages').then((module) => ({ default: module.AuthPage })));
+const SignupChoicePage = lazy(() => import('./pages/AuthPages').then((module) => ({ default: module.SignupChoicePage })));
+
+const AccountPage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.AccountPage })));
+const BuyerCollectionPage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.BuyerCollectionPage })));
+const CartPage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.CartPage })));
+const CatalogPage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.CatalogPage })));
+const CheckoutPage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.CheckoutPage })));
+const CheckoutSuccessPage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.CheckoutSuccessPage })));
+const ConversationPage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.ConversationPage })));
+const HelpArticlePage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.HelpArticlePage })));
+const HomePage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.HomePage })));
+const InfoPage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.InfoPage })));
+const NotFoundPage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.NotFoundPage })));
+const OrderDetailPage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.OrderDetailPage })));
+const OrdersPage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.OrdersPage })));
+const ProductPage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.ProductPage })));
+const RfqPage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.RfqPage })));
+const ServiceDetailPage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.ServiceDetailPage })));
+const ServicesPage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.ServicesPage })));
+const SourcingPage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.SourcingPage })));
+const StorePage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.StorePage })));
+const UpcomingPage = lazy(() => import('./pages/MarketplacePages').then((module) => ({ default: module.UpcomingPage })));
+
+const AdminBroadcastEditorPage = lazy(() => import('./pages/WorkspacePages').then((module) => ({ default: module.AdminBroadcastEditorPage })));
+const AdminListPage = lazy(() => import('./pages/WorkspacePages').then((module) => ({ default: module.AdminListPage })));
+const DashboardPage = lazy(() => import('./pages/WorkspacePages').then((module) => ({ default: module.DashboardPage })));
+const FinancePage = lazy(() => import('./pages/WorkspacePages').then((module) => ({ default: module.FinancePage })));
+const ProductEditorPage = lazy(() => import('./pages/WorkspacePages').then((module) => ({ default: module.ProductEditorPage })));
+const SellerOnboardingPage = lazy(() => import('./pages/WorkspacePages').then((module) => ({ default: module.SellerOnboardingPage })));
+const SellerSourcingEditorPage = lazy(() => import('./pages/WorkspacePages').then((module) => ({ default: module.SellerSourcingEditorPage })));
+const SellerStorePage = lazy(() => import('./pages/WorkspacePages').then((module) => ({ default: module.SellerStorePage })));
+const WorkspaceDetailPage = lazy(() => import('./pages/WorkspacePages').then((module) => ({ default: module.WorkspaceDetailPage })));
+const WorkspaceListPage = lazy(() => import('./pages/WorkspacePages').then((module) => ({ default: module.WorkspaceListPage })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
