@@ -6,8 +6,6 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "redirects": [
-    { "source": "/1688-sourcing", "destination": "/sourcing", "permanent": true },
-    { "source": "/seller/sourcing/1688", "destination": "/seller/sourcing", "permanent": true },
     { "source": "/products.html", "destination": "/products", "permanent": true },
     { "source": "/product.html", "destination": "/marketplace", "permanent": true },
     { "source": "/upcoming.html", "destination": "/upcoming", "permanent": true },
