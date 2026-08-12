@@ -1,57 +1,86 @@
-# BUYSELL.NG
+# BUYSELL
 
-React/Vite marketplace frontend for BUYSELL Nigeria, backed by Supabase tables,
-storage, auth, and Edge Functions. The current migration preserves the existing
-visual system and CSS while moving route ownership and the product/category/legal
-pages into React components.
+BUYSELL is a production-oriented, multi-vendor Nigerian marketplace. The repository is an npm-workspace monorepo with a React storefront and role-based workspaces, an Express API, and a PostgreSQL domain model managed by Prisma.
 
-## Local Setup
+## Repository layout
 
-1. Copy `config.example.js` to `config.js`.
-2. Fill in your Supabase anon key, Supabase URL, Flutterwave public key, and admin email.
-3. Install dependencies with `npm install --cache .\.npm-cache`.
-4. Run the React dev server with `npm run dev`.
-5. Build production assets with `npm run build`.
+- `frontend/` — React 19, TypeScript, Vite, React Router, and TanStack Query
+- `backend/` — Express API, Supabase identity verification, payments, media, notifications, and role-based authorization
+- `database/prisma/` — schema, baseline migration, and safe baseline/demo seed
+- `scripts/migration/` — read-only source inventory, resumable export/transform/load, media copy, and target validation
+- `scripts/verification/` — public-boundary, secret, and bundle-budget checks
+- `docs/` — architecture, API, security, migration, deployment, and cutover runbooks
 
-`config.js` is intentionally ignored by Git because it contains local keys.
+Supabase remains the identity provider during migration. Marketplace data and all server-authoritative business operations live behind the API and PostgreSQL; the browser does not query marketplace tables directly.
 
-## Production Environment
+## Prerequisites
 
-Set these variables in Vercel before deploying:
+- Node.js 22.12–24.x and npm
+- PostgreSQL 15+ (or a compatible managed PostgreSQL service)
+- A Supabase project for authentication
 
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
-- `VITE_FLUTTERWAVE_PUBLIC_KEY`
-- `VITE_ADMIN_EMAIL`
-- `VITE_ADMIN_EMAILS`
+Payment, email, web-push, and media-provider credentials are optional for local UI work but required to exercise those integrations.
 
-The build generates `dist/config.js` from those values so both the React pages
-and the preserved legacy marketplace runtime can load the same backend config.
+## Local setup
 
-## Supabase Setup
+```powershell
+npm install
+Copy-Item .env.example backend/.env
+Copy-Item .env.example frontend/.env.local
+npm run db:generate
+npm run db:validate
+npm run db:migrate
+npm run db:seed
+npm run dev
+```
 
-Run the SQL files in order:
+The frontend runs at `http://localhost:5173`; the API runs at `http://localhost:4000`. Health endpoints are `GET /api/v1/health` and `GET /api/v1/ready`.
 
-1. `supabase_migration_phase2.sql`
-2. `supabase_migration.sql`
-3. `supabase_migrations.sql`
-4. `supabase_migration_phase3.sql`
-5. `supabase_migration_phase4_orders_update.sql`
-6. `supabase_migration_phase5_id_fix.sql`
-7. `supabase_migration_phase6.sql`
-8. `supabase_storage_policies.sql`
+The default seed creates only baseline categories. To add clearly labelled local demonstration records, set `SEED_DEMO_DATA=true` outside production before running `npm run db:seed`.
 
-Deploy the Edge Functions used by `app.js` before production launch. At minimum,
-the frontend currently calls functions such as `admin-action`, `manage-product`,
-`init-checkout`, `verify-payment`, `create-order`, `submit-review`,
-`update-profile`, `request-withdrawal`, `submit-dispute`, `send-broadcast`,
-`init-ad-payment`, `verify-ad-payment`, `update-ad-stats`, and
-`chat-bot-handler`.
+## Verification
 
-## GitHub Launch Checklist
+```powershell
+npm run lint
+npm test
+npm run build
+npm run verify:secrets
+```
 
-- Keep `config.js` out of Git.
-- Rotate any API keys that were pasted into local scripts before publishing.
-- Commit `config.example.js` instead of real credentials.
-- Confirm every Edge Function above is deployed in Supabase.
-- Use live Flutterwave keys only after payment verification is handled server-side.
+`npm run build` validates/generates Prisma, checks the backend, builds the frontend, scans the public source and bundle for protected procurement-provider terminology, and enforces the bundle budget.
+
+## Environment
+
+Start from [.env.example](.env.example). Important groups are:
+
+- Runtime: `DATABASE_URL`, `DIRECT_DATABASE_URL`, `FRONTEND_ORIGINS`
+- Identity: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and their `VITE_` browser equivalents
+- Payments: `FLUTTERWAVE_SECRET_KEY`, `FLUTTERWAVE_WEBHOOK_HASH`, `PAYMENT_REDIRECT_URL`
+- Media: Cloudinary or S3-compatible public media settings plus private S3 settings
+- Payouts and notifications: `PAYOUT_ENCRYPTION_KEY`, Resend, and VAPID settings
+- Migration-only credentials: `SOURCE_DATABASE_URL` and `SOURCE_SUPABASE_*`
+
+Never expose backend secrets through `VITE_*` variables. Development auth bypass is opt-in and is rejected when `NODE_ENV=production`.
+
+## Safe source-data migration
+
+Migration commands default to read-only or dry-run behavior. Review [the Supabase migration guide](docs/SUPABASE_MIGRATION.md), [media migration guide](docs/MEDIA_MIGRATION.md), and [production cutover runbook](docs/PRODUCTION_CUTOVER.md) before using them.
+
+```powershell
+npm run migration:inventory
+npm run migration:schema
+npm run migration:export -- --help
+npm run migration:transform -- --help
+npm run migration:load -- --help
+npm run migration:validate
+```
+
+Loading target data and copying media require explicit execution and confirmation flags. The tools never delete source records or source objects.
+
+## Deployment
+
+Build and deploy `frontend/dist` as the static application, and deploy `backend/` as a separate Node service with its own secrets and pooled PostgreSQL connection. Apply Prisma migrations using a direct database connection before promoting the API. See [deployment](docs/DEPLOYMENT.md) for the exact sequence, health checks, and rollback procedure.
+
+## Documentation
+
+Begin with [architecture](docs/ARCHITECTURE.md), [frontend](docs/FRONTEND.md), [API](docs/API.md), [database](docs/DATABASE.md), and [security](docs/SECURITY.md). The complete reconstruction record and any environment-dependent blockers are in [the implementation report](docs/IMPLEMENTATION_REPORT.md).
