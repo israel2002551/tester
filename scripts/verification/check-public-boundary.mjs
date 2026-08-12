@@ -3,7 +3,12 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 const repositoryRoot = path.resolve(import.meta.dirname, '..', '..');
-const targets = [path.join(repositoryRoot, 'frontend', 'src'), path.join(repositoryRoot, 'frontend', 'dist')];
+const targets = [
+  path.join(repositoryRoot, 'frontend', 'src'),
+  path.join(repositoryRoot, 'frontend', 'public'),
+  path.join(repositoryRoot, 'frontend', 'dist'),
+  path.join(repositoryRoot, 'vercel.json'),
+];
 const prohibited = String.fromCharCode(49, 54, 56, 56).toLowerCase();
 const textExtensions = new Set(['.js', '.jsx', '.ts', '.tsx', '.css', '.html', '.json', '.map', '.xml', '.txt', '.svg']);
 const findings = [];
@@ -31,4 +36,4 @@ if (findings.length) {
   console.error(`Public sourcing boundary failed. Prohibited provider exposure found:\n${findings.join('\n')}`);
   process.exit(1);
 }
-console.log('Public sourcing boundary: PASS (frontend source and production output are provider-neutral).');
+console.log('Public sourcing boundary: PASS (source, static assets, deploy config and production output are provider-neutral).');
