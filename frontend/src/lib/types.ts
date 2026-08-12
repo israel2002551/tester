@@ -38,6 +38,9 @@ export interface Product {
   location?: string;
   variantId?: string;
   shippingFee?: MoneyValue;
+  primary?: string;
+  secondary?: string;
+  date?: string;
 }
 
 export interface CartItem {
@@ -90,6 +93,17 @@ export interface ActivityRow {
   status: string;
   value?: string;
   date?: string;
+  name?: string;
+  orderNumber?: string;
+  title?: string;
+  email?: string;
+  sku?: string;
+  quantity?: number | string;
+  total?: number | string;
+  price?: number | string;
+  type?: string;
+  customer?: string;
+  role?: string;
 }
 
 export interface DashboardData {
