@@ -30,16 +30,22 @@ const demoUser = {
   user_metadata: { display_name: 'Ada Nwosu' },
 } as unknown as SupabaseUser;
 
+const demoViewer: Viewer = {
+  id: 'demo-user',
+  email: 'demo@buysell.ng',
+  displayName: 'Ada Nwosu',
+  platformRoles: ['BUYER'],
+  storeMemberships: [],
+};
+
 export function AuthProvider({ children }: PropsWithChildren) {
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(demoMode ? demoUser : null);
-  const [viewer, setViewer] = useState<Viewer | null>(demoMode ? {
-    id: 'demo-user', email: 'demo@buysell.ng', displayName: 'Ada Nwosu', platformRoles: ['BUYER'], storeMemberships: [],
-  } : null);
-  const [loading, setLoading] = useState(!demoMode);
+  const [viewer, setViewer] = useState<Viewer | null>(demoMode ? demoViewer : null);
+  const [loading, setLoading] = useState(Boolean(supabase) && !demoMode);
 
   const refreshViewer = useCallback(async () => {
-    if (!authUser && !demoMode) {
-      setViewer(null);
+    if (demoMode) {
+      setViewer(demoViewer);
       return;
     }
     try {
@@ -47,13 +53,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
     } catch {
       setViewer(null);
     }
-  }, [authUser]);
+  }, []);
 
   useEffect(() => {
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
+    if (demoMode || !supabase) return;
 
     registerAccessTokenProvider(async () => {
       const { data } = await supabase.auth.getSession();
@@ -63,29 +66,31 @@ export function AuthProvider({ children }: PropsWithChildren) {
     let active = true;
     void supabase.auth.getSession().then(({ data }) => {
       if (!active) return;
-      setAuthUser(data.session?.user ?? null);
+      const nextUser = data.session?.user ?? null;
+      setAuthUser(nextUser);
       setLoading(false);
+      if (nextUser) void refreshViewer();
+      else setViewer(null);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
-      setAuthUser(session?.user ?? null);
-      if (!session) setViewer(null);
+      const nextUser = session?.user ?? null;
+      setAuthUser(nextUser);
+      if (nextUser) void refreshViewer();
+      else setViewer(null);
     });
 
     return () => {
       active = false;
       listener.subscription.unsubscribe();
     };
-  }, []);
-
-  useEffect(() => {
-    if (!loading && authUser) void refreshViewer();
-  }, [authUser, loading, refreshViewer]);
+  }, [refreshViewer]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (demoMode) {
       setAuthUser({ ...demoUser, email } as SupabaseUser);
+      setViewer({ ...demoViewer, email });
       return;
     }
     if (!supabase) throw new Error('Authentication is not configured. Add the Supabase URL and publishable key.');
@@ -96,6 +101,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const signUp = useCallback(async ({ email, password, displayName, intent }: SignUpInput) => {
     if (demoMode) {
       setAuthUser({ ...demoUser, email } as SupabaseUser);
+      setViewer({ ...demoViewer, email, displayName });
       return { confirmationRequired: false };
     }
     if (!supabase) throw new Error('Authentication is not configured. Add the Supabase URL and publishable key.');
