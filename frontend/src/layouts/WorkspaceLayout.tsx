@@ -1,6 +1,6 @@
 import {
   BarChart3, Bell, Boxes, Building2, CircleDollarSign, ClipboardCheck, FileCheck2,
-  FileText, FolderKanban, HandCoins, HelpCircle, Home, LayoutDashboard, LogOut,
+  FileText, FolderKanban, HelpCircle, Home, LayoutDashboard, LogOut,
   Menu, MessageSquare, Megaphone, Package, PanelLeftClose, Search, Settings,
   ShieldCheck, ShoppingBag, Store, Truck, UserRoundCheck, UsersRound, WalletCards, X,
 } from 'lucide-react';
