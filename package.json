@@ -26,6 +26,7 @@
     "migration:inventory": "node scripts/migration/source-inventory.mjs",
     "migration:schema": "node scripts/migration/inventory-source-schema.mjs",
     "migration:export": "node scripts/migration/export-source.mjs",
+    "migration:archive": "node scripts/migration/archive-target.mjs",
     "migration:transform": "node scripts/migration/transform-source.mjs",
     "migration:load": "node scripts/migration/load-target.mjs",
     "migration:media:inventory": "node scripts/migration/inventory-media.mjs",
