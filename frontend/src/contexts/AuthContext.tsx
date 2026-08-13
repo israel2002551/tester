@@ -4,39 +4,16 @@ import { api, demoMode, registerAccessTokenProvider } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import type { Viewer } from '../lib/types';
 
-interface SignUpInput {
-  email: string;
-  password: string;
-  displayName: string;
-  intent: 'buyer' | 'seller' | 'supplier';
-}
-
+interface SignUpInput { email: string; password: string; displayName: string; intent: 'buyer' | 'seller' | 'supplier'; }
 interface AuthContextValue {
-  authUser: SupabaseUser | null;
-  viewer: Viewer | null;
-  loading: boolean;
-  configured: boolean;
+  authUser: SupabaseUser | null; viewer: Viewer | null; loading: boolean; configured: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (input: SignUpInput) => Promise<{ confirmationRequired: boolean }>;
-  signOut: () => Promise<void>;
-  refreshViewer: () => Promise<void>;
+  signOut: () => Promise<void>; refreshViewer: () => Promise<void>;
 }
-
 const AuthContext = createContext<AuthContextValue | null>(null);
-
-const demoUser = {
-  id: 'demo-user',
-  email: 'demo@buysell.ng',
-  user_metadata: { display_name: 'Ada Nwosu' },
-} as unknown as SupabaseUser;
-
-const demoViewer: Viewer = {
-  id: 'demo-user',
-  email: 'demo@buysell.ng',
-  displayName: 'Ada Nwosu',
-  platformRoles: ['BUYER'],
-  storeMemberships: [],
-};
+const demoUser = { id: 'demo-user', email: 'demo@buysell.ng', user_metadata: { display_name: 'Ada Nwosu' } } as unknown as SupabaseUser;
+const demoViewer: Viewer = { id: 'demo-user', email: 'demo@buysell.ng', displayName: 'Ada Nwosu', platformRoles: ['BUYER'], storeMemberships: [] };
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(demoMode ? demoUser : null);
@@ -44,108 +21,58 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [loading, setLoading] = useState(Boolean(supabase) && !demoMode);
 
   const refreshViewer = useCallback(async () => {
-    if (demoMode) {
-      setViewer(demoViewer);
-      return;
-    }
-    try {
-      setViewer(await api.get<Viewer>('/auth/me'));
-    } catch {
-      setViewer(null);
-    }
+    if (demoMode) { setViewer(demoViewer); return; }
+    try { setViewer(await api.get<Viewer>('/auth/me')); } catch { setViewer(null); }
   }, []);
 
   useEffect(() => {
     if (demoMode || !supabase) return;
     const authClient = supabase;
-
-    registerAccessTokenProvider(async () => {
-      const { data } = await authClient.auth.getSession();
-      return data.session?.access_token ?? null;
-    });
-
+    registerAccessTokenProvider(async () => (await authClient.auth.getSession()).data.session?.access_token ?? null);
     let active = true;
     void authClient.auth.getSession().then(({ data }) => {
       if (!active) return;
       const nextUser = data.session?.user ?? null;
-      setAuthUser(nextUser);
-      setLoading(false);
-      if (nextUser) void refreshViewer();
-      else setViewer(null);
+      setAuthUser(nextUser); setLoading(false);
+      if (nextUser) void refreshViewer(); else setViewer(null);
     });
-
     const { data: listener } = authClient.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
       const nextUser = session?.user ?? null;
-      setAuthUser(nextUser);
-      if (nextUser) void refreshViewer();
-      else setViewer(null);
+      setAuthUser(nextUser); setLoading(false);
+      if (nextUser) void refreshViewer(); else setViewer(null);
     });
-
-    return () => {
-      active = false;
-      listener.subscription.unsubscribe();
-    };
+    return () => { active = false; listener.subscription.unsubscribe(); };
   }, [refreshViewer]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    if (demoMode) {
-      setAuthUser({ ...demoUser, email } as SupabaseUser);
-      setViewer({ ...demoViewer, email });
-      return;
-    }
+    if (demoMode) { setAuthUser({ ...demoUser, email } as SupabaseUser); setViewer({ ...demoViewer, email }); setLoading(false); return; }
     if (!supabase) throw new Error('Authentication is not configured. Add the Supabase URL and publishable key.');
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
-  }, []);
+    setAuthUser(data.user ?? null); setLoading(false);
+    if (data.user) void refreshViewer();
+  }, [refreshViewer]);
 
   const signUp = useCallback(async ({ email, password, displayName, intent }: SignUpInput) => {
-    if (demoMode) {
-      setAuthUser({ ...demoUser, email } as SupabaseUser);
-      setViewer({ ...demoViewer, email, displayName });
-      return { confirmationRequired: false };
-    }
+    if (demoMode) { setAuthUser({ ...demoUser, email } as SupabaseUser); setViewer({ ...demoViewer, email, displayName }); setLoading(false); return { confirmationRequired: false }; }
     if (!supabase) throw new Error('Authentication is not configured. Add the Supabase URL and publishable key.');
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-        // These fields are profile hints only. The backend never authorizes from user metadata.
-        data: { display_name: displayName, account_intent: intent },
-      },
-    });
+    const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/auth/callback`, data: { display_name: displayName, account_intent: intent } } });
     if (error) throw error;
+    setAuthUser(data.user ?? null); setLoading(false);
+    if (data.user) void refreshViewer();
     return { confirmationRequired: !data.session };
-  }, []);
+  }, [refreshViewer]);
 
   const signOut = useCallback(async () => {
-    if (demoMode) {
-      setAuthUser(null);
-      setViewer(null);
-      return;
-    }
+    if (demoMode) { setAuthUser(null); setViewer(null); return; }
     if (!supabase) return;
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
+    setAuthUser(null); setViewer(null);
   }, []);
 
-  const value = useMemo<AuthContextValue>(() => ({
-    authUser,
-    viewer,
-    loading,
-    configured: Boolean(supabase) || demoMode,
-    signIn,
-    signUp,
-    signOut,
-    refreshViewer,
-  }), [authUser, viewer, loading, signIn, signUp, signOut, refreshViewer]);
-
+  const value = useMemo<AuthContextValue>(() => ({ authUser, viewer, loading, configured: Boolean(supabase) || demoMode, signIn, signUp, signOut, refreshViewer }), [authUser, viewer, loading, signIn, signUp, signOut, refreshViewer]);
   return <AuthContext value={value}>{children}</AuthContext>;
 }
-
-export function useAuth() {
-  const context = use(AuthContext);
-  if (!context) throw new Error('useAuth must be used inside AuthProvider');
-  return context;
-}
+export function useAuth() { const context = use(AuthContext); if (!context) throw new Error('useAuth must be used inside AuthProvider'); return context; }

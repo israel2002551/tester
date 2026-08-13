@@ -31,15 +31,17 @@ type LegacyProduct = {
   } | null;
 };
 
-const CATEGORY_LABELS: Record<string, { name: string; slug: string }> = {
+type CategoryInfo = { name: string; slug: string };
+const OTHER_CATEGORY: CategoryInfo = { name: 'Other', slug: 'other' };
+const CATEGORY_LABELS: Record<string, CategoryInfo> = {
   phones: { name: 'Phones & Tablets', slug: 'phones-tablets' },
   electronics: { name: 'Electronics', slug: 'electronics' },
   fashion: { name: 'Fashion', slug: 'fashion' },
   home: { name: 'Home & Living', slug: 'home-living' },
   beauty: { name: 'Beauty & Health', slug: 'beauty-health' },
   sports: { name: 'Sports & Outdoors', slug: 'sports-outdoors' },
-  dropship: { name: 'Other', slug: 'other' },
-  other: { name: 'Other', slug: 'other' },
+  dropship: OTHER_CATEGORY,
+  other: OTHER_CATEGORY,
 };
 
 const PRODUCT_SELECT = [
@@ -50,8 +52,8 @@ const PRODUCT_SELECT = [
 
 const PRODUCT_PATH = /^\/catalog\/products\/([^/?#]+)$/;
 
-function categoryInfo(value: string | null | undefined) {
-  return CATEGORY_LABELS[value ?? 'other'] ?? CATEGORY_LABELS.other;
+function categoryInfo(value: string | null | undefined): CategoryInfo {
+  return CATEGORY_LABELS[value ?? 'other'] ?? OTHER_CATEGORY;
 }
 
 function slugify(value: string) {
@@ -92,18 +94,12 @@ function toProduct(row: LegacyProduct): Product {
 
 async function loadProducts(params: URLSearchParams) {
   if (!supabase) throw new Error('Marketplace data connection is not configured.');
-
-  let query = supabase
-    .from('products')
-    .select(PRODUCT_SELECT, { count: 'exact' })
-    .eq('status', 'active');
-
+  let query = supabase.from('products').select(PRODUCT_SELECT, { count: 'exact' }).eq('status', 'active');
   const search = params.get('q')?.trim();
   const category = params.get('category');
   const condition = params.get('condition');
   const minKobo = Number(params.get('minPriceKobo') ?? '');
   const maxKobo = Number(params.get('maxPriceKobo') ?? '');
-
   if (search) query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`);
   if (category) {
     const legacyCategory = Object.entries(CATEGORY_LABELS).find(([, value]) => value.slug === category)?.[0];
@@ -115,37 +111,23 @@ async function loadProducts(params: URLSearchParams) {
   if (condition === 'REFURBISHED') query = query.eq('condition', 'refurbished');
   if (Number.isFinite(minKobo) && minKobo > 0) query = query.gte('price', minKobo / 100);
   if (Number.isFinite(maxKobo) && maxKobo > 0) query = query.lte('price', maxKobo / 100);
-
   const sort = params.get('sort');
   if (sort === 'name') query = query.order('name', { ascending: true });
   else if (sort === 'oldest') query = query.order('created_at', { ascending: true });
   else query = query.order('created_at', { ascending: false });
-
   const page = Math.max(1, Number(params.get('page') ?? 1));
   const limit = Math.min(100, Math.max(1, Number(params.get('limit') ?? 24)));
   query = query.range((page - 1) * limit, page * limit - 1);
-
   const { data, error, count } = await query;
   if (error) throw error;
-
   const rows = (data ?? []) as unknown as LegacyProduct[];
   const sellerIds = [...new Set(rows.map((row) => row.seller_id).filter((id): id is string => Boolean(id)))];
-  const profiles = sellerIds.length
-    ? await supabase.from('profiles').select('id,name,store_name,seller_verified,logo_url,store_address').in('id', sellerIds)
-    : { data: [], error: null };
+  const profiles = sellerIds.length ? await supabase.from('profiles').select('id,name,store_name,seller_verified,logo_url,store_address').in('id', sellerIds) : { data: [], error: null };
   if (profiles.error) throw profiles.error;
-
   const profileMap = new Map((profiles.data ?? []).map((profile) => [profile.id, profile]));
   const products = rows.map((row) => toProduct({ ...row, profiles: row.seller_id ? profileMap.get(row.seller_id) ?? null : null }));
   const total = count ?? products.length;
-
-  return {
-    items: products,
-    page,
-    pageSize: limit,
-    total,
-    totalPages: Math.max(1, Math.ceil(total / limit)),
-  } satisfies PageResult<Product>;
+  return { items: products, page, pageSize: limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) } satisfies PageResult<Product>;
 }
 
 async function loadHome(): Promise<{ categories: Category[]; products: Product[]; campaigns: never[] }> {
@@ -154,28 +136,16 @@ async function loadHome(): Promise<{ categories: Category[]; products: Product[]
   if (error) throw error;
   const rows = (data ?? []) as unknown as LegacyProduct[];
   const sellerIds = [...new Set(rows.map((row) => row.seller_id).filter((id): id is string => Boolean(id)))];
-  const profiles = sellerIds.length
-    ? await supabase.from('profiles').select('id,name,store_name,seller_verified,logo_url,store_address').in('id', sellerIds)
-    : { data: [], error: null };
+  const profiles = sellerIds.length ? await supabase.from('profiles').select('id,name,store_name,seller_verified,logo_url,store_address').in('id', sellerIds) : { data: [], error: null };
   if (profiles.error) throw profiles.error;
   const profileMap = new Map((profiles.data ?? []).map((profile) => [profile.id, profile]));
   const products = rows.map((row) => toProduct({ ...row, profiles: row.seller_id ? profileMap.get(row.seller_id) ?? null : null }));
-
   const counts = new Map<string, number>();
-  rows.forEach((row) => {
-    const key = categoryInfo(row.category).slug;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  });
+  rows.forEach((row) => { const key = categoryInfo(row.category).slug; counts.set(key, (counts.get(key) ?? 0) + 1); });
   const categories = Object.values(CATEGORY_LABELS)
     .filter((category, index, all) => all.findIndex((candidate) => candidate.slug === category.slug) === index)
-    .map((category) => ({
-      id: category.slug,
-      name: category.name,
-      slug: category.slug,
-      productCount: counts.get(category.slug) ?? 0,
-    }))
+    .map((category) => ({ id: category.slug, name: category.name, slug: category.slug, productCount: counts.get(category.slug) ?? 0 }))
     .filter((category) => category.productCount > 0);
-
   return { categories, products, campaigns: [] };
 }
 
@@ -221,9 +191,7 @@ export async function legacyCatalogGet<T>(path: string): Promise<T | null> {
     const storeMatch = pathname.match(/^\/catalog\/stores\/([^/?#]+)$/);
     if (storeMatch) return await loadStore(decodeURIComponent(storeMatch[1]!)) as T;
     return null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 const originalGet = api.get.bind(api);
