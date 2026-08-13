@@ -228,11 +228,14 @@ export async function legacyCatalogGet<T>(path: string): Promise<T | null> {
 
 const originalGet = api.get.bind(api);
 api.get = async <T>(path: string, options = {}) => {
-  const result = await originalGet<T>(path, options);
-  if (path.startsWith('/catalog/') && isCatalogResultEmpty(result)) {
-    return (await legacyCatalogGet<T>(path)) ?? result;
+  if (!path.startsWith('/catalog/')) return originalGet<T>(path, options);
+  try {
+    const result = await originalGet<T>(path, options);
+    if (isCatalogResultEmpty(result)) return (await legacyCatalogGet<T>(path)) ?? result;
+    return result;
+  } catch (error) {
+    return (await legacyCatalogGet<T>(path)) ?? Promise.reject(error);
   }
-  return result;
 };
 
 function isCatalogResultEmpty(value: unknown) {
