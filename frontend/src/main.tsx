@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import './lib/legacyCatalogBridge';
 import './styles.css';
 import './responsive.css';
 
