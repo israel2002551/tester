@@ -18,6 +18,20 @@ export default defineConfig({
     target: 'es2022',
     sourcemap: true,
     cssCodeSplit: true,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: 'vendor',
+              test: /node_modules[\\/]/,
+              minSize: 20_000,
+              maxSize: 250_000,
+            },
+          ],
+        },
+      },
+    },
   },
   test: {
     environment: 'jsdom',
