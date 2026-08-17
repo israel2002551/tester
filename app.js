@@ -3226,10 +3226,9 @@ async function payWithFlutterwave() {
  phone_number: checkoutPayload.delivery_phone,
  name: checkoutPayload.delivery_name,
  },
- metadata: {
- user_id: currentUser.id,
- cart: checkoutPayload.cart,
- },
+  // Flutterwave meta only accepts simple values. The cart is submitted to the
+  // verification endpoint after payment, so it must not be sent here.
+  metadata: { user_id: currentUser.id },
  callback: async function(response) {
  toast('Verifying Payment...', 'Please do not close the window', 'info');
 
