@@ -1,5 +1,6 @@
 # Secrets - never commit
 config.js
+.env.cloudinary-migration
 
 # Python cache
 __pycache__/

@@ -1026,6 +1026,25 @@ async function uploadToFirstAvailableBucket(buckets, path, file, options = {}) {
  throw lastError || new Error('Upload failed');
 }
 
+/** Upload product media directly to Cloudinary using a short-lived server signature. */
+async function uploadProductMediaToCloudinary(file, kind) {
+ const signed = await callEdge('cloudinary-sign-upload', { kind });
+ const form = new FormData();
+ form.append('file', file);
+ form.append('api_key', signed.api_key);
+ form.append('timestamp', String(signed.timestamp));
+ form.append('folder', signed.folder);
+ form.append('signature', signed.signature);
+
+ const endpoint = `https://api.cloudinary.com/v1_1/${encodeURIComponent(signed.cloud_name)}/${signed.resource_type}/upload`;
+ const response = await fetch(endpoint, { method: 'POST', body: form });
+ const data = await response.json().catch(() => ({}));
+ if (!response.ok || !data.secure_url) {
+  throw new Error(data?.error?.message || 'Cloudinary upload failed.');
+ }
+ return { url: sanitizeUrl(data.secure_url), publicId: data.public_id || '' };
+}
+
 const PRODUCT_IMAGE_LIMIT = 8;
 const PRODUCT_VIDEO_LIMIT = 3;
 const PRODUCT_MAX_IMAGE_SIZE = 8 * 1024 * 1024;
@@ -1046,7 +1065,6 @@ async function uploadProductMediaFiles(files, kind) {
  const maxCount = isVideo ? PRODUCT_VIDEO_LIMIT : PRODUCT_IMAGE_LIMIT;
  const maxSize = isVideo ? PRODUCT_MAX_VIDEO_SIZE : PRODUCT_MAX_IMAGE_SIZE;
  const allowedTypes = isVideo ? PRODUCT_ALLOWED_VID_TYPES : PRODUCT_ALLOWED_IMG_TYPES;
- const folder = isVideo ? 'vids' : 'imgs';
  const label = isVideo ? 'video' : 'image';
  const selected = files.slice(0, maxCount);
 
@@ -1055,14 +1073,11 @@ async function uploadProductMediaFiles(files, kind) {
  }
 
  const urls = [];
- for (let index = 0; index < selected.length; index++) {
-  const file = selected[index];
+ for (const file of selected) {
   if (!allowedTypes.includes(file.type)) throw new Error(`Unsupported ${label} type: ${file.name}`);
   if (file.size > maxSize) throw new Error(`${file.name} is too large. ${isVideo ? 'Videos' : 'Images'} must be under ${Math.round(maxSize / 1024 / 1024)}MB.`);
-  const ext = safeFileExt(file.name, isVideo ? 'mp4' : 'jpg');
-  const path = `${folder}/${currentUser.id}/${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
-  const uploaded = await uploadToFirstAvailableBucket(['products', 'uploads'], path, file, { contentType: file.type, upsert: false });
-  if (uploaded.publicUrl) urls.push(uploaded.publicUrl);
+   const uploaded = await uploadProductMediaToCloudinary(file, kind);
+   if (uploaded.url) urls.push(uploaded.url);
  }
  return urls;
 }
