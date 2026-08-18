@@ -3215,8 +3215,19 @@ async function payWithFlutterwave() {
  const secretComm = Math.round(rawProductTotal * PLATFORM_FEE_PCT);
  const hiddenTotalBillAmount = rawProductTotal + secretComm;
  
- const reference = 'bs_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
- openFlutterwaveTransaction({
+  const reference = 'bs_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+  const pendingOrder = await callEdge('verify-flutterwave-payment', {
+  action: 'create_pending',
+  tx_ref: reference,
+  expected_amount: hiddenTotalBillAmount,
+  currency: 'NGN',
+  ...checkoutPayload,
+  payment_method: 'flutterwave',
+  });
+  if (!pendingOrder?.order_id) throw new Error('Could not prepare your order for payment');
+  let verificationStarted = false;
+  let paymentConfirmed = false;
+  openFlutterwaveTransaction({
  tx_ref: reference,
  amount: hiddenTotalBillAmount,
  currency: 'NGN',
@@ -3226,22 +3237,25 @@ async function payWithFlutterwave() {
  phone_number: checkoutPayload.delivery_phone,
  name: checkoutPayload.delivery_name,
  },
-  // Flutterwave meta accepts simple values only. The cart is sent to the
-  // verification endpoint after the payment callback, not to the gateway.
-  metadata: { user_id: currentUser.id },
- callback: async function(response) {
- toast('Verifying Payment...', 'Please do not close the window', 'info');
+  // Flutterwave meta accepts simple values only. The complete cart is stored
+  // in the pending order before checkout opens.
+  metadata: { user_id: currentUser.id, order_id: pendingOrder.order_id },
+  callback: async function(response) {
+  verificationStarted = true;
+  toast('Verifying Payment...', 'Please do not close the window', 'info');
 
  try {
  const result = await callEdge('verify-flutterwave-payment', {
  transaction_id: response.transaction_id || response.id,
  tx_ref: response.tx_ref || reference,
- expected_amount: hiddenTotalBillAmount,
- currency: 'NGN',
+  expected_amount: hiddenTotalBillAmount,
+  currency: 'NGN',
+  order_id: pendingOrder.order_id,
  ...checkoutPayload,
  payment_method: 'flutterwave',
  });
- if (result.success) {
+  if (result.success) {
+  paymentConfirmed = true;
  const seller = cart[0]?.profiles;
  if (seller?.whatsapp) sendWhatsAppOrderNotification({ id: result.order_id, total_amount: result.total_paid }, seller.whatsapp);
  
@@ -3266,10 +3280,12 @@ async function payWithFlutterwave() {
  if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
  }
  },
- onclose: () => {
- if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
- toast('Payment cancelled', '', 'warn');
- }
+  onclose: (incomplete) => {
+  if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
+  if (!verificationStarted && !paymentConfirmed && incomplete !== false) {
+  toast('Payment cancelled', '', 'warn');
+  }
+  }
  });
  } catch (err) {
  if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
