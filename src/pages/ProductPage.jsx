@@ -134,17 +134,22 @@ export default function ProductPage() {
     const text = `Check out "${product.name}" for ${money(product.price)} on BUYSELL Nigeria.`;
     const imageUrl = media.find(item => item.type === 'image')?.url || product.image_url || '';
     const shareData = { title: product.name, text, url: window.location.href };
-    try {
-      if (navigator.share && imageUrl && typeof File !== 'undefined') {
+    let imageFile = null;
+    if (navigator.share && imageUrl && typeof File !== 'undefined') {
+      try {
         const response = await fetch(imageUrl);
         if (response.ok) {
           const imageBlob = await response.blob();
-          const imageFile = new File([imageBlob], 'buysell-product.jpg', { type: imageBlob.type || 'image/jpeg' });
-          if (!navigator.canShare || navigator.canShare({ files: [imageFile] })) {
-            await navigator.share({ ...shareData, files: [imageFile] });
-            return;
-          }
+          imageFile = new File([imageBlob], 'buysell-product.jpg', { type: imageBlob.type || 'image/jpeg' });
         }
+      } catch (error) {
+        console.warn('Product share image could not be attached:', error);
+      }
+    }
+    try {
+      if (imageFile && (!navigator.canShare || navigator.canShare({ files: [imageFile] }))) {
+        await navigator.share({ ...shareData, files: [imageFile] });
+        return;
       }
       if (navigator.share) {
         await navigator.share(shareData);
