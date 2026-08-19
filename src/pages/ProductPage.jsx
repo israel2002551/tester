@@ -130,10 +130,31 @@ export default function ProductPage() {
     window.location.href = '/?view=shop&cart=open';
   }
 
-  function shareProduct() {
+  async function shareProduct() {
     const text = `Check out "${product.name}" for ${money(product.price)} on BUYSELL Nigeria.`;
-    if (navigator.share) navigator.share({ title: product.name, text, url: window.location.href }).catch(() => {});
-    else navigator.clipboard?.writeText(`${window.location.href}\n${text}`).then(() => setToast('Product link copied'));
+    const imageUrl = media.find(item => item.type === 'image')?.url || product.image_url || '';
+    const shareData = { title: product.name, text, url: window.location.href };
+    try {
+      if (navigator.share && imageUrl && typeof File !== 'undefined') {
+        const response = await fetch(imageUrl);
+        if (response.ok) {
+          const imageBlob = await response.blob();
+          const imageFile = new File([imageBlob], 'buysell-product.jpg', { type: imageBlob.type || 'image/jpeg' });
+          if (!navigator.canShare || navigator.canShare({ files: [imageFile] })) {
+            await navigator.share({ ...shareData, files: [imageFile] });
+            return;
+          }
+        }
+      }
+      if (navigator.share) {
+        await navigator.share(shareData);
+        return;
+      }
+      await navigator.clipboard?.writeText(`${window.location.href}\n${text}`);
+      setToast('Product link copied');
+    } catch (error) {
+      if (error?.name !== 'AbortError') setToast('Could not open sharing');
+    }
   }
 
   if (status === 'loading') {

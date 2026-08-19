@@ -6,7 +6,7 @@
 
 let chatHistory = []; 
 let adminAiHistory = [];
-let currentUser = null, currentRole = 'buyer', currentProd = null;
+let currentUser = null, currentRole = 'buyer', currentProd = null, currentStoreShare = null;
 const PUBLIC_SITE_URL = 'https://buysell-marketplace.com';
 const SERVICE_WORKER_APP_VERSION = '2026-08-04-push-3';
 function createMemoryStorage() {
@@ -2822,10 +2822,47 @@ function goBackFromStorefront() {
  }
 }
 
-function shareStore() {
- const url = window.location.href;
- if (navigator.share) { navigator.share({ title: 'BUYSELL Store', url }); }
- else { navigator.clipboard.writeText(url); toast('Link Copied!','','success'); }
+async function shareLinkWithImage({ title, text = '', url, imageUrl = '', imageName = 'buysell-share.jpg' }) {
+ const shareData = { title, text, url };
+ if (navigator.share) {
+  const safeImageUrl = sanitizeUrl(imageUrl);
+  if (safeImageUrl && typeof File !== 'undefined') {
+   try {
+    const response = await fetch(safeImageUrl);
+    if (response.ok) {
+     const imageBlob = await response.blob();
+     const imageFile = new File([imageBlob], imageName, { type: imageBlob.type || 'image/jpeg' });
+     if (!navigator.canShare || navigator.canShare({ files: [imageFile] })) {
+      await navigator.share({ ...shareData, files: [imageFile] });
+      return true;
+     }
+    }
+   } catch (error) {
+    console.warn('Share image could not be attached:', error);
+   }
+  }
+  await navigator.share(shareData);
+  return true;
+ }
+ await navigator.clipboard.writeText([url, text].filter(Boolean).join('\n'));
+ return false;
+}
+
+async function shareStore() {
+ const store = currentStoreShare || {};
+ const url = store.url || window.location.href;
+ try {
+  const shared = await shareLinkWithImage({
+   title: store.title || 'BUYSELL Store',
+   text: store.text || 'Visit this store on BUYSELL Nigeria.',
+   url,
+   imageUrl: store.logoUrl || '',
+   imageName: 'buysell-store-logo.jpg',
+  });
+  if (!shared) toast('Store Link Copied!', 'Share with customers', 'success');
+ } catch (error) {
+  if (error?.name !== 'AbortError') toast('Share unavailable', 'Please try again.', 'error');
+ }
 }
 
 function copyStoreLink() {
@@ -7734,12 +7771,18 @@ async function importCsvProducts() {
 function shareProduct(prod) {
  const url = `${window.location.origin}${productDetailPageUrl(prod.id)}`;
  const text = `Check out "${prod.name}" for ${fmtN(prod.price)} on BUYSELL Nigeria!`;
- if (navigator.share) {
- navigator.share({ title: prod.name, text, url });
- } else {
- navigator.clipboard.writeText(url + '\n' + text);
- toast('Link Copied!', 'Share it with buyers', 'success');
- }
+ const imageUrl = prod.images?.[0] || prod.image_url || '';
+ shareLinkWithImage({
+  title: prod.name,
+  text,
+  url,
+  imageUrl,
+  imageName: 'buysell-product.jpg',
+ }).then(shared => {
+  if (!shared) toast('Link Copied!', 'Share it with buyers', 'success');
+ }).catch(error => {
+  if (error?.name !== 'AbortError') toast('Share unavailable', 'Please try again.', 'error');
+ });
 }
 
 // Handle direct links for product, store, category, referral, and cart routes.
@@ -7996,10 +8039,17 @@ async function viewStorefront(sellerId) {
  // Share button URL
 // Share button URL setup
  const sfUrl = `${window.location.origin}${window.location.pathname}?store=${sellerId}`;
+ const storeShare = {
+  title: storeLabel,
+  text: storeDescription,
+  url: sfUrl,
+  logoUrl: seller.logo_url || '',
+ };
+ currentStoreShare = storeShare;
  const sfWaButtonElement = document.getElementById('sf-wa-link');
   if (sfWaButtonElement && sfWaButtonElement.parentElement) {
   sfWaButtonElement.parentElement.querySelectorAll('button').forEach(b => {
-  if (b.textContent.includes('Share')) b.onclick = () => { navigator.clipboard?.writeText(sfUrl).then(()=>toast('Store Link Copied!','','success')).catch(()=>{}); if(navigator.share) navigator.share({title:storeLabel,url:sfUrl}); };
+  if (b.textContent.includes('Share')) b.onclick = () => { shareStore(); };
   });
   }
  const grid = document.getElementById('sf-products-grid');
