@@ -2317,7 +2317,7 @@ function prodCard(p) {
  <span class="prod-price">${fmtN(displayPrice)}</span>
  ${p.original_price > displayPrice ? `<span class="prod-orig">${fmtN(p.original_price)}</span>` : ''}
  </div>
- <div class="prod-shipping text-xs color-text3" style="margin-top:.15rem"><i class="fa-solid fa-truck-fast"></i> BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} flat fee per order</div>
+  <div class="prod-shipping text-xs color-text3" style="margin-top:.15rem"><i class="fa-solid fa-truck-fast"></i> BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} per store</div>
   <div class="prod-trust-line"><span><i class="fa-solid fa-shield-halved"></i> BUYSELL tracking</span><span>${escHtml(stockLabel)}</span></div>
  <div class="prod-rating-row"><span class="stars sm">${stars}</span><span class="text-xs color-text3">${p.avg_rating ? p.avg_rating.toFixed(1) : '5.0'} (${p.review_count||0})</span></div>
  <div class="prod-location"><i class="fa-solid fa-map-marker-alt" style="font-size:.6rem"></i>${escHtml(p.location||'Nigeria')}</div>
@@ -2894,13 +2894,14 @@ function cartProductTotal() {
 }
 
 function cartSellerShippingGroups() {
- if (!cart.length) return [];
- return [{
- sellerKey: 'buysell-delivery',
- sellerName: 'BUYSELL Delivery',
- fee: BUYSELL_DELIVERY_FEE,
- count: cart.reduce((sum, item) => sum + (item.qty || 1), 0),
- }];
+ const groups = new Map();
+ cart.forEach(item => {
+ const sellerKey = cartSellerKey(item);
+ const existing = groups.get(sellerKey) || { sellerKey, sellerName: item.profiles?.name || 'Seller', fee: BUYSELL_DELIVERY_FEE, count: 0 };
+ existing.count += item.qty || 1;
+ groups.set(sellerKey, existing);
+ });
+ return [...groups.values()];
 }
 
 function cartShippingTotal() {
@@ -2908,8 +2909,11 @@ function cartShippingTotal() {
 }
 
 function checkoutCartItems(includeDetails = false) {
- return cart.map((item, index) => {
- const chargedShipping = index === 0 ? BUYSELL_DELIVERY_FEE : 0;
+ const feeApplied = new Set();
+ return cart.map(item => {
+ const sellerKey = cartSellerKey(item);
+ const chargedShipping = feeApplied.has(sellerKey) ? 0 : BUYSELL_DELIVERY_FEE;
+ feeApplied.add(sellerKey);
  const base = {
  id: item.id,
  seller_id: item.seller_id || item.profiles?.id || item.store_id || null,
@@ -3015,7 +3019,7 @@ function renderCartItems() {
  <div style="flex:1;min-width:0">
  <div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px">${escHtml(c.name)}</div>
  <div class="color-green font-bold">${fmtN(c.price)}</div>
-  <div class="text-xs color-text3">BUYSELL delivery: Flat ${fmtN(BUYSELL_DELIVERY_FEE)} per order</div>
+   <div class="text-xs color-text3">BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} per store</div>
  <div class="flex items-center gap-2 mt-1">
  <button onclick="changeCartQty('${c.id}',-1)" class="btn btn-outline btn-sm" style="padding:.2rem .5rem">-</button>
  <span class="text-sm font-bold">${c.qty||1}</span>
@@ -3166,7 +3170,7 @@ async function startCheckout() {
  document.getElementById('co-items').innerHTML = cart.map(c=>`
  <div class="order-item">
  <img src="${c.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=100'}" alt="" loading="lazy">
-  <div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(c.name)}</div><div class="color-text3 text-xs">Qty: ${c.qty||1} - BUYSELL delivery: Flat ${fmtN(BUYSELL_DELIVERY_FEE)} per order</div></div>
+   <div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(c.name)}</div><div class="color-text3 text-xs">Qty: ${c.qty||1} - BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} per store</div></div>
  <div class="font-bold text-sm">${fmtN(c.price*(c.qty||1))}</div>
  </div>`).join('');
  

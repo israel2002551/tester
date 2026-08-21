@@ -60,6 +60,9 @@ serve(async (req) => {
     const payload = await req.json();
     const cart = Array.isArray(payload.cart) ? payload.cart : [];
     const sellerId = cart[0]?.seller_id;
+    const sellerIds = Array.from(new Set(cart.map((item: any) => String(item?.seller_id || "")).filter(Boolean)));
+    const shippingGroups = sellerIds.map((id) => ({ sellerKey: id, sellerName: "Seller", fee: BUYSELL_DELIVERY_FEE }));
+    const shippingTotal = shippingGroups.length * BUYSELL_DELIVERY_FEE;
     const expectedAmount = Number(payload.expected_amount || 0);
     const expectedCurrency = String(payload.currency || "NGN").toUpperCase();
     const expectedTxRef = String(payload.tx_ref || "");
@@ -83,8 +86,8 @@ serve(async (req) => {
         delivery_name: String(payload.delivery_name || ""),
         delivery_phone: String(payload.delivery_phone || ""),
         delivery_address: String(payload.delivery_address || ""),
-        shipping_total: BUYSELL_DELIVERY_FEE,
-        shipping_groups: [{ sellerKey: "buysell-delivery", sellerName: "BUYSELL Delivery", fee: BUYSELL_DELIVERY_FEE }],
+        shipping_total: shippingTotal,
+        shipping_groups: shippingGroups,
         created_at: new Date().toISOString(),
       });
       return json({ success: true, order_id: order?.id || orderId, pending: true });
@@ -146,8 +149,8 @@ serve(async (req) => {
       delivery_name: String(payload.delivery_name || ""),
       delivery_phone: String(payload.delivery_phone || ""),
       delivery_address: String(payload.delivery_address || ""),
-      shipping_total: BUYSELL_DELIVERY_FEE,
-      shipping_groups: [{ sellerKey: "buysell-delivery", sellerName: "BUYSELL Delivery", fee: BUYSELL_DELIVERY_FEE }],
+      shipping_total: shippingTotal,
+      shipping_groups: shippingGroups,
       created_at: new Date().toISOString(),
     });
 
