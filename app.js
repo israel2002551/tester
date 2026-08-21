@@ -67,6 +67,7 @@ const appCache = new Map();
 let carouselIndex = 0, carouselTimer = null;
 let selectedRating = 0, checkoutPaymentMethod = 'flutterwave';
 const WALLET_CHECKOUT_ENABLED = false;
+const BUYSELL_DELIVERY_FEE = 2000;
 let deferredInstallPrompt = null, salesChart = null;
 let sellerAnalyticsChart = null;
 let carouselStartX = 0;
@@ -1972,7 +1973,12 @@ function showDash(section) {
  if (section === 'withdrawals') { loadWithdrawalData(); loadWithdrawalHistory(); }
  if (section === 'dropshipping') loadDropshipData();
  if (section === 'affiliate') loadAffiliateData();
- if (section === 'advertise') loadSellerAds();
+  if (section === 'advertise') loadSellerAds();
+  if (section === 'add-product') {
+  const shippingInput = document.getElementById('p-shipping-fee');
+  const shippingGroup = shippingInput?.closest('.form-group');
+  if (shippingGroup) shippingGroup.innerHTML = `<label class="form-label">BUYSELL delivery fee</label><div class="form-input" style="display:flex;align-items:center;background:var(--cream);color:var(--green);font-weight:700">${fmtN(BUYSELL_DELIVERY_FEE)} flat fee per order — set by BUYSELL</div>`;
+  }
  if (section === 'coupons') { 
  loadSellerCoupons(); 
  loadFlashSaleProducts();
@@ -2311,7 +2317,7 @@ function prodCard(p) {
  <span class="prod-price">${fmtN(displayPrice)}</span>
  ${p.original_price > displayPrice ? `<span class="prod-orig">${fmtN(p.original_price)}</span>` : ''}
  </div>
-  <div class="prod-shipping text-xs color-text3" style="margin-top:.15rem"><i class="fa-solid fa-truck-fast"></i> BUYSELL delivery: ${fmtN(itemShippingFee(p))}</div>
+ <div class="prod-shipping text-xs color-text3" style="margin-top:.15rem"><i class="fa-solid fa-truck-fast"></i> BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} flat fee per order</div>
   <div class="prod-trust-line"><span><i class="fa-solid fa-shield-halved"></i> BUYSELL tracking</span><span>${escHtml(stockLabel)}</span></div>
  <div class="prod-rating-row"><span class="stars sm">${stars}</span><span class="text-xs color-text3">${p.avg_rating ? p.avg_rating.toFixed(1) : '5.0'} (${p.review_count||0})</span></div>
  <div class="prod-location"><i class="fa-solid fa-map-marker-alt" style="font-size:.6rem"></i>${escHtml(p.location||'Nigeria')}</div>
@@ -2715,7 +2721,7 @@ async function openProduct(id) {
  document.getElementById('modal-condition').textContent = p.condition || 'New';
  document.getElementById('modal-location').textContent = p.location || 'Nigeria';
  const modalShippingEl = document.getElementById('modal-shipping-fee');
- if (modalShippingEl) modalShippingEl.textContent = `BUYSELL delivery: ${fmtN(itemShippingFee(p))}`;
+ if (modalShippingEl) modalShippingEl.textContent = `BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} flat fee per order`;
  
  const stock = p.stock_quantity;
  const sb = document.getElementById('modal-stock-badge');
@@ -2876,7 +2882,7 @@ function copyStoreLink() {
 function saveCart() { appStorage.setItem('bs_cart', JSON.stringify(cart)); updateCartCount(); }
 
 function itemShippingFee(item = {}) {
- return Math.max(0, Number(item.shipping_fee ?? item.shipping_cost ?? item.shipping ?? 0) || 0);
+ return BUYSELL_DELIVERY_FEE;
 }
 
 function cartSellerKey(item = {}) {
@@ -2888,15 +2894,13 @@ function cartProductTotal() {
 }
 
 function cartSellerShippingGroups() {
- const groups = new Map();
- cart.forEach(item => {
- const sellerKey = cartSellerKey(item);
- const existing = groups.get(sellerKey) || { sellerKey, sellerName: item.profiles?.name || 'Seller', fee: 0, count: 0 };
- existing.fee = Math.max(existing.fee, itemShippingFee(item));
- existing.count += item.qty || 1;
- groups.set(sellerKey, existing);
- });
- return [...groups.values()];
+ if (!cart.length) return [];
+ return [{
+ sellerKey: 'buysell-delivery',
+ sellerName: 'BUYSELL Delivery',
+ fee: BUYSELL_DELIVERY_FEE,
+ count: cart.reduce((sum, item) => sum + (item.qty || 1), 0),
+ }];
 }
 
 function cartShippingTotal() {
@@ -2904,12 +2908,8 @@ function cartShippingTotal() {
 }
 
 function checkoutCartItems(includeDetails = false) {
- const groupFees = new Map(cartSellerShippingGroups().map(group => [group.sellerKey, group.fee]));
- const feeApplied = new Set();
- return cart.map(item => {
- const sellerKey = cartSellerKey(item);
- const chargedShipping = feeApplied.has(sellerKey) ? 0 : (groupFees.get(sellerKey) || 0);
- feeApplied.add(sellerKey);
+ return cart.map((item, index) => {
+ const chargedShipping = index === 0 ? BUYSELL_DELIVERY_FEE : 0;
  const base = {
  id: item.id,
  seller_id: item.seller_id || item.profiles?.id || item.store_id || null,
@@ -3015,7 +3015,7 @@ function renderCartItems() {
  <div style="flex:1;min-width:0">
  <div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px">${escHtml(c.name)}</div>
  <div class="color-green font-bold">${fmtN(c.price)}</div>
- <div class="text-xs color-text3">BUYSELL delivery fee: ${fmtN(itemShippingFee(c))}</div>
+  <div class="text-xs color-text3">BUYSELL delivery: Flat ${fmtN(BUYSELL_DELIVERY_FEE)} per order</div>
  <div class="flex items-center gap-2 mt-1">
  <button onclick="changeCartQty('${c.id}',-1)" class="btn btn-outline btn-sm" style="padding:.2rem .5rem">-</button>
  <span class="text-sm font-bold">${c.qty||1}</span>
@@ -3166,7 +3166,7 @@ async function startCheckout() {
  document.getElementById('co-items').innerHTML = cart.map(c=>`
  <div class="order-item">
  <img src="${c.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=100'}" alt="" loading="lazy">
- <div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(c.name)}</div><div class="color-text3 text-xs">Qty: ${c.qty||1} - BUYSELL delivery fee: ${fmtN(itemShippingFee(c))}</div></div>
+  <div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(c.name)}</div><div class="color-text3 text-xs">Qty: ${c.qty||1} - BUYSELL delivery: Flat ${fmtN(BUYSELL_DELIVERY_FEE)} per order</div></div>
  <div class="font-bold text-sm">${fmtN(c.price*(c.qty||1))}</div>
  </div>`).join('');
  
@@ -4187,7 +4187,6 @@ async function submitProduct(e) {
 
  const nameVal = document.getElementById('p-name').value.trim();
  const priceVal = parseFloat(document.getElementById('p-price').value);
- const shippingFeeVal = parseFloat(document.getElementById('p-shipping-fee').value);
  const stockVal = parseInt(document.getElementById('p-stock').value) || 0;
  const descVal = document.getElementById('p-desc').value.trim();
  const catVal = document.getElementById('p-category').value;
@@ -4204,8 +4203,6 @@ if (nameVal.length > 300) {
 }
  if (isNaN(priceVal) || priceVal <= 0) { toast('Invalid price','Enter a price greater than 0','warn'); return; }
  if (priceVal > 100000000) { toast('Price too high','Maximum price is \u20A6100,000,000','warn'); return; }
- if (isNaN(shippingFeeVal) || shippingFeeVal < 0) { toast('Invalid delivery fee','Enter 0 or a valid BUYSELL delivery fee','warn'); return; }
- if (shippingFeeVal > 10000000) { toast('Delivery fee too high','Maximum delivery fee is \u20A610,000,000','warn'); return; }
  if (stockVal < 0 || stockVal > 100000) { toast('Invalid stock','Stock must be between 0 and 100,000','warn'); return; }
  if (descVal.length > 2000) { toast('Description too long','Max 2,000 characters','warn'); return; }
  if (!VALID_CATS.includes(catVal)) { toast('Invalid category','Please select a valid category','warn'); return; }
@@ -4220,7 +4217,7 @@ if (nameVal.length > 300) {
 
  const price = priceVal;
  const origPrice= parseFloat(document.getElementById('p-orig-price').value) || price;
- const shippingFee = shippingFeeVal;
+  const shippingFee = BUYSELL_DELIVERY_FEE;
  const stock = stockVal;
  const prodData = {
  name: nameVal,
@@ -4333,7 +4330,8 @@ async function editProduct(id) {
  document.getElementById('p-name').value = p.name || '';
  document.getElementById('p-price').value = p.price || '';
  document.getElementById('p-orig-price').value = p.original_price || '';
- document.getElementById('p-shipping-fee').value = p.shipping_fee ?? p.shipping_cost ?? 0;
+  const shippingFeeInput = document.getElementById('p-shipping-fee');
+  if (shippingFeeInput) shippingFeeInput.value = BUYSELL_DELIVERY_FEE;
  document.getElementById('p-stock').value = p.stock_quantity ?? '';
  document.getElementById('p-low-stock').value = p.low_stock_alert || '';
  document.getElementById('p-category').value = p.category || 'electronics';

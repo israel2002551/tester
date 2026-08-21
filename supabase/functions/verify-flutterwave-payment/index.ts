@@ -6,6 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+const BUYSELL_DELIVERY_FEE = 2000;
 
 function json(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -82,8 +83,8 @@ serve(async (req) => {
         delivery_name: String(payload.delivery_name || ""),
         delivery_phone: String(payload.delivery_phone || ""),
         delivery_address: String(payload.delivery_address || ""),
-        shipping_total: Number(payload.shipping_total || 0),
-        shipping_groups: payload.shipping_groups || [],
+        shipping_total: BUYSELL_DELIVERY_FEE,
+        shipping_groups: [{ sellerKey: "buysell-delivery", sellerName: "BUYSELL Delivery", fee: BUYSELL_DELIVERY_FEE }],
         created_at: new Date().toISOString(),
       });
       return json({ success: true, order_id: order?.id || orderId, pending: true });
@@ -145,8 +146,8 @@ serve(async (req) => {
       delivery_name: String(payload.delivery_name || ""),
       delivery_phone: String(payload.delivery_phone || ""),
       delivery_address: String(payload.delivery_address || ""),
-      shipping_total: Number(payload.shipping_total || 0),
-      shipping_groups: payload.shipping_groups || [],
+      shipping_total: BUYSELL_DELIVERY_FEE,
+      shipping_groups: [{ sellerKey: "buysell-delivery", sellerName: "BUYSELL Delivery", fee: BUYSELL_DELIVERY_FEE }],
       created_at: new Date().toISOString(),
     });
 
