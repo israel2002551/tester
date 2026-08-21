@@ -1953,6 +1953,33 @@ async function revokeSellerPermission(idOrEmail) {
  toast('Access Revoked', 'This team member no longer has active seller access.', 'info');
 }
 
+function setupProductCategoryField() {
+ const select = document.getElementById('p-category');
+ if (!select) return;
+ if (!select.querySelector('option[value="__custom__"]')) {
+  const option = document.createElement('option');
+  option.value = '__custom__';
+  option.textContent = 'Custom category…';
+  select.appendChild(option);
+ }
+ let group = document.getElementById('p-custom-category-group');
+ if (!group) {
+  group = document.createElement('div');
+  group.id = 'p-custom-category-group';
+  group.className = 'form-group hidden';
+  group.innerHTML = '<label class="form-label">Custom category <span class="req">*</span></label><input id="p-custom-category" class="form-input" maxlength="60" placeholder="e.g. Baby Products, Auto Parts">';
+  select.closest('.form-group')?.insertAdjacentElement('afterend', group);
+ }
+ const sync = () => {
+  const isCustom = select.value === '__custom__';
+  group.classList.toggle('hidden', !isCustom);
+  const input = document.getElementById('p-custom-category');
+  if (input) input.required = isCustom;
+ };
+ select.onchange = sync;
+ sync();
+}
+
 function showDash(section) {
   if (!canAccessSellerSection(section)) {
   const label = SELLER_ACCESS_CATEGORIES[currentSellerAccessCategory()]?.label || 'Seller Access';
@@ -1975,6 +2002,7 @@ function showDash(section) {
  if (section === 'affiliate') loadAffiliateData();
   if (section === 'advertise') loadSellerAds();
   if (section === 'add-product') {
+  setupProductCategoryField();
   const shippingInput = document.getElementById('p-shipping-fee');
   const shippingGroup = shippingInput?.closest('.form-group');
   if (shippingGroup) shippingGroup.innerHTML = `<label class="form-label">BUYSELL delivery fee</label><div class="form-input" style="display:flex;align-items:center;background:var(--cream);color:var(--green);font-weight:700">${fmtN(BUYSELL_DELIVERY_FEE)} flat fee per order — set by BUYSELL</div>`;
@@ -4193,7 +4221,9 @@ async function submitProduct(e) {
  const priceVal = parseFloat(document.getElementById('p-price').value);
  const stockVal = parseInt(document.getElementById('p-stock').value) || 0;
  const descVal = document.getElementById('p-desc').value.trim();
- const catVal = document.getElementById('p-category').value;
+  const selectedCategory = document.getElementById('p-category').value;
+  const customCategory = document.getElementById('p-custom-category')?.value.trim() || '';
+  const catVal = selectedCategory === '__custom__' ? customCategory.toLowerCase() : selectedCategory;
  const condVal = document.getElementById('p-condition').value;
  const locVal = document.getElementById('p-location').value.trim();
 
@@ -4209,7 +4239,8 @@ if (nameVal.length > 300) {
  if (priceVal > 100000000) { toast('Price too high','Maximum price is \u20A6100,000,000','warn'); return; }
  if (stockVal < 0 || stockVal > 100000) { toast('Invalid stock','Stock must be between 0 and 100,000','warn'); return; }
  if (descVal.length > 2000) { toast('Description too long','Max 2,000 characters','warn'); return; }
- if (!VALID_CATS.includes(catVal)) { toast('Invalid category','Please select a valid category','warn'); return; }
+  if (selectedCategory === '__custom__' && (customCategory.length < 2 || customCategory.length > 60)) { toast('Invalid custom category','Enter a category between 2 and 60 characters','warn'); return; }
+  if (selectedCategory !== '__custom__' && !VALID_CATS.includes(catVal)) { toast('Invalid category','Please select a valid category','warn'); return; }
  if (!VALID_CONDS.includes(condVal)) { toast('Invalid condition','Please select a valid condition','warn'); return; }
 
  const imgFiles = fileListToArray('p-image');
@@ -4338,7 +4369,14 @@ async function editProduct(id) {
   if (shippingFeeInput) shippingFeeInput.value = BUYSELL_DELIVERY_FEE;
  document.getElementById('p-stock').value = p.stock_quantity ?? '';
  document.getElementById('p-low-stock').value = p.low_stock_alert || '';
- document.getElementById('p-category').value = p.category || 'electronics';
+  const categorySelect = document.getElementById('p-category');
+  const savedCategory = p.category || 'electronics';
+  categorySelect.value = savedCategory;
+  if (categorySelect.value !== savedCategory) {
+   categorySelect.value = '__custom__';
+   document.getElementById('p-custom-category').value = savedCategory;
+   categorySelect.onchange?.();
+  }
  document.getElementById('p-condition').value = p.condition || 'new';
  document.getElementById('p-desc').value = p.description || '';
  document.getElementById('p-location').value = p.location || '';
