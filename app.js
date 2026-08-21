@@ -2912,6 +2912,7 @@ function checkoutCartItems(includeDetails = false) {
  feeApplied.add(sellerKey);
  const base = {
  id: item.id,
+ seller_id: item.seller_id || item.profiles?.id || item.store_id || null,
  qty: item.qty || 1,
  shipping_fee: chargedShipping,
  shipping_cost: chargedShipping,
