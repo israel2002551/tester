@@ -30,13 +30,27 @@ export default function LegalPage({ page }) {
   const content = legalContent[page] || legalContent.privacy;
   document.body.className = 'legal-page';
   document.title = `${content.title} | BUYSELL Nigeria`;
+
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      window.location.href = '/?view=shop';
+    }
+  };
+
   return (
     <>
       <header className="legal-page-header">
-        <a href="/" className="brand-logo">
-          <div className="brand-icon">B</div>
-          <div><div className="brand-text">BUY<span>SELL</span></div><div className="brand-tld">.nigeria</div></div>
-        </a>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <button className="btn btn-outline btn-sm" onClick={handleBack} type="button" title="Back">
+            <i className="fa-solid fa-arrow-left" /> Back
+          </button>
+          <a href="/?view=shop" className="brand-logo">
+            <div className="brand-icon">B</div>
+            <div><div className="brand-text">BUY<span>SELL</span></div><div className="brand-tld">.nigeria</div></div>
+          </a>
+        </div>
       </header>
       <main className="legal-page-main">
         <article className="legal-document">
@@ -49,7 +63,10 @@ export default function LegalPage({ page }) {
             </section>
           ))}
           <div className="legal-page-links">
-            <a className="btn btn-primary" href="/">Back to BUYSELL</a>
+            <button className="btn btn-primary" onClick={handleBack} type="button">
+              <i className="fa-solid fa-arrow-left" /> Back to Previous
+            </button>
+            <a className="btn btn-outline" href="/?view=shop">Marketplace</a>
             <a className="btn btn-outline" href={page === 'privacy' ? '/terms' : '/privacy'}>{page === 'privacy' ? 'Terms of Service' : 'Privacy Policy'}</a>
             <a className="btn btn-outline" href="https://chat.whatsapp.com/LbqLGlmpqwbJqDEmj6FUPW?s=cl&p=a&ilr=1" target="_blank" rel="noopener noreferrer"><i className="fa-brands fa-whatsapp" /> Community</a>
             <a className="btn btn-outline" href="https://youtube.com/@buysellmarketplacenigeria?si=hz5EL1weqka8ikG1" target="_blank" rel="noopener noreferrer"><i className="fa-brands fa-youtube" /> YouTube</a>

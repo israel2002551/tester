@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import MarketplacePage from './pages/MarketplacePage.jsx';
 import CategoryPage from './pages/CategoryPage.jsx';
 import ProductPage from './pages/ProductPage.jsx';
@@ -42,7 +43,7 @@ const marketplaceQueryKeys = [
   'order',
 ];
 
-function routeFor(pathname, search = '') {
+export function routeFor(pathname, search = '') {
   const path = pathname.replace(/\/index\.html$/, '') || '/';
   if (path === '/product' || path === '/product.html') return { type: 'product' };
   if (path === '/privacy' || path === '/privacy.html') return { type: 'legal', page: 'privacy' };
@@ -51,6 +52,9 @@ function routeFor(pathname, search = '') {
   if (categoryRoutes[path]) return { type: 'category', category: categoryRoutes[path] };
   if (path === '/') {
     const params = new URLSearchParams(search);
+    if (params.get('landing') === '1' || params.get('marketing') === '1') {
+      return { type: 'marketing' };
+    }
     const hasMarketplaceIntent = marketplaceQueryKeys.some(key => params.has(key));
     return hasMarketplaceIntent ? { type: 'marketplace' } : { type: 'marketing' };
   }
@@ -58,7 +62,23 @@ function routeFor(pathname, search = '') {
 }
 
 export default function App() {
-  const route = routeFor(window.location.pathname, window.location.search);
+  const [currentLocation, setCurrentLocation] = useState(() => ({
+    pathname: window.location.pathname,
+    search: window.location.search,
+  }));
+
+  useEffect(() => {
+    const onPopState = () => {
+      setCurrentLocation({
+        pathname: window.location.pathname,
+        search: window.location.search,
+      });
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  const route = routeFor(currentLocation.pathname, currentLocation.search);
   if (route.type === 'product') return <ProductPage />;
   if (route.type === 'category') return <CategoryPage category={route.category} />;
   if (route.type === 'legal') return <LegalPage page={route.page} />;

@@ -3,6 +3,7 @@ import BrandHeader from '../components/BrandHeader.jsx';
 import CategoryNav from '../components/CategoryNav.jsx';
 import CategoryTrustBar from '../components/CategoryTrustBar.jsx';
 import LoadingGrid from '../components/LoadingGrid.jsx';
+import CartDrawer from '../components/CartDrawer.jsx';
 import { CategoryProductCard, UpcomingProductCard } from '../components/CategoryProductCard.jsx';
 import { createSupabaseClient } from '../lib/browserConfig.js';
 import { categoryConfig, categoryProductColumns, upcomingColumns } from '../lib/categoryData.js';
@@ -64,6 +65,7 @@ export default function CategoryPage({ category = 'all' }) {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('newest');
   const [status, setStatus] = useState('loading');
+  const [isCartOpen, setIsCartOpen] = useState(false);
 
   useEffect(() => {
     document.body.className = 'category-page';
@@ -122,7 +124,7 @@ export default function CategoryPage({ category = 'all' }) {
 
   return (
     <>
-      <BrandHeader className="category-page-header" />
+      <BrandHeader className="category-page-header" onOpenCart={() => setIsCartOpen(true)} />
       <main className="category-page-main">
         <section className="category-hero">
           <span className="category-hero-kicker">{isUpcoming ? 'Launch Preview' : 'BUYSELL Collection'}</span>
@@ -153,6 +155,7 @@ export default function CategoryPage({ category = 'all' }) {
           </div>
         ) : null}
       </main>
+      <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
     </>
   );
 }

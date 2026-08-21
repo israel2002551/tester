@@ -553,7 +553,7 @@ if (typeof supabase !== 'undefined') {
   if (hasAppRouteParams()) {
   await continueUrlRoute();
   } else {
-  showMarketLandingPage();
+  showBuyerView();
   }
   }
  }, 0);
@@ -569,7 +569,10 @@ function processInboundChatRedirects() {
  console.log('[INBOUND ROUTER] Direct chat intercept parameter caught. Partner ID:', targetChatPartnerId);
  
  // Clear URL parameters cleanly so reloading the window doesn't keep opening the popup loop
- window.history.replaceState({}, document.title, window.location.pathname);
+ const cleanUrl = new URL(window.location.href);
+ cleanUrl.searchParams.delete('chat');
+ if (!cleanUrl.searchParams.get('view')) cleanUrl.searchParams.set('view', 'shop');
+ window.history.replaceState({}, document.title, `${cleanUrl.pathname}${cleanUrl.search}`);
  
  // Fetch user profile properties asynchronously out of database and toggle UI focus layout panels
  db.from('profiles')
@@ -655,7 +658,9 @@ function setSurfaceRoute(page) {
  else url.searchParams.delete('page');
  url.searchParams.delete('cart');
  url.searchParams.delete('checkout');
- history.pushState({ page: page || 'shop' }, '', `${url.pathname}${url.search}${url.hash}`);
+ if (window.history?.pushState) {
+  history.pushState({ page: page || 'shop', view: 'shop' }, '', `${url.pathname}${url.search}${url.hash}`);
+ }
 }
 
 function clearPageSurfaceRoute() {
@@ -663,7 +668,10 @@ function clearPageSurfaceRoute() {
  url.searchParams.delete('page');
  url.searchParams.delete('cart');
  url.searchParams.delete('checkout');
- history.pushState({ view: url.searchParams.get('view') || 'shop' }, '', `${url.pathname}${url.search}${url.hash}`);
+ if (!url.searchParams.get('view')) url.searchParams.set('view', 'shop');
+ if (window.history?.replaceState) {
+  history.replaceState({ view: url.searchParams.get('view') || 'shop' }, '', `${url.pathname}${url.search}${url.hash}`);
+ }
 }
 
 function preparePageSurface(id, page) {
@@ -705,6 +713,23 @@ function closeModal(id) {
  }
 }
 document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if(e.target===m) closeModal(m.id); }));
+
+window.addEventListener('popstate', () => {
+ const params = new URLSearchParams(window.location.search);
+ const page = params.get('page');
+ const isCart = params.get('cart') === 'open';
+ const isCheckout = params.get('checkout') === 'open';
+ if (!page && !isCart && !isCheckout && activePageSurface) {
+  const currentSurface = activePageSurface;
+  activePageSurface = '';
+  document.body.classList.remove('surface-page-open');
+  const m = document.getElementById(currentSurface);
+  if (m) {
+   m.classList.remove('open', 'app-page-surface', 'cart-page-surface', 'checkout-page-surface', 'messages-page-surface', 'conversation-page-surface');
+  }
+  if (!document.querySelector('.modal-overlay.open')) document.body.classList.remove('modal-open');
+ }
+});
 
 function hideAccountPage() {
  const accountView = document.getElementById('account-view');
@@ -951,7 +976,11 @@ async function continueUrlRoute() {
 
 function cleanAuthRedirectUrl() {
   if (!hasAuthRedirectParams() || !window.history?.replaceState) return;
-  window.history.replaceState({}, document.title, window.location.pathname);
+  const url = new URL(window.location.href);
+  url.searchParams.delete('code');
+  url.searchParams.delete('state');
+  if (!url.searchParams.get('view')) url.searchParams.set('view', 'shop');
+  window.history.replaceState({}, document.title, `${url.pathname}${url.search}`);
 }
 
 function continuePendingEntry() {
@@ -1390,7 +1419,7 @@ async function checkSession() {
   } else if (appStorage.getItem('bs_manual_navigation_pass') || hasAuthRedirectParams()) {
   continuePendingEntry();
   } else {
-  showMarketLandingPage();
+  showBuyerView();
  }
  }
  }
@@ -2391,11 +2420,14 @@ function categoryLabel(cat) {
 
 function setCategoryUrl(cat) {
  const url = new URL(window.location.href);
+ url.searchParams.set('view', 'shop');
  if (!cat || cat === 'all') url.searchParams.delete('category');
  else url.searchParams.set('category', cat);
  url.searchParams.delete('product');
  url.searchParams.delete('store');
- history.pushState({ category: cat || 'all' }, '', `${url.pathname}${url.search}${url.hash}`);
+ if (window.history?.replaceState) {
+  history.replaceState({ category: cat || 'all', view: 'shop' }, '', `${url.pathname}${url.search}${url.hash}`);
+ }
 }
 
 function filterCat(cat, options = {}) {

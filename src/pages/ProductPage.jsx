@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import LoadingGrid from '../components/LoadingGrid.jsx';
+import CartDrawer from '../components/CartDrawer.jsx';
 import { createSupabaseClient } from '../lib/browserConfig.js';
 import { money } from '../lib/format.js';
 import { productColumns, productMedia, shippingFee } from '../lib/productData.js';
@@ -59,6 +60,7 @@ export default function ProductPage() {
   const [activeMedia, setActiveMedia] = useState(0);
   const [count, setCount] = useState(cartCount());
   const [toast, setToast] = useState('');
+  const [isCartOpen, setIsCartOpen] = useState(false);
   const productId = new URLSearchParams(window.location.search).get('id') || new URLSearchParams(window.location.search).get('product');
 
   useEffect(() => {
@@ -127,7 +129,7 @@ export default function ProductPage() {
 
   function buyNow() {
     addToCart(1);
-    window.location.href = '/?view=shop&cart=open';
+    setIsCartOpen(true);
   }
 
   async function shareProduct() {
@@ -162,10 +164,18 @@ export default function ProductPage() {
     }
   }
 
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      window.location.href = '/?view=shop';
+    }
+  };
+
   if (status === 'loading') {
     return (
       <>
-        <ProductHeader count={count} />
+        <ProductHeader count={count} onOpenCart={() => setIsCartOpen(true)} onBack={handleBack} />
         <main className="product-page-shell"><LoadingGrid count={2} className="product-page-loading" height={520} /></main>
       </>
     );
@@ -179,14 +189,17 @@ export default function ProductPage() {
       : 'This listing may have been removed or is temporarily unavailable.';
     return (
       <>
-        <ProductHeader count={count} />
+        <ProductHeader count={count} onOpenCart={() => setIsCartOpen(true)} onBack={handleBack} />
         <main className="product-page-shell">
           <section className="product-page-error">
             <i className="fa-solid fa-box-open" />
             <h1>{message}</h1>
             <p>{detail}</p>
             <div className="product-page-error-actions">
-              <a className="btn btn-primary" href="/">Market Landing</a>
+              <button className="btn btn-primary" onClick={handleBack} type="button">
+                <i className="fa-solid fa-arrow-left" /> Back to Previous
+              </button>
+              <a className="btn btn-outline" href="/?view=shop">Marketplace</a>
               <a className="btn btn-outline" href="/products">Browse Products</a>
             </div>
           </section>
@@ -199,7 +212,7 @@ export default function ProductPage() {
 
   return (
     <>
-      <ProductHeader count={count} />
+      <ProductHeader count={count} onOpenCart={() => setIsCartOpen(true)} onBack={handleBack} />
       <main className="product-page-shell">
         <section className="product-detail-hero">
           <div className="product-detail-gallery">
@@ -245,7 +258,7 @@ export default function ProductPage() {
                 <h2>{sellerName}</h2>
                 <p>{seller.seller_verified ? 'Verified BUYSELL seller' : 'Seller on BUYSELL Nigeria'}</p>
               </div>
-              <a className="btn btn-outline btn-sm" href={`/?store=${encodeURIComponent(product.seller_id || '')}`}><i className="fa-solid fa-store" /> Store</a>
+              <a className="btn btn-outline btn-sm" href={`/?view=shop&store=${encodeURIComponent(product.seller_id || '')}`}><i className="fa-solid fa-store" /> Store</a>
             </section>
           </article>
         </section>
@@ -256,22 +269,27 @@ export default function ProductPage() {
           <TrustItem icon="fa-shield-halved" title="Marketplace Review" text="Admin support for order issues" />
         </section>
       </main>
+      <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} onCartChange={cnt => setCount(cnt)} />
       {toast ? <div className="product-page-toast show">{toast}</div> : null}
     </>
   );
 }
 
-function ProductHeader({ count }) {
+function ProductHeader({ count, onOpenCart, onBack }) {
   return (
     <header className="product-page-header">
-      <a className="category-brand" href="/">BUY<span>SELL</span></a>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+        <button className="btn btn-outline btn-sm" onClick={onBack} type="button" title="Back">
+          <i className="fa-solid fa-arrow-left" /> Back
+        </button>
+        <a className="category-brand" href="/?view=shop">BUY<span>SELL</span></a>
+      </div>
       <nav>
-        <a href="/">Home</a>
+        <a href="/?view=shop">Marketplace</a>
         <a href="/products">Collections</a>
         <a href="/category/dropship">1688 Sourcing</a>
-        <a href="/?view=shop">Marketplace</a>
       </nav>
-      <button className="product-cart-pill" onClick={() => { window.location.href = '/?view=shop&cart=open'; }} type="button">
+      <button className="product-cart-pill" onClick={onOpenCart} type="button" title="View Cart">
         <i className="fa-solid fa-cart-shopping" /><span>{count}</span>
       </button>
     </header>
