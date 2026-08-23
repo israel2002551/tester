@@ -6951,7 +6951,6 @@ async function loadAdminDisputes() {
   if (dl) dl.innerHTML = '<p class="color-text3 text-sm">No disputes.</p>';
  }
 }
-}
 
 async function resolveDispute(id) {
  try { await callEdge('admin-action', { action: 'resolve_dispute', target_id: id }); }
