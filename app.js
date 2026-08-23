@@ -57,7 +57,8 @@ const PRODUCT_LIST_COLUMNS = [
 const PRODUCT_MINIMAL_COLUMNS = ['id','seller_id','name','price','category','status','created_at','image_url'];
 const PRODUCT_PROFILE_HYDRATE_COLUMNS = ['id','name','email','role','accounts','store_name','store_description','whatsapp','bank_name','account_number','account_name','paystack_key','logo_url','store_address'];
 const SELLER_PRODUCT_COLUMNS = 'id,name,price,shipping_fee,shipping_cost,image_url,has_video,stock_quantity,status,created_at';
-const ORDER_LIST_COLUMNS = ['id','status','total_amount','created_at','delivery_name','delivery_address','items','payment_method','proof_url','payment_proof_url','seller_id','buyer_id'];
+const ORDER_LIST_COLUMNS = ['id','status','total_amount','created_at','delivery_name','delivery_address','items','payment_method','proof_url','seller_id','buyer_id'];
+const DISPUTE_LIST_COLUMNS = ['id','order_id','buyer_id','seller_id','dispute_type','reason','description','status','created_at'];
 const DROPSHIP_REQUEST_COLUMNS = ['id','status','total_amount','created_at','delivery_name','delivery_address','items','payment_method','seller_id','buyer_id','name','contact','destination','request','admin_note','tracking_update','updated_at'];
 const MESSAGE_LIST_COLUMNS = ['id','sender_id','receiver_id','content','message','body','order_id','is_read','created_at'];
 const SELLER_ADMIN_COLUMNS = ['id','name','email','role','accounts','store_name','whatsapp','created_at','is_suspended','commission_paid','trial_end','kyc_status','last_login_at','last_seen_at','login_count'];
@@ -2101,7 +2102,6 @@ function handleSellerSidebarTap(event) {
 }
 
 document.addEventListener('click', handleSellerSidebarTap, true);
-document.addEventListener('touchend', handleSellerSidebarTap, { capture: true, passive: false });
 
 // ====================================================
 // CAROUSEL
@@ -6862,25 +6862,29 @@ async function adminDeleteSeller(id) {
 /* -- ORDERS -- */
 async function loadAdminOrders() {
  if (!isAdmin()) return;
- document.getElementById('adm-orders-skeleton').classList.remove('hidden');
- document.getElementById('adm-orders-list').classList.add('hidden');
- document.getElementById('adm-orders-empty').classList.add('hidden');
+ document.getElementById('adm-orders-skeleton')?.classList.remove('hidden');
+ document.getElementById('adm-orders-list')?.classList.add('hidden');
+ document.getElementById('adm-orders-empty')?.classList.add('hidden');
  const filter = document.getElementById('adm-order-filter')?.value || 'all';
-  let q = db.from('orders').select(ORDER_LIST_COLUMNS.join(',')).order('created_at',{ascending:false}).limit(120);
- if (filter !== 'all') q = q.eq('status', filter);
- const { data: orders } = await q;
- document.getElementById('adm-orders-skeleton').classList.add('hidden');
- document.getElementById('adm-order-count').textContent = (orders||[]).length + ' orders';
- const list = document.getElementById('adm-orders-list');
- if (!orders?.length) { document.getElementById('adm-orders-empty').classList.remove('hidden'); return; }
- list.classList.remove('hidden');
- const sc = {pending:'badge-gold',confirmed:'badge-blue',shipped:'badge-purple',delivered:'badge-green',cancelled:'badge-red',refunded:'badge-gray'};
- list.innerHTML = orders.map(o => `
+ try {
+  const { data: orders = [] } = await runSelectWithColumnFallback('orders', ORDER_LIST_COLUMNS, q => {
+   let builder = q.order('created_at', { ascending: false }).limit(120);
+   if (filter !== 'all') builder = builder.eq('status', filter);
+   return builder;
+  });
+  document.getElementById('adm-orders-skeleton')?.classList.add('hidden');
+  const countEl = document.getElementById('adm-order-count');
+  if (countEl) countEl.textContent = (orders || []).length + ' orders';
+  const list = document.getElementById('adm-orders-list');
+  if (!orders?.length) { document.getElementById('adm-orders-empty')?.classList.remove('hidden'); return; }
+  list?.classList.remove('hidden');
+  const sc = {pending:'badge-gold',confirmed:'badge-blue',shipped:'badge-purple',delivered:'badge-green',cancelled:'badge-red',refunded:'badge-gray'};
+  list.innerHTML = orders.map(o => `
  <div class="card card-pad mb-2">
  <div class="flex justify-between items-start flex-wrap gap-2 mb-2">
  <div>
- <div class="font-bold text-sm">${o.id}</div>
- <div class="text-xs color-text3">${fmtDate(o.created_at)} - ${o.payment_method||''}</div>
+ <div class="font-bold text-sm">${escHtml(o.id)}</div>
+ <div class="text-xs color-text3">${fmtDate(o.created_at)} - ${escHtml(o.payment_method||'')}</div>
  <div class="text-xs mt-1">${(o.items||[]).map(i=>`${escHtml(i.name)} x${i.qty}`).join(', ')}</div>
  </div>
  <div class="text-right">
@@ -6890,13 +6894,18 @@ async function loadAdminOrders() {
  </div>
  <div class="text-xs color-text3 mb-2"><i class="fa-solid fa-user"></i> ${escHtml(o.delivery_name||' - ')} &nbsp;|&nbsp; <i class="fa-solid fa-map-marker-alt"></i> ${escHtml((o.delivery_address||'').substr(0,50))}</div>
  <div class="flex gap-2 flex-wrap">
-  ${o.status==='pending' ? `<button onclick="adminUpdateOrder('${o.id}','confirmed')" class="btn btn-primary btn-sm">Schedule Pickup</button>` : ''}
-  ${o.status==='confirmed' ? `<button onclick="adminUpdateOrder('${o.id}','shipped')" class="btn btn-sm" style="background:#ede9fe;color:var(--purple)">Collected by BUYSELL</button>` : ''}
-  ${o.status==='shipped' ? `<button onclick="adminUpdateOrder('${o.id}','delivered')" class="btn btn-sm" style="background:#dcfce7;color:#15803d">Mark Delivered</button>` : ''}
- ${!['cancelled','refunded'].includes(o.status) ? `<button onclick="adminUpdateOrder('${o.id}','cancelled')" class="btn btn-outline btn-sm">Cancel</button>` : ''}
- ${o.proof_url ? `<a href="${o.proof_url}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-image"></i> Proof</a>` : ''}
+  ${o.status==='pending' ? `<button onclick="adminUpdateOrder('${escAttr(o.id)}','confirmed')" class="btn btn-primary btn-sm">Schedule Pickup</button>` : ''}
+  ${o.status==='confirmed' ? `<button onclick="adminUpdateOrder('${escAttr(o.id)}','shipped')" class="btn btn-sm" style="background:#ede9fe;color:var(--purple)">Collected by BUYSELL</button>` : ''}
+  ${o.status==='shipped' ? `<button onclick="adminUpdateOrder('${escAttr(o.id)}','delivered')" class="btn btn-sm" style="background:#dcfce7;color:#15803d">Mark Delivered</button>` : ''}
+ ${!['cancelled','refunded'].includes(o.status) ? `<button onclick="adminUpdateOrder('${escAttr(o.id)}','cancelled')" class="btn btn-outline btn-sm">Cancel</button>` : ''}
+ ${o.proof_url ? `<a href="${escAttr(o.proof_url)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-image"></i> Proof</a>` : ''}
  </div>
  </div>`).join('');
+ } catch(err) {
+  console.warn('Could not load admin orders:', err);
+  document.getElementById('adm-orders-skeleton')?.classList.add('hidden');
+  document.getElementById('adm-orders-empty')?.classList.remove('hidden');
+ }
 }
 
 async function adminUpdateOrder(id, status) {
@@ -6912,32 +6921,36 @@ async function adminUpdateOrder(id, status) {
 /* -- DISPUTES -- */
 async function loadAdminDisputes() {
  if (!isAdmin()) return;
- const { data: disputes } = await db.from('disputes')
- .select('id,order_id,dispute_type,description,status,created_at')
- .order('created_at',{ascending:false})
- .limit(60);
  const dl = document.getElementById('admin-disputes-list');
- const open = (disputes||[]).filter(d => d.status === 'open').length;
- document.getElementById('adm-disputes').textContent = open;
- if (!disputes?.length) { dl.innerHTML = '<p class="color-text3 text-sm">No disputes.</p>'; return; }
- dl.innerHTML = disputes.map(d => `
+ try {
+  const { data: disputes = [] } = await runSelectWithColumnFallback('disputes', DISPUTE_LIST_COLUMNS, q => q.order('created_at', { ascending: false }).limit(60));
+  const open = (disputes || []).filter(d => d.status === 'open').length;
+  const dispEl = document.getElementById('adm-disputes');
+  if (dispEl) dispEl.textContent = open;
+  if (!disputes?.length) { if (dl) dl.innerHTML = '<p class="color-text3 text-sm">No disputes.</p>'; return; }
+  if (dl) dl.innerHTML = disputes.map(d => `
  <div class="dispute-card ${d.status==='open'?'open-dispute':'resolved'} mb-2">
  <div class="flex justify-between items-start flex-wrap gap-2 mb-2">
  <div>
- <div class="font-600 text-sm">Order: ${d.order_id}</div>
+ <div class="font-600 text-sm">Order: ${escHtml(d.order_id || d.id)}</div>
  <div class="text-xs color-text3">${fmtDate(d.created_at)}</div>
- <div class="text-sm mt-1"><strong>${(d.dispute_type||'').replace(/-/g,' ')}</strong></div>
- <div class="text-xs color-text3 mt-1">${escHtml((d.description||'').substr(0,200))}${(d.description?.length||0)>200?'...':''}</div>
+ <div class="text-sm mt-1"><strong>${escHtml((d.dispute_type || d.reason || '').replace(/-/g,' '))}</strong></div>
+ <div class="text-xs color-text3 mt-1">${escHtml((d.description||d.reason||'').substr(0,200))}${(d.description?.length||0)>200?'...':''}</div>
  </div>
- <span class="badge ${d.status==='open'?'badge-red':d.status==='resolved'?'badge-green':'badge-orange'}">${d.status}</span>
+ <span class="badge ${d.status==='open'?'badge-red':d.status==='resolved'?'badge-green':'badge-orange'}">${escHtml(d.status||'open')}</span>
  </div>
  ${d.status==='open' ? `
  <div class="flex gap-2 flex-wrap">
- <button onclick="resolveDispute('${d.id}')" class="btn btn-primary btn-sm"><i class="fa-solid fa-check"></i> Resolve</button>
- <button onclick="refundDispute('${d.id}','${d.order_id}')" class="btn btn-danger btn-sm"><i class="fa-solid fa-undo"></i> Refund</button>
- <a href="https://wa.me/?text=Re%20dispute%20Order%20${d.order_id}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i></a>
+ <button onclick="resolveDispute('${escAttr(d.id)}')" class="btn btn-primary btn-sm"><i class="fa-solid fa-check"></i> Resolve</button>
+ <button onclick="refundDispute('${escAttr(d.id)}','${escAttr(d.order_id||d.id)}')" class="btn btn-danger btn-sm"><i class="fa-solid fa-undo"></i> Refund</button>
+ <a href="https://wa.me/?text=Re%20dispute%20Order%20${escAttr(d.order_id||d.id)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i></a>
  </div>` : ''}
  </div>`).join('');
+ } catch(err) {
+  console.warn('Could not load disputes:', err);
+  if (dl) dl.innerHTML = '<p class="color-text3 text-sm">No disputes.</p>';
+ }
+}
 }
 
 async function resolveDispute(id) {
@@ -10442,17 +10455,17 @@ async function fetchProductForNotification(productId) {
 
 async function notifyOrderIfConfirmed(orderId, oldStatus = null) {
  if (!orderId) return;
- const { data: order, error } = await db.from('orders').select(ORDER_LIST_COLUMNS.join(',')).eq('id', orderId).maybeSingle();
- if (error || !order) {
- console.warn('[PUSH ENGINE] Could not load order for notification:', error?.message || error || 'not found');
- return;
+ try {
+  const { data: order } = await runSelectWithColumnFallback('orders', ORDER_LIST_COLUMNS, q => q.eq('id', orderId).maybeSingle());
+  if (!order || order.status !== 'confirmed') return;
+  await fireNotificationFunction('notify-seller-order', {
+   type: oldStatus ? 'UPDATE' : 'INSERT',
+   record: order,
+   old_record: oldStatus ? { ...order, status: oldStatus } : null,
+  });
+ } catch(error) {
+  console.warn('[PUSH ENGINE] Could not load order for notification:', error?.message || error || 'not found');
  }
- if (order.status !== 'confirmed') return;
- await fireNotificationFunction('notify-seller-order', {
- type: oldStatus ? 'UPDATE' : 'INSERT',
- record: order,
- old_record: oldStatus ? { ...order, status: oldStatus } : null,
- });
 }
 
 async function loadActiveAds() {

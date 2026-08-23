@@ -3635,6 +3635,8 @@ button, a, input, textarea, select { touch-action: manipulation; }
   height: 100dvh !important;
   max-height: 100dvh !important;
   overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior-y: contain;
   z-index: 1100 !important;
   pointer-events: auto !important;
   touch-action: pan-y;
@@ -3659,7 +3661,7 @@ button, a, input, textarea, select { touch-action: manipulation; }
  #dash-sidebar *,
  #spd-sidebar * {
   pointer-events: auto !important;
-  touch-action: manipulation;
+  touch-action: pan-y;
  }
 
  body.sidebar-open .dash-main {
