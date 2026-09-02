@@ -37,6 +37,20 @@ export function installRuntimeGlobals() {
   window.ADMIN_EMAILS = adminEmails.length ? adminEmails : window.ADMIN_EMAILS || [];
   window.EDGE_URL = window.SB_URL ? `${window.SB_URL}/functions/v1` : window.EDGE_URL || '';
   window.CLAUDE_EDGE_URL = window.EDGE_URL ? `${window.EDGE_URL}/smooth-handler` : window.CLAUDE_EDGE_URL || '';
+  if (!window.supabaseClient && window.supabase && typeof window.supabase.createClient === 'function' && window.SB_URL && window.SB_KEY) {
+    try {
+      window.supabaseClient = window.supabase.createClient(window.SB_URL, window.SB_KEY, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+        },
+      });
+      window.db = window.supabaseClient;
+    } catch (e) {
+      console.warn('installRuntimeGlobals client init warning:', e);
+    }
+  }
   return config;
 }
 
@@ -74,5 +88,16 @@ export async function createSupabaseClient() {
   const url = config.SB_URL || readGlobalConst('SB_URL');
   const key = config.SB_KEY || readGlobalConst('SB_KEY');
   if (!window.supabase || !url || !key) throw new Error('Supabase config unavailable');
-  return window.supabase.createClient(url, key);
+  if (!window.supabaseClient) {
+    window.supabaseClient = window.supabase.createClient(url, key, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    });
+    window.db = window.supabaseClient;
+  }
+  return window.supabaseClient;
 }
+

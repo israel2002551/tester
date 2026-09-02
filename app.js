@@ -3,6 +3,8 @@
 // Config loaded from config.js (secrets are .gitignored)
 // ====================================================
 
+var db = (typeof window !== 'undefined' ? (window.db || window.supabaseClient) : null) || null;
+var supabase = (typeof window !== 'undefined' ? (window.supabaseClient || window.supabase) : null) || null;
 
 let chatHistory = []; 
 let adminAiHistory = [];
@@ -159,6 +161,10 @@ function clearCacheByPrefix(prefix) {
 }
 
 async function runSelectWithColumnFallback(table, columns, configure) {
+ initSupabaseClient();
+ if (!db || typeof db.from !== 'function') {
+  throw new Error('Database connection unavailable. Please check Supabase configuration.');
+ }
  let remaining = [...columns];
  let lastError = null;
  while (remaining.length) {
@@ -467,29 +473,55 @@ async function trackAnalytics(event) {
  }
 }
 
-// " SAFE SUPABASE INITIALIZATION & VARIABLES
-if (typeof window.supabaseClient === 'undefined') {
- window.supabaseClient = window.supabase.createClient(SB_URL, SB_KEY, {
- auth: {
- persistSession: true,
- autoRefreshToken: true,
- detectSessionInUrl: true,
- storage: appStorage
- }
- });
+// SAFE SUPABASE INITIALIZATION & VARIABLES
+function getSupabaseConfig() {
+ const cfg = (typeof window !== 'undefined' && window.BUYSELL_CONFIG) || {};
+ const url = (typeof window !== 'undefined' && window.SB_URL) || (typeof SB_URL !== 'undefined' ? SB_URL : '') || cfg.SB_URL || '';
+ const key = (typeof window !== 'undefined' && window.SB_KEY) || (typeof SB_KEY !== 'undefined' ? SB_KEY : '') || cfg.SB_KEY || '';
+ return { url: String(url || '').trim(), key: String(key || '').trim() };
 }
 
-// FIX: Re-assign globally without re-declaring 'const' or 'let'
-db = window.supabaseClient;
-supabase = window.supabaseClient;
+function initSupabaseClient() {
+ if (typeof window === 'undefined') return null;
+ if (window.supabaseClient && window.supabaseClient.auth) {
+  db = window.supabaseClient;
+  supabase = window.supabaseClient;
+  window.db = window.supabaseClient;
+  window.supabaseAppClient = window.supabaseClient;
+  return window.supabaseClient;
+ }
 
-window.db = window.supabaseClient;
-window.supabase = window.supabaseClient;
-window.supabaseAppClient = window.supabaseClient;
+ const { url, key } = getSupabaseConfig();
+ if (window.supabase && typeof window.supabase.createClient === 'function' && url && key) {
+  try {
+   window.supabaseClient = window.supabase.createClient(url, key, {
+    auth: {
+     persistSession: true,
+     autoRefreshToken: true,
+     detectSessionInUrl: true,
+     storage: appStorage
+    }
+   });
+   db = window.supabaseClient;
+   supabase = window.supabaseClient;
+   window.db = window.supabaseClient;
+   window.supabaseAppClient = window.supabaseClient;
+   return window.supabaseClient;
+  } catch (err) {
+   console.error('Supabase client initialization failed:', err);
+  }
+ }
+
+ db = window.supabaseClient || window.db || null;
+ supabase = window.supabaseClient || window.supabase || null;
+ return db;
+}
+
+initSupabaseClient();
 
 
 // Auth state listener keeps the visible header and active view in sync.
-if (typeof supabase !== 'undefined') {
+if (supabase && supabase.auth && typeof supabase.auth.onAuthStateChange === 'function') {
  supabase.auth.onAuthStateChange((event, session) => {
  console.log(`Flash Gatekeeper Auth Engine Event: ${event}`);
  
@@ -1117,6 +1149,12 @@ async function uploadProductMediaFiles(files, kind) {
 }
 
 async function signInWithGoogle() {
+ initSupabaseClient();
+ if (!db || !db.auth) {
+  toast('Setup Required', 'Supabase credentials are not configured. Please add your Supabase URL and Anon Key to config.js or .env.local.', 'error', 7000);
+  return;
+ }
+
  const rawRole = pendingEntryRole || appStorage.getItem('bs_entry_role') || document.querySelector('input[name="auth-role-radio"]:checked')?.value || 'buyer';
  const role = rawRole === 'both' ? 'seller' : rawRole;
  setPendingEntryRole(rawRole);
@@ -1128,10 +1166,11 @@ async function signInWithGoogle() {
  }));
 
  try {
+ const redirectOrigin = (typeof window !== 'undefined' && window.location?.origin) ? window.location.origin : PUBLIC_SITE_URL;
  const { error } = await db.auth.signInWithOAuth({
  provider: 'google',
  options: {
- redirectTo: `${PUBLIC_SITE_URL}/`,
+ redirectTo: `${redirectOrigin}/`,
  queryParams: {
  access_type: 'offline',
  prompt: 'select_account',
@@ -1178,6 +1217,12 @@ function withTimeout(promise, ms, timeoutMessage) {
 
 async function handleAuth(e) {
  e.preventDefault();
+ initSupabaseClient();
+ if (!db || !db.auth) {
+  toast('Setup Required', 'Supabase credentials are not configured. Please add your Supabase URL and Anon Key to config.js or .env.local.', 'error', 7000);
+  return;
+ }
+
  const isLogin = document.getElementById('auth-tab-login').classList.contains('active');
  const email = document.getElementById('auth-email').value.trim();
  const password = document.getElementById('auth-password').value;
@@ -1316,7 +1361,8 @@ async function handleAuth(e) {
 }
 
 async function upsertProfile(user, meta) {
- if (!user?.id) return;
+ initSupabaseClient();
+ if (!user?.id || !db || typeof db.from !== 'function') return;
  const referredBy = meta.referred_by || appStorage.getItem('bs_ref') || user.user_metadata?.referred_by || '';
  const { error } = await db.from('profiles').upsert({
  id: user.id,
@@ -1482,11 +1528,18 @@ function updateNavForUser() {
  // Referral link
  const rc = currentUser.profile?.referral_code || 'ref_' + currentUser.id?.substr(0,8);
  document.getElementById('referral-link').value = `${PUBLIC_SITE_URL}/ref/${rc}`;
+ updateBuyerSidebarUser();
 }
 
 async function sendPasswordReset() {
  const email = document.getElementById('forgot-email').value.trim();
  if (!email) { toast('Enter your email', '', 'warn'); return; }
+
+ initSupabaseClient();
+ if (!db || !db.auth) {
+  toast('Setup Required', 'Supabase credentials are not configured.', 'error', 6000);
+  return;
+ }
 
  const btn = document.getElementById('forgot-btn');
  const btnText = document.getElementById('forgot-btn-text');
@@ -1494,8 +1547,9 @@ async function sendPasswordReset() {
  btn.disabled = true; btnText.textContent = ''; spinner.classList.remove('hidden');
 
  try {
+ const redirectOrigin = (typeof window !== 'undefined' && window.location?.origin) ? window.location.origin : PUBLIC_SITE_URL;
  const { error } = await db.auth.resetPasswordForEmail(email, {
- redirectTo: PUBLIC_SITE_URL
+ redirectTo: `${redirectOrigin}/`
  });
 
  if (error) {
@@ -1526,11 +1580,13 @@ async function sendPasswordReset() {
 // OK REPLACE WITH THIS:
 async function logoutUser() {
  // 1. Log out of active Supabase database session
- await db.auth.signOut();
+ if (db && db.auth) {
+  await db.auth.signOut().catch(() => {});
+ }
  
- if (messageChannel) {
- db.removeChannel(messageChannel);
- messageChannel = null;
+ if (messageChannel && db && typeof db.removeChannel === 'function') {
+  db.removeChannel(messageChannel);
+  messageChannel = null;
  }
   currentUser = null;
   currentChatPartner = null;
@@ -2075,6 +2131,114 @@ function renderWithdrawalHistory(withdrawals) {
  </tr>
  `).join('');
 }
+
+// ====================================================
+// BUYER MOBILE SIDEBAR & NAVIGATION DRAWER
+// ====================================================
+function openBuyerSidebar() {
+ const sidebar = document.getElementById('buyer-sidebar');
+ const overlay = document.getElementById('buyer-mob-overlay');
+ if (!sidebar) return;
+ updateBuyerSidebarUser();
+ sidebar.classList.add('open');
+ overlay?.classList.add('open');
+ document.body.classList.add('buyer-sidebar-open');
+}
+
+function closeBuyerSidebar() {
+ document.getElementById('buyer-sidebar')?.classList.remove('open');
+ document.getElementById('buyer-mob-overlay')?.classList.remove('open');
+ document.body.classList.remove('buyer-sidebar-open');
+}
+
+function updateBuyerSidebarUser() {
+ const loggedEl = document.getElementById('buyer-sidebar-user-logged');
+ const guestEl = document.getElementById('buyer-sidebar-user-guest');
+ const shortcutsEl = document.getElementById('buyer-sidebar-shortcuts');
+ const accountSection = document.getElementById('buyer-sidebar-account-section');
+ const logoutBtn = document.getElementById('buyer-sidebar-logout-btn');
+ const cartBadge = document.getElementById('buyer-sidebar-cart-badge');
+ const wishlistBadge = document.getElementById('buyer-sidebar-wishlist-badge');
+ const inboxBadge = document.getElementById('buyer-sidebar-inbox-badge');
+ const sellerActionContainer = document.getElementById('buyer-sidebar-seller-actions');
+
+ const currentCartCount = (cart || []).reduce((sum, item) => sum + (Number(item.qty) || 1), 0);
+ if (cartBadge) cartBadge.textContent = currentCartCount;
+ const currentWishlistCount = (wishlist || []).length;
+ if (wishlistBadge) wishlistBadge.textContent = currentWishlistCount;
+ const currentInboxCount = document.getElementById('inbox-count')?.textContent || '0';
+ if (inboxBadge) inboxBadge.textContent = currentInboxCount;
+
+ if (currentUser) {
+  if (loggedEl) loggedEl.style.display = 'flex';
+  if (guestEl) guestEl.style.display = 'none';
+  if (shortcutsEl) shortcutsEl.style.display = 'grid';
+  if (accountSection) accountSection.style.display = 'block';
+  if (logoutBtn) logoutBtn.style.display = 'flex';
+
+  const name = currentUser.profile?.name || currentUser.user_metadata?.name || currentUser.email?.split('@')[0] || 'User';
+  const email = currentUser.email || '';
+  const initial = (name || 'U')[0].toUpperCase();
+  const role = (currentUser.profile?.role || currentRole || 'buyer').replace('_', ' ');
+
+  const nameEl = document.getElementById('buyer-sidebar-name');
+  if (nameEl) nameEl.textContent = name;
+  const emailEl = document.getElementById('buyer-sidebar-email');
+  if (emailEl) emailEl.textContent = email;
+  const avatarEl = document.getElementById('buyer-sidebar-avatar');
+  if (avatarEl) avatarEl.textContent = initial;
+  const roleBadge = document.getElementById('buyer-sidebar-role-badge');
+  if (roleBadge) {
+   roleBadge.textContent = role.charAt(0).toUpperCase() + role.slice(1);
+   roleBadge.className = `badge ${role === 'seller' || role === 'admin' ? 'badge-green' : 'badge-gold'}`;
+  }
+
+  if (sellerActionContainer) {
+   if (profileHasSellerAccess()) {
+    sellerActionContainer.innerHTML = `<button class="buyer-sidebar-item buyer-sidebar-seller-btn" onclick="closeBuyerSidebar();showSellerDashboard()"><i class="fa-solid fa-store" style="color:var(--gold)"></i> Switch to Seller Dashboard</button>`;
+   } else {
+    sellerActionContainer.innerHTML = `<button class="buyer-sidebar-item buyer-sidebar-seller-btn" onclick="closeBuyerSidebar();openEntryAuth('seller','signup')"><i class="fa-solid fa-rocket" style="color:var(--green)"></i> Start Selling on BUYSELL (Free)</button>`;
+   }
+  }
+ } else {
+  if (loggedEl) loggedEl.style.display = 'none';
+  if (guestEl) guestEl.style.display = 'flex';
+  if (shortcutsEl) shortcutsEl.style.display = 'none';
+  if (accountSection) accountSection.style.display = 'none';
+  if (logoutBtn) logoutBtn.style.display = 'none';
+  if (sellerActionContainer) {
+   sellerActionContainer.innerHTML = `<button class="buyer-sidebar-item buyer-sidebar-seller-btn" onclick="closeBuyerSidebar();openEntryAuth('seller','signup')"><i class="fa-solid fa-store" style="color:var(--gold)"></i> Open a Seller Store</button>`;
+  }
+ }
+}
+
+window.openBuyerSidebar = openBuyerSidebar;
+window.closeBuyerSidebar = closeBuyerSidebar;
+window.updateBuyerSidebarUser = updateBuyerSidebarUser;
+
+document.addEventListener('click', function handleBuyerMenuClick(event) {
+  const ham = event.target.closest?.('#buyer-ham-btn');
+  if (ham) {
+    event.preventDefault();
+    event.stopPropagation();
+    openBuyerSidebar();
+    return;
+  }
+  const closeBtn = event.target.closest?.('.buyer-sidebar-close-btn');
+  if (closeBtn) {
+    event.preventDefault();
+    event.stopPropagation();
+    closeBuyerSidebar();
+    return;
+  }
+  const overlay = event.target.closest?.('#buyer-mob-overlay');
+  if (overlay) {
+    event.preventDefault();
+    event.stopPropagation();
+    closeBuyerSidebar();
+    return;
+  }
+}, true);
 
 // ====================================================
 // SIDEBAR (MOBILE)
@@ -2706,33 +2870,64 @@ async function openProduct(id) {
  mainContainer.style.display = 'flex';
  mainContainer.style.alignItems = 'center';
  mainContainer.style.justifyContent = 'center';
- }
- 
- // Internal helper function to change the main viewer frame smoothly
- window.switchProductModalMediaView = function(index) {
- const asset = structuralMediaList[index];
- if (!asset || !mainContainer) return;
- 
- if (asset.type === 'video') {
- mainContainer.innerHTML = `
- <div style="position:relative; width:100%; height:100%; display:flex; align-items:center; justify-content:center;">
- <video src="${escAttr(asset.url)}" controls autoplay muted playsinline 
- style="width:100%; height:100%; object-fit:contain; background:#000;">
- </video>
- </div>`;
- } else {
- mainContainer.innerHTML = `
- <img src="${escAttr(asset.url)}" alt="${escAttr(p.name)}" 
- style="width:100%; height:100%; object-fit:contain; background:#fafafa;">`;
- }
- 
- // Highlight matching active thumbnail preview container border dynamically
- document.querySelectorAll('.modal-thumb-nav-btn').forEach((btn, btnIdx) => {
- btn.style.borderColor = btnIdx === index ? 'var(--green)' : 'var(--border)';
- btn.style.boxShadow = btnIdx === index ? '0 0 0 2px var(--green-xlt)' : 'none';
- });
- };
+  let currentModalMediaIdx = 0;
+  window.switchProductModalMediaView = function(index) {
+  currentModalMediaIdx = Math.max(0, Math.min(index, structuralMediaList.length - 1));
+  const asset = structuralMediaList[currentModalMediaIdx];
+  if (!asset || !mainContainer) return;
+  
+  const counterHtml = structuralMediaList.length > 1 ? `
+  <div style="position:absolute; top:10px; right:10px; background:rgba(7,21,14,0.76); backdrop-filter:blur(6px); color:#fff; font-size:0.72rem; font-weight:700; padding:3px 9px; border-radius:999px; z-index:5; pointer-events:none; display:flex; align-items:center; gap:4px;">
+    ${asset.type === 'video' ? '<i class="fa-solid fa-circle-play" style="color:var(--gold);font-size:0.8rem;"></i>' : '<i class="fa-regular fa-image" style="color:var(--gold);font-size:0.8rem;"></i>'}
+    <span>${currentModalMediaIdx + 1} / ${structuralMediaList.length}</span>
+  </div>` : '';
 
+  const arrowsHtml = structuralMediaList.length > 1 ? `
+  <button type="button" onclick="event.stopPropagation(); switchProductModalMediaView(${currentModalMediaIdx - 1})" style="position:absolute; top:50%; left:8px; transform:translateY(-50%); width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,0.85); border:none; color:#000; display:${currentModalMediaIdx === 0 ? 'none' : 'flex'}; align-items:center; justify-content:center; cursor:pointer; z-index:6; box-shadow:0 2px 8px rgba(0,0,0,0.2);"><i class="fa-solid fa-chevron-left" style="font-size:0.75rem;"></i></button>
+  <button type="button" onclick="event.stopPropagation(); switchProductModalMediaView(${currentModalMediaIdx + 1})" style="position:absolute; top:50%; right:8px; transform:translateY(-50%); width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,0.85); border:none; color:#000; display:${currentModalMediaIdx === structuralMediaList.length - 1 ? 'none' : 'flex'}; align-items:center; justify-content:center; cursor:pointer; z-index:6; box-shadow:0 2px 8px rgba(0,0,0,0.2);"><i class="fa-solid fa-chevron-right" style="font-size:0.75rem;"></i></button>` : '';
+
+  if (asset.type === 'video') {
+  mainContainer.innerHTML = `
+  <div style="position:relative; width:100%; height:100%; display:flex; align-items:center; justify-content:center;">
+  <video src="${escAttr(asset.url)}" controls autoplay muted playsinline 
+  style="width:100%; height:100%; object-fit:contain; background:#000;">
+  </video>
+  ${counterHtml}
+  ${arrowsHtml}
+  </div>`;
+  } else {
+  mainContainer.innerHTML = `
+  <div style="position:relative; width:100%; height:100%; display:flex; align-items:center; justify-content:center;">
+  <img src="${escAttr(asset.url)}" alt="${escAttr(p.name)}" 
+  style="width:100%; height:100%; object-fit:contain; background:#fafafa;">
+  ${counterHtml}
+  ${arrowsHtml}
+  </div>`;
+  }
+  
+  // Highlight matching active thumbnail preview container border dynamically
+  document.querySelectorAll('.modal-thumb-nav-btn').forEach((btn, btnIdx) => {
+  btn.style.borderColor = btnIdx === currentModalMediaIdx ? 'var(--green)' : 'var(--border)';
+  btn.style.boxShadow = btnIdx === currentModalMediaIdx ? '0 0 0 2px var(--green-xlt)' : 'none';
+  if (btnIdx === currentModalMediaIdx && btn.scrollIntoView) {
+    btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }
+  });
+  };
+
+  // Add swipe gesture listener to mainContainer
+  let modalTouchStartX = 0;
+  mainContainer.ontouchstart = function(e) {
+    if (e.touches && e.touches[0]) modalTouchStartX = e.touches[0].clientX;
+  };
+  mainContainer.ontouchend = function(e) {
+    if (!e.changedTouches || !e.changedTouches[0]) return;
+    const diff = e.changedTouches[0].clientX - modalTouchStartX;
+    if (diff > 40) switchProductModalMediaView(currentModalMediaIdx - 1);
+    else if (diff < -40) switchProductModalMediaView(currentModalMediaIdx + 1);
+  };
+ }
+ 
  // Force clean up old navigation nodes from prior modal instances before calculating HTML Injections
  const existingThumbs = document.querySelector('.modal-media-thumbnails');
  if (existingThumbs) existingThumbs.remove();
@@ -3056,8 +3251,13 @@ function changeCartQty(id, delta) {
 
 function updateCartCount() {
   const count = cart.reduce((s,c)=>s+(c.qty||1),0);
-  document.getElementById('cart-count').textContent = count;
-  document.getElementById('cart-count').style.display = count ? 'flex' : 'none';
+  const cartEl = document.getElementById('cart-count');
+  if (cartEl) {
+    cartEl.textContent = count;
+    cartEl.style.display = count ? 'flex' : 'none';
+  }
+  const buyerSidebarCartBadge = document.getElementById('buyer-sidebar-cart-badge');
+  if (buyerSidebarCartBadge) buyerSidebarCartBadge.textContent = count;
 }
 
 function ensureNavLogoutButton() {

@@ -18,7 +18,7 @@ export function loadMarketplaceRuntime() {
   };
 
   if (!runtimePromise) {
-    runtimePromise = ensureRuntimeConfig().then(() => loadClassicScript('/app.js?v=10.22'));
+    runtimePromise = ensureRuntimeConfig().then(() => loadClassicScript('/app.js?v=10.23'));
   } else {
     // If runtime was already loaded and MarketplacePage is remounted, restore the active marketplace view
     setTimeout(() => {

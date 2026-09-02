@@ -1,5 +1,8 @@
 # Secrets - never commit
 config.js
+.env
+.env.local
+.env.*.local
 .env.cloudinary-migration
 
 # Python cache
@@ -30,4 +33,3 @@ update_app_groq.py
 upgrade_*.py
 features_dump.txt
 refactor.py
-

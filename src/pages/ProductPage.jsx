@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import LoadingGrid from '../components/LoadingGrid.jsx';
 import CartDrawer from '../components/CartDrawer.jsx';
 import { createSupabaseClient } from '../lib/browserConfig.js';
@@ -76,6 +76,9 @@ export default function ProductPage() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const productId = new URLSearchParams(window.location.search).get('id') || new URLSearchParams(window.location.search).get('product');
 
+  const sliderRef = useRef(null);
+  const thumbsRef = useRef(null);
+
   useEffect(() => {
     document.body.className = 'product-page';
   }, []);
@@ -114,6 +117,31 @@ export default function ProductPage() {
   const stock = Number(product?.stock_quantity ?? 1);
   const inStock = stock !== 0;
   const discount = product?.original_price > product?.price ? Math.round((1 - product.price / product.original_price) * 100) : 0;
+
+  const handleSliderScroll = () => {
+    if (!sliderRef.current) return;
+    const scrollLeft = sliderRef.current.scrollLeft;
+    const width = sliderRef.current.offsetWidth || 1;
+    const index = Math.round(scrollLeft / width);
+    if (index >= 0 && index < media.length && index !== activeMedia) {
+      setActiveMedia(index);
+    }
+  };
+
+  const scrollToSlide = (index) => {
+    const target = Math.max(0, Math.min(index, media.length - 1));
+    setActiveMedia(target);
+    if (sliderRef.current) {
+      const width = sliderRef.current.offsetWidth;
+      sliderRef.current.scrollTo({ left: target * width, behavior: 'smooth' });
+    }
+    if (thumbsRef.current) {
+      const thumbBtn = thumbsRef.current.children[target];
+      if (thumbBtn?.scrollIntoView) {
+        thumbBtn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      }
+    }
+  };
 
   function addToCart(quantity = 1) {
     if (!product?.id) return;
@@ -221,26 +249,102 @@ export default function ProductPage() {
     );
   }
 
-  const selected = media[activeMedia] || media[0];
-  const selectedImage = selected?.type === 'image' ? cloudinaryImage(selected.url, 1280) : '';
-
   return (
     <>
       <ProductHeader count={count} onOpenCart={() => setIsCartOpen(true)} onBack={handleBack} />
       <main className="product-page-shell">
         <section className="product-detail-hero">
           <div className="product-detail-gallery">
-            <div className="product-page-main-media">
-              {selected.type === 'video' ? <video src={selected.url} controls playsInline /> : <img src={selectedImage || selected.url} srcSet={cloudinarySrcSet(selected.url)} sizes="(max-width: 640px) 100vw, 55vw" alt={product.name || 'Product'} decoding="async" fetchPriority="high" />}
+            <div className="product-gallery-container">
+              <div 
+                className="product-gallery-slider" 
+                ref={sliderRef}
+                onScroll={handleSliderScroll}
+              >
+                {media.map((item, index) => (
+                  <div className="product-gallery-slide" key={`${item.type}-${item.url}-${index}`}>
+                    {item.type === 'video' ? (
+                      <div className="product-video-wrapper">
+                        <video src={item.url} controls playsInline preload="metadata" />
+                      </div>
+                    ) : (
+                      <img 
+                        src={cloudinaryImage(item.url, 1280) || item.url} 
+                        srcSet={cloudinarySrcSet(item.url)} 
+                        sizes="(max-width: 640px) 100vw, 55vw" 
+                        alt={`${product.name || 'Product'} - media ${index + 1}`} 
+                        loading={index === 0 ? 'eager' : 'lazy'}
+                        decoding="async" 
+                        fetchPriority={index === 0 ? 'high' : 'auto'} 
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {media.length > 1 ? (
+                <>
+                  <div className="product-gallery-counter">
+                    {media[activeMedia]?.type === 'video' ? <i className="fa-solid fa-circle-play" /> : <i className="fa-regular fa-image" />}
+                    <span>{activeMedia + 1} / {media.length}</span>
+                  </div>
+                  <button 
+                    type="button" 
+                    className="product-gallery-arrow prev" 
+                    onClick={() => scrollToSlide(activeMedia - 1)}
+                    disabled={activeMedia === 0}
+                    aria-label="Previous media"
+                  >
+                    <i className="fa-solid fa-chevron-left" />
+                  </button>
+                  <button 
+                    type="button" 
+                    className="product-gallery-arrow next" 
+                    onClick={() => scrollToSlide(activeMedia + 1)}
+                    disabled={activeMedia === media.length - 1}
+                    aria-label="Next media"
+                  >
+                    <i className="fa-solid fa-chevron-right" />
+                  </button>
+                  <div className="product-gallery-dots">
+                    {media.map((_, i) => (
+                      <button 
+                        key={i} 
+                        type="button" 
+                        className={`product-gallery-dot ${i === activeMedia ? 'active' : ''}`}
+                        onClick={() => scrollToSlide(i)}
+                        aria-label={`Go to slide ${i + 1}`}
+                      />
+                    ))}
+                  </div>
+                </>
+              ) : null}
             </div>
-            <div className="product-page-thumbs">
-              {media.map((item, index) => (
-                <button className={`product-page-thumb ${index === activeMedia ? 'active' : ''}`} onClick={() => setActiveMedia(index)} type="button" key={`${item.type}-${item.url}`}>
-                  {item.type === 'video' ? <><video src={item.url} preload="metadata" /><i className="fa-solid fa-circle-play" /></> : <img src={cloudinaryImage(item.url, 160, { square: true })} alt="" loading="lazy" decoding="async" />}
-                </button>
-              ))}
-            </div>
+
+            {media.length > 1 ? (
+              <div className="product-page-thumbs" ref={thumbsRef}>
+                {media.map((item, index) => (
+                  <button 
+                    className={`product-page-thumb ${index === activeMedia ? 'active' : ''}`} 
+                    onClick={() => scrollToSlide(index)} 
+                    type="button" 
+                    key={`${item.type}-${item.url}`}
+                    aria-label={`Thumbnail ${index + 1}`}
+                  >
+                    {item.type === 'video' ? (
+                      <>
+                        <video src={item.url} preload="metadata" />
+                        <i className="fa-solid fa-circle-play" />
+                      </>
+                    ) : (
+                      <img src={cloudinaryImage(item.url, 160, { square: true })} alt="" loading="lazy" decoding="async" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
+
           <article className="product-detail-panel">
             <span className="product-detail-kicker">{product.category || 'BUYSELL Product'}</span>
             <h1>{product.name || 'Product'}</h1>
