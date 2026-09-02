@@ -28,6 +28,19 @@ function isConfigError(error) {
   return message.includes('invalid api key') || message.includes('supabase config unavailable') || message.includes('jwt');
 }
 
+function cloudinaryImage(url, width, { square = false } = {}) {
+  const source = String(url || '');
+  if (!source.includes('res.cloudinary.com/') || !source.includes('/upload/')) return source;
+  const crop = square ? `c_fill,g_auto,w_${width},h_${width}` : `c_limit,w_${width}`;
+  return source.replace('/upload/', `/upload/f_auto,q_auto:good,dpr_auto,${crop}/`);
+}
+
+function cloudinarySrcSet(url, widths = [640, 960, 1280]) {
+  const source = String(url || '');
+  if (!source.includes('res.cloudinary.com/') || !source.includes('/upload/')) return undefined;
+  return widths.map(width => `${cloudinaryImage(source, width)} ${width}w`).join(', ');
+}
+
 async function fetchSellerProfile(db, sellerId) {
   if (!sellerId) return null;
   for (const columns of profileColumnFallbacks) {
@@ -209,6 +222,7 @@ export default function ProductPage() {
   }
 
   const selected = media[activeMedia] || media[0];
+  const selectedImage = selected?.type === 'image' ? cloudinaryImage(selected.url, 1280) : '';
 
   return (
     <>
@@ -217,12 +231,12 @@ export default function ProductPage() {
         <section className="product-detail-hero">
           <div className="product-detail-gallery">
             <div className="product-page-main-media">
-              {selected.type === 'video' ? <video src={selected.url} controls playsInline /> : <img src={selected.url} alt={product.name || 'Product'} />}
+              {selected.type === 'video' ? <video src={selected.url} controls playsInline /> : <img src={selectedImage || selected.url} srcSet={cloudinarySrcSet(selected.url)} sizes="(max-width: 640px) 100vw, 55vw" alt={product.name || 'Product'} decoding="async" fetchPriority="high" />}
             </div>
             <div className="product-page-thumbs">
               {media.map((item, index) => (
                 <button className={`product-page-thumb ${index === activeMedia ? 'active' : ''}`} onClick={() => setActiveMedia(index)} type="button" key={`${item.type}-${item.url}`}>
-                  {item.type === 'video' ? <><video src={item.url} /><i className="fa-solid fa-circle-play" /></> : <img src={item.url} alt="" />}
+                  {item.type === 'video' ? <><video src={item.url} preload="metadata" /><i className="fa-solid fa-circle-play" /></> : <img src={cloudinaryImage(item.url, 160, { square: true })} alt="" loading="lazy" decoding="async" />}
                 </button>
               ))}
             </div>
@@ -263,7 +277,7 @@ export default function ProductPage() {
           </article>
         </section>
         <section className="product-detail-trust">
-          <TrustItem icon="fa-lock" title="Secure Checkout" text="Flutterwave protected payment" />
+          <TrustItem icon="fa-lock" title="Verified Checkout" text="BUYSELL transfer receipt review" />
           <TrustItem icon="fa-truck-fast" title="BUYSELL Delivery" text="Pickup and tracking support" />
           <TrustItem icon="fa-message" title="Seller Chat" text="Ask questions before buying" />
           <TrustItem icon="fa-shield-halved" title="Marketplace Review" text="Admin support for order issues" />

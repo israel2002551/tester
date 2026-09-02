@@ -3673,3 +3673,34 @@ button, a, input, textarea, select { touch-action: manipulation; }
   pointer-events: auto !important;
  }
 }
+
+/* Seller dashboard header: buyer actions live only in the buyer marketplace.
+   The seller workspace keeps a centered BUYSELL mark and its sidebar menu,
+   where the existing logout action remains available. */
+body.in-seller #main-nav .nav-inner {
+ position: relative;
+ justify-content: center;
+ min-height: 58px;
+}
+body.in-seller #main-nav .nav-search,
+body.in-seller #main-nav .nav-actions,
+body.in-seller #main-nav #nav-auth-btns,
+body.in-seller #main-nav #nav-user-btns {
+ display: none !important;
+}
+body.in-seller #main-nav .nav-brand-sm {
+ position: absolute;
+ left: 50%;
+ transform: translateX(-50%);
+ margin: 0;
+}
+body.in-seller #main-nav .nav-brand-text-full {
+ display: none;
+}
+body.in-seller #main-nav .mob-ham-btn {
+ position: absolute;
+ left: .75rem;
+ top: 50%;
+ transform: translateY(-50%);
+ z-index: 1;
+}

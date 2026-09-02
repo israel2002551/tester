@@ -66,9 +66,12 @@ const PROFILE_COLUMNS = ['id','name','email','role','accounts','store_name','sto
 const KYC_LIST_COLUMNS = ['id','user_id','status','document_type','document_number','full_name','front_url','back_url','selfie_url','created_at','reviewed_at','admin_note'];
 const appCache = new Map();
 let carouselIndex = 0, carouselTimer = null;
-let selectedRating = 0, checkoutPaymentMethod = 'flutterwave';
+let selectedRating = 0, checkoutPaymentMethod = 'buysell_transfer';
 const WALLET_CHECKOUT_ENABLED = false;
-const BUYSELL_DELIVERY_FEE = 2000;
+const BUYSELL_DELIVERY_FEE = 2500;
+const BUYSELL_BANK_ACCOUNT_NUMBER = '9061484256';
+const BUYSELL_BANK_NAME = 'Moniepoint';
+const BUYSELL_BANK_ACCOUNT_NAME = 'Israel Efe';
 let deferredInstallPrompt = null, salesChart = null;
 let sellerAnalyticsChart = null;
 let carouselStartX = 0;
@@ -1712,6 +1715,7 @@ function showBuyerView() {
  if (mobHamBtn) mobHamBtn.style.setProperty('display', 'none', 'important');
  
  document.body.classList.remove('in-seller', 'platform-seller-mode');
+ closeMobSidebar();
  currentRole = 'buyer';
 
  if (typeof startCarousel === 'function') startCarousel();
@@ -1997,11 +2001,11 @@ function setupProductCategoryField() {
   group = document.createElement('div');
   group.id = 'p-custom-category-group';
   group.className = 'form-group hidden';
-  group.innerHTML = '<label class="form-label">Custom category <span class="req">*</span></label><input id="p-custom-category" class="form-input" maxlength="60" placeholder="e.g. Baby Products, Auto Parts">';
+ group.innerHTML = '<label class="form-label">Custom category <span class="req">*</span></label><input id="p-custom-category" class="form-input" maxlength="60" placeholder="e.g. Baby Products, Auto Parts">';
   select.closest('.form-group')?.insertAdjacentElement('afterend', group);
  }
  const sync = () => {
-  const isCustom = select.value === '__custom__';
+  const isCustom = isCustomProductCategoryValue(select.value);
   group.classList.toggle('hidden', !isCustom);
   const input = document.getElementById('p-custom-category');
   if (input) input.required = isCustom;
@@ -2942,7 +2946,7 @@ function copyStoreLink() {
 function saveCart() { appStorage.setItem('bs_cart', JSON.stringify(cart)); updateCartCount(); }
 
 function itemShippingFee(item = {}) {
- return BUYSELL_DELIVERY_FEE;
+ return currentMode === 'pickup' ? 0 : BUYSELL_DELIVERY_FEE;
 }
 
 function cartSellerKey(item = {}) {
@@ -2957,7 +2961,7 @@ function cartSellerShippingGroups() {
  const groups = new Map();
  cart.forEach(item => {
  const sellerKey = cartSellerKey(item);
- const existing = groups.get(sellerKey) || { sellerKey, sellerName: item.profiles?.name || 'Seller', fee: BUYSELL_DELIVERY_FEE, count: 0 };
+ const existing = groups.get(sellerKey) || { sellerKey, sellerName: item.profiles?.name || 'Seller', fee: itemShippingFee(item), count: 0 };
  existing.count += item.qty || 1;
  groups.set(sellerKey, existing);
  });
@@ -2972,7 +2976,7 @@ function checkoutCartItems(includeDetails = false) {
  const feeApplied = new Set();
  return cart.map(item => {
  const sellerKey = cartSellerKey(item);
- const chargedShipping = feeApplied.has(sellerKey) ? 0 : BUYSELL_DELIVERY_FEE;
+ const chargedShipping = feeApplied.has(sellerKey) ? 0 : itemShippingFee(item);
  feeApplied.add(sellerKey);
  const base = {
  id: item.id,
@@ -2993,6 +2997,18 @@ function checkoutCartItems(includeDetails = false) {
 
 function cartPayableSubtotal() {
  return cartProductTotal() + cartShippingTotal();
+}
+
+function isCustomProductCategoryValue(value) {
+ return ['__custom__', 'custom', 'custom-category', 'custom_category'].includes(String(value || '').trim().toLowerCase());
+}
+
+function updateCheckoutTotals() {
+ const total = cartPayableSubtotal();
+ const totalEl = document.getElementById('co-total');
+ const payAmountEl = document.getElementById('co-pay-amount');
+ if (totalEl) totalEl.textContent = fmtN(total);
+ if (payAmountEl) payAmountEl.textContent = fmtN(total);
 }
 
 function addToCart(prod) {
@@ -3142,6 +3158,7 @@ async function getSellerAvailableRevenue(sellerId = currentUser?.id) {
 async function startCheckout() {
  if (!currentUser) { showModal('auth-modal'); return; }
  if (!cart.length) { toast('Cart is empty','','warn'); return; }
+ currentMode = 'home';
 
  let availableBalance = Number(currentUser?.profile?.wallet_balance || 0);
  const isSeller = isSellerAccount();
@@ -3176,13 +3193,8 @@ async function startCheckout() {
  if (p.name) document.getElementById('co-name').value = p.name;
  document.getElementById('co-pay-email').textContent = currentUser.email;
  
- // --- INVISIBLE COMMISSION MATHEMATICS ---
- const secretComm = Math.round(rawProductTotal * PLATFORM_FEE_PCT);
- const totalWithCommission = rawProductTotal + secretComm;
- 
- // Render the unified price containing the commission hidden inside
- document.getElementById('co-pay-amount').textContent = fmtN(totalWithCommission);
- document.getElementById('co-total').textContent = fmtN(totalWithCommission);
+ document.getElementById('co-pay-amount').textContent = fmtN(rawProductTotal);
+ document.getElementById('co-total').textContent = fmtN(rawProductTotal);
  
  // Mask the old commission UI layout block and slide it out of display tree
  const commEl = document.getElementById('co-commission');
@@ -3191,40 +3203,25 @@ async function startCheckout() {
  commEl.closest('.pay-row')?.classList.add('hidden');
  }
  
-// --- DYNAMIC PAYMENT METHOD RENDERING (WITH WALLET CHANNELS) ---
- const isUnderfunded = availableBalance < totalWithCommission;
-
- let walletCardHtml = '';
- if (isSeller && WALLET_CHECKOUT_ENABLED) {
- walletCardHtml = `
- <div class="payment-method-card wallet-card ${isUnderfunded ? 'disabled' : ''}" 
- id="pm-wallet" onclick="if(!${isUnderfunded}){selectCheckoutPaymentMethod('wallet')}"
- style="position:relative; overflow:hidden; border:2px solid var(--border); border-radius:var(--radius-sm); padding:1rem; cursor:${isUnderfunded ? 'not-allowed' : 'pointer'}; opacity:${isUnderfunded ? '0.6' : '1'}">
- <span class="payment-method-icon"><i class="fa-solid fa-wallet" style="color:var(--green)"></i></span>
- <div class="payment-method-title">Wallet Revenue</div>
- <div class="payment-method-sub">Available: ${fmtN(availableBalance)}</div>
- ${isUnderfunded ? `<div style="color:var(--danger); font-size:0.65rem; font-weight:700; margin-top:4px;"> Insufficient Funds</div>` : ''}
- </div>`;
- }
-
+ // Every marketplace order is paid into the BUYSELL account and reviewed by an admin.
+ checkoutPaymentMethod = 'buysell_transfer';
  const methodGrid = document.getElementById('co-p2');
  if (methodGrid) {
- const gridContainer = methodGrid.querySelector('.payment-method-grid');
- if (gridContainer) {
- gridContainer.outerHTML = `
- <div class="payment-method-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap:0.7rem;">
- <div class="payment-method-card flutterwave-card selected" id="pm-flutterwave" onclick="selectCheckoutPaymentMethod('flutterwave')">
- <span class="payment-method-icon"><i class="fa-solid fa-credit-card" style="color:#f97316"></i></span>
- <div class="payment-method-title">Flutterwave Checkout</div>
- <div class="payment-method-sub">Cards, USSD, bank checkout</div>
+ methodGrid.innerHTML = `
+ <h3 class="mb-3">Pay by Bank Transfer</h3>
+ <div class="pay-info-box">
+  <h4><i class="fa-solid fa-building-columns"></i> Transfer to BUYSELL</h4>
+  <div class="pay-row"><span class="label">Bank</span><span class="value">${BUYSELL_BANK_NAME}</span></div>
+  <div class="pay-row"><span class="label">Account number</span><span class="value highlight">${BUYSELL_BANK_ACCOUNT_NUMBER}</span></div>
+  <div class="pay-row"><span class="label">Account name</span><span class="value">${BUYSELL_BANK_ACCOUNT_NAME}</span></div>
+  <div class="pay-row"><span class="label">Amount to transfer</span><span class="value highlight" id="co-pay-amount"></span></div>
  </div>
- ${walletCardHtml}
- </div>`;
+ <p class="text-xs color-text3 mb-2">Transfer the exact amount to BUYSELL, then upload a clear receipt. Your order will be processed only after an admin verifies the payment.</p>
+ <div class="form-group"><label class="form-label">Transfer reference <span class="text-xs color-text3">(optional)</span></label><input id="co-transfer-ref" class="form-input" maxlength="100" placeholder="Bank transaction reference"></div>
+ <div class="form-group"><label class="form-label">Payment receipt <span class="req">*</span></label><input id="co-proof" type="file" class="form-input" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/avif" onchange="handleProofUpload(this)"><div id="proof-upload-zone" class="text-xs color-text3 mt-1"><span class="upload-label">JPG, PNG, WebP or HEIC, up to 10MB</span></div></div>
+ <button id="co-transfer-btn" class="btn btn-primary btn-full btn-lg" onclick="submitTransferOrder()"><i class="fa-solid fa-receipt"></i> Submit Receipt for Verification</button>
+ <button class="btn btn-outline btn-sm mt-2" onclick="goCheckoutStep(1)"><i class="fa-solid fa-arrow-left"></i> Back</button>`;
  }
- }
-
- // Reset explicit gateway checkout selection state to default on entry window
- checkoutPaymentMethod = 'flutterwave'
  
  // Order items rendering engine 
  document.getElementById('co-items').innerHTML = cart.map(c=>`
@@ -3234,10 +3231,7 @@ async function startCheckout() {
  <div class="font-bold text-sm">${fmtN(c.price*(c.qty||1))}</div>
  </div>`).join('');
  
- const bankBox = document.getElementById('seller-bank-details-co');
- if (bankBox) {
- bankBox.innerHTML = `<p class="text-xs color-text3 p-2">Direct seller bank transfer is no longer available. Please use Flutterwave checkout so BUYSELL can manage payment and delivery tracking.</p>`;
- }
+ updateCheckoutTotals();
 }
 function goCheckoutStep(step) {
  document.querySelectorAll('.checkout-panel').forEach(p => p.classList.remove('active'));
@@ -3617,12 +3611,6 @@ async function submitTransferOrder() {
  goCheckoutStep(1);
  return;
  }
- const sellerProfile = cart[0]?.profiles || {};
- if (!sellerProfile.bank_name || !sellerProfile.account_number || !sellerProfile.account_name) {
- toast('Bank transfer unavailable', 'Please use Flutterwave checkout so BUYSELL can manage payment and delivery tracking.', 'warn');
- selectCheckoutPaymentMethod('flutterwave');
- return;
- }
  if (!fileInput.files?.[0]) { toast('Please upload payment proof','','warn'); return; }
  const proofFile = fileInput.files[0];
  const ALLOWED_PROOF = ['image/jpeg','image/jpg','image/pjpeg','image/png','image/webp','image/heic','image/heif','image/jfif','image/avif'];
@@ -3649,7 +3637,8 @@ async function submitTransferOrder() {
  }
  const proofUrl = uploaded.publicUrl;
  try {
- await saveOrderToDb(null, 'transfer', null, proofUrl);
+ const transferRef = document.getElementById('co-transfer-ref')?.value.trim() || '';
+ await saveOrderToDb(transferRef, 'buysell_bank_transfer', null, proofUrl);
  } catch (orderError) {
  throw new Error(`Order creation failed: ${orderError.message || 'check create-order function'}`);
  }
@@ -4255,7 +4244,8 @@ async function submitProduct(e) {
  const descVal = document.getElementById('p-desc').value.trim();
   const selectedCategory = document.getElementById('p-category').value;
   const customCategory = document.getElementById('p-custom-category')?.value.trim() || '';
-  const catVal = selectedCategory === '__custom__' ? customCategory.toLowerCase() : selectedCategory;
+  const isCustomCategory = isCustomProductCategoryValue(selectedCategory);
+  const catVal = isCustomCategory ? customCategory.toLowerCase() : selectedCategory;
  const condVal = document.getElementById('p-condition').value;
  const locVal = document.getElementById('p-location').value.trim();
 
@@ -4271,8 +4261,8 @@ if (nameVal.length > 300) {
  if (priceVal > 100000000) { toast('Price too high','Maximum price is \u20A6100,000,000','warn'); return; }
  if (stockVal < 0 || stockVal > 100000) { toast('Invalid stock','Stock must be between 0 and 100,000','warn'); return; }
  if (descVal.length > 2000) { toast('Description too long','Max 2,000 characters','warn'); return; }
-  if (selectedCategory === '__custom__' && (customCategory.length < 2 || customCategory.length > 60)) { toast('Invalid custom category','Enter a category between 2 and 60 characters','warn'); return; }
-  if (selectedCategory !== '__custom__' && !VALID_CATS.includes(catVal)) { toast('Invalid category','Please select a valid category','warn'); return; }
+  if (isCustomCategory && (customCategory.length < 2 || customCategory.length > 60)) { toast('Invalid custom category','Enter a category between 2 and 60 characters','warn'); return; }
+  if (!isCustomCategory && !VALID_CATS.includes(catVal)) { toast('Invalid category','Please select a valid category','warn'); return; }
  if (!VALID_CONDS.includes(condVal)) { toast('Invalid condition','Please select a valid condition','warn'); return; }
 
  const imgFiles = fileListToArray('p-image');
@@ -6894,7 +6884,8 @@ async function loadAdminOrders() {
  </div>
  <div class="text-xs color-text3 mb-2"><i class="fa-solid fa-user"></i> ${escHtml(o.delivery_name||' - ')} &nbsp;|&nbsp; <i class="fa-solid fa-map-marker-alt"></i> ${escHtml((o.delivery_address||'').substr(0,50))}</div>
  <div class="flex gap-2 flex-wrap">
-  ${o.status==='pending' ? `<button onclick="adminUpdateOrder('${escAttr(o.id)}','confirmed')" class="btn btn-primary btn-sm">Schedule Pickup</button>` : ''}
+  ${o.status==='pending' && o.proof_url ? `<button onclick="adminUpdateOrder('${escAttr(o.id)}','confirmed')" class="btn btn-primary btn-sm"><i class="fa-solid fa-check"></i> Verify Payment & Schedule Pickup</button>` : ''}
+  ${o.status==='pending' && !o.proof_url ? `<span class="text-xs color-text3">Awaiting payment receipt</span>` : ''}
   ${o.status==='confirmed' ? `<button onclick="adminUpdateOrder('${escAttr(o.id)}','shipped')" class="btn btn-sm" style="background:#ede9fe;color:var(--purple)">Collected by BUYSELL</button>` : ''}
   ${o.status==='shipped' ? `<button onclick="adminUpdateOrder('${escAttr(o.id)}','delivered')" class="btn btn-sm" style="background:#dcfce7;color:#15803d">Mark Delivered</button>` : ''}
  ${!['cancelled','refunded'].includes(o.status) ? `<button onclick="adminUpdateOrder('${escAttr(o.id)}','cancelled')" class="btn btn-outline btn-sm">Cancel</button>` : ''}
@@ -7932,6 +7923,16 @@ function sendWhatsAppOrderNotification(order, sellerWa) {
  document.body.removeChild(link);
 }
 
+async function notifyTelegramPaymentProof(orderId) {
+ try {
+  await callEdge('telegram-payment-proof', { order_id: orderId });
+ } catch (error) {
+  // A Telegram outage must not lose the buyer's submitted order; it remains in
+  // the admin payment-review queue with its receipt attached.
+  console.warn('Telegram payment-proof notification failed:', error);
+ }
+}
+
 // Full saveOrderToDb implementation (with WA notification)
 async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
  try {
@@ -7997,11 +7998,7 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
  // --- Cleanup, Notifications, and Analytics ---
  appStorage.removeItem('bs_ref');
  
-  const seller = cart[0]?.profiles;
-  if (seller?.whatsapp) {
-  sendWhatsAppOrderNotification({ id: orderId, total_amount: totalAmount }, seller.whatsapp);
-  }
-  notifyOrderIfConfirmed(orderId);
+  await notifyTelegramPaymentProof(orderId);
 
   trackAnalytics({
  event_type: 'order_created',
@@ -8018,8 +8015,12 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
  document.getElementById('co-order-id').textContent = orderId;
  document.getElementById('co-order-total').textContent = fmtN(totalAmount);
  goCheckoutStep(3);
+ const successTitle = document.querySelector('#co-p3 h2');
+ const successText = document.querySelector('#co-p3 .color-text3');
+ if (successTitle) successTitle.textContent = 'Receipt Submitted!';
+ if (successText) successText.textContent = 'BUYSELL will verify your bank transfer before scheduling pickup or delivery.';
  
- toast('Order Placed! ', `Order ${orderId} confirmed`, 'success', 5000);
+ toast('Receipt Submitted', 'Your payment is awaiting BUYSELL admin verification.', 'success', 5000);
 
  return { success: true, order_id: orderId, total: totalAmount };
 
@@ -8241,6 +8242,7 @@ function setDeliveryMode(mode) {
  if (isPickup) {
  initLeaflet();
  }
+ updateCheckoutTotals();
 }
 
 function initLeaflet() {

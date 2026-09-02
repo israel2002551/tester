@@ -62,7 +62,7 @@ const products = [
 
 const trustItems = [
   ['fa-truck-fast', 'Nationwide Delivery', 'BUYSELL pickup, handoff checks, and order updates.'],
-  ['fa-shield-halved', 'Secure Checkout', 'Flutterwave-backed payments with safer transaction records.'],
+  ['fa-shield-halved', 'Verified Checkout', 'Transfer to BUYSELL and upload your receipt for admin verification.'],
   ['fa-comments', 'In-App Chat', 'Buyer and seller messages stay attached to the order.'],
   ['fa-store', 'Seller Tools', 'Roles, products, sourcing, payouts, and order management.'],
 ];

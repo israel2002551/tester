@@ -8,7 +8,7 @@ pages into React components.
 ## Local Setup
 
 1. Copy `config.example.js` to `config.js`.
-2. Fill in your Supabase anon key, Supabase URL, Flutterwave public key, and admin email.
+2. Fill in your Supabase anon key, Supabase URL, and admin email.
 3. Install dependencies with `npm install --cache .\.npm-cache`.
 4. Run the React dev server with `npm run dev`.
 5. Build production assets with `npm run build`.
@@ -21,7 +21,6 @@ Set these variables in Vercel before deploying:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
-- `VITE_FLUTTERWAVE_PUBLIC_KEY`
 - `VITE_ADMIN_EMAIL`
 - `VITE_ADMIN_EMAILS`
 
@@ -47,6 +46,26 @@ the frontend currently calls functions such as `admin-action`, `manage-product`,
 `update-profile`, `request-withdrawal`, `submit-dispute`, `send-broadcast`,
 `init-ad-payment`, `verify-ad-payment`, `update-ad-stats`, and
 `chat-bot-handler`.
+
+### BUYSELL bank-transfer receipts
+
+Marketplace buyers transfer their order total to the BUYSELL Moniepoint account,
+upload a receipt, and wait for an admin to verify it in the Admin Orders screen.
+Doorstep delivery adds ₦2,500; pickup is free. The frontend never marks a
+bank-transfer order as paid on its own.
+
+To send each uploaded receipt to the admin Telegram chat, configure and deploy
+the `telegram-payment-proof` Edge Function:
+
+```powershell
+supabase secrets set TELEGRAM_BOT_TOKEN=your-bot-token --project-ref your-project-ref
+supabase secrets set TELEGRAM_CHAT_ID=your-admin-chat-id --project-ref your-project-ref
+supabase functions deploy telegram-payment-proof --project-ref your-project-ref
+```
+
+Add the bot to the target Telegram group (or start a direct chat with it) before
+submitting a test receipt. The order and receipt remain in the admin queue even
+if Telegram delivery is temporarily unavailable.
 
 ### Cloudinary product media
 
@@ -93,4 +112,4 @@ project root, fill in the same values, and run the two Node commands above.
 - Rotate any API keys that were pasted into local scripts before publishing.
 - Commit `config.example.js` instead of real credentials.
 - Confirm every Edge Function above is deployed in Supabase.
-- Use live Flutterwave keys only after payment verification is handled server-side.
+- Confirm a test transfer receipt reaches both the Admin Orders queue and Telegram.

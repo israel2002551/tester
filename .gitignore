@@ -16,8 +16,12 @@ node_modules/
 .npm-cache/
 dist/
 
-# Supabase project files stay local
-supabase/
+# Supabase project files stay local, except the production receipt notifier.
+supabase/*
+!supabase/functions/
+supabase/functions/*
+!supabase/functions/telegram-payment-proof/
+!supabase/functions/telegram-payment-proof/index.ts
 
 # Local/generated upgrade helpers
 add_features.py
