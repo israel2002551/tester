@@ -10,7 +10,7 @@ let chatHistory = [];
 let adminAiHistory = [];
 let currentUser = null, currentRole = 'buyer', currentProd = null, currentStoreShare = null;
 const PUBLIC_SITE_URL = 'https://buysell-marketplace.com';
-const SERVICE_WORKER_APP_VERSION = '2026-09-20-auth-5';
+const SERVICE_WORKER_APP_VERSION = '2026-09-21-auth-6';
 const GOOGLE_OAUTH_RETURN_KEY = 'bs_google_oauth_return';
 const GOOGLE_OAUTH_RETURN_MAX_AGE_MS = 20 * 60 * 1000;
 let googleSignInInFlight = false;
@@ -556,6 +556,23 @@ async function hydrateAuthenticatedUser(user, options = {}) {
  return authHydrationPromise;
 }
 
+function syncAuthenticationNavigation() {
+ const signedIn = Boolean(currentUser);
+ document.body?.classList.toggle('is-authenticated', signedIn);
+ const navAuthButtons = document.getElementById('nav-auth-btns');
+ const navUserButtons = document.getElementById('nav-user-btns');
+
+ if (signedIn) {
+  navAuthButtons?.classList.add('hidden');
+  navUserButtons?.classList.remove('hidden');
+  ensureNavLogoutButton();
+ } else {
+  navAuthButtons?.classList.remove('hidden');
+  navUserButtons?.classList.add('hidden');
+ }
+}
+window.syncAuthenticationNavigation = syncAuthenticationNavigation;
+
 function clearAuthenticatedSessionUi() {
  if (messageChannel && db?.removeChannel) {
   db.removeChannel(messageChannel);
@@ -569,8 +586,7 @@ function clearAuthenticatedSessionUi() {
  currentRole = 'buyer';
  currentChatPartner = null;
  currentChatProductId = null;
- document.getElementById('nav-auth-btns')?.classList.remove('hidden');
- document.getElementById('nav-user-btns')?.classList.add('hidden');
+ syncAuthenticationNavigation();
  if (typeof updateInboxCount === 'function') updateInboxCount();
 }
 
@@ -1762,13 +1778,11 @@ async function checkSession() {
 }
 
 function updateNavForUser() {
- if (!currentUser) return;
- const navAuthButtons = document.getElementById('nav-auth-btns');
- const navUserButtons = document.getElementById('nav-user-btns');
- if (!navAuthButtons && !navUserButtons) return;
- navAuthButtons?.classList.add('hidden');
- navUserButtons?.classList.remove('hidden');
- ensureNavLogoutButton();
+ if (!currentUser) {
+  syncAuthenticationNavigation();
+  return;
+ }
+ syncAuthenticationNavigation();
  const initial = (currentUser.profile?.name || currentUser.email || 'U')[0].toUpperCase();
  const avatar = document.getElementById('nav-avatar-inner');
  if (avatar) {
@@ -1848,19 +1862,10 @@ async function logoutUser() {
   await db.auth.signOut().catch(() => {});
  }
  
- if (messageChannel && db && typeof db.removeChannel === 'function') {
-  db.removeChannel(messageChannel);
-  messageChannel = null;
- }
-  currentUser = null;
-  currentChatPartner = null;
-  currentChatProductId = null;
+ clearAuthenticatedSessionUi();
   PAGE_SURFACE_IDS.forEach(id => document.getElementById(id)?.classList.remove('open', 'app-page-surface', 'cart-page-surface', 'checkout-page-surface', 'messages-page-surface', 'conversation-page-surface'));
   document.body.classList.remove('surface-page-open', 'modal-open');
-  document.getElementById('nav-auth-btns').classList.remove('hidden');
-  document.getElementById('nav-user-btns').classList.add('hidden');
- updateInboxCount();
- enterSite('buyer');
+  enterSite('buyer');
  toast('Signed Out', '', 'info');
 }
 
@@ -2039,12 +2044,16 @@ function showBuyerView() {
  if (mobHamBtn) mobHamBtn.style.setProperty('display', 'none', 'important');
  
   document.body.classList.remove('in-seller', 'platform-seller-mode');
-  closeMobSidebar();
-  organizeBuyerMarketplace();
-  setupMarketplaceSearchInput();
-  currentRole = 'buyer';
+   closeMobSidebar();
+   organizeBuyerMarketplace();
+   setupMarketplaceSearchInput();
+   currentRole = 'buyer';
+   // React can recreate this legacy markup after a product-page Back action.
+   // Apply the live session state to the newly mounted header and drawer.
+   if (currentUser) updateNavForUser();
+   else syncAuthenticationNavigation();
 
- if (typeof startCarousel === 'function') startCarousel();
+  if (typeof startCarousel === 'function') startCarousel();
   if (typeof loadProducts === 'function') loadProducts({ preferCache: true });
  if (typeof loadActiveAds === 'function') loadActiveAds();
   if (typeof updateCartCount === 'function') updateCartCount();

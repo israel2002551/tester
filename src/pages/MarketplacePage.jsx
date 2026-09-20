@@ -20,7 +20,7 @@ export function loadMarketplaceRuntime() {
   if (!runtimePromise) {
     // Version the classic runtime explicitly so an application deploy also
     // refreshes service-worker and notification-route safeguards immediately.
-    const appScriptUrl = import.meta.env.DEV ? `/app.js?t=${Date.now()}` : '/app.js?v=10.32';
+    const appScriptUrl = import.meta.env.DEV ? `/app.js?t=${Date.now()}` : '/app.js?v=10.33';
     runtimePromise = ensureRuntimeConfig()
       .then(() => loadClassicScript(appScriptUrl))
       .then(() => window.applyPlatformBrandAssets?.());
@@ -44,9 +44,10 @@ export function loadMarketplaceRuntime() {
 
 export default function MarketplacePage() {
   useEffect(() => {
-    document.body.className = '';
+    document.body.classList.remove('product-page');
     document.title = 'BUYSELL Nigeria | Buy, Sell, and Manage Orders';
-    loadMarketplaceRuntime();
+    window.syncAuthenticationNavigation?.();
+    loadMarketplaceRuntime().then(() => window.syncAuthenticationNavigation?.());
   }, []);
 
   return <div dangerouslySetInnerHTML={{ __html: marketplaceHtml }} />;

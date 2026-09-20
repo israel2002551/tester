@@ -5585,3 +5585,69 @@ body.buyer-sidebar-open {
  #auth-modal .auth-logo.platform-brand-wordmark > .platform-brand-asset { width: 132px; height: 47px; }
 }
 
+/* Authentication state and product-gallery hardening.  The account drawer and
+   the marketplace header must never disagree about a restored session. */
+body.is-authenticated #main-nav #nav-auth-btns,
+body:not(.is-authenticated) #main-nav #nav-user-btns {
+ display: none !important;
+}
+
+@media (max-width: 900px) {
+ body:not(.in-seller).is-authenticated #main-nav #nav-user-btns {
+  display: flex !important;
+ }
+ body:not(.in-seller):not(.is-authenticated) #main-nav #nav-user-btns {
+  display: none !important;
+ }
+}
+
+.product-detail-hero > *,
+.product-detail-gallery,
+.product-detail-panel,
+.product-gallery-container,
+.product-gallery-slider,
+.product-page-thumbs {
+ min-width: 0;
+}
+.product-gallery-container { isolation: isolate; }
+.product-gallery-slider {
+ overscroll-behavior-x: contain;
+ touch-action: pan-x pinch-zoom;
+ contain: layout paint;
+}
+.product-gallery-slide { min-width: 100%; contain: content; }
+.product-gallery-slide img,
+.product-gallery-slide video {
+ max-width: 100%;
+ min-width: 0;
+}
+.product-page-thumbs {
+ max-width: 100%;
+ overscroll-behavior-x: contain;
+ -webkit-overflow-scrolling: touch;
+ scroll-snap-type: x proximity;
+ scroll-padding-inline: .2rem;
+}
+.product-page-thumb { scroll-snap-align: start; }
+.product-detail-panel h1,
+.product-detail-desc { overflow-wrap: anywhere; }
+
+@media (max-width: 640px) {
+ .product-page-shell { overflow: clip; }
+ .product-detail-hero { gap: .75rem; }
+ .product-detail-gallery { overflow: hidden; }
+ .product-gallery-container { aspect-ratio: 1 / 1; }
+ .product-gallery-slider {
+  height: 100% !important;
+  max-height: none !important;
+ }
+ .product-gallery-arrow { width: 34px; height: 34px; }
+ .product-gallery-arrow.prev { left: 7px; }
+ .product-gallery-arrow.next { right: 7px; }
+ .product-gallery-dots { max-width: calc(100% - 104px); gap: 5px; overflow: hidden; }
+ .product-page-thumbs { padding: .58rem .1rem .7rem; }
+ .product-page-thumb { flex-basis: 58px; width: 58px; height: 58px; }
+ .product-detail-panel { overflow: hidden; }
+ .product-detail-panel h1 { font-size: clamp(1.8rem, 8.5vw, 2.45rem); line-height: 1.02; }
+}
+

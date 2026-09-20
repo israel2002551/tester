@@ -68,6 +68,12 @@ async function fetchProductById(db, productId) {
   throw lastError || new Error('Product lookup failed');
 }
 
+function visibleGalleryDots(total, activeIndex, maxDots = 7) {
+  if (total <= maxDots) return Array.from({ length: total }, (_, index) => index);
+  const start = Math.max(0, Math.min(activeIndex - Math.floor(maxDots / 2), total - maxDots));
+  return Array.from({ length: maxDots }, (_, offset) => start + offset);
+}
+
 export default function ProductPage() {
   const [product, setProduct] = useState(null);
   const [status, setStatus] = useState('loading');
@@ -79,10 +85,21 @@ export default function ProductPage() {
 
   const sliderRef = useRef(null);
   const thumbsRef = useRef(null);
+  const sliderFrameRef = useRef(0);
 
   useEffect(() => {
-    document.body.className = 'product-page';
+    document.body.classList.add('product-page');
+    return () => document.body.classList.remove('product-page');
   }, []);
+
+  useEffect(() => () => {
+    if (sliderFrameRef.current) window.cancelAnimationFrame(sliderFrameRef.current);
+  }, []);
+
+  useEffect(() => {
+    setActiveMedia(0);
+    sliderRef.current?.scrollTo({ left: 0, behavior: 'auto' });
+  }, [productId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,15 +135,17 @@ export default function ProductPage() {
   const stock = Number(product?.stock_quantity ?? 1);
   const inStock = stock !== 0;
   const discount = product?.original_price > product?.price ? Math.round((1 - product.price / product.original_price) * 100) : 0;
+  const galleryDots = useMemo(() => visibleGalleryDots(media.length, activeMedia), [media.length, activeMedia]);
 
   const handleSliderScroll = () => {
-    if (!sliderRef.current) return;
-    const scrollLeft = sliderRef.current.scrollLeft;
-    const width = sliderRef.current.offsetWidth || 1;
-    const index = Math.round(scrollLeft / width);
-    if (index >= 0 && index < media.length && index !== activeMedia) {
-      setActiveMedia(index);
-    }
+    if (!sliderRef.current || sliderFrameRef.current) return;
+    sliderFrameRef.current = window.requestAnimationFrame(() => {
+      const slider = sliderRef.current;
+      sliderFrameRef.current = 0;
+      if (!slider) return;
+      const index = Math.round(slider.scrollLeft / (slider.offsetWidth || 1));
+      if (index >= 0 && index < media.length) setActiveMedia(previous => previous === index ? previous : index);
+    });
   };
 
   const scrollToSlide = (index) => {
@@ -321,14 +340,15 @@ export default function ProductPage() {
                   >
                     <i className="fa-solid fa-chevron-right" />
                   </button>
-                  <div className="product-gallery-dots">
-                    {media.map((_, i) => (
+                  <div className="product-gallery-dots" aria-label="Product media navigation">
+                    {galleryDots.map(i => (
                       <button 
                         key={i} 
                         type="button" 
                         className={`product-gallery-dot ${i === activeMedia ? 'active' : ''}`}
                         onClick={() => scrollToSlide(i)}
                         aria-label={`Go to slide ${i + 1}`}
+                        aria-current={i === activeMedia ? 'true' : undefined}
                       />
                     ))}
                   </div>
@@ -337,7 +357,7 @@ export default function ProductPage() {
             </div>
 
             {media.length > 1 ? (
-              <div className="product-page-thumbs" ref={thumbsRef}>
+              <div className="product-page-thumbs" ref={thumbsRef} aria-label="Product media thumbnails">
                 {media.map((item, index) => (
                   <button 
                     className={`product-page-thumb ${index === activeMedia ? 'active' : ''}`} 
@@ -345,6 +365,7 @@ export default function ProductPage() {
                     type="button" 
                     key={`${item.type}-${item.url}`}
                     aria-label={`Thumbnail ${index + 1}`}
+                    aria-current={index === activeMedia ? 'true' : undefined}
                   >
                     {item.type === 'video' ? (
                       <>
@@ -352,7 +373,7 @@ export default function ProductPage() {
                         <i className="fa-solid fa-circle-play" />
                       </>
                     ) : (
-                      <img src={cloudinaryImage(item.url, 160, { square: true })} alt="" loading="lazy" decoding="async" />
+                      <img src={cloudinaryImage(item.url, 160, { square: true })} alt="" loading="lazy" decoding="async" draggable="false" />
                     )}
                   </button>
                 ))}
