@@ -18,10 +18,16 @@ export function loadMarketplaceRuntime() {
   };
 
   if (!runtimePromise) {
-    runtimePromise = ensureRuntimeConfig().then(() => loadClassicScript('/app.js?v=10.23'));
+    // Version the classic runtime explicitly so an application deploy also
+    // refreshes service-worker and notification-route safeguards immediately.
+    const appScriptUrl = import.meta.env.DEV ? `/app.js?t=${Date.now()}` : '/app.js?v=10.32';
+    runtimePromise = ensureRuntimeConfig()
+      .then(() => loadClassicScript(appScriptUrl))
+      .then(() => window.applyPlatformBrandAssets?.());
   } else {
     // If runtime was already loaded and MarketplacePage is remounted, restore the active marketplace view
     setTimeout(() => {
+      window.applyPlatformBrandAssets?.();
       if (typeof window.showBuyerView === 'function') {
         window.showBuyerView();
       }

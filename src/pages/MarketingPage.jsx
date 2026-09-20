@@ -1,155 +1,156 @@
 import { useEffect } from 'react';
+import BrandLogo from '../components/BrandLogo.jsx';
 
 const categories = [
   {
     name: 'Fashion',
-    count: 'Curated apparel',
-    image: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=700&q=85&auto=format&fit=crop',
+    description: 'Clothes, shoes, and everyday style.',
+    icon: 'fa-shirt',
+    theme: 'clay',
     href: '/category/fashion',
   },
   {
-    name: 'Phones',
-    count: 'Devices and accessories',
-    image: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=700&q=85&auto=format&fit=crop',
+    name: 'Phones & gadgets',
+    description: 'Devices, accessories, and upgrades.',
+    icon: 'fa-mobile-screen-button',
+    theme: 'mint',
     href: '/category/phones',
   },
   {
-    name: 'Home',
-    count: 'Living and decor',
-    image: 'https://images.unsplash.com/photo-1616046229478-9901c5536a45?w=700&q=85&auto=format&fit=crop',
+    name: 'Home & living',
+    description: 'Useful pieces for every space.',
+    icon: 'fa-couch',
+    theme: 'cream',
     href: '/category/home',
   },
   {
     name: 'Beauty',
-    count: 'Skincare and fragrance',
-    image: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=700&q=85&auto=format&fit=crop',
+    description: 'Skincare, fragrance, and self-care.',
+    icon: 'fa-wand-magic-sparkles',
+    theme: 'rose',
     href: '/category/beauty',
   },
   {
-    name: '1688 Sourcing',
-    count: 'Bulk order tools',
-    image: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=700&q=85&auto=format&fit=crop',
-    href: '/?view=1688',
+    name: '1688 sourcing',
+    description: 'Bulk-order tools for growing stores.',
+    icon: 'fa-boxes-stacked',
+    theme: 'gold',
+    href: '/category/dropship',
   },
 ];
 
-const products = [
+const journeys = [
   {
-    name: 'Verified fashion drops',
-    price: 'From NGN 12,500',
-    badge: 'Trending',
-    image: 'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=600&q=85&auto=format&fit=crop',
+    eyebrow: 'For buyers',
+    title: 'Find what you need, then check out with clarity.',
+    text: 'Browse real categories, talk to a seller in context, and keep delivery or pickup updates connected to the order.',
+    icon: 'fa-bag-shopping',
+    href: '/?view=shop',
+    action: 'Shop the marketplace',
+    theme: 'shop',
   },
   {
-    name: 'Smart devices',
-    price: 'Bulk ready',
-    badge: '1688',
-    image: 'https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=600&q=85&auto=format&fit=crop',
+    eyebrow: 'For sellers',
+    title: 'Run your store from one focused workspace.',
+    text: 'Manage products, orders, conversations, team roles, and payouts without mixing buyer tools into your dashboard.',
+    icon: 'fa-store',
+    href: '/?view=shop&entry=seller&mode=signup',
+    action: 'Open a seller store',
+    theme: 'sell',
   },
   {
-    name: 'Beauty essentials',
-    price: 'Seller verified',
-    badge: 'New',
-    image: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=600&q=85&auto=format&fit=crop',
-  },
-  {
-    name: 'Home upgrades',
-    price: 'Nationwide delivery',
-    badge: 'Protected',
-    image: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&q=85&auto=format&fit=crop',
+    eyebrow: 'For sourcing',
+    title: 'Turn 1688 requests into supplier-ready batches.',
+    text: 'Collect requests, keep procurement chats in one thread, and export organised CSV or XLS files when you are ready.',
+    icon: 'fa-arrow-right-arrow-left',
+    href: '/category/dropship',
+    action: 'Explore 1688 sourcing',
+    theme: 'source',
   },
 ];
 
 const trustItems = [
-  ['fa-truck-fast', 'Nationwide Delivery', 'BUYSELL pickup, handoff checks, and order updates.'],
-  ['fa-shield-halved', 'Verified Checkout', 'Transfer to BUYSELL and upload your receipt for admin verification.'],
-  ['fa-comments', 'In-App Chat', 'Buyer and seller messages stay attached to the order.'],
-  ['fa-store', 'Seller Tools', 'Roles, products, sourcing, payouts, and order management.'],
+  ['fa-truck-fast', 'Clear delivery updates', 'Pickup, handoff checks, and order status stay in one flow.'],
+  ['fa-shield-halved', 'Verified checkout', 'Payment proof and order review are handled inside BUYSELL.'],
+  ['fa-comments', 'Order-linked chat', 'Conversations stay with the product or sourcing request they relate to.'],
+  ['fa-store', 'Focused seller tools', 'Buyer pages and seller workspaces remain purposefully separate.'],
 ];
 
 const steps = [
-  ['01', 'Discover', 'Browse verified Nigerian products or import 1688 links in bulk.'],
-  ['02', 'Checkout', 'Pay securely, choose delivery or pickup, and keep proof in-app.'],
-  ['03', 'Manage', 'Sellers track orders, chat, export CSV/XLS, and send supplier batches.'],
+  ['01', 'Choose a route', 'Start in the marketplace, open a store, or create a 1688 sourcing request.'],
+  ['02', 'Keep it in context', 'Products, payments, messages, and delivery updates stay tied to the same order.'],
+  ['03', 'Move with confidence', 'Use the next page that fits your role instead of being bounced through an auth modal.'],
 ];
 
 export default function MarketingPage() {
   useEffect(() => {
     document.body.className = '';
-    document.title = 'BUYSELL Nigeria | Buy, sell, source, and deliver with trust';
+    document.title = 'BUYSELL Nigeria | Buy, sell, and source with confidence';
   }, []);
-
-  const goShop = () => {
-    window.location.href = '/?view=shop';
-  };
-
-  const goSellerSignup = () => {
-    window.location.href = '/?entry=seller&mode=signup';
-  };
 
   return (
     <main className="bs-landing bs-lux">
       <header className="bs-lux-nav" aria-label="BUYSELL landing navigation">
-        <a className="bs-lux-brand" href="/">
-          <span className="bs-lux-mark">B</span>
-          <span className="logo-text"><span>BUY</span><span>SELL</span></span>
+        <a className="bs-lux-brand" href="/" aria-label="BUYSELL Nigeria home">
+          <BrandLogo variant="light" decorative />
         </a>
-        <nav>
+        <nav aria-label="Primary navigation">
           <a href="/?view=shop">Marketplace</a>
-          <a href="/products">Collections</a>
-          <a href="/?view=1688">1688 Sourcing</a>
-          <a href="/terms">Trust</a>
+          <a href="/products">Categories</a>
+          <a href="/category/dropship">1688 Sourcing</a>
+          <a href="/terms">How trust works</a>
         </nav>
         <div className="bs-lux-nav-actions">
-          <button type="button" className="bs-lux-icon-btn" aria-label="Search marketplace" onClick={goShop}>
+          <a className="bs-lux-icon-btn" href="/?view=shop" aria-label="Search marketplace">
             <i className="fa-solid fa-magnifying-glass" />
-          </button>
-          <button type="button" className="bs-lux-text-btn" onClick={goSellerSignup}>Open Store</button>
+          </a>
+          <a className="bs-lux-text-btn" href="/?view=shop&entry=seller&mode=signup">Open Store</a>
         </div>
       </header>
 
-      <section className="bs-lux-hero">
+      <section className="bs-lux-hero bs-market-hero" aria-labelledby="market-hero-title">
         <div className="bs-lux-hero-copy">
-          <span className="bs-lux-kicker">New commerce workspace</span>
-          <h1>Shop safer. Sell smarter. Source from 1688 in bulk.</h1>
+          <span className="bs-lux-kicker">Nigeria&apos;s connected marketplace</span>
+          <h1 id="market-hero-title">Buy with ease. Sell with structure. Source without the chaos.</h1>
           <p>
-            BUYSELL gives Nigerian buyers and sellers a polished marketplace for product discovery,
-            secure checkout, in-app chat, seller roles, delivery tracking, and supplier-ready CSV/XLS exports.
+            BUYSELL brings shopping, secure order steps, seller workspaces, delivery updates,
+            and 1688 sourcing together—while keeping each journey on its own clear page.
           </p>
           <div className="bs-lux-hero-actions">
-            <button type="button" className="bs-btn bs-btn--primary" onClick={goShop}>
+            <a className="bs-btn bs-btn--primary" href="/?view=shop">
               <span>Shop Marketplace</span>
               <i className="fa-solid fa-arrow-right" />
-            </button>
-            <button type="button" className="bs-btn bs-btn--ghost" onClick={goSellerSignup}>
+            </a>
+            <a className="bs-btn bs-btn--ghost" href="/?view=shop&entry=seller&mode=signup">
               Start Selling
-            </button>
+            </a>
           </div>
-          <div className="bs-lux-proof-row">
-            <span><i className="fa-solid fa-star" /> 4.9 buyer trust flow</span>
-            <span><i className="fa-solid fa-lock" /> Secure checkout</span>
-            <span><i className="fa-solid fa-file-csv" /> Bulk CSV/XLS</span>
-          </div>
+          <ul className="bs-lux-proof-row" aria-label="BUYSELL benefits">
+            <li><i className="fa-solid fa-lock" /> Protected order flow</li>
+            <li><i className="fa-solid fa-message" /> Contextual chat</li>
+            <li><i className="fa-solid fa-file-export" /> Supplier-ready exports</li>
+          </ul>
         </div>
 
-        <div className="bs-lux-hero-media" aria-label="BUYSELL product marketplace preview">
-          <img
-            src="https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=1100&q=90&auto=format&fit=crop"
-            alt="Online marketplace checkout and shopping workflow"
-          />
-          <article className="bs-lux-floating-card bs-lux-floating-card--product">
+        <div className="bs-lux-hero-media" aria-label="Nigerian market seller">
+          <picture>
+            <source media="(max-width: 640px)" srcSet="/images/marketing/buysell-marketplace-real-v1.jpg" />
             <img
-              src="https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?w=260&q=85&auto=format&fit=crop"
-              alt="Curated marketplace product"
+              src="/images/marketing/buysell-marketplace-real-v1.jpg"
+              alt="Nigerian market seller at her fresh produce stall"
             />
-            <div>
-              <strong>Verified marketplace deals</strong>
-              <span>Checkout, chat, and delivery in one place</span>
-            </div>
-          </article>
+          </picture>
           <article className="bs-lux-floating-card bs-lux-floating-card--stats">
-            <strong>1688 queue</strong>
-            <span>Export supplier orders as CSV or XLS</span>
+            <i className="fa-solid fa-shield-heart" aria-hidden="true" />
+            <strong>One clear order flow</strong>
+            <span>Shop, chat, pay, and follow delivery without losing context.</span>
+          </article>
+          <article className="bs-lux-floating-card bs-lux-floating-card--product">
+            <span className="bs-lux-mini-package" aria-hidden="true"><i className="fa-solid fa-box" /></span>
+            <div>
+              <strong>Built for everyday trade</strong>
+              <span>Fashion, phones, home, beauty, and bulk sourcing.</span>
+            </div>
           </article>
         </div>
       </section>
@@ -157,7 +158,7 @@ export default function MarketingPage() {
       <section className="bs-lux-trust" aria-label="BUYSELL value propositions">
         {trustItems.map(([icon, title, text]) => (
           <article key={title}>
-            <i className={`fa-solid ${icon}`} />
+            <i className={`fa-solid ${icon}`} aria-hidden="true" />
             <div>
               <h2>{title}</h2>
               <p>{text}</p>
@@ -166,77 +167,70 @@ export default function MarketingPage() {
         ))}
       </section>
 
-      <section className="bs-lux-categories">
+      <section className="bs-lux-journeys" aria-labelledby="journeys-title">
         <div className="bs-lux-section-head">
           <div>
-            <span className="bs-lux-kicker">Shop by category</span>
-            <h2>Browse Nigerian products with a premium shopping feel</h2>
+            <span className="bs-lux-kicker">Choose your journey</span>
+            <h2 id="journeys-title">A home page that leads to the right next page</h2>
           </div>
-          <a href="/products">View all <i className="fa-solid fa-arrow-right" /></a>
+          <p>Each route has its own purpose, so buyer tools, seller work, and sourcing activity never compete for the same space.</p>
         </div>
-        <div className="bs-lux-category-row">
-          {categories.map(category => (
-            <a className="bs-lux-category" href={category.href} key={category.name}>
-              <img src={category.image} alt={`${category.name} category`} loading="lazy" />
-              <strong>{category.name}</strong>
-              <span>{category.count}</span>
+        <div className="bs-lux-journey-grid">
+          {journeys.map(journey => (
+            <a className={`bs-lux-journey bs-lux-journey--${journey.theme}`} href={journey.href} key={journey.title}>
+              <span className="bs-lux-journey-icon"><i className={`fa-solid ${journey.icon}`} /></span>
+              <span className="bs-lux-journey-eyebrow">{journey.eyebrow}</span>
+              <h3>{journey.title}</h3>
+              <p>{journey.text}</p>
+              <span className="bs-lux-journey-link">{journey.action} <i className="fa-solid fa-arrow-right" /></span>
             </a>
           ))}
         </div>
       </section>
 
-      <section className="bs-lux-promo">
-        <div className="bs-lux-promo-copy">
-          <span className="bs-lux-kicker">Seller and sourcing tools</span>
-          <h2>One dashboard for products, team access, bulk sourcing, and supplier files.</h2>
-          <p>
-            Store managers, product managers, and admins can work from the same seller space,
-            then aggregate 1688 and dropshipping orders into supplier-ready spreadsheets.
-          </p>
-          <button type="button" className="bs-btn bs-btn--primary" onClick={goSellerSignup}>
-            Open Seller Account
-          </button>
-        </div>
-        <div className="bs-lux-promo-grid">
-          <div><i className="fa-solid fa-user-shield" /><span>Full Admin</span></div>
-          <div><i className="fa-solid fa-shop" /><span>Store Manager</span></div>
-          <div><i className="fa-solid fa-boxes-stacked" /><span>Product Manager</span></div>
-          <div><i className="fa-solid fa-file-export" /><span>CSV/XLS Export</span></div>
-        </div>
-      </section>
-
-      <section className="bs-lux-products">
+      <section className="bs-lux-categories" aria-labelledby="category-title">
         <div className="bs-lux-section-head">
           <div>
-            <span className="bs-lux-kicker">Featured flows</span>
-            <h2>Marketplace-ready experiences for every order</h2>
+            <span className="bs-lux-kicker">Shop by category</span>
+            <h2 id="category-title">Find a product family before you start browsing</h2>
           </div>
-          <button type="button" onClick={goShop}>Explore products <i className="fa-solid fa-arrow-right" /></button>
+          <a href="/products">View all categories <i className="fa-solid fa-arrow-right" /></a>
         </div>
-        <div className="bs-lux-product-grid">
-          {products.map(product => (
-            <article className="bs-lux-product" key={product.name}>
-              <div className="bs-lux-product-media">
-                <img src={product.image} alt={product.name} loading="lazy" />
-                <span>{product.badge}</span>
-                <button type="button" aria-label={`Save ${product.name}`}>
-                  <i className="fa-regular fa-heart" />
-                </button>
-              </div>
-              <div className="bs-lux-product-body">
-                <h3>{product.name}</h3>
-                <p>{product.price}</p>
-                <div><i className="fa-solid fa-star" /> 4.8</div>
-              </div>
-            </article>
+        <div className="bs-lux-category-row">
+          {categories.map(category => (
+            <a className={`bs-lux-category bs-lux-category--${category.theme}`} href={category.href} key={category.name}>
+              <span className="bs-lux-category-icon" aria-hidden="true"><i className={`fa-solid ${category.icon}`} /></span>
+              <strong>{category.name}</strong>
+              <span>{category.description}</span>
+              <em>Browse <i className="fa-solid fa-arrow-right" /></em>
+            </a>
           ))}
         </div>
       </section>
 
-      <section className="bs-lux-steps">
+      <section className="bs-lux-promo" aria-labelledby="seller-tools-title">
+        <div className="bs-lux-promo-copy">
+          <span className="bs-lux-kicker">Seller and sourcing tools</span>
+          <h2 id="seller-tools-title">From a product link to a supplier-ready batch, keep the work organised.</h2>
+          <p>
+            Build a seller workspace that stays separate from your buyer view, then collect 1688 and dropshipping requests into supplier-ready CSV or XLS files.
+          </p>
+          <ul className="bs-lux-promo-list">
+            <li><i className="fa-solid fa-check" /> Role-aware seller dashboard</li>
+            <li><i className="fa-solid fa-check" /> Dedicated sourcing chats and updates</li>
+            <li><i className="fa-solid fa-check" /> Exportable supplier batches</li>
+          </ul>
+          <a className="bs-btn bs-btn--primary" href="/?view=shop&entry=seller&mode=signup">Open Seller Account</a>
+        </div>
+        <div className="bs-lux-promo-art">
+          <img src="/images/marketing/buysell-sourcing-real-v1.jpg" alt="Nigerian craft seller working in a shoe workshop" loading="lazy" />
+        </div>
+      </section>
+
+      <section className="bs-lux-steps" aria-labelledby="steps-title">
         <div className="bs-lux-section-head bs-lux-section-head--center">
           <span className="bs-lux-kicker">How BUYSELL works</span>
-          <h2>From discovery to delivery, every step has a page and a purpose.</h2>
+          <h2 id="steps-title">Every action has a destination, not a dead end.</h2>
         </div>
         <div className="bs-lux-step-grid">
           {steps.map(([number, title, text]) => (
@@ -249,30 +243,28 @@ export default function MarketingPage() {
         </div>
       </section>
 
-      <section className="bs-lux-newsletter">
+      <section className="bs-lux-final-cta" aria-labelledby="final-cta-title">
         <div>
-          <i className="fa-regular fa-envelope" />
-          <div>
-            <h2>Join the BUYSELL circle</h2>
-            <p>Get marketplace updates, sourcing launches, and seller tool improvements.</p>
-          </div>
+          <span className="bs-lux-kicker">Ready when you are</span>
+          <h2 id="final-cta-title">Start with the side of BUYSELL that fits what you need today.</h2>
+          <p>Shop now, open a store, or explore 1688 sourcing without crossing into the wrong workspace.</p>
         </div>
-        <form onSubmit={event => event.preventDefault()}>
-          <input type="email" placeholder="Enter your email" aria-label="Email address" />
-          <button type="submit">Subscribe</button>
-        </form>
+        <div className="bs-lux-final-cta-actions">
+          <a className="bs-btn bs-btn--primary" href="/?view=shop">Shop now <i className="fa-solid fa-arrow-right" /></a>
+          <a className="bs-btn bs-btn--ghost" href="/category/dropship">Explore sourcing</a>
+        </div>
       </section>
 
       <footer className="bs-lux-footer">
         <div>
           <strong>BUYSELL Nigeria</strong>
-          <p>Buy, sell, source, checkout, chat, and deliver with stronger trust signals.</p>
+          <p>Buy, sell, source, check out, chat, and deliver with a clearer journey from first click to final order.</p>
         </div>
-        <nav>
+        <nav aria-label="Footer navigation">
           <a href="/terms">Terms</a>
           <a href="/privacy">Privacy</a>
           <a href="/?view=shop">Marketplace</a>
-          <a href="/products">Products</a>
+          <a href="/products">Categories</a>
         </nav>
       </footer>
     </main>

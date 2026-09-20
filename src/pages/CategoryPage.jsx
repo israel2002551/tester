@@ -29,15 +29,45 @@ function sortItems(items, sort, isUpcoming) {
   return sorted;
 }
 
+function normalizeCategory(value = '') {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function categoryTitle(category = '') {
+  return normalizeCategory(category)
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, character => character.toUpperCase());
+}
+
+function customCategoryConfig(category) {
+  const title = categoryTitle(category) || 'Products';
+  return {
+    title,
+    subtitle: `Browse active ${title.toLowerCase()} listings from BUYSELL sellers.`,
+    icon: 'fa-tags',
+    searchPlaceholder: `Search ${title.toLowerCase()}...`,
+  };
+}
+
 function matchesCategory(product, category) {
-  if (category === 'all' || category === 'trending') return true;
-  const value = String(product.category || '').toLowerCase();
-  if (category === 'phones') return ['phones', 'phone', 'mobile', 'gadgets', 'electronics'].some(term => value.includes(term));
-  if (category === 'home') return ['home', 'furniture', 'kitchen', 'appliance'].some(term => value.includes(term));
-  if (category === 'beauty') return ['beauty', 'skincare', 'cosmetic', 'fragrance', 'perfume'].some(term => value.includes(term));
-  if (category === 'sports') return ['sport', 'fitness', 'gym'].some(term => value.includes(term));
-  if (category === 'dropship') return ['dropship', '1688', 'sourcing'].some(term => value.includes(term));
-  return value === category || value.includes(category);
+  const target = normalizeCategory(category);
+  if (target === 'all' || target === 'trending') return true;
+  const value = normalizeCategory(product.category);
+  const matchingTerms = {
+    phones: ['phone', 'mobile', 'tablet', 'gadget', 'accessor'],
+    electronics: ['electronics', 'electronic', 'laptop', 'computer', 'audio', 'television', 'tv', 'tech'],
+    fashion: ['fashion', 'clothing', 'apparel', 'shoe', 'bag', 'watch'],
+    home: ['home', 'furniture', 'kitchen', 'appliance', 'decor'],
+    beauty: ['beauty', 'skincare', 'cosmetic', 'fragrance', 'perfume', 'personal care'],
+    sports: ['sport', 'fitness', 'gym', 'activewear', 'outdoor'],
+    dropship: ['dropship', '1688', 'sourcing'],
+  };
+  if (matchingTerms[target]) {
+    return matchingTerms[target].some(term => value === term || value.includes(term));
+  }
+  // Seller-defined categories should stay separate rather than being mixed into
+  // an unrelated built-in category.
+  return value === target;
 }
 
 async function fetchCategoryRows(db, category) {
@@ -59,19 +89,24 @@ async function fetchCategoryRows(db, category) {
 }
 
 export default function CategoryPage({ category = 'all' }) {
-  const config = categoryConfig[category] || categoryConfig.all;
-  const isUpcoming = category === 'upcoming';
+  const normalizedCategory = normalizeCategory(category) || 'all';
+  const isCustomCategory = !categoryConfig[normalizedCategory];
+  const config = categoryConfig[normalizedCategory] || customCategoryConfig(normalizedCategory);
+  const isUpcoming = normalizedCategory === 'upcoming';
   const [items, setItems] = useState([]);
-  const [search, setSearch] = useState('');
-  const [sort, setSort] = useState('newest');
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get('q') || '');
+  const [sort, setSort] = useState(() => {
+    const savedSort = new URLSearchParams(window.location.search).get('sort');
+    return ['newest', 'price-asc', 'price-desc', 'rating'].includes(savedSort) ? savedSort : 'newest';
+  });
   const [status, setStatus] = useState('loading');
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   useEffect(() => {
     document.body.className = 'category-page';
-    document.body.dataset.category = category;
+    document.body.dataset.category = normalizedCategory;
     document.title = `${config.title} - BUYSELL Nigeria`;
-  }, [category, config.title]);
+  }, [normalizedCategory, config.title]);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,8 +124,8 @@ export default function CategoryPage({ category = 'all' }) {
           }
           return;
         } else {
-          const data = await fetchCategoryRows(db, category);
-          const rows = category === 'trending'
+          const data = await fetchCategoryRows(db, normalizedCategory);
+          const rows = normalizedCategory === 'trending'
             ? [...(data || [])].sort((a, b) => {
                 const bScore = Number(b.review_count || 0) * 3 + Number(b.avg_rating || 0) + (b.has_video ? 2 : 0);
                 const aScore = Number(a.review_count || 0) * 3 + Number(a.avg_rating || 0) + (a.has_video ? 2 : 0);
@@ -110,7 +145,23 @@ export default function CategoryPage({ category = 'all' }) {
     }
     loadProducts();
     return () => { cancelled = true; };
-  }, [category, isUpcoming]);
+  }, [normalizedCategory, isUpcoming]);
+
+  useEffect(() => {
+    if (isUpcoming && (sort === 'price-asc' || sort === 'price-desc')) {
+      setSort('newest');
+    }
+  }, [isUpcoming, sort]);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const query = search.trim();
+    if (query) url.searchParams.set('q', query);
+    else url.searchParams.delete('q');
+    if (sort !== 'newest') url.searchParams.set('sort', sort);
+    else url.searchParams.delete('sort');
+    window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+  }, [search, sort]);
 
   const visibleItems = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -135,22 +186,37 @@ export default function CategoryPage({ category = 'all' }) {
           </div>
         </section>
         <CategoryTrustBar />
-        <CategoryNav active={category} />
-        <section className="category-toolbar">
-          <input className="form-input" placeholder={config.searchPlaceholder} value={search} onChange={event => setSearch(event.target.value)} />
-          <select className="form-select" value={sort} onChange={event => setSort(event.target.value)}>
+        <CategoryNav active={normalizedCategory} customLabel={isCustomCategory ? config.title : ''} />
+        <section className="category-toolbar" aria-label="Browse and filter products">
+          <label className="category-search-field">
+            <span className="sr-only">Search {config.title}</span>
+            <i className="fa-solid fa-magnifying-glass" aria-hidden="true" />
+            <input
+              className="form-input"
+              type="search"
+              placeholder={config.searchPlaceholder}
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              aria-controls="category-products"
+            />
+            {search ? <button type="button" onClick={() => setSearch('')} aria-label="Clear search"><i className="fa-solid fa-xmark" /></button> : null}
+          </label>
+          <label className="category-sort-field">
+            <span>Sort</span>
+            <select className="form-select" value={sort} onChange={event => setSort(event.target.value)}>
             <option value="newest">Newest</option>
             {!isUpcoming ? <option value="price-asc">Price low to high</option> : null}
             {!isUpcoming ? <option value="price-desc">Price high to low</option> : null}
             <option value="rating">{isUpcoming ? 'Priority' : 'Top rated'}</option>
-          </select>
-          <span><strong>{visibleItems.length}</strong> items</span>
+            </select>
+          </label>
+          <span className="category-results-count" aria-live="polite"><strong>{visibleItems.length}</strong> {visibleItems.length === 1 ? 'item' : 'items'}{search ? ` for "${search.trim()}"` : ''}</span>
         </section>
         {status === 'loading' ? <LoadingGrid /> : null}
         {status === 'error' ? <div className="category-empty"><i className="fa-solid fa-triangle-exclamation" /><p>Could not load products. Please try again.</p></div> : null}
-        {status === 'ready' && !visibleItems.length ? <div className="category-empty"><i className="fa-solid fa-box-open" /><p>No products found here yet.</p></div> : null}
+        {status === 'ready' && !visibleItems.length ? <div className="category-empty"><i className="fa-solid fa-box-open" /><h2>No matches found</h2><p>{search ? 'Try a shorter search term, another spelling, or clear the search to browse this category.' : 'No products found here yet. Check back soon for new listings.'}</p>{search ? <button className="btn btn-outline btn-sm" type="button" onClick={() => setSearch('')}>Clear search</button> : null}</div> : null}
         {status === 'ready' && visibleItems.length ? (
-          <div className="category-products-grid">
+          <div className="category-products-grid" id="category-products">
             {visibleItems.map(item => isUpcoming ? <UpcomingProductCard product={item} key={item.id} /> : <CategoryProductCard product={item} key={item.id} />)}
           </div>
         ) : null}

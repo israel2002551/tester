@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import LoadingGrid from '../components/LoadingGrid.jsx';
 import CartDrawer from '../components/CartDrawer.jsx';
+import BrandLogo from '../components/BrandLogo.jsx';
 import { createSupabaseClient } from '../lib/browserConfig.js';
 import { money } from '../lib/format.js';
 import { productColumns, productMedia, shippingFee } from '../lib/productData.js';
@@ -162,6 +163,7 @@ export default function ProductPage() {
     if (existing) existing.qty = (Number(existing.qty) || 1) + quantity;
     else cart.push({ ...item, qty: quantity });
     writeJson('bs_cart', cart);
+    window.dispatchEvent(new Event('bs:cart-change'));
     setCount(cartCount());
     setToast('Added to cart');
     window.clearTimeout(addToCart.timer);
@@ -206,10 +208,23 @@ export default function ProductPage() {
   }
 
   const handleBack = () => {
-    if (window.history.length > 1) {
+    let canReturnToMarketplace = false;
+    try {
+      const previousUrl = new URL(document.referrer);
+      canReturnToMarketplace = previousUrl.origin === window.location.origin
+        && !/[?&](entry|mode)=/.test(previousUrl.search);
+    } catch (_) {
+      canReturnToMarketplace = false;
+    }
+    const isInAppProductRoute = Boolean(window.history.state?.buysellRoute);
+    if (window.history.length > 1 && (isInAppProductRoute || canReturnToMarketplace)) {
       window.history.back();
     } else {
-      window.location.href = '/?view=shop';
+      if (typeof window.bsNavigate === 'function') {
+        window.bsNavigate('/?view=shop');
+      } else {
+        window.location.href = '/?view=shop';
+      }
     }
   };
 
@@ -395,19 +410,19 @@ export default function ProductPage() {
 
 function ProductHeader({ count, onOpenCart, onBack }) {
   return (
-    <header className="product-page-header">
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+    <header className="commerce-page-header product-page-header">
+      <div className="commerce-page-header__brand">
         <button className="btn btn-outline btn-sm" onClick={onBack} type="button" title="Back">
           <i className="fa-solid fa-arrow-left" /> Back
         </button>
-        <a className="category-brand" href="/?view=shop">BUY<span>SELL</span></a>
+        <a className="category-brand category-brand--asset" href="/?view=shop"><BrandLogo variant="transparent" /></a>
       </div>
-      <nav>
+      <nav className="commerce-page-header__links" aria-label="Storefront navigation">
         <a href="/?view=shop">Marketplace</a>
         <a href="/products">Collections</a>
         <a href="/category/dropship">1688 Sourcing</a>
       </nav>
-      <button className="product-cart-pill" onClick={onOpenCart} type="button" title="View Cart">
+      <button className="product-cart-pill" onClick={onOpenCart} type="button" title="View Cart" aria-label={`Open cart, ${count} ${count === 1 ? 'item' : 'items'}`}>
         <i className="fa-solid fa-cart-shopping" /><span>{count}</span>
       </button>
     </header>

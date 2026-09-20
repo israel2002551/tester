@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 960" role="img" aria-labelledby="title desc">
+  <title id="title">BUYSELL mobile marketplace illustration</title>
+  <desc id="desc">A Nigerian entrepreneur packages marketplace orders beside a secure checkout display.</desc>
+  <defs>
+    <linearGradient id="bg" x1="64" y1="34" x2="649" y2="931" gradientUnits="userSpaceOnUse"><stop stop-color="#0A2117"/><stop offset=".52" stop-color="#154B35"/><stop offset="1" stop-color="#082218"/></linearGradient>
+    <linearGradient id="desk" x1="104" y1="565" x2="628" y2="865" gradientUnits="userSpaceOnUse"><stop stop-color="#F8EBD7"/><stop offset="1" stop-color="#D9B987"/></linearGradient>
+    <linearGradient id="dress" x1="390" y1="377" x2="587" y2="753" gradientUnits="userSpaceOnUse"><stop stop-color="#ED782D"/><stop offset="1" stop-color="#B64117"/></linearGradient>
+    <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="17" stdDeviation="17" flood-color="#06150D" flood-opacity=".32"/></filter>
+    <pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="1.5" fill="#F4BF68" opacity=".2"/></pattern>
+  </defs>
+  <rect width="720" height="960" rx="46" fill="url(#bg)"/>
+  <rect width="720" height="960" rx="46" fill="url(#dots)"/>
+  <circle cx="608" cy="128" r="145" fill="#E99336" opacity=".22"/>
+  <path d="M-24 802C158 688 263 853 399 777s171-38 347-150" fill="none" stroke="#F0D5A5" stroke-width="2" opacity=".28"/>
+  <g filter="url(#shadow)">
+    <rect x="70" y="78" width="288" height="297" rx="35" fill="#F8EFDf"/>
+    <rect x="91" y="100" width="246" height="253" rx="25" fill="#E4EEDC"/>
+    <rect x="117" y="129" width="195" height="165" rx="18" fill="#153F2B"/>
+    <rect x="136" y="151" width="60" height="25" rx="8" fill="#F6B84C"/>
+    <rect x="136" y="195" width="74" height="68" rx="12" fill="#2D7650"/>
+    <rect x="224" y="195" width="65" height="30" rx="10" fill="#F6B84C"/>
+    <rect x="224" y="236" width="65" height="27" rx="10" fill="#EA732C"/>
+    <path d="m242 209 10 11 22-25" fill="none" stroke="#F9F3E7" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M116 307h198l-21 25H137l-21-25Z" fill="#A38F74"/>
+  </g>
+  <g filter="url(#shadow)">
+    <path d="M307 794c16-162 48-294 101-368 41-57 113-62 158-13 56 61 86 201 94 381H307Z" fill="url(#dress)"/>
+    <ellipse cx="482" cy="306" rx="90" ry="111" fill="#9D5D39"/>
+    <path d="M398 305c-2-85 44-143 109-143 67 0 101 58 87 125-40-32-86-42-129-28-23 7-43 22-67 31v15Z" fill="#211B18"/>
+    <path d="M422 251c36 29 115 20 151-37-20-37-54-53-90-49-42 5-63 37-61 86Z" fill="#28201B"/>
+    <ellipse cx="450" cy="309" rx="6" ry="8" fill="#29180F"/><ellipse cx="519" cy="309" rx="6" ry="8" fill="#29180F"/>
+    <path d="M459 363c18 13 40 13 58-3" fill="none" stroke="#6C3724" stroke-width="7" stroke-linecap="round"/>
+    <path d="M410 430c-48 57-69 109-77 182" fill="none" stroke="#9D5D39" stroke-width="42" stroke-linecap="round"/>
+    <path d="M554 431c50 36 78 95 91 162" fill="none" stroke="#9D5D39" stroke-width="42" stroke-linecap="round"/>
+    <path d="M441 424c25 22 57 22 83 0l23 35c-25 30-89 36-128 0l22-35Z" fill="#FFF2DB"/>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="63" y="608" width="593" height="228" rx="30" fill="url(#desk)"/>
+    <rect x="101" y="652" width="168" height="137" rx="18" fill="#CE722B"/>
+    <path d="M101 695h168M185 652v137" stroke="#FFF2D9" stroke-width="7" opacity=".86"/>
+    <circle cx="185" cy="720" r="23" fill="#1B7049"/>
+    <path d="m174 720 8 8 18-20" fill="none" stroke="#FFF6E5" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="295" y="682" width="130" height="107" rx="18" fill="#284F39"/>
+    <rect x="312" y="700" width="96" height="60" rx="12" fill="#F9D48D"/>
+    <rect x="438" y="644" width="161" height="145" rx="18" fill="#E9D9C4"/>
+    <path d="M438 688h161M518 644v145" stroke="#BF7B39" stroke-width="7"/>
+  </g>
+  <g fill="#F5D6A0" opacity=".75"><circle cx="80" cy="461" r="7"/><circle cx="101" cy="461" r="7"/><circle cx="122" cy="461" r="7"/><circle cx="605" cy="448" r="7"/><circle cx="626" cy="448" r="7"/><circle cx="647" cy="448" r="7"/></g>
+</svg>

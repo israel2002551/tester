@@ -10,7 +10,11 @@ let chatHistory = [];
 let adminAiHistory = [];
 let currentUser = null, currentRole = 'buyer', currentProd = null, currentStoreShare = null;
 const PUBLIC_SITE_URL = 'https://buysell-marketplace.com';
-const SERVICE_WORKER_APP_VERSION = '2026-08-04-push-3';
+const SERVICE_WORKER_APP_VERSION = '2026-09-20-auth-5';
+const GOOGLE_OAUTH_RETURN_KEY = 'bs_google_oauth_return';
+const GOOGLE_OAUTH_RETURN_MAX_AGE_MS = 20 * 60 * 1000;
+let googleSignInInFlight = false;
+let googleOAuthCallbackPending = false;
 function createMemoryStorage() {
  const fallback = new Map();
  return {
@@ -81,6 +85,9 @@ let notificationSyncPromise = null;
 let pushServiceWorkerRegistrationPromise = null;
 let presenceHeartbeatTimer = null;
 let previousAppView = 'buyer';
+let currentChatPartner = null;
+let currentChatProductId = null;
+let messageChannel = null;
 // MOVE THESE TWO LINES HERE (TO THE TOP VARIABLES AREA):
 let wishlist = readStoredJson('bs_wishlist', []);
 let compareList = readStoredJson('bs_compare', []);
@@ -519,82 +526,163 @@ function initSupabaseClient() {
 
 initSupabaseClient();
 
+// There is one source of truth for authentication.  A page can safely ask for the
+// current user while Supabase restores its persisted session, without briefly
+// treating an already signed-in visitor as a guest.
+let ensureCurrentUserPromise = null;
+let authBootstrapComplete = false;
+let authHydrationPromise = null;
+let authHydratingUserId = '';
+let authEventQueue = Promise.resolve();
+let authStateSubscription = null;
+let authModalDeferred = false;
 
-// Auth state listener keeps the visible header and active view in sync.
-if (supabase && supabase.auth && typeof supabase.auth.onAuthStateChange === 'function') {
- supabase.auth.onAuthStateChange((event, session) => {
- console.log(`Flash Gatekeeper Auth Engine Event: ${event}`);
- 
- setTimeout(async () => {
- const authButton = document.querySelector('.nav-sign-in-btn') || 
- document.getElementById('landing-auth-btn') ||
- document.getElementById('nav-auth-inner-btn');
+async function hydrateAuthenticatedUser(user, options = {}) {
+ if (!user) return null;
 
- if (session && session.user) {
- await onAuthSuccess(session.user);
- console.log("Active user credentials cached securely in memory: " + currentUser.email);
-
- if (authButton) {
- authButton.innerHTML = `<i class="fas fa-sign-out-alt"></i> Sign Out`;
- authButton.onclick = async (e) => {
- e.preventDefault();
- appStorage.clear();
- await supabase.auth.signOut();
- window.location.reload(); 
- };
+ if (currentUser?.id === user.id && currentUser.profile && !options.force) {
+  currentUser = { ...currentUser, ...user, profile: currentUser.profile };
+  if (typeof updateNavForUser === 'function') updateNavForUser();
+  return currentUser;
  }
 
- try {
-  const profile = await fetchProfileById(session.user.id).catch(() => null);
-  const error = null;
+ if (authHydrationPromise && authHydratingUserId === user.id) return authHydrationPromise;
 
- if (!error && profile) {
- currentUser.profile = profile;
- currentRole = profile.role || 'buyer';
+ authHydratingUserId = user.id;
+ authHydrationPromise = Promise.resolve(onAuthSuccess(user, options)).finally(() => {
+  authHydrationPromise = null;
+  authHydratingUserId = '';
+ });
+ return authHydrationPromise;
+}
+
+function clearAuthenticatedSessionUi() {
+ if (messageChannel && db?.removeChannel) {
+  db.removeChannel(messageChannel);
+  messageChannel = null;
  }
- } catch (e) {
- console.warn("Warning Background profile parsing deferred:", e.message);
+ if (presenceHeartbeatTimer) {
+  clearInterval(presenceHeartbeatTimer);
+  presenceHeartbeatTimer = null;
  }
-
- // ROUTER INTEGRATION: Intercept inbound query parameters and pop chat UI if active
- if (typeof processInboundChatRedirects === 'function') {
- processInboundChatRedirects();
- }
-
-  const shouldContinueAfterAuth = appStorage.getItem('bs_manual_navigation_pass') || hasAuthRedirectParams();
-
-  if (hasAppRouteParams()) {
-  await continueUrlRoute();
-  } else {
-  if (!shouldContinueAfterAuth) console.log("Background session detected. Restoring app workspace.");
-  continuePendingEntry();
-  }
-
- } else {
- console.log("Guest View Matrix Active.");
  currentUser = null;
  currentRole = 'buyer';
-
- if (authButton) {
- authButton.innerHTML = `<i class="fas fa-sign-in-alt"></i> Sign In`;
- authButton.onclick = (e) => {
- e.preventDefault();
- if (typeof showModal === 'function') {
- showModal('auth-modal');
- toggleAuth('login');
- }
- };
- }
-
-  if (hasAppRouteParams()) {
-  await continueUrlRoute();
-  } else {
-  showBuyerView();
-  }
-  }
- }, 0);
- });
+ currentChatPartner = null;
+ currentChatProductId = null;
+ document.getElementById('nav-auth-btns')?.classList.remove('hidden');
+ document.getElementById('nav-user-btns')?.classList.add('hidden');
+ if (typeof updateInboxCount === 'function') updateInboxCount();
 }
+
+async function restoreAuthSession() {
+ if (currentUser?.id && currentUser.profile) return currentUser;
+ if (ensureCurrentUserPromise) return ensureCurrentUserPromise;
+ const isGoogleOAuthCallback = hasPendingGoogleOAuthCallback();
+ if (isGoogleOAuthCallback) googleOAuthCallbackPending = true;
+
+ ensureCurrentUserPromise = (async () => {
+  try {
+   const client = initSupabaseClient() || supabase || window.supabaseClient || window.supabase || db;
+   if (client?.auth && typeof client.auth.getSession === 'function') {
+    const { data } = await client.auth.getSession();
+    if (data?.session?.user) {
+     await hydrateAuthenticatedUser(data.session.user);
+    }
+   }
+  } catch (err) {
+   console.warn('Unable to restore the saved session:', err);
+  } finally {
+   authBootstrapComplete = true;
+  }
+  return currentUser;
+ })().finally(() => {
+  ensureCurrentUserPromise = null;
+ });
+ return ensureCurrentUserPromise;
+}
+
+async function ensureCurrentUser() {
+ if (currentUser?.id && currentUser.profile) return currentUser;
+ return restoreAuthSession();
+}
+window.ensureCurrentUser = ensureCurrentUser;
+
+async function routeAfterAuthRestore({ resumeGoogleReturn = false } = {}) {
+ // The legacy runtime remains loaded while React is showing a product page.
+ // Do not let background auth events try to repaint marketplace-only elements.
+ if (!document.getElementById('buyer-view') && !document.getElementById('seller-view')) return;
+ // Supabase can briefly report an empty initial session while it exchanges an
+ // OAuth code. Keep the saved destination intact until the real session arrives.
+ if (!currentUser && hasPendingGoogleOAuthCallback()) return;
+ if (resumeGoogleReturn || googleOAuthCallbackPending) {
+  const savedRoute = consumeGoogleOAuthReturnRoute();
+  googleOAuthCallbackPending = false;
+  if (savedRoute) {
+   const currentRoute = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+   if (savedRoute !== currentRoute && window.history?.replaceState) {
+    window.history.replaceState({ view: 'shop', oauth: 'google' }, document.title, savedRoute);
+   }
+  }
+ }
+ if (typeof processInboundChatRedirects === 'function') processInboundChatRedirects();
+ if (hasAppRouteParams()) {
+  await continueUrlRoute();
+  return;
+ }
+ if (appStorage.getItem('bs_manual_navigation_pass') || hasAuthRedirectParams()) {
+  continuePendingEntry();
+  return;
+ }
+ showBuyerView();
+}
+
+function installAuthStateListener() {
+ const client = initSupabaseClient() || supabase || db;
+ if (!client?.auth || typeof client.auth.onAuthStateChange !== 'function' || authStateSubscription) return;
+
+ const registration = client.auth.onAuthStateChange((event, session) => {
+  authEventQueue = authEventQueue.catch(() => {}).then(async () => {
+   const isGoogleOAuthCallback = googleOAuthCallbackPending || hasPendingGoogleOAuthCallback();
+   if (isGoogleOAuthCallback) googleOAuthCallbackPending = true;
+   const oauthCallbackError = getOAuthCallbackError();
+   if (!session?.user && isGoogleOAuthCallback && oauthCallbackError) {
+    authBootstrapComplete = true;
+    clearGoogleOAuthAttempt();
+    clearAuthenticatedSessionUi();
+    if (document.getElementById('buyer-view') || document.getElementById('seller-view')) {
+     cleanAuthUrlParams();
+     showBuyerView();
+     toast('Google Sign In Failed', oauthCallbackError, 'warn', 7000);
+    }
+    return;
+   }
+   if (session?.user) {
+    if ((event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && currentUser?.id === session.user.id) {
+     currentUser = { ...currentUser, ...session.user, profile: currentUser.profile };
+     authBootstrapComplete = true;
+     return;
+    }
+    await hydrateAuthenticatedUser(session.user, { countLogin: event === 'SIGNED_IN' });
+    authBootstrapComplete = true;
+    if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') {
+     await routeAfterAuthRestore({ resumeGoogleReturn: isGoogleOAuthCallback });
+    }
+    return;
+   }
+
+   authBootstrapComplete = true;
+   if (event === 'SIGNED_OUT') {
+    clearAuthenticatedSessionUi();
+    await routeAfterAuthRestore();
+   } else if (event === 'INITIAL_SESSION') {
+    await routeAfterAuthRestore();
+   }
+  }).catch((error) => console.warn('Auth state sync failed:', error));
+ });
+ authStateSubscription = registration?.data?.subscription || true;
+}
+
+installAuthStateListener();
 function processInboundChatRedirects() {
  const urlParameters = new URLSearchParams(window.location.search);
  const targetChatPartnerId = urlParameters.get('chat');
@@ -687,16 +775,27 @@ function toast(title, msg='', type='success', dur=3500) {
 const PAGE_SURFACE_IDS = new Set(['cart-modal', 'checkout-modal', 'inbox-modal', 'message-modal']);
 let activePageSurface = '';
 
-function setSurfaceRoute(page) {
- const url = new URL(window.location.href);
- url.searchParams.set('view', 'shop');
- if (page) url.searchParams.set('page', page);
- else url.searchParams.delete('page');
- url.searchParams.delete('cart');
- url.searchParams.delete('checkout');
- if (window.history?.pushState) {
-  history.pushState({ page: page || 'shop', view: 'shop' }, '', `${url.pathname}${url.search}${url.hash}`);
- }
+function setSurfaceRoute(page, historyMode = 'auto') {
+  const url = new URL(window.location.href);
+  url.searchParams.set('view', 'shop');
+  if (page) url.searchParams.set('page', page);
+  else url.searchParams.delete('page');
+  url.searchParams.delete('cart');
+  url.searchParams.delete('checkout');
+  const current = new URL(window.location.href);
+  const routeAlreadyMatches =
+   current.searchParams.get('view') === 'shop' &&
+   current.searchParams.get('page') === (page || null) &&
+   !current.searchParams.has('cart') &&
+   !current.searchParams.has('checkout');
+  const replace = historyMode === 'replace' || routeAlreadyMatches;
+  if (window.history?.[replace ? 'replaceState' : 'pushState']) {
+   history[replace ? 'replaceState' : 'pushState'](
+    { page: page || 'shop', view: 'shop' },
+    document.title,
+    `${url.pathname}${url.search}${url.hash}`
+   );
+  }
 }
 
 function clearPageSurfaceRoute() {
@@ -710,7 +809,7 @@ function clearPageSurfaceRoute() {
  }
 }
 
-function preparePageSurface(id, page) {
+function preparePageSurface(id, page, historyMode = 'auto') {
  PAGE_SURFACE_IDS.forEach(surfaceId => {
   if (surfaceId !== id) document.getElementById(surfaceId)?.classList.remove('app-page-surface', 'cart-page-surface', 'checkout-page-surface', 'messages-page-surface', 'conversation-page-surface', 'open');
  });
@@ -723,15 +822,71 @@ function preparePageSurface(id, page) {
  surface.classList.toggle('conversation-page-surface', page === 'conversation');
  activePageSurface = id;
  document.body.classList.add('surface-page-open');
- setSurfaceRoute(page === 'conversation' ? 'messages' : page);
+  setSurfaceRoute(page === 'conversation' ? 'messages' : page, historyMode);
 }
 
 function showModal(id, options = {}) {
+ if (id === 'auth-modal' && !currentUser && !authBootstrapComplete) {
+  // Do not let a route transition flash the sign-in modal while Supabase is
+  // still reading a persisted session from storage.
+  if (!authModalDeferred) {
+   authModalDeferred = true;
+   ensureCurrentUser().catch(() => null).finally(() => {
+    authModalDeferred = false;
+    if (!currentUser) showModal('auth-modal', options);
+   });
+  }
+  return;
+ }
  const m = document.getElementById(id);
  if(m){
-  if (options.page) preparePageSurface(id, options.page);
+  if (id === 'auth-modal') {
+   if (currentUser) {
+    console.log('User already signed in. Suppressing auth-modal.');
+    return;
+   }
+   const coM = document.getElementById('checkout-modal');
+   if (coM) {
+    coM.classList.remove('open', 'app-page-surface', 'checkout-page-surface');
+   }
+  }
+  if (id === 'checkout-modal') {
+   const authM = document.getElementById('auth-modal');
+   if (authM) {
+    authM.classList.remove('open');
+   }
+  }
+  if (options.page) preparePageSurface(id, options.page, options.historyMode);
   m.classList.add('open');
   document.body.classList.add('modal-open');
+ }
+}
+
+function cleanAuthUrlParams() {
+ if (!window.history?.replaceState) return;
+ try {
+  const url = new URL(window.location.href);
+  let changed = false;
+  ['entry', 'mode', 'code', 'state', 'error', 'error_code', 'error_description'].forEach(param => {
+   if (url.searchParams.has(param)) {
+    url.searchParams.delete(param);
+    changed = true;
+   }
+  });
+  const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+  if (['access_token', 'refresh_token', 'provider_token'].some(param => hashParams.has(param))) {
+   url.hash = '';
+   changed = true;
+  }
+  if (!url.searchParams.get('view') && (url.pathname === '/' || url.pathname.endsWith('index.html'))) {
+   url.searchParams.set('view', 'shop');
+   changed = true;
+  }
+  if (changed) {
+   window.history.replaceState({ view: url.searchParams.get('view') || 'shop' }, document.title, `${url.pathname}${url.search}${url.hash}`);
+  }
+ } catch (err) {
+  console.warn('Could not clean auth URL params:', err);
  }
 }
 
@@ -745,17 +900,27 @@ function closeModal(id) {
    document.body.classList.remove('surface-page-open');
    clearPageSurfaceRoute();
   }
+  if (id === 'auth-modal') {
+   cleanAuthUrlParams();
+  }
   if (!document.querySelector('.modal-overlay.open')) document.body.classList.remove('modal-open');
  }
 }
 document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if(e.target===m) closeModal(m.id); }));
 
 window.addEventListener('popstate', () => {
- const params = new URLSearchParams(window.location.search);
- const page = params.get('page');
- const isCart = params.get('cart') === 'open';
- const isCheckout = params.get('checkout') === 'open';
- if (!page && !isCart && !isCheckout && activePageSurface) {
+  const params = new URLSearchParams(window.location.search);
+  const page = params.get('page');
+  const isCart = params.get('cart') === 'open';
+  const isCheckout = params.get('checkout') === 'open';
+  // Keep the visible surface in sync with browser navigation.  In particular,
+  // do not leave checkout visible after Back has returned to the marketplace.
+  if (page === 'checkout' || isCheckout) {
+   startCheckout({ restoring: true, historyMode: 'replace' }).catch(error => console.warn('Could not restore checkout:', error));
+  } else if (page === 'cart' || isCart) {
+   openCart({ page: true, historyMode: 'replace' });
+  }
+  if (!page && !isCart && !isCheckout && activePageSurface) {
   const currentSurface = activePageSurface;
   activePageSurface = '';
   document.body.classList.remove('surface-page-open');
@@ -764,6 +929,10 @@ window.addEventListener('popstate', () => {
    m.classList.remove('open', 'app-page-surface', 'cart-page-surface', 'checkout-page-surface', 'messages-page-surface', 'conversation-page-surface');
   }
   if (!document.querySelector('.modal-overlay.open')) document.body.classList.remove('modal-open');
+ }
+ const authModal = document.getElementById('auth-modal');
+ if (authModal && authModal.classList.contains('open')) {
+  closeModal('auth-modal');
  }
 });
 
@@ -959,10 +1128,103 @@ function hasAuthRedirectParams() {
   const params = new URLSearchParams(window.location.search);
   const hashParams = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
   return params.has('code') ||
- params.has('state') ||
- hashParams.has('access_token') ||
- hashParams.has('refresh_token') ||
-  hashParams.has('provider_token');
+   params.has('state') ||
+   params.has('error') ||
+   params.has('error_code') ||
+   params.has('error_description') ||
+   hashParams.has('access_token') ||
+   hashParams.has('refresh_token') ||
+   hashParams.has('provider_token');
+}
+
+function getOAuthCallbackError() {
+ const params = new URLSearchParams(window.location.search);
+ const error = params.get('error') || params.get('error_code') || '';
+ const description = params.get('error_description') || '';
+ if (!error && !description) return '';
+ if (/access_denied|cancel/i.test(`${error} ${description}`)) return 'Google sign-in was cancelled. You can try again whenever you are ready.';
+ return description || error || 'Google could not complete sign-in. Please try again.';
+}
+
+function createGoogleOAuthReturnRoute() {
+ try {
+  const current = new URL(window.location.href);
+  const target = new URL('/', window.location.origin);
+  target.searchParams.set('view', 'shop');
+
+  // Carry only application state that belongs to the post-auth route. Auth
+  // codes/state are deliberately excluded and are handled by Supabase.
+  const returnKeys = ['entry', 'mode', 'dashboard', 'order', 'page', 'checkout', 'cart', 'product', 'store', 'category', 'q', 'sort', 'chat'];
+  returnKeys.forEach(key => {
+   const value = current.searchParams.get(key);
+   if (value) target.searchParams.set(key, value);
+  });
+  return `${target.pathname}${target.search}${target.hash}`;
+ } catch {
+  return '/?view=shop';
+ }
+}
+
+function rememberGoogleOAuthReturnRoute() {
+ const route = createGoogleOAuthReturnRoute();
+ appSessionStorage.setItem(GOOGLE_OAUTH_RETURN_KEY, JSON.stringify({ route, createdAt: Date.now() }));
+ return route;
+}
+
+function readGoogleOAuthReturnRoute({ consume = false } = {}) {
+ const raw = appSessionStorage.getItem(GOOGLE_OAUTH_RETURN_KEY);
+ if (!raw) return '';
+ if (consume) appSessionStorage.removeItem(GOOGLE_OAUTH_RETURN_KEY);
+ try {
+  const saved = JSON.parse(raw);
+  if (!saved?.route || Date.now() - Number(saved.createdAt || 0) > GOOGLE_OAUTH_RETURN_MAX_AGE_MS) return '';
+  const target = new URL(saved.route, window.location.origin);
+  if (target.origin !== window.location.origin || target.pathname !== '/') return '';
+  if (!target.searchParams.get('view')) target.searchParams.set('view', 'shop');
+  return `${target.pathname}${target.search}${target.hash}`;
+ } catch {
+  return '';
+ }
+}
+
+function consumeGoogleOAuthReturnRoute() {
+ return readGoogleOAuthReturnRoute({ consume: true });
+}
+
+function clearGoogleOAuthAttempt() {
+ appSessionStorage.removeItem(GOOGLE_OAUTH_RETURN_KEY);
+ appStorage.removeItem('bs_google_profile_hint');
+ appStorage.removeItem('bs_manual_navigation_pass');
+ googleOAuthCallbackPending = false;
+ googleSignInInFlight = false;
+}
+
+function hasPendingGoogleOAuthCallback() {
+ return Boolean(getOAuthCallbackError() || hasAuthRedirectParams()) && Boolean(readGoogleOAuthReturnRoute());
+}
+
+function setGoogleSignInBusy(isBusy) {
+ document.querySelectorAll('.auth-google-btn').forEach(button => {
+  button.disabled = isBusy;
+  button.setAttribute('aria-busy', String(isBusy));
+  if (isBusy) {
+   button.dataset.originalHtml = button.dataset.originalHtml || button.innerHTML;
+  button.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Opening Google...';
+  } else if (button.dataset.originalHtml) {
+   button.innerHTML = button.dataset.originalHtml;
+  }
+ });
+}
+
+function googleAuthErrorMessage(error) {
+ const message = String(error?.message || error || '').trim();
+ if (/provider.+(not enabled|disabled)|unsupported provider/i.test(message)) {
+  return 'Google sign-in is not enabled in Supabase yet. Enable Google under Authentication > Providers.';
+ }
+ if (/redirect|redirect_to|url.*allow|not allowed/i.test(message)) {
+  return `Add ${window.location.origin}/ to Supabase Authentication > URL Configuration, then try again.`;
+ }
+ return message || 'Google could not start sign-in. Please try again.';
 }
 
 function hasAppRouteParams() {
@@ -972,9 +1234,12 @@ function hasAppRouteParams() {
  params.has('mode') ||
  params.get('dashboard') === 'seller' ||
  params.has('product') ||
- params.has('store') ||
- params.has('category') ||
- params.has('chat');
+  params.has('store') ||
+  params.has('category') ||
+  params.has('chat') ||
+  params.has('page') ||
+  params.has('checkout') ||
+  params.has('cart');
 }
 
 async function continueUrlRoute() {
@@ -984,12 +1249,24 @@ async function continueUrlRoute() {
  const entryRole = params.get('entry');
  const entryMode = params.get('mode') === 'signup' ? 'signup' : 'login';
  if (entryRole) {
+  cleanAuthUrlParams();
+  if (currentUser) {
+   if ((entryRole === 'seller' || entryRole === 'both') && profileHasSellerAccess()) {
+    showSellerDashboard();
+   } else {
+    showBuyerView();
+   }
+   return;
+  }
+  showBuyerView();
   openEntryAuth(entryRole, entryMode);
   return;
  }
 
  if (params.get('dashboard') === 'seller') {
   if (!currentUser) {
+   cleanAuthUrlParams();
+   showBuyerView();
    openEntryAuth('seller', 'login');
    return;
   }
@@ -1005,18 +1282,13 @@ async function continueUrlRoute() {
 
  showBuyerView();
  if (params.get('view') === 'shop') switchBuyerTab?.('shop');
- if (params.has('product') || params.has('store') || params.has('category') || params.has('chat')) {
+ if (params.has('product') || params.has('store') || params.has('category') || params.has('q') || params.has('chat') || params.has('page') || params.has('checkout') || params.has('cart')) {
   await handleDeepLink();
  }
 }
 
 function cleanAuthRedirectUrl() {
-  if (!hasAuthRedirectParams() || !window.history?.replaceState) return;
-  const url = new URL(window.location.href);
-  url.searchParams.delete('code');
-  url.searchParams.delete('state');
-  if (!url.searchParams.get('view')) url.searchParams.set('view', 'shop');
-  window.history.replaceState({}, document.title, `${url.pathname}${url.search}`);
+  cleanAuthUrlParams();
 }
 
 function continuePendingEntry() {
@@ -1149,6 +1421,7 @@ async function uploadProductMediaFiles(files, kind) {
 }
 
 async function signInWithGoogle() {
+ if (googleSignInInFlight) return;
  initSupabaseClient();
  if (!db || !db.auth) {
   toast('Setup Required', 'Supabase credentials are not configured. Please add your Supabase URL and Anon Key to config.js or .env.local.', 'error', 7000);
@@ -1164,10 +1437,16 @@ async function signInWithGoogle() {
  accounts: rawRole,
  whatsapp: document.getElementById('auth-wa')?.value.trim() || '',
  }));
+ rememberGoogleOAuthReturnRoute();
+ googleSignInInFlight = true;
+ setGoogleSignInBusy(true);
 
  try {
+ // Keep the callback at the configured site root. App.jsx recognises the
+ // temporary OAuth parameters there and loads the marketplace auth runtime.
+ // That avoids needing a second callback page or a separately bundled login app.
  const redirectOrigin = (typeof window !== 'undefined' && window.location?.origin) ? window.location.origin : PUBLIC_SITE_URL;
- const { error } = await db.auth.signInWithOAuth({
+ const { data, error } = await db.auth.signInWithOAuth({
  provider: 'google',
  options: {
  redirectTo: `${redirectOrigin}/`,
@@ -1178,10 +1457,11 @@ async function signInWithGoogle() {
  },
  });
  if (error) throw error;
+ if (!data?.url) throw new Error('Google sign-in could not create a redirect URL.');
  } catch (err) {
- appStorage.removeItem('bs_manual_navigation_pass');
- appStorage.removeItem('bs_google_profile_hint');
- toast('Google Sign In Failed', err.message || 'Please try again', 'error');
+ clearGoogleOAuthAttempt();
+ setGoogleSignInBusy(false);
+ toast('Google Sign In Failed', googleAuthErrorMessage(err), 'error', 7000);
  }
 }
 
@@ -1217,6 +1497,8 @@ function withTimeout(promise, ms, timeoutMessage) {
 
 async function handleAuth(e) {
  e.preventDefault();
+ // A normal password attempt supersedes any abandoned Google redirect state.
+ clearGoogleOAuthAttempt();
  initSupabaseClient();
  if (!db || !db.auth) {
   toast('Setup Required', 'Supabase credentials are not configured. Please add your Supabase URL and Anon Key to config.js or .env.local.', 'error', 7000);
@@ -1265,6 +1547,11 @@ async function handleAuth(e) {
  const user = data.session?.user || data.user;
  await withTimeout(onAuthSuccess(user, { countLogin: true }), 10000, 'Profile loading timed out. Please refresh and try again.');
  closeModal('auth-modal');
+ const coParams = new URLSearchParams(window.location.search);
+ if (coParams.get('page') === 'checkout' || coParams.get('checkout') === 'open') {
+  await startCheckout();
+  return;
+ }
  continuePendingEntry();
 
  } else {
@@ -1307,6 +1594,11 @@ async function handleAuth(e) {
  const user = loginData.session?.user || loginData.user;
  await withTimeout(onAuthSuccess(user, { countLogin: true }), 10000, 'Profile loading timed out. Please refresh and try again.');
  closeModal('auth-modal');
+ const suParams = new URLSearchParams(window.location.search);
+ if (suParams.get('page') === 'checkout' || suParams.get('checkout') === 'open') {
+  await startCheckout();
+  return;
+ }
  continuePendingEntry();
  return;
  } else if (msg.includes('rate limit') || msg.includes('too many')) {
@@ -1338,6 +1630,11 @@ async function handleAuth(e) {
  await upsertProfile(user, { name, role, accounts, whatsapp: wa });
  await withTimeout(onAuthSuccess(user, { countLogin: true }), 10000, 'Profile loading timed out. Please refresh and try again.');
  closeModal('auth-modal');
+ const suDirectParams = new URLSearchParams(window.location.search);
+ if (suDirectParams.get('page') === 'checkout' || suDirectParams.get('checkout') === 'open') {
+  await startCheckout();
+  return;
+ }
  continuePendingEntry();
 
  const msgs = {
@@ -1455,70 +1752,36 @@ async function onAuthSuccess(user, options = {}) {
  updateNavForUser();
  updateInboxCount();
  setupMessageRealtime();
+ if (typeof closeModal === 'function') closeModal('auth-modal');
 }
 
 async function checkSession() {
- // Subscribe to auth state changes FIRST so we don't miss the initial event
- db.auth.onAuthStateChange((event, session) => {
- setTimeout(async () => {
- if (event === 'SIGNED_IN' && session?.user) {
- if (!currentUser) {
- await onAuthSuccess(session.user);
-  if (hasAppRouteParams()) {
-  await continueUrlRoute();
-  } else if (appStorage.getItem('bs_manual_navigation_pass') || hasAuthRedirectParams()) {
-  continuePendingEntry();
-  } else {
-  showBuyerView();
- }
- }
- }
- if (event === 'SIGNED_OUT') {
-  if (messageChannel) {
-  db.removeChannel(messageChannel);
-  messageChannel = null;
-  }
-  if (presenceHeartbeatTimer) {
-  clearInterval(presenceHeartbeatTimer);
-  presenceHeartbeatTimer = null;
-  }
-  currentUser = null;
- currentRole = 'buyer';
- currentChatPartner = null;
- currentChatProductId = null;
- updateInboxCount();
- }
- if (event === 'TOKEN_REFRESHED' && session?.user) {
- currentUser = session.user;
- }
- if (event === 'USER_UPDATED' && session?.user) {
- currentUser = session.user;
- }
- }, 0);
- });
-
- // Then check for an existing persisted session
- const { data: { session } } = await db.auth.getSession();
- if (session?.user) {
- await onAuthSuccess(session.user);
-  if (hasAppRouteParams()) await continueUrlRoute();
-  else if (hasAuthRedirectParams()) continuePendingEntry();
-  }
+ // Kept as a compatibility entry point for older code.  The shared listener
+ // above owns subscriptions, so calling this no longer creates a second one.
+ return ensureCurrentUser();
 }
 
 function updateNavForUser() {
  if (!currentUser) return;
- document.getElementById('nav-auth-btns').classList.add('hidden');
- document.getElementById('nav-user-btns').classList.remove('hidden');
+ const navAuthButtons = document.getElementById('nav-auth-btns');
+ const navUserButtons = document.getElementById('nav-user-btns');
+ if (!navAuthButtons && !navUserButtons) return;
+ navAuthButtons?.classList.add('hidden');
+ navUserButtons?.classList.remove('hidden');
  ensureNavLogoutButton();
  const initial = (currentUser.profile?.name || currentUser.email || 'U')[0].toUpperCase();
- document.getElementById('nav-avatar-inner').textContent = initial;
- document.getElementById('nav-avatar-inner').style.fontSize = '.9rem';
+ const avatar = document.getElementById('nav-avatar-inner');
+ if (avatar) {
+  avatar.textContent = initial;
+  avatar.style.fontSize = '.9rem';
+ }
   updateNotificationButtonState();
   // Keep push setup user-triggered. Some mobile browsers abort service worker
   // registration when background and manual notification setup overlap.
- document.getElementById('dash-user-name').textContent = currentUser.profile?.name || 'Seller';
- document.getElementById('dash-user-email').textContent = currentUser.email || '';
+ const dashboardName = document.getElementById('dash-user-name');
+ const dashboardEmail = document.getElementById('dash-user-email');
+ if (dashboardName) dashboardName.textContent = currentUser.profile?.name || 'Seller';
+ if (dashboardEmail) dashboardEmail.textContent = currentUser.email || '';
  // Admin check
  // DB-backed admin check - email alone is not sufficient
  const isAdmin = isAdminEmail();
@@ -1527,7 +1790,8 @@ function updateNavForUser() {
  }
  // Referral link
  const rc = currentUser.profile?.referral_code || 'ref_' + currentUser.id?.substr(0,8);
- document.getElementById('referral-link').value = `${PUBLIC_SITE_URL}/ref/${rc}`;
+ const referralLink = document.getElementById('referral-link');
+ if (referralLink) referralLink.value = `${PUBLIC_SITE_URL}/ref/${rc}`;
  updateBuyerSidebarUser();
 }
 
@@ -1699,32 +1963,36 @@ function handleLandingAuthClick() {
  }
 }
 
-function __legacyDuplicate_enterSite_1528(mode) {
+function enterSite(mode) {
  const entryRole = setPendingEntryRole(mode);
  console.log(" Manual selection pass triggered for role:", mode);
  
  appStorage.setItem('bs_manual_navigation_pass', 'true');
 
  if (!currentUser) {
- if (entryRole === 'buyer') {
- appStorage.removeItem('bs_manual_navigation_pass');
- clearPendingEntryRole();
- showBuyerView();
- return;
+  if (entryRole === 'buyer') {
+   appStorage.removeItem('bs_manual_navigation_pass');
+   clearPendingEntryRole();
+   cleanAuthUrlParams();
+   showBuyerView();
+   return;
+  }
+  cleanAuthUrlParams();
+  showBuyerView();
+  openEntryAuth(entryRole, 'login');
+  return;
  }
- openEntryAuth(entryRole, 'login');
- return;
- } // ' Closes: if (!currentUser)
 
  if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').style.setProperty('display', 'none', 'important');
  if (document.getElementById('landing')) document.getElementById('landing').style.setProperty('display', 'none', 'important');
 
  if (entryRole === 'seller' || entryRole === 'both') {
- if (typeof showSellerDashboard === 'function') showSellerDashboard();
+  if (typeof showSellerDashboard === 'function') showSellerDashboard();
  } else {
- if (typeof showBuyerView === 'function') showBuyerView();
+  if (typeof showBuyerView === 'function') showBuyerView();
  }
-} // ' Closes: function enterSite(mode)
+}
+window.enterSite = enterSite;
 
 
 // ==========================================
@@ -1770,14 +2038,26 @@ function showBuyerView() {
  const mobHamBtn = document.getElementById('mob-ham-btn');
  if (mobHamBtn) mobHamBtn.style.setProperty('display', 'none', 'important');
  
- document.body.classList.remove('in-seller', 'platform-seller-mode');
- closeMobSidebar();
- currentRole = 'buyer';
+  document.body.classList.remove('in-seller', 'platform-seller-mode');
+  closeMobSidebar();
+  organizeBuyerMarketplace();
+  setupMarketplaceSearchInput();
+  currentRole = 'buyer';
 
  if (typeof startCarousel === 'function') startCarousel();
   if (typeof loadProducts === 'function') loadProducts({ preferCache: true });
  if (typeof loadActiveAds === 'function') loadActiveAds();
- if (typeof updateCartCount === 'function') updateCartCount();
+  if (typeof updateCartCount === 'function') updateCartCount();
+}
+
+// The mobile menu owns global navigation. Keep the buyer home focused on
+// discovery and shopping, instead of repeating menu-only shortcuts on the page.
+function organizeBuyerMarketplace() {
+ const duplicateNavigation = document.querySelectorAll('.buyer-command-strip, .buyer-deal-board');
+ duplicateNavigation.forEach(section => {
+  section.classList.add('buyer-menu-duplicate', 'hidden');
+  section.setAttribute('aria-hidden', 'true');
+ });
 }
 
 async function showSellerDashboard() {
@@ -1826,10 +2106,11 @@ async function showSellerDashboard() {
  const adminNavItem = document.getElementById('admin-nav-item');
  if (adminNavItem) adminNavItem.style.setProperty('display', (isAdminEmail() ? 'flex' : 'none'), 'important');
  
-  document.body.classList.add('in-seller');
-  currentRole = 'seller';
-  updatePlatformSellerDashboardChrome();
-  updateSellerAccessChrome();
+   document.body.classList.add('in-seller');
+   currentRole = 'seller';
+   updatePlatformSellerDashboardChrome();
+   updateSellerAccessChrome();
+   enhanceSellerSidebar();
  
  if (typeof stopCarousel === 'function') stopCarousel();
  if (typeof checkSellerCommission === 'function') checkSellerCommission();
@@ -2070,6 +2351,41 @@ function setupProductCategoryField() {
  sync();
 }
 
+function enhanceSellerSidebar() {
+ const sidebar = document.getElementById('dash-sidebar');
+ const nav = sidebar?.querySelector('.dash-nav');
+ if (!sidebar || !nav || sidebar.dataset.enhanced === 'true') return;
+ sidebar.dataset.enhanced = 'true';
+
+ const subtitle = sidebar.querySelector('.dash-sidebar-head .sub');
+ if (subtitle) subtitle.textContent = 'Seller workspace';
+
+ const labels = {
+  dropshipping: '1688 Sourcing',
+  advertise: 'Promote Store',
+  commission: 'Plan & Access',
+ };
+ Object.entries(labels).forEach(([section, label]) => {
+  const item = nav.querySelector(`[data-dash-section="${section}"]`);
+  if (!item) return;
+  const icon = item.querySelector('i')?.outerHTML || '';
+  const badge = item.querySelector('.nav-badge, .nav-new')?.outerHTML || '';
+  item.innerHTML = `${icon} ${label}${badge ? ` ${badge}` : ''}`;
+  item.setAttribute('aria-label', label);
+ });
+
+ const shortcuts = document.createElement('div');
+ shortcuts.className = 'seller-nav-shortcuts';
+ shortcuts.innerHTML = '<span>Quick actions</span><div><button type="button" data-seller-shortcut="add-product"><i class="fa-solid fa-plus"></i> Add product</button><button type="button" data-seller-shortcut="orders"><i class="fa-solid fa-receipt"></i> Orders</button></div>';
+ shortcuts.querySelectorAll('[data-seller-shortcut]').forEach(button => {
+  button.addEventListener('click', () => {
+   showDash(button.dataset.sellerShortcut);
+   closeMobSidebar();
+  });
+ });
+ nav.insertAdjacentElement('beforebegin', shortcuts);
+}
+
 function showDash(section) {
   if (!canAccessSellerSection(section)) {
   const label = SELLER_ACCESS_CATEGORIES[currentSellerAccessCategory()]?.label || 'Seller Access';
@@ -2077,11 +2393,16 @@ function showDash(section) {
   section = 'overview';
  }
   document.querySelectorAll('.dash-section').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.dash-nav-item').forEach(n => n.classList.remove('active'));
- const el = document.getElementById(`ds-${section}`);
- if (el) el.classList.add('active');
- const navItems = document.querySelectorAll('.dash-nav-item');
- navItems.forEach(n => { if (n.textContent.toLowerCase().includes(section.replace('-',' '))) n.classList.add('active'); });
+  const el = document.getElementById(`ds-${section}`);
+  if (el) el.classList.add('active');
+ const navItems = document.querySelectorAll('.dash-nav-item[data-dash-section]');
+ navItems.forEach(item => {
+  const isActive = item.dataset.dashSection === section;
+  item.classList.toggle('active', isActive);
+  if (isActive) item.setAttribute('aria-current', 'page');
+  else item.removeAttribute('aria-current');
+ });
+ document.querySelector('.dash-main')?.scrollTo({ top: 0, behavior: 'smooth' });
  if (section === 'products') loadSellerProds();
  if (section === 'orders') loadSellerOrders();
  if (section === 'reviews') loadSellerReviews();
@@ -2413,6 +2734,8 @@ function saveUpcomingProductInterest(productId, title = 'Upcoming product') {
 
 function renderProducts(prods) {
  document.getElementById('prods-skeleton').classList.add('hidden');
+ renderCustomCategoryChips();
+ renderMarketplaceSearchStatus();
  const grid = document.getElementById('prods-grid');
  if (!prods.length) { grid.classList.add('hidden'); document.getElementById('prods-empty').classList.remove('hidden'); return; }
  document.getElementById('prods-empty').classList.add('hidden');
@@ -2420,6 +2743,10 @@ function renderProducts(prods) {
  grid.innerHTML = prods.map(p => prodCard(p)).join('');
  renderRecentlyViewed();
  renderBuyerDealShelf();
+}
+
+function isFocusedMarketplaceBrowse() {
+ return Boolean(activeFilters.category && activeFilters.category !== 'all') || Boolean(activeFilters.search);
 }
 
 function readRecentlyViewedIds() {
@@ -2442,6 +2769,10 @@ function renderRecentlyViewed() {
  const section = document.getElementById('recently-viewed-section');
  const grid = document.getElementById('recently-viewed-grid');
  if (!section || !grid || !products?.length) return;
+ if (isFocusedMarketplaceBrowse()) {
+  section.classList.add('hidden');
+  return;
+ }
  const recentProducts = readRecentlyViewedIds()
  .map(id => products.find(product => product.id === id))
  .filter(Boolean)
@@ -2454,6 +2785,10 @@ function renderBuyerDealShelf() {
  const section = document.getElementById('buyer-deals-section');
  const grid = document.getElementById('buyer-deals-grid');
  if (!section || !grid || !products?.length) return;
+ if (isFocusedMarketplaceBrowse()) {
+  section.classList.add('hidden');
+  return;
+ }
  const deals = products
  .filter(product => Number(product.price || 0) > 0 && Number(product.price || 0) <= 10000 && Number(product.stock_quantity ?? 1) !== 0)
  .sort((a, b) => Number(a.price || 0) - Number(b.price || 0))
@@ -2582,8 +2917,79 @@ const CATEGORY_PAGE_URLS = {
  upcoming: '/upcoming',
 };
 
+const MARKETPLACE_BUILTIN_CATEGORIES = new Set([
+ 'all', 'trending', 'electronics', 'phones', 'fashion', 'home', 'beauty', 'sports', 'dropship', 'upcoming'
+]);
+
+function normalizeProductCategory(value = '') {
+ return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 function categoryLabel(cat) {
- return CATEGORY_PAGE_LABELS[cat] || String(cat || 'Products').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+ const category = normalizeProductCategory(cat);
+ return CATEGORY_PAGE_LABELS[category] || String(category || 'Products').replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function productMatchesMarketplaceCategory(product, category) {
+ const selected = normalizeProductCategory(category);
+ const value = normalizeProductCategory(product?.category);
+ if (!selected || selected === 'all') return true;
+ if (selected === 'trending') return Number(product?.review_count || 0) > 0 || Number(product?.avg_rating || 0) >= 4;
+ const matchingTerms = {
+  phones: ['phone', 'mobile', 'tablet', 'gadget', 'accessor'],
+  electronics: ['electronics', 'electronic', 'laptop', 'computer', 'audio', 'television', 'tv', 'tech'],
+  fashion: ['fashion', 'clothing', 'apparel', 'shoe', 'bag', 'watch'],
+  home: ['home', 'furniture', 'kitchen', 'appliance', 'decor'],
+  beauty: ['beauty', 'skincare', 'cosmetic', 'fragrance', 'perfume', 'personal care'],
+  sports: ['sport', 'fitness', 'gym', 'activewear', 'outdoor'],
+  dropship: ['dropship', '1688', 'sourcing'],
+ };
+ if (matchingTerms[selected]) {
+  return matchingTerms[selected].some(term => value === term || value.includes(term));
+ }
+ // Custom seller categories are exact matches so unrelated listings do not leak
+ // into a category page just because their labels happen to share a word.
+ return value === selected;
+}
+
+function renderCustomCategoryChips() {
+ const anchor = document.querySelector('.cats-section .cats-strip');
+ if (!anchor) return;
+ let section = document.getElementById('custom-category-section');
+ if (!section) {
+  section = document.createElement('section');
+  section.id = 'custom-category-section';
+  section.className = 'custom-category-section hidden';
+  anchor.insertAdjacentElement('afterend', section);
+ }
+
+ const categories = new Map();
+ (products || []).forEach(product => {
+  const key = normalizeProductCategory(product?.category);
+  if (!key || MARKETPLACE_BUILTIN_CATEGORIES.has(key)) return;
+  const saved = categories.get(key) || { key, label: categoryLabel(key), count: 0 };
+  saved.count += 1;
+  categories.set(key, saved);
+ });
+ const rows = [...categories.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+ if (!rows.length) {
+  section.classList.add('hidden');
+  section.innerHTML = '';
+  return;
+ }
+
+ section.classList.remove('hidden');
+ section.innerHTML = '<div class="custom-category-heading"><i class="fa-solid fa-tags"></i><span>More categories</span></div><div class="custom-category-chips"></div>';
+ const chips = section.querySelector('.custom-category-chips');
+ rows.forEach(row => {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `cat-chip custom-category-chip${normalizeProductCategory(activeFilters.category) === row.key ? ' active' : ''}`;
+  button.dataset.cat = row.key;
+  button.innerHTML = `<span>${escHtml(row.label)}</span><small>${row.count}</small>`;
+  button.addEventListener('click', () => filterCat(row.key, { updateUrl: true, scroll: true }));
+  chips.appendChild(button);
+ });
 }
 
 function setCategoryUrl(cat) {
@@ -2599,17 +3005,19 @@ function setCategoryUrl(cat) {
 }
 
 function filterCat(cat, options = {}) {
- const selected = cat || 'all';
+ const selected = normalizeProductCategory(cat) || 'all';
  document.querySelectorAll('.cat-chip').forEach(c => c.classList.toggle('active', c.dataset.cat === selected));
  document.querySelectorAll('[data-category-link]').forEach(btn => btn.classList.toggle('active', btn.dataset.categoryLink === selected));
+ const sectionTitle = document.getElementById('section-title-text');
  if (selected === 'all') {
   delete activeFilters.category;
-  document.getElementById('section-title-text').textContent = 'Latest Products';
+  if (sectionTitle) sectionTitle.textContent = 'Latest Products';
  } else {
   activeFilters.category = selected;
-  document.getElementById('section-title-text').textContent = categoryLabel(selected);
+  if (sectionTitle) sectionTitle.textContent = categoryLabel(selected);
  }
  applyCurrentFilters();
+ renderCustomCategoryChips();
  if (options.updateUrl) setCategoryUrl(selected);
  if (options.scroll) {
   switchBuyerTab?.('shop');
@@ -2618,7 +3026,7 @@ function filterCat(cat, options = {}) {
 }
 
 function openCategoryPage(cat) {
- const selected = cat || 'all';
+ const selected = normalizeProductCategory(cat) || 'all';
  appStorage.setItem('bs_last_market_route', 'index.html?view=shop');
  if (window.history?.replaceState) {
   const url = new URL(window.location.href);
@@ -2631,46 +3039,196 @@ function openCategoryPage(cat) {
 }
 
 let searchTimeout;
-// Replace doSearch() with this Claude-enhanced version
-async function doSearch() {
- const q = validateInput(document.getElementById('search-input').value.trim());
- if (!q) return;
 
- // First do the normal fuzzy search (fast, free)
- activeFilters.search = q.toLowerCase();
- applyCurrentFilters();
+// Marketplace search is intentionally local and deterministic: results are
+// instant, work on weak connections, and are easy to share through `?q=`.
+const MARKETPLACE_SEARCH_ALIASES = {
+ phone: ['mobile', 'smartphone', 'iphone', 'android', 'tablet'],
+ phones: ['phone', 'mobile', 'smartphone', 'iphone', 'android', 'tablet'],
+ laptop: ['computer', 'notebook', 'macbook'],
+ laptops: ['laptop', 'computer', 'notebook', 'macbook'],
+ tv: ['television', 'smart tv'],
+ television: ['tv', 'smart tv'],
+ shoe: ['shoes', 'sneaker', 'sneakers', 'footwear'],
+ shoes: ['shoe', 'sneaker', 'sneakers', 'footwear'],
+ bag: ['bags', 'handbag', 'backpack'],
+ bags: ['bag', 'handbag', 'backpack'],
+ beauty: ['skincare', 'cosmetics', 'perfume', 'fragrance'],
+ fashion: ['clothing', 'apparel', 'shoe', 'bag', 'watch'],
+ furniture: ['sofa', 'chair', 'table', 'home'],
+ home: ['furniture', 'kitchen', 'decor', 'appliance'],
+ dropship: ['dropshipping', '1688', 'sourcing'],
+ sourcing: ['dropship', '1688', 'wholesale'],
+};
 
- // If < 3 results, ask Claude for query suggestions
- if (filteredProducts.length < 3 && q.length > 4) {
- try {
- const res = await fetch(CLAUDE_EDGE_URL, {
- method: 'POST',
- headers: { 'Content-Type': 'application/json', apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
- body: JSON.stringify({
- messages: [{
- role: 'user',
- content: `A user searched "${q}" on a Nigerian marketplace. 
- Suggest 2-3 alternative single-word search terms 
- they might mean. Reply ONLY with the terms 
- comma-separated, nothing else.`
- }],
- context: { task: 'search_suggestion' }
- }),
+function normalizeMarketplaceSearch(query = '') {
+ return String(query || '').trim().replace(/\s+/g, ' ').slice(0, 100);
+}
+
+function marketplaceSearchDocument(product = {}) {
+ return [
+  product.name,
+  product.description,
+  product.category,
+  product.location,
+  product.profiles?.store_name,
+  product.profiles?.name,
+ ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function marketplaceSearchProducts(rows, query) {
+ const normalizedQuery = normalizeMarketplaceSearch(query).toLowerCase();
+ if (!normalizedQuery) return [...rows];
+ const tokens = normalizedQuery.split(' ').filter(Boolean);
+ const direct = rows.filter(product => {
+  const text = marketplaceSearchDocument(product);
+  return tokens.every(token => [token, ...(MARKETPLACE_SEARCH_ALIASES[token] || [])]
+   .some(candidate => text.includes(candidate)));
  });
- const data = await res.json();
- if (data.reply) {
- const suggestions = data.reply.split(',').map(s => s.trim()).filter(Boolean);
- if (suggestions.length) {
- toast(
- `' Try searching: ${suggestions.slice(0,2).join(', ')}`,
- 'Showing closest matches',
- 'info',
- 4000
- );
+ const fuse = new Fuse(rows, {
+  keys: [
+   { name: 'name', weight: 0.55 },
+   { name: 'description', weight: 0.2 },
+   { name: 'category', weight: 0.12 },
+   { name: 'profiles.store_name', weight: 0.08 },
+   { name: 'location', weight: 0.05 },
+  ],
+  threshold: 0.34,
+  distance: 120,
+  ignoreLocation: true,
+ });
+ const fuzzy = fuse.search(normalizedQuery).map(result => result.item);
+ const seen = new Set();
+ return [...direct, ...fuzzy].filter(product => {
+  if (!product?.id || seen.has(product.id)) return false;
+  seen.add(product.id);
+  return true;
+ });
+}
+
+function marketplaceSearchSuggestions(query) {
+ const normalizedQuery = normalizeMarketplaceSearch(query).toLowerCase();
+ if (!normalizedQuery || !products.length) return [];
+ const tokens = normalizedQuery.split(' ').filter(Boolean);
+ const options = [
+  ...Object.keys(MARKETPLACE_SEARCH_ALIASES),
+  ...products.map(product => String(product.category || '').trim()),
+  ...products.map(product => String(product.name || '').trim()),
+ ].filter(Boolean);
+ const unique = [...new Set(options.map(value => String(value).trim()))];
+ return unique
+  .filter(value => value.toLowerCase() !== normalizedQuery)
+  .filter(value => tokens.some(token => value.toLowerCase().includes(token) || (MARKETPLACE_SEARCH_ALIASES[token] || []).some(alias => value.toLowerCase().includes(alias))))
+  .slice(0, 3);
+}
+
+function syncMarketplaceSearchUrl(query) {
+ const url = new URL(window.location.href);
+ const normalizedQuery = normalizeMarketplaceSearch(query);
+ if (!url.searchParams.get('view')) url.searchParams.set('view', 'shop');
+ if (normalizedQuery) url.searchParams.set('q', normalizedQuery);
+ else url.searchParams.delete('q');
+ history.replaceState({ view: 'shop', search: normalizedQuery }, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+function renderMarketplaceSearchStatus() {
+ const input = document.getElementById('search-input');
+ if (!input) return;
+ const shell = input.closest('.nav-search');
+ if (!shell) return;
+ let panel = document.getElementById('market-search-status');
+ if (!panel) {
+  panel = document.createElement('div');
+  panel.id = 'market-search-status';
+  panel.className = 'market-search-status hidden';
+  panel.setAttribute('aria-live', 'polite');
+  shell.appendChild(panel);
  }
+ let clearButton = document.getElementById('market-search-clear');
+ if (!clearButton) {
+  clearButton = document.createElement('button');
+  clearButton.type = 'button';
+  clearButton.id = 'market-search-clear';
+  clearButton.className = 'market-search-clear hidden';
+  clearButton.setAttribute('aria-label', 'Clear marketplace search');
+  clearButton.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+  clearButton.addEventListener('click', () => clearMarketplaceSearch({ focus: true }));
+  shell.appendChild(clearButton);
  }
- } catch(e) { /* silent fail */ }
+ const query = normalizeMarketplaceSearch(input.value);
+ clearButton.classList.toggle('hidden', !query);
+ panel.replaceChildren();
+ panel.classList.toggle('hidden', !query);
+ if (!query) return;
+ const summary = document.createElement('span');
+ summary.className = 'market-search-status__summary';
+ summary.textContent = filteredProducts.length
+  ? `${filteredProducts.length} ${filteredProducts.length === 1 ? 'result' : 'results'} for “${query}”`
+  : `No exact matches for “${query}”`;
+ panel.appendChild(summary);
+ const suggestions = marketplaceSearchSuggestions(query);
+ if (!suggestions.length || filteredProducts.length > 2) return;
+ const suggestionRow = document.createElement('div');
+ suggestionRow.className = 'market-search-status__suggestions';
+ const label = document.createElement('span');
+ label.textContent = 'Try';
+ suggestionRow.appendChild(label);
+ suggestions.forEach(suggestion => {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = suggestion;
+  button.addEventListener('click', () => runMarketplaceSearch(suggestion, { updateUrl: true, scroll: true, focus: true }));
+  suggestionRow.appendChild(button);
+ });
+ panel.appendChild(suggestionRow);
+}
+
+function runMarketplaceSearch(query, options = {}) {
+ const { updateUrl = true, scroll = false, focus = false } = options;
+ const input = document.getElementById('search-input');
+ const normalizedQuery = normalizeMarketplaceSearch(query);
+ if (input && input.value !== normalizedQuery) input.value = normalizedQuery;
+ if (normalizedQuery) activeFilters.search = normalizedQuery.toLowerCase();
+ else delete activeFilters.search;
+ applyCurrentFilters();
+ if (updateUrl) syncMarketplaceSearchUrl(normalizedQuery);
+ renderMarketplaceSearchStatus();
+ if (scroll) {
+  switchBuyerTab?.('shop');
+  document.querySelector('.products-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
  }
+ if (focus) input?.focus();
+}
+
+function clearMarketplaceSearch(options = {}) {
+ runMarketplaceSearch('', { updateUrl: true, scroll: false, focus: options.focus });
+}
+
+function setupMarketplaceSearchInput() {
+ const input = document.getElementById('search-input');
+ if (!input || input.dataset.marketSearchReady === 'true') return;
+ input.dataset.marketSearchReady = 'true';
+ input.setAttribute('type', 'search');
+ input.setAttribute('autocomplete', 'off');
+ input.setAttribute('aria-label', 'Search marketplace products');
+ const initialQuery = new URLSearchParams(window.location.search).get('q');
+ if (initialQuery) input.value = normalizeMarketplaceSearch(initialQuery);
+ input.addEventListener('input', () => {
+  window.clearTimeout(searchTimeout);
+  searchTimeout = window.setTimeout(() => runMarketplaceSearch(input.value, { updateUrl: true }), 180);
+ });
+ input.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && input.value) {
+   event.preventDefault();
+   clearMarketplaceSearch({ focus: true });
+  }
+ });
+ renderMarketplaceSearchStatus();
+}
+
+function doSearch() {
+ const input = document.getElementById('search-input');
+ runMarketplaceSearch(input?.value || '', { updateUrl: true, scroll: true });
 }
 
 function applyFilters() {
@@ -2746,11 +3304,15 @@ function removeFilter(key) {
 
 function clearFilters() {
  activeFilters = {};
+ const searchInput = document.getElementById('search-input');
+ if (searchInput) searchInput.value = '';
+ syncMarketplaceSearchUrl('');
  document.querySelectorAll('.cat-chip').forEach(c => c.classList.toggle('active', c.dataset.cat === 'all'));
  syncQuickFilterChips();
  updateFilterCount();
  document.getElementById('active-filters').innerHTML = '';
  applyCurrentFilters();
+ renderMarketplaceSearchStatus();
 }
 
 function applyCurrentFilters() {
@@ -2758,24 +3320,12 @@ function applyCurrentFilters() {
 
  // 1. SMART FUZZY SEARCH
  if (activeFilters.search) {
- const options = {
- keys: ['name', 'description', 'category', 'location'],
- threshold: 0.3, // 0.0 = perfect match, 1.0 = match anything
- distance: 100
- };
- 
- const fuse = new Fuse(result, options);
- const searchResult = fuse.search(activeFilters.search);
- result = searchResult.map(res => res.item);
+  result = marketplaceSearchProducts(result, activeFilters.search);
  }
 
  // 2. CATEGORY FILTER
  if (activeFilters.category && activeFilters.category !== 'all') {
- if (activeFilters.category === 'trending') {
- result = result.filter(p => p.review_count > 0 || p.avg_rating >= 4);
- } else {
- result = result.filter(p => p.category === activeFilters.category);
- }
+ result = result.filter(product => productMatchesMarketplaceCategory(product, activeFilters.category));
  }
 
  // 3. RANGE FILTERS
@@ -2821,9 +3371,36 @@ function productDetailPageUrl(productId) {
  return `/product.html?id=${encodeURIComponent(productId)}`;
 }
 
+function navigateWithinBuySell(destination, { replace = false } = {}) {
+ try {
+  const target = new URL(destination, window.location.origin);
+  if (target.origin !== window.location.origin) {
+   window.location.assign(target.href);
+   return;
+  }
+
+  const nextUrl = `${target.pathname}${target.search}${target.hash}`;
+  const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (nextUrl === currentUrl) return;
+
+  if (window.history && typeof window.history.pushState === 'function') {
+   window.history[replace ? 'replaceState' : 'pushState']({ buysellRoute: true }, document.title, nextUrl);
+   window.dispatchEvent(new CustomEvent('bs:navigate', { detail: { url: nextUrl, replace } }));
+   return;
+  }
+  window.location.assign(nextUrl);
+ } catch (error) {
+  console.warn('In-app navigation fallback used:', error);
+  window.location.assign(destination);
+ }
+}
+window.bsNavigate = navigateWithinBuySell;
+
 async function openProduct(id) {
  if (id) {
-  window.location.href = productDetailPageUrl(id);
+  // Keeping the React shell alive means the authenticated session and cart do
+  // not get reset while a shopper opens a product and then uses Back.
+  navigateWithinBuySell(productDetailPageUrl(id));
   return;
  }
  currentProd = products.find(p => p.id === id);
@@ -3078,12 +3655,18 @@ function goBackFromStorefront() {
  const storefrontView = document.getElementById('storefront-view');
  const buyerView = document.getElementById('buyer-view');
  if (storefrontView) {
- storefrontView.classList.add('hidden');
- storefrontView.style.display = 'none';
+  storefrontView.classList.add('hidden');
+  storefrontView.style.display = 'none';
  }
  if (buyerView) {
- buyerView.classList.remove('hidden');
- buyerView.style.display = 'block';
+  buyerView.classList.remove('hidden');
+  buyerView.style.display = 'block';
+ }
+ if (window.history?.replaceState) {
+  const url = new URL(window.location.href);
+  url.searchParams.delete('store');
+  if (!url.searchParams.get('view')) url.searchParams.set('view', 'shop');
+  window.history.replaceState({ view: 'shop' }, document.title, `${url.pathname}${url.search}${url.hash}`);
  }
 }
 
@@ -3138,7 +3721,11 @@ function copyStoreLink() {
 // ====================================================
 // CART
 // ====================================================
-function saveCart() { appStorage.setItem('bs_cart', JSON.stringify(cart)); updateCartCount(); }
+function saveCart() {
+ appStorage.setItem('bs_cart', JSON.stringify(cart));
+ updateCartCount();
+ window.dispatchEvent(new Event('bs:cart-change'));
+}
 
 function itemShippingFee(item = {}) {
  return currentMode === 'pickup' ? 0 : BUYSELL_DELIVERY_FEE;
@@ -3277,7 +3864,10 @@ function ensureNavLogoutButton() {
 function openCart(options = {}) {
   renderCartItems();
   const pageMode = options.page !== false;
-  showModal('cart-modal', pageMode ? { page: 'cart' } : {});
+  const params = new URLSearchParams(window.location.search);
+  const historyMode = options.historyMode ||
+   ((params.get('page') === 'cart' || params.get('cart') === 'open') ? 'replace' : 'auto');
+  showModal('cart-modal', pageMode ? { page: 'cart', historyMode } : {});
 }
 
 function renderCartItems() {
@@ -3355,8 +3945,19 @@ async function getSellerAvailableRevenue(sellerId = currentUser?.id) {
  return { available, revenue, pending, paid, walletDebits };
 }
 
-async function startCheckout() {
- if (!currentUser) { showModal('auth-modal'); return; }
+async function startCheckout(options = {}) {
+ if (!currentUser) {
+  await ensureCurrentUser();
+ }
+ if (!currentUser) {
+  const coM = document.getElementById('checkout-modal');
+  if (coM) coM.classList.remove('open', 'app-page-surface', 'checkout-page-surface');
+  showModal('auth-modal');
+  return;
+ }
+ if (typeof closeModal === 'function') closeModal('auth-modal');
+ const authM = document.getElementById('auth-modal');
+ if (authM) authM.classList.remove('open');
  if (!cart.length) { toast('Cart is empty','','warn'); return; }
  currentMode = 'home';
 
@@ -3377,24 +3978,37 @@ async function startCheckout() {
  
  const rawProductTotal = cartPayableSubtotal();
  
- trackAnalytics({
- event_type: 'checkout_started',
- seller_id: cart[0]?.seller_id,
- quantity: cart.reduce((sum,c)=>sum+(c.qty||1),0),
- amount: rawProductTotal,
- metadata: { item_count: cart.length, shipping_total: cartShippingTotal() },
- });
+  if (!options.restoring) {
+   trackAnalytics({
+   event_type: 'checkout_started',
+   seller_id: cart[0]?.seller_id,
+   quantity: cart.reduce((sum,c)=>sum+(c.qty||1),0),
+   amount: rawProductTotal,
+   metadata: { item_count: cart.length, shipping_total: cartShippingTotal() },
+   });
+  }
  
  goCheckoutStep(1);
-  showModal('checkout-modal', { page: 'checkout' });
+  // Checkout replaces the cart history entry, so Back returns to the marketplace
+  // instead of replaying an old cart/auth-modal state.
+  const params = new URLSearchParams(window.location.search);
+  const historyMode = options.historyMode ||
+   (activePageSurface === 'cart-modal' || params.get('page') === 'checkout' || params.get('checkout') === 'open'
+    ? 'replace'
+    : 'auto');
+  showModal('checkout-modal', { page: 'checkout', historyMode });
  
  // Pre-fill user profile info
  const p = currentUser.profile || {};
- if (p.name) document.getElementById('co-name').value = p.name;
- document.getElementById('co-pay-email').textContent = currentUser.email;
+ const coNameEl = document.getElementById('co-name');
+ if (coNameEl && p.name) coNameEl.value = p.name;
+ const coPayEmailEl = document.getElementById('co-pay-email');
+ if (coPayEmailEl && currentUser?.email) coPayEmailEl.textContent = currentUser.email;
  
- document.getElementById('co-pay-amount').textContent = fmtN(rawProductTotal);
- document.getElementById('co-total').textContent = fmtN(rawProductTotal);
+ const coPayAmtEl = document.getElementById('co-pay-amount');
+ if (coPayAmtEl) coPayAmtEl.textContent = fmtN(rawProductTotal);
+ const coTotEl = document.getElementById('co-total');
+ if (coTotEl) coTotEl.textContent = fmtN(rawProductTotal);
  
  // Mask the old commission UI layout block and slide it out of display tree
  const commEl = document.getElementById('co-commission');
@@ -3415,6 +4029,7 @@ async function startCheckout() {
   <div class="pay-row"><span class="label">Account number</span><span class="value highlight">${BUYSELL_BANK_ACCOUNT_NUMBER}</span></div>
   <div class="pay-row"><span class="label">Account name</span><span class="value">${BUYSELL_BANK_ACCOUNT_NAME}</span></div>
   <div class="pay-row"><span class="label">Amount to transfer</span><span class="value highlight" id="co-pay-amount"></span></div>
+  <div class="pay-row"><span class="label">Account email</span><span class="value" id="co-pay-email">${escHtml(currentUser.email || '')}</span></div>
  </div>
  <p class="text-xs color-text3 mb-2">Transfer the exact amount to BUYSELL, then upload a clear receipt. Your order will be processed only after an admin verifies the payment.</p>
  <div class="form-group"><label class="form-label">Transfer reference <span class="text-xs color-text3">(optional)</span></label><input id="co-transfer-ref" class="form-input" maxlength="100" placeholder="Bank transaction reference"></div>
@@ -3424,12 +4039,15 @@ async function startCheckout() {
  }
  
  // Order items rendering engine 
- document.getElementById('co-items').innerHTML = cart.map(c=>`
+ const coItemsEl = document.getElementById('co-items');
+ if (coItemsEl) {
+ coItemsEl.innerHTML = cart.map(c=>`
  <div class="order-item">
  <img src="${c.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=100'}" alt="" loading="lazy">
    <div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(c.name)}</div><div class="color-text3 text-xs">Qty: ${c.qty||1} - BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} per store</div></div>
  <div class="font-bold text-sm">${fmtN(c.price*(c.qty||1))}</div>
  </div>`).join('');
+ }
  
  updateCheckoutTotals();
 }
@@ -3478,7 +4096,7 @@ function openFlutterwaveTransaction(options) {
  customizations: {
  title: 'BUYSELL Nigeria',
  description: 'Marketplace checkout with BUYSELL delivery tracking',
- logo: `${PUBLIC_SITE_URL || location.origin}/favicon.ico`,
+ logo: `${PUBLIC_SITE_URL || location.origin}/brand/png/buysell_icon_green.png`,
  ...(options.customizations || {})
  },
  callback: options.callback,
@@ -5485,7 +6103,7 @@ function renderDropshipSection() {
 
  <div class="dropship-hero ds-1688-hero mb-4">
  <div><h2>Find products on 1688. Send us the link. We help you order and deliver.</h2><p>Sellers browse 1688, submit product links, publish dropship listings, and send sourcing requests to the BUYSELL team.</p></div>
- <div class="ds-1688-hero-actions"><button class="btn btn-primary" onclick="document.getElementById('ds-1688-url')?.focus()"><i class="fa-solid fa-link"></i> Submit 1688 Link</button><a class="btn btn-ghost" href="https://www.1688.com/" target="_blank" rel="noopener"><i class="fa-solid fa-up-right-from-square"></i> Open 1688</a></div>
+ <div class="ds-1688-hero-actions"><button class="btn btn-primary" onclick="document.getElementById('ds-1688-url')?.focus()"><i class="fa-solid fa-link"></i> Submit 1688 Link</button><button class="btn btn-ghost" onclick="openDropshipSupportChat()"><i class="fa-solid fa-comments"></i> Chat with Sourcing</button><a class="btn btn-ghost" href="https://www.1688.com/" target="_blank" rel="noopener"><i class="fa-solid fa-up-right-from-square"></i> Open 1688</a></div>
  </div>
 
  <div class="dropship-stats mb-4">
@@ -5565,14 +6183,16 @@ function renderDropshipSection() {
  <div id="ds-1688-cart" class="ds-1688-cart"></div>
  <div class="form-grid form-grid-2 mt-3"><input id="ds-1688-contact" class="form-input" placeholder="Seller phone/WhatsApp"><input id="ds-1688-destination" class="form-input" placeholder="Delivery city/country"></div>
  <textarea id="ds-1688-request-note" class="form-textarea mt-2" rows="3" placeholder="Extra sourcing notes: color, size, model, budget, buyer deadline..."></textarea>
- <button class="btn btn-primary btn-full mt-2" onclick="submit1688SourcingRequest(event)"><i class="fa-solid fa-paper-plane"></i> Send to BUYSELL Sourcing Team</button>
+  <button class="btn btn-primary btn-full mt-2" onclick="submit1688SourcingRequest(event)"><i class="fa-solid fa-paper-plane"></i> Send to BUYSELL Sourcing Team</button>
+  <button class="btn btn-outline btn-full mt-2" onclick="openDropshipSupportChat()"><i class="fa-solid fa-comments"></i> Ask the Sourcing Team</button>
  </div>
   <div class="card card-pad">
   <h3 class="mb-2">How BUYSELL Handles 1688 Orders</h3>
   <div class="ds-1688-steps"><div><strong>1. Seller submits link</strong><span>Paste URL, variant, quantity, and desired selling price.</span></div><div><strong>2. Admin confirms source</strong><span>BUYSELL checks supplier, cost, MOQ, shipping, and availability.</span></div><div><strong>3. BUYSELL handles delivery</strong><span>We coordinate collection, shipping, updates, and order tracking.</span></div></div>
   <button class="btn btn-outline btn-full mt-3" onclick="showDash('orders')"><i class="fa-solid fa-truck-fast"></i> View Order Tracking</button>
   <div class="divider mt-3 mb-3"></div>
-  <h4 class="mb-2">BUYSELL Admin Updates</h4>
+   <div class="ds-1688-chat-card"><div><h4>BUYSELL Sourcing Chat</h4><p>Ask about supplier confirmation, a quote, payment, or delivery. Your conversation stays in BUYSELL messages.</p></div><button class="btn btn-primary btn-sm" onclick="openDropshipSupportChat()"><i class="fa-solid fa-comment-dots"></i> Open Chat</button></div>
+   <h4 class="mb-2">Request Updates</h4>
   <div id="ds-1688-updates" class="ds-1688-updates"><p class="text-xs color-text3">No admin updates yet.</p></div>
   </div>
   </div>
@@ -6099,6 +6719,30 @@ async function insertMessageWithFallback(payload) {
  throw lastError || new Error('Could not send admin message');
 }
 
+function dropshipChatPrefill() {
+ const items = (source1688Cart || []).slice(0, 4)
+  .map(item => `${item.title || item.name || '1688 product'} × ${Number(item.quantity || 1)}`)
+  .join(', ');
+ const note = document.getElementById('ds-1688-request-note')?.value.trim();
+ const lines = ['[1688 sourcing request]'];
+ if (items) lines.push(`Products: ${items}${source1688Cart.length > 4 ? ` (+${source1688Cart.length - 4} more)` : ''}`);
+ if (note) lines.push(`Notes: ${note}`);
+ lines.push('Please help me confirm supplier availability, the final quote, and delivery timeline.');
+ return lines.join('\n');
+}
+
+async function openDropshipSupportChat() {
+ if (!currentUser) {
+  showModal('auth-modal');
+  toggleAuth('login');
+  return;
+ }
+ await openAdminSupportChat(dropshipChatPrefill());
+ const meta = document.getElementById('msg-partner-meta');
+ if (meta) meta.textContent = 'BUYSELL 1688 sourcing team';
+ setMessageQuickReplies('dropship');
+}
+
 async function loadSellerDropshipUpdates() {
  const el = document.getElementById('ds-1688-updates');
  if (!el || !currentUser) return;
@@ -6109,15 +6753,20 @@ async function loadSellerDropshipUpdates() {
   ]);
   const requestUpdates = (orders || []).filter(row => is1688Request(row) && (row.seller_id === currentUser.id || row.buyer_id === currentUser.id || parseSellerIdFromRequest(row) === currentUser.id)).slice(0, 4);
   const adminMessages = (messages || []).filter(row => /1688|dropship|sourcing|BUYSELL delivery/i.test(row.content || row.message || row.body || '')).slice(0, 4);
-  const updates = [
-   ...requestUpdates.map(row => ({ type: 'status', title: getDropshipRequestTitle(row), body: row.admin_note || row.tracking_update || buildDropshipRequestSummary(row), status: row.status || 'Submitted', date: row.updated_at || row.created_at })),
-   ...adminMessages.map(row => ({ type: 'message', title: 'Message from BUYSELL Admin', body: row.content || row.message || row.body || '', status: 'Admin update', date: row.created_at }))
+   const updates = [
+    ...requestUpdates.map(row => ({ type: 'status', title: getDropshipRequestTitle(row), body: row.admin_note || row.tracking_update || buildDropshipRequestSummary(row), status: row.status || 'Submitted', date: row.updated_at || row.created_at })),
+    ...adminMessages.map(row => ({ type: 'message', title: 'Message from BUYSELL Admin', body: row.content || row.message || row.body || '', status: 'Admin update', date: row.created_at, senderId: row.sender_id || '' }))
   ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)).slice(0, 5);
   if (!updates.length) {
    el.innerHTML = '<p class="text-xs color-text3">No admin updates yet. BUYSELL will message you here when your request is being reviewed.</p>';
    return;
   }
-  el.innerHTML = updates.map(item => `<div class="ds-1688-update-card"><div><strong>${escHtml(item.title)}</strong><span>${escHtml(String(item.body || '').slice(0, 220))}</span></div><div class="flex justify-between items-center gap-2 mt-1"><span class="badge badge-green">${escHtml(item.status)}</span><small>${fmtDate(item.date)}</small></div></div>`).join('');
+   el.innerHTML = updates.map(item => {
+    const action = item.senderId
+     ? `<button class="btn btn-outline btn-sm" onclick="openConversation('${escAttr(item.senderId)}','BUYSELL Sourcing Team')"><i class="fa-solid fa-reply"></i> Reply</button>`
+     : '<button class="btn btn-outline btn-sm" onclick="openDropshipSupportChat()"><i class="fa-solid fa-comments"></i> Ask a question</button>';
+    return `<div class="ds-1688-update-card"><div><strong>${escHtml(item.title)}</strong><span>${escHtml(String(item.body || '').slice(0, 220))}</span></div><div class="ds-1688-update-foot"><div><span class="badge badge-green">${escHtml(item.status)}</span><small>${fmtDate(item.date)}</small></div>${action}</div></div>`;
+   }).join('');
  } catch (error) {
   el.innerHTML = '<p class="text-xs color-text3">Updates will appear here when BUYSELL admin responds.</p>';
  }
@@ -6572,6 +7221,52 @@ async function saveAdminLogo() {
 }
 
 // Function to hunt down every logo element and replace it with the image
+const PLATFORM_BRAND_ASSETS = Object.freeze({
+ light: '/brand/svg/buysell_primary_light.svg',
+ transparent: '/brand/svg/buysell_transparent_color.svg',
+ dark: '/brand/svg/buysell_primary_dark.svg',
+ green: '/brand/svg/buysell_reverse_green.svg',
+ icon: '/brand/svg/buysell_icon_transparent.svg',
+});
+
+function makePlatformBrandImage(variant = 'light', className = '') {
+ const image = document.createElement('img');
+ const isIcon = variant === 'icon';
+ image.src = PLATFORM_BRAND_ASSETS[variant] || PLATFORM_BRAND_ASSETS.light;
+ image.alt = 'BUYSELL Nigeria';
+ image.width = isIcon ? 512 : 1200;
+ image.height = isIcon ? 512 : 420;
+ image.decoding = 'async';
+ image.dataset.platformBrandLogo = 'true';
+ image.className = `platform-brand-asset platform-brand-asset--${variant} ${className}`.trim();
+ return image;
+}
+
+function setPlatformWordmark(target, variant = 'light') {
+ if (!target || target.dataset.platformBrandVariant === variant) return;
+ target.replaceChildren(makePlatformBrandImage(variant));
+ target.classList.add('platform-brand-wordmark', `platform-brand-wordmark--${variant}`);
+ target.dataset.platformBrandVariant = variant;
+ if (target.tagName === 'A') target.setAttribute('aria-label', 'BUYSELL Nigeria home');
+}
+
+function setPlatformIcon(target) {
+ if (!target || target.dataset.platformBrandVariant === 'icon') return;
+ target.replaceChildren(makePlatformBrandImage('icon'));
+ target.classList.add('platform-brand-icon');
+ target.dataset.platformBrandVariant = 'icon';
+}
+
+function applyPlatformBrandAssets() {
+ setPlatformWordmark(document.querySelector('#main-nav .nav-brand-sm'), 'transparent');
+ setPlatformWordmark(document.querySelector('#landing .brand-logo'), 'dark');
+ setPlatformWordmark(document.querySelector('#seller-dashboard .dash-sidebar-head .brand-text'), 'dark');
+ setPlatformWordmark(document.querySelector('#service-provider-view .dash-sidebar-head .brand-text'), 'dark');
+ setPlatformWordmark(document.querySelector('#auth-modal .auth-logo'), 'transparent');
+ document.querySelectorAll('#buyer-sidebar-user-guest .brand-icon').forEach(setPlatformIcon);
+ document.querySelectorAll('#terms-modal .brand-icon, #privacy-modal .brand-icon').forEach(setPlatformIcon);
+}
+
 function applySiteLogo(url) {
  if (!url) return;
  document.querySelectorAll('.brand-icon').forEach(icon => {
@@ -6580,6 +7275,11 @@ function applySiteLogo(url) {
  // Remove the green background gradient so the image looks clean
  icon.style.background = 'transparent';
  icon.style.boxShadow = 'none';
+ });
+ document.querySelectorAll('[data-platform-brand-logo="true"]').forEach(image => {
+ image.src = sanitizeUrl(url);
+ image.alt = 'Logo';
+ image.style.objectFit = 'contain';
  });
 }
  
@@ -8067,6 +8767,7 @@ async function handleDeepLink() {
  const productId = params.get('product');
  const storeId = params.get('store');
   const category = params.get('category');
+  const search = normalizeMarketplaceSearch(params.get('q') || '');
   const refCode = params.get('ref');
   const page = params.get('page');
   const shouldOpenCart = params.get('cart') === 'open';
@@ -8078,24 +8779,33 @@ async function handleDeepLink() {
    if (storeId) {
    viewStorefront(storeId);
    }
- if (category && !productId && !storeId) {
+ if ((category || search) && !productId && !storeId) {
   await loadProducts();
-  filterCat(category, { scroll: true });
-  document.title = `${categoryLabel(category)} - BUYSELL Nigeria`;
+  if (category) {
+   filterCat(category, { scroll: !search });
+   document.title = `${categoryLabel(category)} - BUYSELL Nigeria`;
+  }
+  if (search) {
+   setupMarketplaceSearchInput();
+   runMarketplaceSearch(search, { updateUrl: false, scroll: true });
+   document.title = `Search “${search}” - BUYSELL Nigeria`;
+  }
  }
  if (refCode) {
- // Track referral click
+  // Track referral click
   appStorage.setItem('bs_ref', refCode);
-  }
-  if (page === 'cart' || shouldOpenCart) {
-   openCart({ page: true });
-  }
-  if (page === 'checkout' || shouldOpenCheckout) {
-   startCheckout();
-  }
-  if (page === 'messages' || page === 'chat') {
-   openInbox();
-  }
+ }
+ if (page === 'cart' || shouldOpenCart) {
+  openCart({ page: true });
+ }
+ if (page === 'checkout' || shouldOpenCheckout) {
+  await ensureCurrentUser();
+  await startCheckout({ historyMode: 'replace' });
+ }
+ if (page === 'messages' || page === 'chat') {
+  await ensureCurrentUser();
+  openInbox();
+ }
 }
 
 // ====================================================
@@ -8558,13 +9268,15 @@ function installSecurityDomGuards() {
   if (await refreshStaleServiceWorkerData()) return;
   installSecurityDomGuards();
   showCookieConsent();
+  applyPlatformBrandAssets();
   
   const savedLogo = appStorage.getItem('buysell_custom_logo');
  if (savedLogo) applySiteLogo(savedLogo);
 
  if (typeof updateCartCount === 'function') updateCartCount();
  if (typeof updateWishlistCount === 'function') updateWishlistCount();
- if (typeof handleDeepLink === 'function') handleDeepLink();
+ await ensureCurrentUser();
+ if (typeof handleDeepLink === 'function') await handleDeepLink();
  if (typeof checkBroadcastForUser === 'function') checkBroadcastForUser();
 
  // Real-time order updates for sellers
@@ -9627,9 +10339,6 @@ async function showCompareModal() {
 // ====================================================
 // MESSAGING
 // ====================================================
-let currentChatPartner = null;
-let currentChatProductId = null;
-let messageChannel = null;
 let pendingMessageImage = null;
 
 function extractMessageImageUrl(message = {}) {
@@ -9879,6 +10588,7 @@ async function openConversation(partnerId, partnerName, productId = null) {
  document.getElementById('msg-partner-avatar').textContent = (partnerName || 'U')[0].toUpperCase();
  document.getElementById('msg-partner-meta').textContent = 'Loading conversation...';
  showModal('message-modal', { page: 'conversation' });
+ setMessageQuickReplies();
  const conv = document.getElementById('msg-conversation');
  conv.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
  await renderMessageProductCard(currentChatProductId);
@@ -9927,6 +10637,26 @@ function insertQuickMessage(text) {
  if (!input) return;
  input.value = text;
  input.focus();
+}
+
+function setMessageQuickReplies(mode = 'general') {
+ const quickRow = document.querySelector('#message-modal .msg-quick-row');
+ if (!quickRow) return;
+ const replies = mode === 'dropship'
+  ? [
+    'Please confirm the supplier and MOQ.',
+    'Please send my final sourcing quote.',
+    'What is the delivery timeline for this request?'
+   ]
+  : ['Is this still available?', 'Can you send more details?', 'What is your best price?'];
+ quickRow.replaceChildren();
+ replies.forEach(reply => {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = mode === 'dropship' ? reply.replace('Please ', '').replace(' for this request?', '') : reply;
+  button.addEventListener('click', () => insertQuickMessage(reply));
+  quickRow.appendChild(button);
+ });
 }
 
 function handleMessageKey(event) {
@@ -10968,7 +11698,9 @@ async function testNotification() {
   const result = await callEdge('test-push-notification', {
    title: 'BUYSELL Nigeria',
    body: `Background notifications are active for this device. ${new Date().toLocaleTimeString()}`,
-   url: `${PUBLIC_SITE_URL}/?view=shop`,
+   // A relative target keeps device notifications on the installed site's
+   // origin and avoids depending on a server-side site-url setting.
+   url: '/?view=shop',
   });
   toast('Push Sent', `Sent to ${result?.sent || 1} device(s). Check your browser or system notification area.`, 'success', 6500);
   return;
@@ -10980,8 +11712,8 @@ async function testNotification() {
    const registration = await ensurePushServiceWorkerRegistration();
    await registration.showNotification('BUYSELL Nigeria', {
    body: 'Local notification works. Server push still needs configuration.',
-  icon: '/favicon.ico',
-  badge: '/favicon.ico',
+  icon: '/brand/png/buysell_icon_green.png',
+  badge: '/brand/png/buysell_icon_green.png',
   data: { url: '/?view=shop' },
    tag: 'buysell-test-notification',
     });
@@ -11007,8 +11739,8 @@ async function testLocalNotification() {
    const registration = await ensurePushServiceWorkerRegistration();
  await registration.showNotification('BUYSELL Nigeria', {
  body: 'Notifications are working on this device.',
- icon: '/favicon.ico',
- badge: '/favicon.ico',
+ icon: '/brand/png/buysell_icon_green.png',
+ badge: '/brand/png/buysell_icon_green.png',
   data: { url: '/?view=shop' },
  tag: 'buysell-test-notification',
   });
@@ -11027,8 +11759,8 @@ function showForegroundNotification(title, body) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return false;
   const notification = new Notification(title, {
    body,
-   icon: '/favicon.ico',
-   badge: '/favicon.ico',
+   icon: '/brand/png/buysell_icon_green.png',
+   badge: '/brand/png/buysell_icon_green.png',
    tag: 'buysell-test-notification'
   });
   notification.onclick = () => {

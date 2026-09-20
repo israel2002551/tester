@@ -12,6 +12,33 @@ self.addEventListener('message', (event) => {
   }
 });
 
+// Push payloads are created by more than one notification source.  Keep every
+// BUYSELL-internal destination on the active site origin, including payloads
+// from an older notification worker that used the misspelled "markerplace"
+// hostname.  This preserves the route/query/hash while never allowing a stale
+// absolute URL to send the user to the wrong site.
+const BUYSELL_NOTIFICATION_HOSTS = new Set([
+  'buysell-marketplace.com',
+  'www.buysell-marketplace.com',
+  'buysell-markerplace.com',
+  'www.buysell-markerplace.com',
+]);
+
+function resolveNotificationUrl(rawUrl) {
+  const fallback = new URL('/?view=shop', self.location.origin);
+  try {
+    const candidate = new URL(rawUrl || fallback.href, self.location.origin);
+    if (candidate.origin === self.location.origin) return candidate.href;
+
+    if (BUYSELL_NOTIFICATION_HOSTS.has(candidate.hostname.toLowerCase())) {
+      return new URL(`${candidate.pathname}${candidate.search}${candidate.hash}`, self.location.origin).href;
+    }
+  } catch {
+    // Use the marketplace fallback for malformed notification payloads.
+  }
+  return fallback.href;
+}
+
 self.addEventListener('push', (event) => {
   let payload = {
     source: 'buysell-web-push',
@@ -33,16 +60,16 @@ self.addEventListener('push', (event) => {
   const title = payload.title || 'BUYSELL Nigeria';
   const options = {
     body: payload.body || '',
-    icon: payload.icon || '/favicon.ico',
+    icon: payload.icon || '/brand/png/buysell_icon_green.png',
     image: payload.image,
-    badge: payload.badge || '/favicon.ico',
+    badge: payload.badge || '/brand/png/buysell_icon_green.png',
     tag: payload.tag || `buysell-${Date.now()}`,
     renotify: payload.renotify !== false,
     requireInteraction: payload.requireInteraction === true,
     timestamp: payload.timestamp || Date.now(),
     vibrate: payload.vibrate || [120, 80, 120],
     data: {
-      url: payload.url || '/',
+      url: resolveNotificationUrl(payload.url),
     },
   };
 
@@ -52,7 +79,7 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  const targetUrl = new URL(event.notification?.data?.url || '/', self.location.origin).href;
+  const targetUrl = resolveNotificationUrl(event.notification?.data?.url);
 
   event.waitUntil((async () => {
     const windows = await clients.matchAll({ type: 'window', includeUncontrolled: true });

@@ -1,8 +1,13 @@
 import { categoryLinks } from '../lib/categoryData.js';
 
-export default function CategoryNav({ active }) {
+export default function CategoryNav({ active, customLabel = '' }) {
   return (
     <nav className="category-nav">
+      {customLabel ? (
+        <a href={`/products?category=${encodeURIComponent(active)}`} className="active">
+          {customLabel}
+        </a>
+      ) : null}
       {categoryLinks.map(([label, href, key]) => (
         <a href={href} data-category-nav={key} className={active === key ? 'active' : ''} key={key}>
           {label}

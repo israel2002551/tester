@@ -8,9 +8,10 @@ export function CategoryProductCard({ product }) {
   const hasVideo = videos.length || product.video_url || product.has_video;
   const rating = Number(product.avg_rating || 5).toFixed(1);
   const seller = product.profiles?.store_name || product.profiles?.name || 'Seller';
+  const productHref = product.id ? `/product.html?id=${encodeURIComponent(product.id)}` : '/products';
 
   return (
-    <article className="cat-product-card" onClick={() => { window.location.href = `/product.html?id=${encodeURIComponent(product.id)}`; }}>
+    <a className="cat-product-card" href={productHref} aria-label={`View ${product.name || 'product'}`}>
       <div className="cat-product-media">
         <img src={image} alt={product.name || 'Product'} loading="lazy" />
         <div className="cat-product-badges">
@@ -27,7 +28,7 @@ export function CategoryProductCard({ product }) {
         </div>
         <p>{seller}</p>
       </div>
-    </article>
+    </a>
   );
 }
 

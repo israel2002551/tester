@@ -41,21 +41,39 @@ const marketplaceQueryKeys = [
   'category',
   'seller',
   'order',
+  'q',
+  'sort',
 ];
 
 export function routeFor(pathname, search = '') {
-  const path = pathname.replace(/\/index\.html$/, '') || '/';
+  const withoutIndex = pathname.replace(/\/index\.html$/, '') || '/';
+  const path = withoutIndex.length > 1 ? withoutIndex.replace(/\/+$/, '') : withoutIndex;
+  const params = new URLSearchParams(search);
   if (path === '/product' || path === '/product.html') return { type: 'product' };
   if (path === '/privacy' || path === '/privacy.html') return { type: 'legal', page: 'privacy' };
   if (path === '/terms' || path === '/terms.html') return { type: 'legal', page: 'terms' };
   if (path === '/marketing' || path === '/marketing.html') return { type: 'marketing' };
-  if (categoryRoutes[path]) return { type: 'category', category: categoryRoutes[path] };
+  if (categoryRoutes[path]) {
+    // `/products?category=...` is the shareable route for seller-defined
+    // categories. Known categories still retain their dedicated SEO routes.
+    const requestedCategory = path.startsWith('/products')
+      ? String(params.get('category') || '').trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 60)
+      : '';
+    return { type: 'category', category: requestedCategory || categoryRoutes[path] };
+  }
   if (path === '/') {
-    const params = new URLSearchParams(search);
     if (params.get('landing') === '1' || params.get('marketing') === '1') {
       return { type: 'marketing' };
     }
-    const hasMarketplaceIntent = marketplaceQueryKeys.some(key => params.has(key));
+    // OAuth callbacks arrive at the configured site URL with transient auth
+    // parameters. They must load the marketplace runtime so Supabase can
+    // exchange the code and restore the authenticated session.
+    const authCallbackKeys = ['code', 'state', 'error', 'error_code', 'error_description'];
+    const hash = typeof window !== 'undefined' ? window.location.hash : '';
+    const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
+    const hasAuthCallback = authCallbackKeys.some(key => params.has(key))
+      || ['access_token', 'refresh_token', 'provider_token'].some(key => hashParams.has(key));
+    const hasMarketplaceIntent = hasAuthCallback || marketplaceQueryKeys.some(key => params.has(key));
     return hasMarketplaceIntent ? { type: 'marketplace' } : { type: 'marketing' };
   }
   return { type: 'marketplace' };
@@ -68,14 +86,18 @@ export default function App() {
   }));
 
   useEffect(() => {
-    const onPopState = () => {
+    const syncLocation = () => {
       setCurrentLocation({
         pathname: window.location.pathname,
         search: window.location.search,
       });
     };
-    window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
+    window.addEventListener('popstate', syncLocation);
+    window.addEventListener('bs:navigate', syncLocation);
+    return () => {
+      window.removeEventListener('popstate', syncLocation);
+      window.removeEventListener('bs:navigate', syncLocation);
+    };
   }, []);
 
   const route = routeFor(currentLocation.pathname, currentLocation.search);

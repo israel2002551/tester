@@ -1,3 +1,6 @@
+import { useEffect } from 'react';
+import BrandLogo from '../components/BrandLogo.jsx';
+
 const legalContent = {
   privacy: {
     title: 'Privacy Policy',
@@ -28,11 +31,22 @@ const legalContent = {
 
 export default function LegalPage({ page }) {
   const content = legalContent[page] || legalContent.privacy;
-  document.body.className = 'legal-page';
-  document.title = `${content.title} | BUYSELL Nigeria`;
+
+  useEffect(() => {
+    document.body.className = 'legal-page';
+    document.title = `${content.title} | BUYSELL Nigeria`;
+  }, [content.title]);
 
   const handleBack = () => {
-    if (window.history.length > 1) {
+    let canReturnToMarketplace = false;
+    try {
+      const previousUrl = new URL(document.referrer);
+      canReturnToMarketplace = previousUrl.origin === window.location.origin
+        && !/[?&](entry|mode)=/.test(previousUrl.search);
+    } catch (_) {
+      canReturnToMarketplace = false;
+    }
+    if (window.history.length > 1 && canReturnToMarketplace) {
       window.history.back();
     } else {
       window.location.href = '/?view=shop';
@@ -41,16 +55,23 @@ export default function LegalPage({ page }) {
 
   return (
     <>
-      <header className="legal-page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+      <header className="commerce-page-header legal-page-header">
+        <div className="commerce-page-header__brand">
           <button className="btn btn-outline btn-sm" onClick={handleBack} type="button" title="Back">
             <i className="fa-solid fa-arrow-left" /> Back
           </button>
-          <a href="/?view=shop" className="brand-logo">
-            <div className="brand-icon">B</div>
-            <div><div className="brand-text">BUY<span>SELL</span></div><div className="brand-tld">.nigeria</div></div>
+          <a href="/?view=shop" className="brand-logo brand-logo--asset">
+            <BrandLogo variant="transparent" />
           </a>
         </div>
+        <nav className="commerce-page-header__links" aria-label="Storefront navigation">
+          <a href="/?view=shop">Marketplace</a>
+          <a href="/products">Categories</a>
+          <a href="/category/dropship">1688 Sourcing</a>
+        </nav>
+        <a className="btn btn-outline btn-sm legal-page-header__action" href={page === 'privacy' ? '/terms' : '/privacy'}>
+          {page === 'privacy' ? 'Terms' : 'Privacy'}
+        </a>
       </header>
       <main className="legal-page-main">
         <article className="legal-document">
