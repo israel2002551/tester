@@ -10,7 +10,7 @@ let chatHistory = [];
 let adminAiHistory = [];
 let currentUser = null, currentRole = 'buyer', currentProd = null, currentStoreShare = null;
 const PUBLIC_SITE_URL = 'https://buysell-marketplace.com';
-const SERVICE_WORKER_APP_VERSION = '2026-09-21-auth-6';
+const SERVICE_WORKER_APP_VERSION = '2026-09-21-pwa-1';
 const GOOGLE_OAUTH_RETURN_KEY = 'bs_google_oauth_return';
 const GOOGLE_OAUTH_RETURN_MAX_AGE_MS = 20 * 60 * 1000;
 let googleSignInInFlight = false;
@@ -10178,6 +10178,10 @@ function dismissInstallBar() {
 }
 
 async function installPWA() {
+ if (typeof window.bsShowPwaInstall === 'function' && window.bsShowPwaInstall()) {
+  dismissInstallBar();
+  return;
+ }
  if (!deferredInstallPrompt) {
   dismissInstallBar();
   toast('Install unavailable', 'Use your browser menu to add BUYSELL to your home screen.', 'info', 5000);

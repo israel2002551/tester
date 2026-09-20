@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import '../styles.css';
 import App from './App.jsx';
+import PwaInstallPrompt from './components/PwaInstallPrompt.jsx';
 
 const siteIcon = document.querySelector('link[rel~="icon"]') || document.createElement('link');
 siteIcon.setAttribute('rel', 'icon');
@@ -12,5 +13,6 @@ if (!siteIcon.parentNode) document.head.appendChild(siteIcon);
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <App />
+    <PwaInstallPrompt />
   </React.StrictMode>,
 );

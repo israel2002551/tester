@@ -1,9 +1,90 @@
+const CACHE_NAME = 'buysell-shell-2026-09-21-pwa-1';
+const APP_SHELL = [
+  '/',
+  '/?view=shop',
+  '/manifest.webmanifest',
+  '/brand/png/buysell_icon_green.png',
+  '/brand/svg/buysell_icon_transparent.svg',
+];
+
+function isCacheable(response) {
+  return Boolean(response && response.ok && response.type === 'basic');
+}
+
+function isStaticAsset(url) {
+  if (url.pathname === '/app.js' || url.pathname === '/config.js' || url.pathname === '/sw.js') return false;
+  return url.pathname.startsWith('/assets/')
+    || url.pathname.startsWith('/brand/')
+    || url.pathname.startsWith('/images/')
+    || url.pathname === '/manifest.webmanifest'
+    || /\.(?:css|js|mjs|png|jpe?g|webp|avif|gif|svg|ico|woff2?|ttf)$/i.test(url.pathname);
+}
+
+async function cacheShell() {
+  const cache = await caches.open(CACHE_NAME);
+  await Promise.all(APP_SHELL.map(async (url) => {
+    try {
+      const response = await fetch(url, { cache: 'reload' });
+      if (isCacheable(response)) await cache.put(url, response.clone());
+    } catch (_) {
+      // A partially cached shell is still useful, especially while deploying.
+    }
+  }));
+}
+
+async function networkFirstNavigation(request) {
+  try {
+    return await fetch(request);
+  } catch (_) {
+    return (await caches.match(request))
+      || (await caches.match('/?view=shop'))
+      || (await caches.match('/'))
+      || new Response('<!doctype html><title>BUYSELL Nigeria</title><main><h1>You are offline</h1><p>Please reconnect and try again.</p></main>', {
+        status: 503,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      });
+  }
+}
+
+async function staleWhileRevalidate(request) {
+  const cached = await caches.match(request);
+  const refresh = fetch(request).then(async (response) => {
+    if (isCacheable(response)) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(request, response.clone());
+    }
+    return response;
+  }).catch(() => null);
+
+  if (cached) return cached;
+  return (await refresh) || new Response('', { status: 504, statusText: 'Offline' });
+}
+
 self.addEventListener('install', (event) => {
-  event.waitUntil(self.skipWaiting());
+  event.waitUntil(cacheShell().then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil((async () => {
+    const cacheNames = await caches.keys();
+    await Promise.all(cacheNames
+      .filter(name => name.startsWith('buysell-shell-') && name !== CACHE_NAME)
+      .map(name => caches.delete(name)));
+    await self.clients.claim();
+  })());
+});
+
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+  if (request.mode === 'navigate') {
+    event.respondWith(networkFirstNavigation(request));
+    return;
+  }
+  if (isStaticAsset(url)) event.respondWith(staleWhileRevalidate(request));
 });
 
 self.addEventListener('message', (event) => {

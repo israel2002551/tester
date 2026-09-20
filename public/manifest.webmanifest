@@ -1,0 +1,30 @@
+{
+  "id": "/?view=shop",
+  "name": "BUYSELL Nigeria",
+  "short_name": "BUYSELL",
+  "description": "Shop, sell, source, and follow orders with BUYSELL Nigeria.",
+  "lang": "en-NG",
+  "dir": "ltr",
+  "start_url": "/?view=shop",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "background_color": "#f7faf6",
+  "theme_color": "#0b1f14",
+  "orientation": "portrait-primary",
+  "categories": ["shopping", "business"],
+  "icons": [
+    {
+      "src": "/brand/png/buysell_icon_green.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/brand/svg/buysell_icon_transparent.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
