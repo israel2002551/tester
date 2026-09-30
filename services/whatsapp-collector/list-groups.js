@@ -25,7 +25,8 @@ async function listGroups() {
       // Check if an invite link was provided as a CLI argument
       const inviteArg = process.argv.slice(2).find((arg) => arg.includes('chat.whatsapp.com'));
       if (inviteArg) {
-        const code = inviteArg.split('/').pop().trim();
+        const cleanUrl = inviteArg.split('?')[0].split('#')[0].trim();
+        const code = cleanUrl.split('/').pop().trim();
         try {
           const info = await sock.groupGetInviteInfo(code);
           const jid = info.id.endsWith('@g.us') ? info.id : `${info.id}@g.us`;
