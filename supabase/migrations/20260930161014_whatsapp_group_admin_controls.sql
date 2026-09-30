@@ -5,7 +5,7 @@
 
 create table if not exists public.whatsapp_group_settings (
   id uuid primary key default gen_random_uuid(),
-  group_jid text not null unique check (group_jid ~ '^[0-9-]{10,80}@g\\.us$'),
+  group_jid text not null unique check (group_jid ~ '^[0-9-]{10,80}@g[.]us$'),
   display_name text not null default '' check (char_length(display_name) <= 120),
   is_active boolean not null default true,
   created_by uuid references auth.users(id) on delete set null,
