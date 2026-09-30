@@ -14,6 +14,7 @@ import { sendSellerCommandResult, sendSellerConfirmation } from './notifier.js';
 
 const api = new BuySellListingsApi();
 const targetGroups = new Set();
+const reportedUnapprovedGroups = new Set();
 const groupRefreshMs = 60_000;
 let lastGroupRefreshAt = 0;
 let groupRefreshPromise = null;
@@ -181,7 +182,13 @@ async function onMessage(sock, message) {
     console.error('[Group configuration]', error?.message || error);
     return;
   }
-  if (!targetGroups.has(remoteJid)) return;
+  if (!targetGroups.has(remoteJid)) {
+    if (!reportedUnapprovedGroups.has(remoteJid)) {
+      reportedUnapprovedGroups.add(remoteJid);
+      console.info(`[WhatsApp Group Detected] ID: ${remoteJid} (Not in approved list. Add this ID in Super Admin -> WhatsApp to monitor)`);
+    }
+    return;
+  }
   const senderJid = message?.key?.participant || remoteJid;
   const details = mediaDetails(message);
   if (!details) {

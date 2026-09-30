@@ -131,9 +131,21 @@ npm.cmd start
 ```
 
 The first run prints a QR code. Scan it with a dedicated BUYSELL WhatsApp
-account, not an employee's personal account. Add the exact approved group IDs
-in the Super Admin WhatsApp tab rather than putting them in `.env` or source
-code. Sellers receive a
+account, not an employee's personal account. To find the exact group IDs of all
+groups this account is in, run:
+
+```powershell
+npm run list-groups
+```
+
+Or pass an invite link directly:
+
+```powershell
+node list-groups.js "https://chat.whatsapp.com/YOUR_INVITE_CODE"
+```
+
+Add the exact approved group IDs in the Super Admin WhatsApp tab rather than
+putting them in `.env` or source code. Sellers receive a
 `/manage?product=…&token=…` link to edit, mark sold, or remove their own
 listing; `SOLD` and `DELETE` direct replies close their latest open listing.
 Posts without a fixed price are skipped because native BUYSELL products require

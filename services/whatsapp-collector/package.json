@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "node collector.js",
+    "list-groups": "node list-groups.js",
     "check": "node --check collector.js && node --check parser.js && node --check notifier.js && node --check cloudinary.js && node --check buysell-api.js"
   },
   "dependencies": {
