@@ -1,0 +1,20 @@
+{
+  "name": "buysell-whatsapp-collector",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node collector.js",
+    "check": "node --check collector.js && node --check parser.js && node --check notifier.js && node --check cloudinary.js && node --check buysell-api.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.9",
+    "dotenv": "^16.4.7",
+    "groq-sdk": "^0.15.0",
+    "pino": "^9.5.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

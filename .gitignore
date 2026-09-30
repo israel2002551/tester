@@ -25,6 +25,10 @@ supabase/*
 supabase/functions/*
 !supabase/functions/telegram-payment-proof/
 !supabase/functions/telegram-payment-proof/index.ts
+!supabase/functions/whatsapp-listing-action/
+!supabase/functions/whatsapp-listing-action/index.ts
+!supabase/migrations/
+!supabase/migrations/*.sql
 
 # Local/generated upgrade helpers
 add_features.py

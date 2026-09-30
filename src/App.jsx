@@ -4,6 +4,7 @@ import CategoryPage from './pages/CategoryPage.jsx';
 import ProductPage from './pages/ProductPage.jsx';
 import LegalPage from './pages/LegalPage.jsx';
 import MarketingPage from './pages/MarketingPage.jsx';
+import WhatsAppManagePage from './pages/WhatsAppManagePage.jsx';
 
 const categoryRoutes = {
   '/products': 'all',
@@ -50,6 +51,7 @@ export function routeFor(pathname, search = '') {
   const path = withoutIndex.length > 1 ? withoutIndex.replace(/\/+$/, '') : withoutIndex;
   const params = new URLSearchParams(search);
   if (path === '/product' || path === '/product.html') return { type: 'product' };
+  if (path === '/manage') return { type: 'whatsapp-manage' };
   if (path === '/privacy' || path === '/privacy.html') return { type: 'legal', page: 'privacy' };
   if (path === '/terms' || path === '/terms.html') return { type: 'legal', page: 'terms' };
   if (path === '/marketing' || path === '/marketing.html') return { type: 'marketing' };
@@ -101,9 +103,11 @@ export default function App() {
   }, []);
 
   const route = routeFor(currentLocation.pathname, currentLocation.search);
+  if (route.type === 'marketplace') return <MarketplacePage />;
+
   if (route.type === 'product') return <ProductPage />;
+  if (route.type === 'whatsapp-manage') return <WhatsAppManagePage />;
   if (route.type === 'category') return <CategoryPage category={route.category} />;
   if (route.type === 'legal') return <LegalPage page={route.page} />;
-  if (route.type === 'marketing') return <MarketingPage />;
-  return <MarketplacePage />;
+  return <MarketingPage />;
 }

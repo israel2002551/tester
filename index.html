@@ -22,6 +22,20 @@
     <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
   </head>
   <body>
+    <script>
+      // Only protected legacy routes start hidden. Public desktop shopping
+      // routes must remain paintable even if a stale module is being replaced.
+      (() => {
+        const params = new URLSearchParams(window.location.search);
+        const protectedRoute = params.get('dashboard') === 'seller'
+          || params.get('page') === 'checkout'
+          || params.get('checkout') === 'open'
+          || params.get('page') === 'messages'
+          || params.get('page') === 'chat'
+          || params.has('chat');
+        if (protectedRoute) document.body.classList.add('auth-pending');
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

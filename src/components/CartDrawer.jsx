@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { readJson, writeJson } from '../lib/storage.js';
+import { readJson, writeCheckoutCartHandoff, writeJson } from '../lib/storage.js';
 import { money } from '../lib/format.js';
 
 function cartQuantity(items) {
@@ -66,6 +66,13 @@ export default function CartDrawer({ isOpen, onClose, onCartChange }) {
   const total = productTotal + shippingTotal;
   const quantity = cartQuantity(items);
   const proceedToCheckout = () => {
+    // Checkout loads the classic marketplace in a new document. Persist both
+    // durable and session-scoped copies before closing this React drawer.
+    writeJson('bs_cart', items);
+    writeCheckoutCartHandoff(items);
+    // On in-app product navigation, app.js remains alive and otherwise keeps
+    // its earlier empty cart array. Bring that legacy checkout state forward.
+    window.syncCartFromStorage?.(items);
     onClose?.();
     // When this drawer was opened from the marketplace shell, preserve its
     // authenticated runtime rather than forcing a full page reload.

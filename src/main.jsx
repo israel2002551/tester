@@ -3,6 +3,12 @@ import { createRoot } from 'react-dom/client';
 import '../styles.css';
 import App from './App.jsx';
 import PwaInstallPrompt from './components/PwaInstallPrompt.jsx';
+import { isProtectedMarketplaceRoute } from './lib/auth.js';
+
+// `index.html` starts hidden so a direct seller/dashboard/order route cannot
+// paint private UI while the persisted Supabase session is being restored.
+if (isProtectedMarketplaceRoute()) document.body.classList.add('auth-pending');
+else document.body.classList.remove('auth-pending');
 
 const siteIcon = document.querySelector('link[rel~="icon"]') || document.createElement('link');
 siteIcon.setAttribute('rel', 'icon');

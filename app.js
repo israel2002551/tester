@@ -3,14 +3,14 @@
 // Config loaded from config.js (secrets are .gitignored)
 // ====================================================
 
-var db = (typeof window !== 'undefined' ? (window.db || window.supabaseClient) : null) || null;
-var supabase = (typeof window !== 'undefined' ? (window.supabaseClient || window.supabase) : null) || null;
+var db = (typeof window !== 'undefined' ? (window.BUYSELL_AUTH?.supabase || window.db || window.supabaseClient) : null) || null;
+var supabase = (typeof window !== 'undefined' ? (window.BUYSELL_AUTH?.supabase || window.supabaseClient || window.supabase) : null) || null;
 
 let chatHistory = []; 
 let adminAiHistory = [];
 let currentUser = null, currentRole = 'buyer', currentProd = null, currentStoreShare = null;
 const PUBLIC_SITE_URL = 'https://buysell-marketplace.com';
-const SERVICE_WORKER_APP_VERSION = '2026-09-21-pwa-1';
+const SERVICE_WORKER_APP_VERSION = '2026-09-30-desktop-1';
 const GOOGLE_OAUTH_RETURN_KEY = 'bs_google_oauth_return';
 const GOOGLE_OAUTH_RETURN_MAX_AGE_MS = 20 * 60 * 1000;
 let googleSignInInFlight = false;
@@ -43,14 +43,29 @@ const appSessionStorage = createSafeStorage('sessionStorage');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 function readStoredJson(key, fallback) {
  try {
- return JSON.parse(appStorage.getItem(key) || JSON.stringify(fallback));
+  return JSON.parse(appStorage.getItem(key) || JSON.stringify(fallback));
  } catch {
- return fallback;
+  return fallback;
+ }
+}
+
+const CHECKOUT_CART_HANDOFF_KEY = 'bs_checkout_cart_handoff';
+function readCheckoutCartHandoff() {
+ try {
+  const raw = appSessionStorage.getItem(CHECKOUT_CART_HANDOFF_KEY);
+  const items = raw ? JSON.parse(raw) : null;
+  return Array.isArray(items) && items.length ? items : null;
+ } catch {
+  return null;
  }
 }
 
 let pendingEntryRole = appStorage.getItem('bs_entry_role') || '';
-let cart = readStoredJson('bs_cart', []);
+// A product page can hand its React cart to this classic checkout runtime. The
+// snapshot is scoped to the browser tab and prevents an immediate navigation
+// from observing an empty/stale localStorage value.
+let cart = readCheckoutCartHandoff() || readStoredJson('bs_cart', []);
+if (cart.length) appStorage.setItem('bs_cart', JSON.stringify(cart));
 let products = [], filteredProducts = [], activeFilters = {};
 const PRODUCT_PAGE_SIZE = 60;
 const DASHBOARD_PAGE_SIZE = 80;
@@ -598,13 +613,14 @@ async function restoreAuthSession() {
 
  ensureCurrentUserPromise = (async () => {
   try {
-   const client = initSupabaseClient() || supabase || window.supabaseClient || window.supabase || db;
-   if (client?.auth && typeof client.auth.getSession === 'function') {
-    const { data } = await client.auth.getSession();
-    if (data?.session?.user) {
-     await hydrateAuthenticatedUser(data.session.user);
-    }
-   }
+    // The React shell creates BUYSELL_AUTH before this classic runtime loads.
+    // Never treat a synchronous/null client read as a sign-out while the SDK is
+    // still restoring persisted storage.
+    const auth = window.BUYSELL_AUTH;
+    const session = auth?.getSession
+     ? await auth.getSession()
+     : (await (initSupabaseClient() || supabase || window.supabaseClient || window.supabase || db)?.auth?.getSession?.())?.data?.session;
+    if (session?.user) await hydrateAuthenticatedUser(session.user);
   } catch (err) {
    console.warn('Unable to restore the saved session:', err);
   } finally {
@@ -652,11 +668,11 @@ async function routeAfterAuthRestore({ resumeGoogleReturn = false } = {}) {
  showBuyerView();
 }
 
-function installAuthStateListener() {
+async function installAuthStateListener() {
  const client = initSupabaseClient() || supabase || db;
- if (!client?.auth || typeof client.auth.onAuthStateChange !== 'function' || authStateSubscription) return;
+ if (authStateSubscription) return;
 
- const registration = client.auth.onAuthStateChange((event, session) => {
+ const syncAuthState = (event, session) => {
   authEventQueue = authEventQueue.catch(() => {}).then(async () => {
    const isGoogleOAuthCallback = googleOAuthCallbackPending || hasPendingGoogleOAuthCallback();
    if (isGoogleOAuthCallback) googleOAuthCallbackPending = true;
@@ -694,11 +710,20 @@ function installAuthStateListener() {
     await routeAfterAuthRestore();
    }
   }).catch((error) => console.warn('Auth state sync failed:', error));
- });
+ };
+
+ const auth = window.BUYSELL_AUTH;
+ if (auth?.onAuthStateChange) {
+  authStateSubscription = 'installing';
+  authStateSubscription = await auth.onAuthStateChange(syncAuthState) || true;
+  return;
+ }
+ if (!client?.auth || typeof client.auth.onAuthStateChange !== 'function') return;
+ const registration = client.auth.onAuthStateChange(syncAuthState);
  authStateSubscription = registration?.data?.subscription || true;
 }
 
-installAuthStateListener();
+installAuthStateListener().catch(error => console.warn('Could not install auth state listener:', error));
 function processInboundChatRedirects() {
  const urlParameters = new URLSearchParams(window.location.search);
  const targetChatPartnerId = urlParameters.get('chat');
@@ -1255,7 +1280,8 @@ function hasAppRouteParams() {
   params.has('chat') ||
   params.has('page') ||
   params.has('checkout') ||
-  params.has('cart');
+  params.has('cart') ||
+  params.has('account');
 }
 
 async function continueUrlRoute() {
@@ -1297,6 +1323,10 @@ async function continueUrlRoute() {
  }
 
  showBuyerView();
+ if (params.get('account') === 'open') {
+  showAccountPage();
+  return;
+ }
  if (params.get('view') === 'shop') switchBuyerTab?.('shop');
  if (params.has('product') || params.has('store') || params.has('category') || params.has('q') || params.has('chat') || params.has('page') || params.has('checkout') || params.has('cart')) {
   await handleDeepLink();
@@ -1559,10 +1589,11 @@ async function handleAuth(e) {
  return;
  }
 
- // Use session.user (more reliable than data.user after token refresh)
- const user = data.session?.user || data.user;
- await withTimeout(onAuthSuccess(user, { countLogin: true }), 10000, 'Profile loading timed out. Please refresh and try again.');
- closeModal('auth-modal');
+  // Use session.user (more reliable than data.user after token refresh)
+  const user = data.session?.user || data.user;
+  await withTimeout(onAuthSuccess(user, { countLogin: true }), 10000, 'Profile loading timed out. Please refresh and try again.');
+  closeModal('auth-modal');
+  if (redirectAfterLoginIfNeeded()) return;
  const coParams = new URLSearchParams(window.location.search);
  if (coParams.get('page') === 'checkout' || coParams.get('checkout') === 'open') {
   await startCheckout();
@@ -1607,9 +1638,10 @@ async function handleAuth(e) {
  toast('Sign In Failed', 'Account exists but password is wrong. Try signing in.', 'error', 7000);
  return;
  }
- const user = loginData.session?.user || loginData.user;
- await withTimeout(onAuthSuccess(user, { countLogin: true }), 10000, 'Profile loading timed out. Please refresh and try again.');
- closeModal('auth-modal');
+  const user = loginData.session?.user || loginData.user;
+  await withTimeout(onAuthSuccess(user, { countLogin: true }), 10000, 'Profile loading timed out. Please refresh and try again.');
+  closeModal('auth-modal');
+  if (redirectAfterLoginIfNeeded()) return;
  const suParams = new URLSearchParams(window.location.search);
  if (suParams.get('page') === 'checkout' || suParams.get('checkout') === 'open') {
   await startCheckout();
@@ -1642,10 +1674,11 @@ async function handleAuth(e) {
  return;
  }
 
- const user = loginData.session?.user || loginData.user;
- await upsertProfile(user, { name, role, accounts, whatsapp: wa });
- await withTimeout(onAuthSuccess(user, { countLogin: true }), 10000, 'Profile loading timed out. Please refresh and try again.');
- closeModal('auth-modal');
+  const user = loginData.session?.user || loginData.user;
+  await upsertProfile(user, { name, role, accounts, whatsapp: wa });
+  await withTimeout(onAuthSuccess(user, { countLogin: true }), 10000, 'Profile loading timed out. Please refresh and try again.');
+  closeModal('auth-modal');
+  if (redirectAfterLoginIfNeeded()) return;
  const suDirectParams = new URLSearchParams(window.location.search);
  if (suDirectParams.get('page') === 'checkout' || suDirectParams.get('checkout') === 'open') {
   await startCheckout();
@@ -1670,6 +1703,22 @@ async function handleAuth(e) {
  btnText.textContent = document.getElementById('auth-tab-login').classList.contains('active')
  ? 'Sign In' : 'Create Account';
  btn.disabled = false;
+ }
+}
+
+function redirectAfterLoginIfNeeded() {
+ try {
+  const savedPath = window.sessionStorage.getItem('redirect_after_login');
+  const savedRoute = window.sessionStorage.getItem('redirect_after_login_route');
+  window.sessionStorage.removeItem('redirect_after_login');
+  window.sessionStorage.removeItem('redirect_after_login_route');
+  if (!savedPath) return false;
+  const target = new URL(savedRoute || savedPath, window.location.origin);
+  if (target.origin !== window.location.origin) return false;
+  window.location.replace(`${target.pathname}${target.search}${target.hash}`);
+  return true;
+ } catch (_) {
+  return false;
  }
 }
 
@@ -1855,18 +1904,19 @@ async function sendPasswordReset() {
  }
 }
 
-// OK REPLACE WITH THIS:
 async function logoutUser() {
- // 1. Log out of active Supabase database session
- if (db && db.auth) {
-  await db.auth.signOut().catch(() => {});
- }
- 
- clearAuthenticatedSessionUi();
+  clearAuthenticatedSessionUi();
   PAGE_SURFACE_IDS.forEach(id => document.getElementById(id)?.classList.remove('open', 'app-page-surface', 'cart-page-surface', 'checkout-page-surface', 'messages-page-surface', 'conversation-page-surface'));
   document.body.classList.remove('surface-page-open', 'modal-open');
-  enterSite('buyer');
- toast('Signed Out', '', 'info');
+
+  // Central auth.js owns sign-out and always uses replace() to keep users from
+  // returning to a protected surface with the browser Back button.
+  if (window.BUYSELL_AUTH?.logoutUser) {
+   await window.BUYSELL_AUTH.logoutUser('/?entry=buyer&mode=login');
+   return;
+  }
+  await db?.auth?.signOut?.().catch(() => {});
+  window.location.replace('/?entry=buyer&mode=login');
 }
 
 async function deleteMyAccount() {
@@ -2415,7 +2465,7 @@ function showDash(section) {
  if (section === 'products') loadSellerProds();
  if (section === 'orders') loadSellerOrders();
  if (section === 'reviews') loadSellerReviews();
- if (section === 'admin') { if (!guardAdminPanel()) return; loadAdminOverview(); }
+ if (section === 'admin') { if (!guardAdminPanel()) return; ensureWhatsAppListingsAdminPanel(); loadAdminOverview(); }
  if (section === 'settings') loadSettings();
  if (section === 'withdrawals') { loadWithdrawalData(); loadWithdrawalHistory(); }
  if (section === 'dropshipping') loadDropshipData();
@@ -2749,9 +2799,97 @@ function renderProducts(prods) {
  if (!prods.length) { grid.classList.add('hidden'); document.getElementById('prods-empty').classList.remove('hidden'); return; }
  document.getElementById('prods-empty').classList.add('hidden');
  grid.classList.remove('hidden');
- grid.innerHTML = prods.map(p => prodCard(p)).join('');
+ grid.innerHTML = renderMarketplaceFeedWithSponsoredAds(prods);
+ observeSponsoredAdViews(grid);
  renderRecentlyViewed();
  renderBuyerDealShelf();
+}
+
+function renderMarketplaceFeedWithSponsoredAds(prods) {
+ if (!adPopupAds.length) return prods.map(product => prodCard(product)).join('');
+
+ const feed = [];
+ let adIndex = 0;
+ const firstPlacement = Math.min(4, prods.length);
+
+ prods.forEach((product, index) => {
+  feed.push(prodCard(product));
+  const productPosition = index + 1;
+  const shouldPlaceAd = productPosition === firstPlacement
+   || (productPosition > firstPlacement && (productPosition - firstPlacement) % 12 === 0);
+  if (shouldPlaceAd) {
+   feed.push(renderSponsoredAdCard(adPopupAds[adIndex % adPopupAds.length]));
+   adIndex++;
+  }
+ });
+
+ return feed.join('');
+}
+
+function renderSponsoredAdCard(ad) {
+ const title = ad.title || 'Sponsored offer';
+ const description = ad.description || 'Discover an offer selected for BUYSELL shoppers.';
+ const sellerId = getAdSellerId(ad);
+ const destination = sellerId ? '#' : getAdLink(ad);
+ const media = ad.media_url
+  ? (ad.media_type === 'video'
+   ? `<video src="${escAttr(ad.media_url)}" autoplay muted playsinline loop preload="metadata"></video>
+      <button type="button" class="native-ad-audio" onclick="event.preventDefault();event.stopPropagation();toggleSponsoredAdAudio(this)" aria-label="Turn sound on" aria-pressed="false"><i class="fa-solid fa-volume-xmark"></i><span>Sound on</span></button>`
+   : `<img src="${escAttr(ad.media_url)}" alt="${escAttr(title)}" loading="lazy">`)
+  : `<div class="native-ad-media-fallback"><i class="fa-solid fa-bullhorn"></i></div>`;
+
+ return `<article class="native-sponsored-card" data-sponsored-ad data-ad-id="${escAttr(ad.id)}">
+  <div class="native-ad-media">${media}</div>
+  <div class="native-ad-body">
+   <span class="native-ad-label"><i class="fa-solid fa-bullhorn"></i> Sponsored</span>
+   <h3>${escHtml(title)}</h3>
+   <p>${escHtml(description)}</p>
+   <a class="native-ad-cta" href="${escAttr(destination)}" onclick="openAdDestination('${escAttr(ad.id)}', event)">${escHtml(ad.cta_text || 'Explore offer')} <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+  </div>
+ </article>`;
+}
+
+function toggleSponsoredAdAudio(button) {
+ const video = button.closest('.native-sponsored-card')?.querySelector('video');
+ if (!video) return;
+
+ const shouldEnableSound = video.muted || video.volume === 0;
+ video.muted = !shouldEnableSound;
+ video.volume = shouldEnableSound ? 1 : 0;
+ if (shouldEnableSound) video.play().catch(() => {});
+
+ button.setAttribute('aria-pressed', String(shouldEnableSound));
+ button.setAttribute('aria-label', shouldEnableSound ? 'Mute video' : 'Turn sound on');
+ button.innerHTML = shouldEnableSound
+  ? '<i class="fa-solid fa-volume-high"></i><span>Sound on</span>'
+  : '<i class="fa-solid fa-volume-xmark"></i><span>Sound off</span>';
+}
+
+function observeSponsoredAdViews(scope = document) {
+ sponsoredAdObserver?.disconnect();
+ const cards = [...scope.querySelectorAll('[data-sponsored-ad]')];
+ if (!cards.length) return;
+
+ const registerView = card => {
+  const adId = card.dataset.adId;
+  if (!adId || viewedSponsoredAdIds.has(adId)) return;
+  viewedSponsoredAdIds.add(adId);
+  trackAdStat(adId, 'view');
+ };
+
+ if (!('IntersectionObserver' in window)) {
+  cards.forEach(registerView);
+  return;
+ }
+
+ sponsoredAdObserver = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+   if (!entry.isIntersecting) return;
+   registerView(entry.target);
+   sponsoredAdObserver?.unobserve(entry.target);
+  });
+ }, { threshold: 0.55 });
+ cards.forEach(card => sponsoredAdObserver.observe(card));
 }
 
 function isFocusedMarketplaceBrowse() {
@@ -2850,6 +2988,7 @@ function prodCard(p) {
 
  const imageCount = imageList.length > 0 ? imageList.length : (p.image_url ? 1 : 0);
  const videoCount = Array.isArray(p.videos) ? p.videos.length : (p.video_url || p.has_video ? 1 : 0);
+ const isSaved = wishlist.includes(p.id);
 
  const badges = [
  isFlashActive ? `<span class="prod-badge" style="background:var(--red); color:#fff;"><i class="fa-solid fa-bolt"></i> Flash</span>` : '',
@@ -2887,10 +3026,10 @@ function prodCard(p) {
  ${p.original_price > displayPrice ? `<span class="prod-orig">${fmtN(p.original_price)}</span>` : ''}
  </div>
   <div class="prod-shipping text-xs color-text3" style="margin-top:.15rem"><i class="fa-solid fa-truck-fast"></i> BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} per store</div>
-  <div class="prod-trust-line"><span><i class="fa-solid fa-shield-halved"></i> BUYSELL tracking</span><span>${escHtml(stockLabel)}</span></div>
+ <div class="prod-trust-line"><span><i class="fa-solid fa-shield-halved"></i> BUYSELL tracking</span><span>${escHtml(stockLabel)}</span></div>
  <div class="prod-rating-row"><span class="stars sm">${stars}</span><span class="text-xs color-text3">${p.avg_rating ? p.avg_rating.toFixed(1) : '5.0'} (${p.review_count||0})</span></div>
  <div class="prod-location"><i class="fa-solid fa-map-marker-alt" style="font-size:.6rem"></i>${escHtml(p.location||'Nigeria')}</div>
-  <a class="prod-store-link ${platformProduct ? 'platform-store-link' : ''}" onclick="event.stopPropagation();viewStorefront('${p.seller_id}')"><i class="fa-solid ${platformProduct ? 'fa-shield-halved' : 'fa-store'}" style="font-size:.6rem"></i>${escHtml(sellerLabel)}</a>
+ <a class="prod-store-link ${platformProduct ? 'platform-store-link' : ''}" onclick="event.stopPropagation();viewStorefront('${p.seller_id}')"><i class="fa-solid ${platformProduct ? 'fa-shield-halved' : 'fa-store'}" style="font-size:.6rem"></i>${escHtml(sellerLabel)}</a>
  ${!isSoldOut ? `<button class="prod-mobile-add" onclick="event.stopPropagation();addToCart(${serializedCartData})"><i class="fa-solid fa-cart-plus"></i> Add to Cart</button>` : ''}
  </div>
  </div>`;
@@ -3732,9 +3871,28 @@ function copyStoreLink() {
 // ====================================================
 function saveCart() {
  appStorage.setItem('bs_cart', JSON.stringify(cart));
- updateCartCount();
+  // Keep the one-tab checkout handoff aligned. Once payment clears the cart,
+  // remove it so a later refresh cannot restore purchased items.
+  if (cart.length) appSessionStorage.setItem(CHECKOUT_CART_HANDOFF_KEY, JSON.stringify(cart));
+  else appSessionStorage.removeItem(CHECKOUT_CART_HANDOFF_KEY);
+  updateCartCount();
  window.dispatchEvent(new Event('bs:cart-change'));
 }
+
+// React owns the product-detail cart drawer, while this legacy runtime owns
+// checkout. When the shell uses History API navigation there is no page reload,
+// so keep this module's lexical `cart` state synchronized with React storage.
+function syncCartFromStorage(nextCart = null) {
+ const stored = Array.isArray(nextCart)
+  ? nextCart
+  : (readCheckoutCartHandoff() || readStoredJson('bs_cart', []));
+ cart = Array.isArray(stored) ? stored : [];
+ if (cart.length) appStorage.setItem('bs_cart', JSON.stringify(cart));
+ updateCartCount();
+ return cart;
+}
+window.syncCartFromStorage = syncCartFromStorage;
+window.addEventListener('bs:cart-change', () => syncCartFromStorage());
 
 function itemShippingFee(item = {}) {
  return currentMode === 'pickup' ? 0 : BUYSELL_DELIVERY_FEE;
@@ -7321,6 +7479,205 @@ function switchAdminTab(tab) {
  if (tab === 'kyc') loadAdminKyc();
  if (tab === 'online') loadAdminOnlineUsers();
  if (tab === 'upcoming') loadAdminUpcomingProducts();
+ if (tab === 'whatsapp-listings') loadAdminWhatsAppListings();
+}
+
+function whatsappListingsPanelMarkup() {
+ return `<div class="whatsapp-admin-workspace">
+  <section class="card card-pad-lg whatsapp-admin-card">
+   <div class="flex justify-between items-start gap-3 flex-wrap mb-3">
+    <div>
+     <span class="admin-command-kicker"><i class="fa-brands fa-whatsapp"></i> Private collector control</span>
+     <h3 class="mb-1">Approved WhatsApp groups</h3>
+     <p class="text-xs color-text3">Only active group IDs are monitored. Changes reach the collector automatically within about one minute.</p>
+    </div>
+    <button class="btn btn-outline btn-sm" onclick="loadAdminWhatsAppListings()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+   </div>
+   <div class="form-grid form-grid-2 whatsapp-group-form">
+    <div class="form-group"><label class="form-label">Group label <span class="text-xs color-text3">Optional</span></label><input class="form-input" data-whatsapp-group-name placeholder="e.g. Abuja Fashion Sellers"></div>
+    <div class="form-group"><label class="form-label">WhatsApp group ID <span class="req">*</span></label><input class="form-input" data-whatsapp-group-jid placeholder="120363…@g.us" autocomplete="off"></div>
+   </div>
+   <div class="flex justify-between items-center gap-2 flex-wrap">
+    <p class="text-xs color-text3" style="margin:0"><i class="fa-solid fa-lock"></i> Group IDs stay private and are never shown to buyers.</p>
+    <button class="btn btn-primary" onclick="adminAddWhatsAppGroup()"><i class="fa-solid fa-plus"></i> Add approved group</button>
+   </div>
+   <div class="whatsapp-admin-group-list" data-whatsapp-group-list><div class="text-sm color-text3">Loading approved groups...</div></div>
+  </section>
+
+  <section class="card card-pad-lg whatsapp-admin-card">
+   <div class="flex justify-between items-start gap-3 flex-wrap mb-3">
+    <div>
+     <span class="admin-command-kicker"><i class="fa-solid fa-boxes-stacked"></i> Import review queue</span>
+     <h3 class="mb-1">WhatsApp product listings</h3>
+     <p class="text-xs color-text3">Buyer price is always the seller’s stated amount plus <strong>₦5,000</strong>. Source prices are visible here only for review.</p>
+    </div>
+    <button class="btn btn-outline btn-sm" onclick="loadAdminWhatsAppListings()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+   </div>
+   <div class="whatsapp-admin-listings" data-whatsapp-listings><div class="text-sm color-text3">Loading imported listings...</div></div>
+  </section>
+ </div>`;
+}
+
+function ensureWhatsAppListingsAdminPanel() {
+ const appendPanel = (host) => {
+  if (!host || host.querySelector('[data-whatsapp-listings-panel]')) return;
+  const panel = document.createElement('div');
+  panel.id = 'adm-tab-whatsapp-listings';
+  panel.className = 'adm-tab hidden';
+  panel.dataset.whatsappListingsPanel = 'true';
+  panel.innerHTML = whatsappListingsPanelMarkup();
+  host.appendChild(panel);
+ };
+
+ document.querySelectorAll('#admin-content .admin-tab-bar, #ap-mobile-tabs').forEach(tabBar => {
+  if (tabBar.querySelector('[data-admin-tab="whatsapp-listings"]')) return;
+  const tab = document.createElement('button');
+  tab.type = 'button';
+  tab.className = 'buyer-tab';
+  tab.dataset.adminTab = 'whatsapp-listings';
+  tab.innerHTML = '<i class="fa-brands fa-whatsapp"></i> WhatsApp';
+  tab.addEventListener('click', () => switchAdminTab('whatsapp-listings'));
+  tabBar.appendChild(tab);
+ });
+
+ const sellerAdmin = document.getElementById('admin-content');
+ appendPanel(sellerAdmin);
+
+ const portalOverview = document.querySelector('#admin-portal-view #adm-tab-overview');
+ appendPanel(portalOverview?.parentElement);
+
+ const sidebarNav = document.querySelector('#admin-portal-view .admin-sidebar nav');
+ if (sidebarNav && !sidebarNav.querySelector('#ap-nav-whatsapp-listings')) {
+  const navItem = document.createElement('a');
+  navItem.href = '#';
+  navItem.id = 'ap-nav-whatsapp-listings';
+  navItem.className = 'dash-nav-item';
+  navItem.style.cssText = 'margin-bottom:.3rem;display:flex';
+  navItem.innerHTML = '<i class="fa-brands fa-whatsapp"></i> WhatsApp Listings';
+  navItem.addEventListener('click', event => { event.preventDefault(); switchAdminTab('whatsapp-listings'); });
+  const upcomingLink = sidebarNav.querySelector('#ap-nav-upcoming');
+  upcomingLink?.insertAdjacentElement('afterend', navItem) || sidebarNav.appendChild(navItem);
+ }
+}
+
+function visibleWhatsAppAdminInput(selector) {
+ return [...document.querySelectorAll(selector)].find(node => node.offsetParent !== null) || document.querySelector(selector);
+}
+
+async function adminWhatsAppRequest(command, payload = {}) {
+ if (!isAdmin()) throw new Error('Administrator access is required.');
+ return callEdge('whatsapp-listing-action', { action: 'admin', command, ...payload });
+}
+
+function renderAdminWhatsAppGroups(groups) {
+ const markup = !groups.length
+ ? '<div class="empty-state whatsapp-admin-empty"><i class="fa-brands fa-whatsapp"></i><p>No approved groups yet. Add an approved WhatsApp group ID above.</p></div>'
+ : groups.map(group => `<article class="whatsapp-admin-group-row">
+   <div class="whatsapp-admin-group-icon"><i class="fa-brands fa-whatsapp"></i></div>
+   <div class="whatsapp-admin-group-info"><strong>${escHtml(group.display_name || 'WhatsApp group')}</strong><code>${escHtml(group.group_jid)}</code><span>${group.is_active ? 'Collector active' : 'Collector paused'} · Added ${fmtDate(group.created_at)}</span></div>
+   <div class="whatsapp-admin-group-actions">
+    <span class="badge ${group.is_active ? 'badge-green' : 'badge-gray'}">${group.is_active ? 'Active' : 'Paused'}</span>
+    <button class="btn btn-outline btn-sm" onclick="adminSetWhatsAppGroupActive('${escAttr(group.id)}',${group.is_active ? 'false' : 'true'})">${group.is_active ? 'Pause' : 'Activate'}</button>
+    <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:#fecaca" onclick="adminDeleteWhatsAppGroup('${escAttr(group.id)}')" title="Remove group"><i class="fa-solid fa-trash"></i></button>
+   </div>
+  </article>`).join('');
+ document.querySelectorAll('[data-whatsapp-group-list]').forEach(node => { node.innerHTML = markup; });
+}
+
+function renderAdminWhatsAppListings(listings) {
+ const markup = !listings.length
+ ? '<div class="empty-state whatsapp-admin-empty"><i class="fa-solid fa-inbox"></i><p>No products have been imported from approved WhatsApp groups yet.</p></div>'
+ : `<div class="whatsapp-admin-listing-table">${listings.map(listing => {
+  const product = listing.product || {};
+  const state = listing.deleted_at ? 'Removed' : listing.sold_at || Number(product.stock_quantity) === 0 ? 'Sold' : product.status === 'active' ? 'Live' : product.status === 'paused' ? 'Paused' : 'Pending review';
+ const stateClass = state === 'Live' ? 'badge-green' : state === 'Pending review' ? 'badge-gold' : 'badge-gray';
+  const cover = sanitizeUrl(product.image_url || '');
+  const canActivate = !listing.deleted_at && !listing.sold_at && product.status !== 'active';
+  const canPause = !listing.deleted_at && !listing.sold_at && product.status === 'active';
+  const sourcePrice = Number(listing.source_price);
+  const pricingLine = Number.isFinite(sourcePrice) && sourcePrice > 0
+  ? `Source ${fmtN(sourcePrice)} + ₦${fmtNum(listing.price_markup || 5000)} = <b>${fmtN(product.price)}</b>`
+  : `Buyer price: <b>${fmtN(product.price)}</b>`;
+  return `<article class="whatsapp-admin-listing-row">
+   <div class="whatsapp-admin-product-thumb">${cover ? `<img src="${escAttr(cover)}" alt="">` : '<i class="fa-solid fa-image"></i>'}</div>
+   <div class="whatsapp-admin-product-info"><strong>${escHtml(product.name || 'Imported product')}</strong><span>${escHtml(product.category || 'Other')} · ${escHtml(product.location || 'Location not set')} · ${fmtDate(listing.created_at)}</span><small>${pricingLine}</small></div>
+   <div class="whatsapp-admin-product-state"><span class="badge ${stateClass}">${state}</span><a class="btn btn-outline btn-sm" href="/product?id=${encodeURIComponent(listing.product_id)}" target="_blank" rel="noopener">View</a></div>
+   <div class="whatsapp-admin-product-actions">
+    ${canActivate ? `<button class="btn btn-primary btn-sm" onclick="adminUpdateWhatsAppListing('${escAttr(listing.product_id)}','activate')"><i class="fa-solid fa-check"></i> Activate</button>` : ''}
+    ${canPause ? `<button class="btn btn-outline btn-sm" onclick="adminUpdateWhatsAppListing('${escAttr(listing.product_id)}','pause')">Pause</button>` : ''}
+    ${!listing.deleted_at && !listing.sold_at ? `<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:#fecaca" onclick="adminUpdateWhatsAppListing('${escAttr(listing.product_id)}','remove')">Remove</button>` : ''}
+   </div>
+  </article>`;
+ }).join('')}</div>`;
+ document.querySelectorAll('[data-whatsapp-listings]').forEach(node => { node.innerHTML = markup; });
+}
+
+async function loadAdminWhatsAppListings() {
+ if (!isAdmin()) return;
+ ensureWhatsAppListingsAdminPanel();
+ document.querySelectorAll('[data-whatsapp-group-list]').forEach(node => { node.innerHTML = '<div class="text-sm color-text3">Loading approved groups...</div>'; });
+ document.querySelectorAll('[data-whatsapp-listings]').forEach(node => { node.innerHTML = '<div class="text-sm color-text3">Loading imported listings...</div>'; });
+ try {
+  const [groupResult, listingResult] = await Promise.all([
+   adminWhatsAppRequest('list_groups'),
+   adminWhatsAppRequest('list_listings'),
+  ]);
+  renderAdminWhatsAppGroups(groupResult.groups || []);
+  renderAdminWhatsAppListings(listingResult.listings || []);
+ } catch (error) {
+  const message = escHtml(error.message || 'Could not load WhatsApp collector data.');
+  document.querySelectorAll('[data-whatsapp-group-list], [data-whatsapp-listings]').forEach(node => { node.innerHTML = `<div class="text-sm color-danger">${message}</div>`; });
+ }
+}
+
+async function adminAddWhatsAppGroup() {
+ const groupInput = visibleWhatsAppAdminInput('[data-whatsapp-group-jid]');
+ const nameInput = visibleWhatsAppAdminInput('[data-whatsapp-group-name]');
+ const groupJid = groupInput?.value.trim() || '';
+ const displayName = nameInput?.value.trim() || '';
+ if (!groupJid) { toast('Group ID required', 'Paste the WhatsApp group ID ending in @g.us.', 'warn'); return; }
+ try {
+  await adminWhatsAppRequest('add_group', { group_jid: groupJid, display_name: displayName });
+  if (groupInput) groupInput.value = '';
+  if (nameInput) nameInput.value = '';
+  toast('WhatsApp group added', 'The collector will begin monitoring it within about one minute.', 'success');
+  loadAdminWhatsAppListings();
+ } catch (error) {
+  toast('Could not add group', error.message || 'Please check the group ID and try again.', 'error');
+ }
+}
+
+async function adminSetWhatsAppGroupActive(groupId, isActive) {
+ try {
+  await adminWhatsAppRequest('set_group_active', { group_id: groupId, is_active: isActive });
+  toast(isActive ? 'Group activated' : 'Group paused', 'The collector will sync this change shortly.', 'success');
+  loadAdminWhatsAppListings();
+ } catch (error) {
+  toast('Could not update group', error.message || 'Please try again.', 'error');
+ }
+}
+
+async function adminDeleteWhatsAppGroup(groupId) {
+ if (!confirm('Remove this WhatsApp group? New posts from it will no longer be imported.')) return;
+ try {
+  await adminWhatsAppRequest('delete_group', { group_id: groupId });
+  toast('WhatsApp group removed', 'The collector will stop monitoring it shortly.', 'info');
+  loadAdminWhatsAppListings();
+ } catch (error) {
+  toast('Could not remove group', error.message || 'Please try again.', 'error');
+ }
+}
+
+async function adminUpdateWhatsAppListing(productId, mode) {
+ const labels = { activate: 'activate', pause: 'pause', remove: 'remove' };
+ if (mode === 'remove' && !confirm('Remove this imported listing from the marketplace? This cannot be undone from the dashboard.')) return;
+ try {
+  await adminWhatsAppRequest('update_listing', { product_id: productId, mode });
+  toast(`Listing ${labels[mode] || 'updated'}`, mode === 'activate' ? 'It is now visible to buyers.' : 'The listing status has been updated.', 'success');
+  loadAdminWhatsAppListings();
+ } catch (error) {
+  toast('Could not update listing', error.message || 'Please try again.', 'error');
+ }
 }
 
 async function uploadUpcomingMediaFiles(files, kind) {
@@ -9184,7 +9541,18 @@ function initLeaflet() {
  }, 300);
 }
 
-// NEW: Dynamic Supabase Fetcher
+function getSafeHubStateAliases(stateName) {
+ const normalized = String(stateName || '').trim();
+ const aliases = {
+  'Federal Capital Territory (Abuja)': ['Federal Capital Territory (Abuja)', 'Federal Capital Territory', 'Abuja', 'FCT'],
+  'Federal Capital Territory': ['Federal Capital Territory', 'Federal Capital Territory (Abuja)', 'Abuja', 'FCT'],
+  Abuja: ['Abuja', 'Federal Capital Territory (Abuja)', 'Federal Capital Territory', 'FCT'],
+  FCT: ['FCT', 'Federal Capital Territory (Abuja)', 'Federal Capital Territory', 'Abuja']
+ };
+ return aliases[normalized] || [normalized];
+}
+
+// Dynamic Supabase fetcher. Keep this field list aligned with public.safe_hubs.
 async function loadHubsForState(stateName) {
  // 1. Clear old pins from the map
  currentMarkers.forEach(marker => pickupMap.removeLayer(marker));
@@ -9197,27 +9565,36 @@ async function loadHubsForState(stateName) {
  // 2. Fetch live data from Supabase
  const { data, error } = await db
  .from('safe_hubs')
- .select('id,name,address,state,lga,contact_phone,latitude,longitude,is_active')
- .eq('state', stateName)
- .eq('is_active', true);
+  .select('id,name,info,state,latitude,longitude,is_active')
+  .in('state', getSafeHubStateAliases(stateName))
+  .eq('is_active', true);
 
  if (error) throw error;
 
- if (data && data.length > 0) {
- const bounds = []; // Used to auto-zoom the map perfectly
+  const uniqueHubs = (data || []).filter((hub, index, hubs) => {
+   const key = [hub.state, hub.name, hub.info, hub.latitude, hub.longitude].join('|');
+   return hubs.findIndex(candidate => [candidate.state, candidate.name, candidate.info, candidate.latitude, candidate.longitude].join('|') === key) === index;
+  }).filter(hub => Number.isFinite(Number(hub.latitude)) && Number.isFinite(Number(hub.longitude)));
 
- data.forEach(hub => {
- const marker = L.marker([hub.latitude, hub.longitude]).addTo(pickupMap);
- marker.bindPopup(`<b class="hub-label">${hub.name}</b><br>${hub.info}`);
- 
- marker.on('click', () => {
- document.getElementById('selected-hub-input').value = hub.name;
- document.getElementById('co-address').value = `VERIFIED HUB: ${hub.name} (${hub.info})`;
- toast('Hub Selected', hub.name, 'success');
- });
+  if (uniqueHubs.length > 0) {
+  const bounds = []; // Used to auto-zoom the map perfectly
 
- currentMarkers.push(marker);
- bounds.push([hub.latitude, hub.longitude]);
+  uniqueHubs.forEach(hub => {
+  const latitude = Number(hub.latitude);
+  const longitude = Number(hub.longitude);
+  const name = String(hub.name || 'Verified pickup hub');
+  const info = String(hub.info || 'Pickup details supplied after selection');
+  const marker = L.marker([latitude, longitude]).addTo(pickupMap);
+  marker.bindPopup(`<b class="hub-label">${escHtml(name)}</b><br>${escHtml(info)}`);
+
+  marker.on('click', () => {
+  document.getElementById('selected-hub-input').value = name;
+  document.getElementById('co-address').value = `VERIFIED HUB: ${name} (${info})`;
+  toast('Hub Selected', name, 'success');
+  });
+
+  currentMarkers.push(marker);
+  bounds.push([latitude, longitude]);
  });
 
  // 3. Auto-zoom map to fit all the new pins perfectly
@@ -9225,11 +9602,11 @@ async function loadHubsForState(stateName) {
  document.getElementById('selected-hub-input').placeholder = "Click a pin on the map";
  
  } else {
- document.getElementById('selected-hub-input').placeholder = "No verified hubs in this state yet.";
+  document.getElementById('selected-hub-input').placeholder = "No verified hubs in this state yet.";
  }
  } catch (err) {
  console.error("Error fetching hubs:", err);
- toast('Map Error', 'Could not load safe hubs. Check your connection.', 'error');
+  toast('Map Error', 'Safe hubs are temporarily unavailable. Please try again.', 'error');
  }
 }
 // Share product from detail modal
@@ -9288,34 +9665,39 @@ function installSecurityDomGuards() {
  if (typeof handleDeepLink === 'function') await handleDeepLink();
  if (typeof checkBroadcastForUser === 'function') checkBroadcastForUser();
 
- // Real-time order updates for sellers
- db.channel('orders-rt').on('postgres_changes', { 
- event: 'INSERT', 
- schema: 'public', 
- table: 'orders' 
- }, payload => {
- if (currentRole === 'seller' && payload.new?.seller_id === currentUser?.id) {
- toast('New Order! ', 'Check your orders panel', 'success', 6000);
- if (typeof loadSellerOrders === 'function') loadSellerOrders();
- if (typeof loadSellerStats === 'function') loadSellerStats();
- }
- }).subscribe();
+  // Real-time subscriptions are optional enhancements. A missing/offline
+  // Supabase client must not abort marketplace startup or leave the buyer view
+  // hidden on desktop.
+  if (db && typeof db.channel === 'function') {
+   // Real-time order updates for sellers
+   db.channel('orders-rt').on('postgres_changes', {
+   event: 'INSERT',
+   schema: 'public',
+   table: 'orders'
+   }, payload => {
+   if (currentRole === 'seller' && payload.new?.seller_id === currentUser?.id) {
+   toast('New Order! ', 'Check your orders panel', 'success', 6000);
+   if (typeof loadSellerOrders === 'function') loadSellerOrders();
+   if (typeof loadSellerStats === 'function') loadSellerStats();
+   }
+   }).subscribe();
 
- // Real-time low stock alerts
- db.channel('stock-rt').on('postgres_changes', { 
- event: 'UPDATE', 
- schema: 'public', 
- table: 'products' 
- }, payload => {
- const p = payload.new;
- const isTargetMerchant = currentRole === 'seller' && p?.seller_id === currentUser?.id;
- 
- if (isTargetMerchant && p?.stock_quantity !== undefined && p?.low_stock_alert) {
- if (p.stock_quantity <= p.low_stock_alert && p.stock_quantity > 0) {
- toast(`Warning Low Stock: ${p.name}`, `Only ${p.stock_quantity} left inside inventory`, 'warn', 7000);
- }
- }
- }).subscribe();
+   // Real-time low stock alerts
+   db.channel('stock-rt').on('postgres_changes', {
+   event: 'UPDATE',
+   schema: 'public',
+   table: 'products'
+   }, payload => {
+   const p = payload.new;
+   const isTargetMerchant = currentRole === 'seller' && p?.seller_id === currentUser?.id;
+
+   if (isTargetMerchant && p?.stock_quantity !== undefined && p?.low_stock_alert) {
+   if (p.stock_quantity <= p.low_stock_alert && p.stock_quantity > 0) {
+   toast(`Warning Low Stock: ${p.name}`, `Only ${p.stock_quantity} left inside inventory`, 'warn', 7000);
+   }
+   }
+   }).subscribe();
+  }
 })(); // ' This explicitly shuts down the self-invoking function thread cleanly.
 // --- PHASE 1-4 INJECTIONS ---
 function validateInput(str) {
@@ -10982,6 +11364,8 @@ async function createFlashSale() {
 // AD SYSTEM
 // ====================================================
 let adPopupAds = [], adPopupIndex = 0, adSkipTimer = null;
+let sponsoredAdObserver = null;
+const viewedSponsoredAdIds = new Set();
 const AD_PRICE_KOBO = 500000;
 
 function resetAdForm() {
@@ -10998,27 +11382,33 @@ function resetAdForm() {
 async function insertAdminAdvertisement(adData) {
  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
  const base = {
- ...adData,
- status: 'active',
- payment_status: 'admin_free',
- payment_reference: `ADMIN-FREE-${Date.now()}`,
- approved_at: new Date().toISOString(),
- expires_at: expiresAt,
- };
- const variants = [
- base,
- { ...base, user_id: currentUser.id },
- { title: base.title, description: base.description, media_url: base.media_url, media_type: base.media_type, cta_text: base.cta_text, cta_link: base.cta_link, advertiser_id: currentUser.id, seller_id: currentUser.id, status: 'active', expires_at: expiresAt },
- ];
- let lastError = null;
- for (const row of variants) {
-  const { error } = await db.from('advertisements').insert(row);
-  if (!error) return;
-  lastError = error;
-  const msg = String(error.message || '').toLowerCase();
-  if (!msg.includes('column') && !msg.includes('schema cache')) break;
- }
- throw lastError || new Error('Could not create admin advertisement');
+  title: adData.title,
+  description: adData.description,
+  media_url: adData.media_url,
+  media_type: adData.media_type,
+  cta_text: adData.cta_text,
+  cta_link: adData.cta_link,
+  status: 'active',
+  payment_status: 'admin_free',
+  payment_ref: `ADMIN-FREE-${Date.now()}`,
+  expires_at: expiresAt,
+  };
+  const variants = [
+  { ...base, advertiser_id: currentUser.id },
+  ];
+  let lastError = null;
+  for (const row of variants) {
+   const payload = { ...row };
+   for (let attempt = 0; attempt < 10; attempt++) {
+    const { error } = await db.from('advertisements').insert(payload);
+    if (!error) return;
+    lastError = error;
+    const missingColumn = String(error.message || '').match(/(?:column [^']*'|Could not find the ')([^']+)'|column [\w.]+\.([\w]+)/i)?.slice(1).find(Boolean);
+    if (!missingColumn || !(missingColumn in payload)) break;
+    delete payload[missingColumn];
+   }
+  }
+  throw lastError || new Error('Could not create admin advertisement');
 }
 
 function normalizeAdUrl(url) {
@@ -11034,7 +11424,7 @@ function normalizeAdUrl(url) {
 }
 
 function getAdLink(ad) {
- return ad.cta_link || ad.link_url || '#';
+ return ad.cta_link || ad.target_url || ad.link_url || '#';
 }
 
 function getAdSellerId(ad) {
@@ -11046,7 +11436,6 @@ function openAdDestination(adId, event) {
  const ad = adPopupAds.find(a => a.id === adId) || adPopupAds[adPopupIndex];
  if (!ad) return;
  trackAdStat(ad.id, 'click');
- closeAdPopup();
  const sellerId = getAdSellerId(ad);
  if (sellerId) {
  viewStorefront(sellerId);
@@ -11094,16 +11483,10 @@ async function loadSellerAds() {
  const tbody = document.getElementById('ad-table-body');
  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3)">Loading ads...</td></tr>';
  try {
- let { data, error } = await db.from('advertisements')
-  .select('id,title,description,media_url,media_type,target_url,placement,status,expires_at,created_at,payment_status')
- .eq('advertiser_id', currentUser.id)
- .order('created_at', { ascending: false });
- if (error) {
- ({ data, error } = await db.from('advertisements')
-  .select('id,title,description,media_url,media_type,target_url,placement,status,expires_at,created_at,payment_status')
- .eq('user_id', currentUser.id)
- .order('created_at', { ascending: false }));
- }
+  let { data, error } = await db.from('advertisements')
+   .select('id,title,description,media_url,media_type,cta_text,cta_link,status,expires_at,created_at,payment_status')
+   .eq('advertiser_id', currentUser.id)
+  .order('created_at', { ascending: false });
  if (error) throw error;
  const ads = data || [];
  const activeAds = ads.filter(a => a.status === 'active' && (!a.expires_at || new Date(a.expires_at) > new Date()));
@@ -11414,24 +11797,18 @@ async function notifyOrderIfConfirmed(orderId, oldStatus = null) {
 
 async function loadActiveAds() {
  try {
- const dismissedUntil = Number(appSessionStorage.getItem('bs_ads_dismissed_until') || 0);
- if (Date.now() < dismissedUntil) return;
+ document.getElementById('ad-popup-overlay')?.classList.add('hidden');
+ if (adSkipTimer) { clearInterval(adSkipTimer); adSkipTimer = null; }
  const { data, error } = await db.from('advertisements')
- .select('id,title,description,media_url,media_type,target_url,placement,status,expires_at,created_at')
+  .select('id,title,description,media_url,media_type,cta_text,cta_link,advertiser_id,status,expires_at,created_at')
  .eq('status', 'active')
  .gt('expires_at', new Date().toISOString())
  .order('created_at', { ascending: false })
  .limit(5);
  if (error) throw error;
  adPopupAds = (data || []).filter(ad => ad.media_url || ad.title);
- if (!adPopupAds.length) return;
  adPopupIndex = 0;
- setTimeout(() => {
- if (currentRole === 'buyer' && !document.querySelector('.modal-overlay.open')) {
- document.getElementById('ad-popup-overlay')?.classList.remove('hidden');
- renderAdPopup();
- }
- }, 2500);
+ if (products.length) renderProducts(filteredProducts);
  } catch (e) {
  console.warn('Could not load active ads:', e);
  }
@@ -11505,17 +11882,14 @@ async function initiateAdPayment() {
  const { data } = db.storage.from('uploads').getPublicUrl(path);
  mediaUrl = data.publicUrl;
 
-  const adData = {
-  title,
-  description: desc || '',
-  media_url: mediaUrl,
- media_type: isVideo ? 'video' : 'image',
- cta_text: cta,
- cta_link: link,
- seller_id: currentUser.id,
- advertiser_id: currentUser.id,
-  advertiser_type: currentRole || 'seller'
-  };
+   const adData = {
+   title,
+   description: desc || '',
+   media_url: mediaUrl,
+  media_type: isVideo ? 'video' : 'image',
+  cta_text: cta,
+  cta_link: link
+   };
 
   if (adminAd) {
   await insertAdminAdvertisement({ ...adData, advertiser_type: 'admin' });
@@ -11575,64 +11949,16 @@ async function initiateAdPayment() {
 }
 function closeAdPopup() {
  document.getElementById('ad-popup-overlay')?.classList.add('hidden');
- appSessionStorage.setItem('bs_ads_dismissed_until', String(Date.now() + 30 * 60 * 1000));
  if (adSkipTimer) { clearInterval(adSkipTimer); adSkipTimer = null; }
 }
 
 function skipAd() {
- if (adPopupIndex < adPopupAds.length - 1) {
- adPopupIndex++;
- renderAdPopup();
- } else {
  closeAdPopup();
- }
 }
 
 function renderAdPopup() {
- if (!adPopupAds.length) return;
- const ad = adPopupAds[adPopupIndex];
- const content = document.getElementById('ad-popup-content');
- const counter = document.getElementById('ad-counter');
- const ctaBtn = document.getElementById('ad-cta-btn');
- const ctaText = document.getElementById('ad-cta-text');
- const desc = escHtml(ad.description || '');
-
- trackAdStat(ad.id, 'view');
-
- if (content) content.innerHTML = `
- ${ad.media_url
- ? (ad.media_type === 'video'
- ? `<video src="${escAttr(ad.media_url)}" autoplay muted playsinline loop></video>`
- : `<img src="${escAttr(ad.media_url)}" alt="${escAttr(ad.title || 'Sponsored ad')}">`)
- : `<div style="padding:2rem;text-align:center;color:#fff"><h3>${escHtml(ad.title || 'Sponsored offer')}</h3></div>`}
- <div class="ad-popup-info">
- <h2>${escHtml(ad.title || 'Sponsored offer')}</h2>
- ${desc ? `<p>${desc}</p>` : ''}
- </div>`;
- if (counter) counter.textContent = `${adPopupIndex+1}/${adPopupAds.length}`;
- if (ctaBtn) {
- ctaBtn.href = getAdSellerId(ad) ? '#' : getAdLink(ad);
- ctaBtn.removeAttribute('target');
- ctaBtn.onclick = (event) => openAdDestination(ad.id, event);
- }
- if (ctaText) ctaText.textContent = ad.cta_text || (getAdLink(ad) !== '#' ? 'Visit' : 'Close');
- const dots = document.getElementById('ad-popup-dots');
- if (dots) dots.innerHTML = adPopupAds.map((_, i) => `<span class="ad-popup-dot ${i === adPopupIndex ? 'active' : ''}"></span>`).join('');
- const progress = document.getElementById('ad-progress');
- if (progress) progress.style.width = '0%';
-
- let secs = 5;
- const skipBtn = document.getElementById('ad-skip-btn');
- const timerEl = document.getElementById('ad-skip-timer');
- if (skipBtn) skipBtn.disabled = true;
- if (timerEl) timerEl.textContent = secs;
- if (adSkipTimer) clearInterval(adSkipTimer);
- adSkipTimer = setInterval(() => {
- secs--;
- if (timerEl) timerEl.textContent = secs;
- if (progress) progress.style.width = `${((5 - secs) / 5) * 100}%`;
- if (secs <= 0) { clearInterval(adSkipTimer); if (skipBtn) { skipBtn.disabled = false; } }
- }, 1000);
+ closeAdPopup();
+ if (products.length) renderProducts(filteredProducts);
 }
 
 // ====================================================

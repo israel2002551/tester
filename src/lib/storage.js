@@ -26,3 +26,16 @@ export function readJson(key, fallback) {
 export function writeJson(key, value) {
   appStorage.setItem(key, JSON.stringify(value));
 }
+
+// The product detail page is React while checkout is still provided by the
+// retained classic runtime. This short-lived snapshot protects the full-page
+// handoff when browser storage is not immediately available on navigation.
+export const checkoutCartHandoffKey = 'bs_checkout_cart_handoff';
+
+export function writeCheckoutCartHandoff(items) {
+  try {
+    sessionStorage.setItem(checkoutCartHandoffKey, JSON.stringify(Array.isArray(items) ? items : []));
+  } catch (_) {
+    // Durable localStorage remains the primary cart source.
+  }
+}

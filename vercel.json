@@ -120,6 +120,10 @@
       "destination": "/product.html"
     },
     {
+      "source": "/manage",
+      "destination": "/index.html"
+    },
+    {
       "source": "/products",
       "destination": "/products.html"
     },

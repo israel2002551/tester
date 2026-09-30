@@ -68,6 +68,40 @@ async function fetchProductById(db, productId) {
   throw lastError || new Error('Product lookup failed');
 }
 
+async function fetchRelatedProducts(db, currentProduct) {
+  if (!currentProduct?.id) return [];
+  const columnSets = [
+    'id,name,price,original_price,category,location,images,videos,image_url,video_url,has_video,stock_quantity,status,created_at',
+    'id,name,price,category,location,images,image_url,stock_quantity,status,created_at',
+    'id,name,price,category,image_url,status,created_at',
+  ];
+  const category = String(currentProduct.category || '').trim();
+
+  for (const columns of columnSets) {
+    let query = db
+      .from('products')
+      .select(columns)
+      .eq('status', 'active')
+      .neq('id', currentProduct.id)
+      .order('created_at', { ascending: false })
+      .limit(12);
+    if (category) query = query.eq('category', category);
+    const { data, error } = await query;
+    if (!error && (data?.length || !category)) return data || [];
+    if (!error && category) {
+      const { data: fallbackData, error: fallbackError } = await db
+        .from('products')
+        .select(columns)
+        .eq('status', 'active')
+        .neq('id', currentProduct.id)
+        .order('created_at', { ascending: false })
+        .limit(12);
+      if (!fallbackError) return fallbackData || [];
+    }
+  }
+  return [];
+}
+
 function visibleGalleryDots(total, activeIndex, maxDots = 7) {
   if (total <= maxDots) return Array.from({ length: total }, (_, index) => index);
   const start = Math.max(0, Math.min(activeIndex - Math.floor(maxDots / 2), total - maxDots));
@@ -81,10 +115,13 @@ export default function ProductPage() {
   const [count, setCount] = useState(cartCount());
   const [toast, setToast] = useState('');
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+  const [relatedProducts, setRelatedProducts] = useState([]);
   const productId = new URLSearchParams(window.location.search).get('id') || new URLSearchParams(window.location.search).get('product');
 
   const sliderRef = useRef(null);
   const thumbsRef = useRef(null);
+  const relatedRailRef = useRef(null);
   const sliderFrameRef = useRef(0);
 
   useEffect(() => {
@@ -98,8 +135,29 @@ export default function ProductPage() {
 
   useEffect(() => {
     setActiveMedia(0);
+    setQuantity(1);
     sliderRef.current?.scrollTo({ left: 0, behavior: 'auto' });
   }, [productId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadRelatedProducts() {
+      if (!product?.id) {
+        setRelatedProducts([]);
+        return;
+      }
+      try {
+        const db = await createSupabaseClient();
+        const listings = await fetchRelatedProducts(db, product);
+        if (!cancelled) setRelatedProducts(listings);
+      } catch (error) {
+        console.warn('Related products could not be loaded:', error);
+        if (!cancelled) setRelatedProducts([]);
+      }
+    }
+    loadRelatedProducts();
+    return () => { cancelled = true; };
+  }, [product]);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,7 +169,10 @@ export default function ProductPage() {
       try {
         const db = await createSupabaseClient();
         const data = await fetchProductById(db, productId);
-        if (!data) {
+        // WhatsApp imports are deliberately created as pending. Do not expose a
+        // direct product URL until the normal BUYSELL review flow has changed
+        // it to active, even if a permissive legacy read policy exists.
+        if (!data || data.status !== 'active') {
           setStatus('missing');
           return;
         }
@@ -135,6 +196,9 @@ export default function ProductPage() {
   const stock = Number(product?.stock_quantity ?? 1);
   const inStock = stock !== 0;
   const discount = product?.original_price > product?.price ? Math.round((1 - product.price / product.original_price) * 100) : 0;
+  const reviewCount = Number(product?.review_count || 0);
+  const rating = Number(product?.avg_rating || 0);
+  const maxQuantity = Number.isFinite(stock) && stock > 0 ? Math.min(stock, 99) : 1;
   const galleryDots = useMemo(() => visibleGalleryDots(media.length, activeMedia), [media.length, activeMedia]);
 
   const handleSliderScroll = () => {
@@ -190,7 +254,7 @@ export default function ProductPage() {
   }
 
   function buyNow() {
-    addToCart(1);
+    addToCart(quantity);
     setIsCartOpen(true);
   }
 
@@ -247,6 +311,12 @@ export default function ProductPage() {
     }
   };
 
+  const scrollRelatedProducts = direction => {
+    const rail = relatedRailRef.current;
+    if (!rail) return;
+    rail.scrollBy({ left: direction * Math.max(248, rail.clientWidth * 0.72), behavior: 'smooth' });
+  };
+
   if (status === 'loading') {
     return (
       <>
@@ -287,9 +357,20 @@ export default function ProductPage() {
     <>
       <ProductHeader count={count} onOpenCart={() => setIsCartOpen(true)} onBack={handleBack} />
       <main className="product-page-shell">
+        <nav className="product-breadcrumb" aria-label="Breadcrumb">
+          <a href="/?view=shop">Marketplace</a>
+          <i className="fa-solid fa-chevron-right" aria-hidden="true" />
+          <a href="/products">{product.category || 'Products'}</a>
+          <i className="fa-solid fa-chevron-right" aria-hidden="true" />
+          <span>{product.name || 'Product'}</span>
+        </nav>
         <section className="product-detail-hero">
           <div className="product-detail-gallery">
             <div className="product-gallery-container">
+              <div className="product-gallery-badges" aria-label="Listing highlights">
+                {discount > 0 ? <span className="product-gallery-sale">Save {discount}%</span> : null}
+                <span><i className="fa-solid fa-circle-check" /> Verified listing</span>
+              </div>
               <div 
                 className="product-gallery-slider" 
                 ref={sliderRef}
@@ -379,43 +460,90 @@ export default function ProductPage() {
                 ))}
               </div>
             ) : null}
+            {media.length > 1 ? <p className="product-gallery-swipe-hint"><i className="fa-solid fa-hand-pointer" /> Swipe the image to view all {media.length} photos and videos.</p> : null}
           </div>
 
           <article className="product-detail-panel">
-            <span className="product-detail-kicker">{product.category || 'BUYSELL Product'}</span>
-            <h1>{product.name || 'Product'}</h1>
+            <header className="product-detail-heading">
+              <div className="product-detail-overline">
+                <span className="product-detail-kicker">{product.category || 'BUYSELL Product'}</span>
+                <button className="product-detail-share" onClick={shareProduct} type="button" title="Share product" aria-label="Share product">
+                  <i className="fa-solid fa-share-nodes" />
+                </button>
+              </div>
+              <h1>{product.name || 'Product'}</h1>
+            </header>
             <div className="product-detail-rating">
-              <span>{Array.from({ length: 5 }, (_, index) => <i className="fa-solid fa-star" key={index} />)}</span>
-              <strong>{Number(product.avg_rating || 5).toFixed(1)}</strong>
-              <em>{Number(product.review_count || 0)} reviews</em>
+              <span aria-label={reviewCount ? `${rating.toFixed(1)} out of 5 stars` : 'New listing'}>{Array.from({ length: 5 }, (_, index) => <i className="fa-solid fa-star" key={index} />)}</span>
+              {reviewCount ? <><strong>{rating.toFixed(1)}</strong><em>{reviewCount} {reviewCount === 1 ? 'review' : 'reviews'}</em></> : <em>New listing - No reviews yet</em>}
             </div>
             <div className="product-detail-price">
-              <strong>{money(product.price)}</strong>
-              {product.original_price > product.price ? <><s>{money(product.original_price)}</s><span>-{discount}%</span></> : null}
+              <div>
+                <small>Price</small>
+                <strong>{money(product.price)}</strong>
+              </div>
+              {product.original_price > product.price ? <div className="product-detail-saving"><s>{money(product.original_price)}</s><span>Save {discount}%</span></div> : null}
+            </div>
+            <div className="product-detail-availability">
+              <div className={inStock ? 'is-stocked' : 'is-sold-out'}>
+                <i className={`fa-solid ${inStock ? 'fa-circle-check' : 'fa-circle-xmark'}`} />
+                <span><strong>{inStock ? 'In stock and ready to order' : 'Currently unavailable'}</strong><small>{inStock ? 'Secure this item while it is available.' : 'Check back for the next restock.'}</small></span>
+              </div>
+              <div>
+                <i className="fa-solid fa-truck-fast" />
+                <span><strong>Delivery from {money(shippingFee(product))}</strong><small>Pickup coordination and order tracking included.</small></span>
+              </div>
             </div>
             <p className="product-detail-desc">{product.description || 'A BUYSELL marketplace product with seller support, checkout, and delivery tracking.'}</p>
-            <div className="product-detail-pills">
-              <span>{product.condition || 'new'}</span>
-              <span>{product.location || 'Nigeria'}</span>
-              <span className={inStock ? 'is-ok' : 'is-out'}>{inStock ? 'In stock' : 'Sold out'}</span>
-              <span>Delivery {money(shippingFee(product))}</span>
+            <div className="product-detail-meta" aria-label="Product details">
+              <span><i className="fa-solid fa-tag" /> {product.condition || 'New'}</span>
+              <span><i className="fa-solid fa-location-dot" /> {product.location || 'Nigeria'}</span>
+              <span><i className="fa-solid fa-shield-heart" /> Buyer support</span>
             </div>
-            <div className="product-detail-actions">
-              <button className="btn btn-primary" onClick={() => addToCart()} disabled={!inStock}><i className="fa-solid fa-cart-plus" /> Add to Cart</button>
-              <button className="btn btn-gold" onClick={buyNow} disabled={!inStock}><i className="fa-solid fa-bolt" /> Buy Now</button>
-              <button className="btn btn-outline" onClick={shareProduct} type="button"><i className="fa-solid fa-share-nodes" /></button>
-            </div>
+            <section className="product-purchase-block" aria-label="Purchase options">
+              <div className="product-quantity-control">
+                <span>Quantity</span>
+                <div>
+                  <button type="button" onClick={() => setQuantity(current => Math.max(1, current - 1))} disabled={!inStock || quantity <= 1} aria-label="Decrease quantity"><i className="fa-solid fa-minus" /></button>
+                  <strong aria-live="polite">{quantity}</strong>
+                  <button type="button" onClick={() => setQuantity(current => Math.min(maxQuantity, current + 1))} disabled={!inStock || quantity >= maxQuantity} aria-label="Increase quantity"><i className="fa-solid fa-plus" /></button>
+                </div>
+              </div>
+              <div className="product-detail-actions">
+                <button className="btn btn-primary" onClick={() => addToCart(quantity)} disabled={!inStock}><i className="fa-solid fa-cart-plus" /> Add to Cart</button>
+                <button className="btn btn-gold" onClick={buyNow} disabled={!inStock}><i className="fa-solid fa-bolt" /> Buy Now</button>
+              </div>
+            </section>
             {product.negotiable ? <div className="product-negotiable-note"><i className="fa-solid fa-comments" /> Price is negotiable. Message the seller before checkout.</div> : null}
             <section className="product-page-seller-card">
-              <div className="product-page-seller-avatar">{sellerName[0]?.toUpperCase() || 'S'}</div>
-              <div>
+              <div className="product-page-seller-avatar" aria-hidden="true">{sellerName[0]?.toUpperCase() || 'S'}</div>
+              <div className="product-page-seller-copy">
+                <span className="product-page-seller-label"><i className="fa-solid fa-store" /> Sold by</span>
                 <h2>{sellerName}</h2>
-                <p>{seller.seller_verified ? 'Verified BUYSELL seller' : 'Seller on BUYSELL Nigeria'}</p>
+                <p><i className={`fa-solid ${seller.seller_verified ? 'fa-circle-check' : 'fa-shield-halved'}`} /> {seller.seller_verified ? 'Verified BUYSELL seller' : 'Seller on BUYSELL Nigeria'}</p>
               </div>
-              <a className="btn btn-outline btn-sm" href={`/?view=shop&store=${encodeURIComponent(product.seller_id || '')}`}><i className="fa-solid fa-store" /> Store</a>
+              <a className="btn btn-outline btn-sm" href={`/?view=shop&store=${encodeURIComponent(product.seller_id || '')}`}>Visit store <i className="fa-solid fa-arrow-right" /></a>
             </section>
           </article>
         </section>
+        {relatedProducts.length ? (
+          <section className="product-related-section" aria-labelledby="product-related-title">
+            <div className="product-related-heading">
+              <div>
+                <span><i className="fa-solid fa-compass" /> Keep browsing</span>
+                <h2 id="product-related-title">More {product.category ? `in ${product.category}` : 'products for you'}</h2>
+                <p>Swipe across to discover another listing without leaving the product experience.</p>
+              </div>
+              <div className="product-related-controls" aria-label="More products controls">
+                <button type="button" onClick={() => scrollRelatedProducts(-1)} aria-label="Previous products"><i className="fa-solid fa-arrow-left" /></button>
+                <button type="button" onClick={() => scrollRelatedProducts(1)} aria-label="Next products"><i className="fa-solid fa-arrow-right" /></button>
+              </div>
+            </div>
+            <div className="product-related-rail" ref={relatedRailRef} aria-label="More products. Swipe horizontally to browse.">
+              {relatedProducts.map(item => <RelatedProductCard product={item} key={item.id} />)}
+            </div>
+          </section>
+        ) : null}
         <section className="product-detail-trust">
           <TrustItem icon="fa-lock" title="Verified Checkout" text="BUYSELL transfer receipt review" />
           <TrustItem icon="fa-truck-fast" title="BUYSELL Delivery" text="Pickup and tracking support" />
@@ -456,5 +584,25 @@ function TrustItem({ icon, title, text }) {
       <i className={`fa-solid ${icon}`} />
       <span><strong>{title}</strong><span>{text}</span></span>
     </div>
+  );
+}
+
+function RelatedProductCard({ product }) {
+  const media = productMedia(product);
+  const image = media.find(item => item.type === 'image')?.url || media[0]?.url || product.image_url || '';
+  const href = `/product.html?id=${encodeURIComponent(product.id)}`;
+  return (
+    <a className="product-related-card" href={href} aria-label={`View ${product.name || 'product'}`}>
+      <div className="product-related-media">
+        {image ? <img src={cloudinaryImage(image, 480, { square: true }) || image} alt={product.name || 'Product'} loading="lazy" /> : <i className="fa-solid fa-box" aria-hidden="true" />}
+        {product.original_price > product.price ? <span>Save {Math.round((1 - product.price / product.original_price) * 100)}%</span> : null}
+      </div>
+      <div className="product-related-copy">
+        <small>{product.category || 'Marketplace'}</small>
+        <h3>{product.name || 'Product'}</h3>
+        <strong>{money(product.price)}</strong>
+        <p><i className="fa-solid fa-location-dot" /> {product.location || 'Nigeria'}</p>
+      </div>
+    </a>
   );
 }

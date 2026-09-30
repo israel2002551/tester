@@ -86,6 +86,59 @@ The existing product `image_url`, `images`, `video_url`, and `videos` fields now
 contain Cloudinary HTTPS delivery URLs. Existing Supabase Storage media is not
 migrated or removed automatically.
 
+### WhatsApp group listing collector
+
+The WhatsApp collector is a separate, private Node service in
+`services/whatsapp-collector`. It can turn sale posts from explicitly approved
+WhatsApp groups into regular BUYSELL `products`, so they use the existing product
+page, catalogue, checkout, and admin product workflows. It does not put a
+WhatsApp session, a Groq key, a Cloudinary secret, or the Supabase service-role
+key in the browser.
+
+Apply both WhatsApp migrations in the Supabase SQL editor first. They create the
+private source-metadata table and the admin-managed approved-group allow-list.
+Then configure the Edge Function:
+
+```powershell
+supabase secrets set WHATSAPP_INGEST_SECRET=generate-a-long-random-secret --project-ref your-project-ref
+supabase secrets set WHATSAPP_LISTINGS_SELLER_ID=the-uuid-of-your-approved-platform-seller --project-ref your-project-ref
+supabase secrets set WHATSAPP_ADMIN_EMAILS=admin@example.com --project-ref your-project-ref
+supabase secrets set PUBLIC_SITE_URL=https://your-buysell-domain.example --project-ref your-project-ref
+supabase secrets set CLOUDINARY_CLOUD_NAME=your-cloud-name --project-ref your-project-ref
+supabase functions deploy whatsapp-listing-action --no-verify-jwt --project-ref your-project-ref
+```
+
+`WHATSAPP_LISTINGS_SELLER_ID` must be an existing BUYSELL platform/admin seller
+profile. `WHATSAPP_ADMIN_EMAILS` is a comma-separated fallback for existing
+admin accounts whose database role has not yet been set to `admin`.
+
+Imported products start as `pending` at the seller's stated price plus ₦5,000.
+The source price and the ₦5,000 uplift remain private to the Super Admin review
+tab. Add, pause, activate, or remove approved group IDs in **Super Admin →
+WhatsApp**; the worker refreshes this allow-list about once a minute. `--no-verify-jwt`
+is required because seller management happens through a high-entropy,
+hash-verified link rather than a BUYSELL account; the function manually verifies
+the signed-in administrator for every dashboard action and rejects all other
+requests.
+
+On the private worker host, copy `services/whatsapp-collector/.env.example` to
+`.env`, set every value, then install and run it:
+
+```powershell
+Set-Location services/whatsapp-collector
+npm.cmd install
+npm.cmd start
+```
+
+The first run prints a QR code. Scan it with a dedicated BUYSELL WhatsApp
+account, not an employee's personal account. Add the exact approved group IDs
+in the Super Admin WhatsApp tab rather than putting them in `.env` or source
+code. Sellers receive a
+`/manage?product=…&token=…` link to edit, mark sold, or remove their own
+listing; `SOLD` and `DELETE` direct replies close their latest open listing.
+Posts without a fixed price are skipped because native BUYSELL products require
+a safe checkout price.
+
 To copy existing product and upcoming-product media, use
 `scripts/migrate-product-media-to-cloudinary.mjs`. It processes every image and
 video URL (including the `images` and `videos` arrays), but only copies URLs

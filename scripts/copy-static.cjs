@@ -21,6 +21,7 @@ for (const file of files) {
 
 const cleanRouteCopies = [
   ['product.html', 'product/index.html'],
+  ['index.html', 'manage/index.html'],
   ['products.html', 'products/index.html'],
   ['upcoming.html', 'upcoming/index.html'],
   ['terms.html', 'terms/index.html'],
