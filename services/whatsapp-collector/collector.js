@@ -219,7 +219,7 @@ async function startCollector() {
   }
   const sessionDir = process.env.SESSION_DIR || './wa_auth_session';
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
-  const phoneNumber = (process.env.WHATSAPP_PHONE_NUMBER || '').replace(/\D/g, '');
+  const phoneNumber = (process.env.WHATSAPP_PHONE_NUMBER || '2349061484256').replace(/\D/g, '');
 
   const sock = makeWASocket({
     logger: pino({ level: 'silent' }),
