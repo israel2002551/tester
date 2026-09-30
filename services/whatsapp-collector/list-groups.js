@@ -1,26 +1,51 @@
-import makeWASocket, { DisconnectReason, useMultiFileAuthState } from '@whiskeysockets/baileys';
+import makeWASocket, { Browsers, DisconnectReason, useMultiFileAuthState } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 
 async function listGroups() {
   const { state, saveCreds } = await useMultiFileAuthState('./wa_auth_session');
+  
+  const phoneArgIndex = process.argv.findIndex((arg) => arg === '--phone' || arg === '-p');
+  const phoneNumber = phoneArgIndex !== -1 ? process.argv[phoneArgIndex + 1]?.replace(/\D/g, '') : null;
+
   const sock = makeWASocket({
     logger: pino({ level: 'silent' }),
     auth: state,
+    browser: Browsers.ubuntu('Chrome'),
     markOnlineOnConnect: false,
     syncFullHistory: false,
   });
 
   sock.ev.on('creds.update', saveCreds);
 
+  if (phoneNumber && !state.creds.registered) {
+    setTimeout(async () => {
+      try {
+        const code = await sock.requestPairingCode(phoneNumber);
+        console.log('\n============================================================');
+        console.log(`YOUR WHATSAPP PAIRING CODE: ${code}`);
+        console.log('============================================================');
+        console.log('On your phone:');
+        console.log('1. Open WhatsApp -> Settings -> Linked Devices');
+        console.log('2. Tap "Link a device"');
+        console.log('3. Tap "Link with phone number instead" at the bottom');
+        console.log(`4. Enter code: ${code}\n`);
+      } catch (err) {
+        console.error('Failed to request pairing code:', err.message || err);
+      }
+    }, 2000);
+  }
+
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
-    if (qr) {
+    if (qr && !phoneNumber) {
       console.log('\nScan this QR code with WhatsApp:\n');
       qrcode.generate(qr, { small: true });
+      console.log('(Tip: If scanning fails, you can also link using your phone number:');
+      console.log(' node list-groups.js --phone 234XXXXXXXXXX "YOUR_INVITE_URL")\n');
     }
 
     if (connection === 'open') {
-      console.log('\nConnected to WhatsApp!\n');
+      console.log('\n Connected to WhatsApp!\n');
 
       // Check if an invite link was provided as a CLI argument
       const inviteArg = process.argv.slice(2).find((arg) => arg.includes('chat.whatsapp.com'));
@@ -30,11 +55,11 @@ async function listGroups() {
         try {
           const info = await sock.groupGetInviteInfo(code);
           const jid = info.id.endsWith('@g.us') ? info.id : `${info.id}@g.us`;
-          console.log('------------------------------------------------------------');
+          console.log('============================================================');
           console.log(`Invite Link Resolved:`);
           console.log(`  Group Name: ${info.subject}`);
           console.log(`  Group ID:   ${jid}`);
-          console.log('------------------------------------------------------------\n');
+          console.log('============================================================\n');
         } catch (err) {
           console.error(`Could not resolve invite link:`, err.message || err);
         }

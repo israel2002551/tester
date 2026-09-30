@@ -1,4 +1,5 @@
 import makeWASocket, {
+  Browsers,
   DisconnectReason,
   downloadMediaMessage,
   useMultiFileAuthState,
@@ -219,6 +220,7 @@ async function startCollector() {
   const sock = makeWASocket({
     logger: pino({ level: 'silent' }),
     auth: state,
+    browser: Browsers.ubuntu('Chrome'),
     markOnlineOnConnect: false,
     syncFullHistory: false,
   });
