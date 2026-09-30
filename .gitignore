@@ -4,6 +4,8 @@ config.js
 .env.local
 .env.*.local
 .env.cloudinary-migration
+wa_auth_session/
+*/wa_auth_session/
 
 # Python cache
 __pycache__/
