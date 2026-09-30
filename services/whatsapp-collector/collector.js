@@ -5,6 +5,7 @@ import makeWASocket, {
   useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
 import { createHash, randomBytes } from 'node:crypto';
+import http from 'node:http';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import 'dotenv/config';
@@ -216,7 +217,10 @@ async function startCollector() {
   } catch (error) {
     console.warn('[Group configuration] Collector started without an approved-group list:', error?.message || error);
   }
-  const { state, saveCreds } = await useMultiFileAuthState('./wa_auth_session');
+  const sessionDir = process.env.SESSION_DIR || './wa_auth_session';
+  const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+  const phoneNumber = (process.env.WHATSAPP_PHONE_NUMBER || '').replace(/\D/g, '');
+
   const sock = makeWASocket({
     logger: pino({ level: 'silent' }),
     auth: state,
@@ -225,8 +229,28 @@ async function startCollector() {
     syncFullHistory: false,
   });
   sock.ev.on('creds.update', saveCreds);
+
+  if (phoneNumber && !state.creds.registered) {
+    setTimeout(async () => {
+      try {
+        const code = await sock.requestPairingCode(phoneNumber);
+        const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
+        console.log('\n============================================================');
+        console.log(`YOUR WHATSAPP PAIRING CODE: ${formatted}`);
+        console.log('============================================================');
+        console.log('On your phone:');
+        console.log('1. Open WhatsApp -> Settings -> Linked Devices');
+        console.log('2. Tap "Link a device"');
+        console.log('3. Tap "Link with phone number instead" at the bottom');
+        console.log(`4. Enter code: ${formatted}\n`);
+      } catch (err) {
+        console.error('Failed to request pairing code:', err?.message || err);
+      }
+    }, 3000);
+  }
+
   sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-    if (qr) {
+    if (qr && !phoneNumber) {
       console.log('Scan this QR code with the dedicated BUYSELL WhatsApp account:');
       qrcode.generate(qr, { small: true });
     }
@@ -241,6 +265,22 @@ async function startCollector() {
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return;
     for (const message of messages) await onMessage(sock, message);
+  });
+}
+
+const port = process.env.PORT || null;
+if (port) {
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      status: 'ok',
+      service: 'buysell-whatsapp-collector',
+      groups_monitored: targetGroups.size,
+      uptime: Math.round(process.uptime()),
+    }));
+  });
+  server.listen(port, () => {
+    console.info(`[HTTP] Render health check listening on port ${port}`);
   });
 }
 
