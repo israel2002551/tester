@@ -77,10 +77,10 @@ export default function CartDrawer({ isOpen, onClose, onCartChange }) {
     // When this drawer was opened from the marketplace shell, preserve its
     // authenticated runtime rather than forcing a full page reload.
     if (typeof window.bsNavigate === 'function') {
-      window.bsNavigate('/?view=shop&page=checkout');
+      window.bsNavigate('/checkout');
       return;
     }
-    window.location.assign('/?view=shop&page=checkout');
+    window.location.assign('/checkout');
   };
 
   return (
