@@ -33,3 +33,4 @@ services:
         sync: false
       - key: MAX_MEDIA_BYTES
         value: "26214400"
+
