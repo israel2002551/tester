@@ -273,7 +273,7 @@ async function startCollector() {
     }
   });
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;
+    if (type !== 'notify' && type !== 'append') return;
     for (const message of messages) await onMessage(sock, message);
   });
 }
