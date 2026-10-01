@@ -2,6 +2,8 @@ import makeWASocket, {
   Browsers,
   DisconnectReason,
   downloadMediaMessage,
+  extractMessageContent,
+  normalizeMessageContent,
   useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
 import { createHash, randomBytes } from 'node:crypto';
@@ -21,8 +23,48 @@ const reportedUnapprovedGroups = new Set();
 const groupRefreshMs = 60_000;
 let lastGroupRefreshAt = 0;
 let groupRefreshPromise = null;
-const mediaQueue = new Map();
-const albumDelayMs = 1_500;
+
+// Built-in list of approved groups (server list + all detected active seller groups)
+const defaultKnownGroups = [
+  '120363405967163832@g.us',
+  '2348115894343-1610476263@g.us',
+  '120363423548052642@g.us',
+  '120363420805394892@g.us',
+  '120363418168443320@g.us',
+  '120363426664187889@g.us',
+  '120363409064832008@g.us',
+  '120363405923643530@g.us',
+  '120363176089818281@g.us',
+  '120363272312108397@g.us',
+  '120363422514509383@g.us',
+  '120363304586013963@g.us',
+  '120363425601990856@g.us',
+  '120363408122221974@g.us',
+];
+
+const envTargetGroups = (process.env.WHATSAPP_TARGET_GROUPS || '')
+  .split(',')
+  .map(g => g.trim())
+  .filter(g => g.endsWith('@g.us'));
+
+const monitorAllGroups = String(process.env.WHATSAPP_MONITOR_ALL_GROUPS || 'false').toLowerCase() === 'true';
+
+// In-memory message store to satisfy Baileys retry requests and avoid Signal session Bad MAC desync
+const messageStore = new Map();
+function saveMessage(message) {
+  const id = message?.key?.id;
+  if (!id) return;
+  messageStore.set(id, message);
+  if (messageStore.size > 500) {
+    const oldestKey = messageStore.keys().next().value;
+    messageStore.delete(oldestKey);
+  }
+}
+
+// Multi-message buffering for photos and follow-up descriptions
+const pendingBundles = new Map();
+const recentUncaptionedMedia = new Map();
+const bundleWindowMs = 5_000;
 
 /**
  * Approved group IDs are managed from the BUYSELL admin dashboard. Keeping
@@ -39,11 +81,23 @@ async function refreshTargetGroups(force = false) {
     .then((result) => {
       const groups = Array.isArray(result?.groups) ? result.groups : [];
       targetGroups.clear();
+      // Server-managed groups
       groups.forEach((groupJid) => {
         const normalized = String(groupJid || '').trim();
         if (normalized) targetGroups.add(normalized);
       });
-      console.info(`[Groups] Monitoring ${targetGroups.size} approved WhatsApp group${targetGroups.size === 1 ? '' : 's'}.`);
+      // Known detected groups
+      defaultKnownGroups.forEach(g => targetGroups.add(g));
+      // Environment variable groups
+      envTargetGroups.forEach(g => targetGroups.add(g));
+
+      console.info(`[Groups] Monitoring ${targetGroups.size} approved WhatsApp group${targetGroups.size === 1 ? '' : 's'}.${monitorAllGroups ? ' (Auto-monitoring ALL groups)' : ''}`);
+      return targetGroups;
+    })
+    .catch((err) => {
+      console.warn('[Groups] Could not load groups from server, using local list:', err?.message || err);
+      defaultKnownGroups.forEach(g => targetGroups.add(g));
+      envTargetGroups.forEach(g => targetGroups.add(g));
       return targetGroups;
     })
     .finally(() => {
@@ -52,36 +106,39 @@ async function refreshTargetGroups(force = false) {
   return groupRefreshPromise;
 }
 
+function unwrapMessage(message) {
+  let content = message?.message;
+  if (!content) return {};
+  try {
+    content = normalizeMessageContent(content) || content;
+    content = extractMessageContent(content) || content;
+  } catch {}
+  return content || {};
+}
+
 function messageText(message) {
-  const content = message?.message || {};
+  const content = unwrapMessage(message);
   return String(
     content.conversation
     || content.extendedTextMessage?.text
     || content.imageMessage?.caption
     || content.videoMessage?.caption
+    || content.documentMessage?.caption
     || '',
   ).trim();
 }
 
 function mediaDetails(message) {
-  const content = message?.message || {};
+  const content = unwrapMessage(message);
   if (content.imageMessage) return { kind: 'image', media: content.imageMessage };
   if (content.videoMessage) return { kind: 'video', media: content.videoMessage };
   return null;
 }
 
 function sourceId(groupJid, senderJid, messageIds) {
-  const identifiers = [...new Set(messageIds.filter(Boolean))].sort().join('|');
+  const identifiers = [...new Set((messageIds || []).filter(Boolean))].sort().join('|');
   const digest = createHash('sha256').update(`${groupJid}|${senderJid}|${identifiers}`).digest('hex');
   return `wa_${digest}`;
-}
-
-function albumBucket(message) {
-  const timestamp = message?.messageTimestamp;
-  // WhatsApp album messages normally share this timestamp. If it is absent,
-  // keep the media isolated rather than risk merging distinct sale posts.
-  const stamp = timestamp === undefined || timestamp === null ? message?.key?.id : String(timestamp);
-  return stamp || randomBytes(8).toString('hex');
 }
 
 function rawPhone(senderJid) {
@@ -91,7 +148,7 @@ function rawPhone(senderJid) {
 
 async function processListing(bundle, sock) {
   if (!bundle || !bundle.text || !looksLikeSalePost(bundle.text)) return;
-  console.info(`[Parsing] Checking sale post from ${bundle.senderJid}: "${bundle.text.slice(0, 60)}..."`);
+  console.info(`[Parsing] Checking sale post from ${bundle.senderJid}: "${bundle.text.slice(0, 60).replace(/\n/g, ' ')}..."`);
   const parsed = await parseListingWithGroq(bundle.text);
   if (!parsed?.is_commercial_listing) {
     console.info(`[Skipped] ${bundle.senderJid}: Groq determined this is not a commercial sale post.`);
@@ -104,7 +161,7 @@ async function processListing(bundle, sock) {
 
   const id = sourceId(bundle.groupJid, bundle.senderJid, bundle.messageIds);
   try {
-    const media = await Promise.all(bundle.media.map((item, index) => uploadWhatsAppMedia({
+    const media = await Promise.all((bundle.media || []).map((item, index) => uploadWhatsAppMedia({
       buffer: item.buffer,
       kind: item.kind,
       mimeType: item.mimeType,
@@ -146,21 +203,75 @@ async function processListing(bundle, sock) {
   }
 }
 
-function queueMedia(message, groupJid, senderJid, details, text, sock) {
-  const bucket = `${groupJid}:${senderJid}:${albumBucket(message)}`;
-  let bundle = mediaQueue.get(bucket);
+function queueListingItem({ groupJid, senderJid, messageId, details, text, sock }) {
+  const key = `${groupJid}:${senderJid}`;
+  let bundle = pendingBundles.get(key);
   if (!bundle) {
-    bundle = { groupJid, senderJid, text: '', media: [], messageIds: [], timer: null };
-    mediaQueue.set(bucket, bundle);
+    bundle = {
+      groupJid,
+      senderJid,
+      texts: [],
+      media: [],
+      messageIds: [],
+      timer: null,
+    };
+    pendingBundles.set(key, bundle);
   }
-  bundle.messageIds.push(message.key?.id);
-  if (text.length > bundle.text.length) bundle.text = text;
-  bundle.media.push(details);
+
+  if (messageId && !bundle.messageIds.includes(messageId)) {
+    bundle.messageIds.push(messageId);
+  }
+
+  // If there was uncaptioned media buffered recently for this sender, attach it!
+  if (recentUncaptionedMedia.has(key)) {
+    const cached = recentUncaptionedMedia.get(key);
+    clearTimeout(cached.timer);
+    recentUncaptionedMedia.delete(key);
+    bundle.media.push(...cached.media);
+    bundle.messageIds.push(...cached.messageIds);
+  }
+
+  if (details) {
+    bundle.media.push(details);
+  }
+
+  if (text && text.trim()) {
+    const clean = text.trim();
+    if (!bundle.texts.includes(clean)) {
+      bundle.texts.push(clean);
+    }
+  }
+
   if (bundle.timer) clearTimeout(bundle.timer);
-  bundle.timer = setTimeout(() => {
-    mediaQueue.delete(bucket);
-    processListing(bundle, sock);
-  }, albumDelayMs);
+
+  bundle.timer = setTimeout(async () => {
+    pendingBundles.delete(key);
+    const combinedText = bundle.texts.join('\n').trim();
+
+    // If media was sent without any text, hold it for 45s in case the seller sends text separately
+    if (!combinedText) {
+      if (bundle.media.length > 0) {
+        console.info(`[Buffer] ${bundle.senderJid} posted ${bundle.media.length} image(s) without text. Holding for 45s for follow-up...`);
+        const timer = setTimeout(() => {
+          recentUncaptionedMedia.delete(key);
+        }, 45_000);
+        recentUncaptionedMedia.set(key, {
+          media: bundle.media,
+          messageIds: bundle.messageIds,
+          timer,
+        });
+      }
+      return;
+    }
+
+    await processListing({
+      groupJid: bundle.groupJid,
+      senderJid: bundle.senderJid,
+      text: combinedText,
+      media: bundle.media,
+      messageIds: bundle.messageIds,
+    }, sock);
+  }, bundleWindowMs);
 }
 
 async function onMessage(sock, message) {
@@ -190,7 +301,7 @@ async function onMessage(sock, message) {
     console.error('[Group configuration]', error?.message || error);
     return;
   }
-  if (!targetGroups.has(remoteJid)) {
+  if (!monitorAllGroups && !targetGroups.has(remoteJid)) {
     if (!reportedUnapprovedGroups.has(remoteJid)) {
       reportedUnapprovedGroups.add(remoteJid);
       console.info(`[WhatsApp Group Detected] ID: ${remoteJid} (Not in approved list. Add this ID in Super Admin -> WhatsApp to monitor)`);
@@ -198,28 +309,43 @@ async function onMessage(sock, message) {
     return;
   }
 
-  const myJid = (sock?.user?.id ? sock.user.id.split(':')[0] : '') + '@s.whatsapp.net';
-  const senderJid = message?.key?.participant || (isFromMe ? myJid : remoteJid);
+  const myPhone = sock?.user?.id ? sock.user.id.split(':')[0] : '';
+  const myJid = myPhone ? `${myPhone}@s.whatsapp.net` : '';
+  const senderJid = isFromMe
+    ? (myJid || message?.key?.participant || remoteJid)
+    : (message?.key?.participant || remoteJid);
+
   const details = mediaDetails(message);
 
-  console.info(`[Group Message] In ${remoteJid} from ${senderJid} (hasMedia: ${Boolean(details)}, fromMe: ${isFromMe}): "${text.slice(0, 50)}"`);
+  console.info(`[Group Message] In ${remoteJid} from ${senderJid} (hasMedia: ${Boolean(details)}, fromMe: ${isFromMe}): "${text.slice(0, 50).replace(/\n/g, ' ')}"`);
 
-  if (!details) {
-    if (!looksLikeSalePost(text)) return;
-    await processListing({ groupJid: remoteJid, senderJid, text, media: [], messageIds: [message.key?.id] }, sock);
-    return;
+  let mediaBuffer = null;
+  if (details) {
+    try {
+      mediaBuffer = await downloadMediaMessage({ message: unwrapMessage(message) }, 'buffer', {}, { logger: pino({ level: 'silent' }) });
+    } catch {
+      try {
+        mediaBuffer = await downloadMediaMessage(message, 'buffer', {}, { logger: pino({ level: 'silent' }) });
+      } catch (err) {
+        console.error('[Media download]', err?.message || err);
+      }
+    }
   }
 
-  try {
-    const buffer = await downloadMediaMessage(message, 'buffer', {}, { logger: pino({ level: 'silent' }) });
-    queueMedia(message, remoteJid, senderJid, {
-      buffer,
-      kind: details.kind,
-      mimeType: details.media?.mimetype || '',
-    }, text, sock);
-  } catch (error) {
-    console.error('[Media download]', error?.message || error);
-  }
+  const itemDetails = mediaBuffer ? {
+    buffer: mediaBuffer,
+    kind: details.kind,
+    mimeType: details.media?.mimetype || '',
+  } : null;
+
+  queueListingItem({
+    groupJid: remoteJid,
+    senderJid,
+    messageId: message.key?.id,
+    details: itemDetails,
+    text,
+    sock,
+  });
 }
 
 async function startCollector() {
@@ -238,6 +364,10 @@ async function startCollector() {
     browser: Browsers.ubuntu('Chrome'),
     markOnlineOnConnect: true,
     syncFullHistory: false,
+    getMessage: async (key) => {
+      const msg = messageStore.get(key.id);
+      return msg?.message || undefined;
+    },
   });
   sock.ev.on('creds.update', saveCreds);
 
@@ -282,9 +412,13 @@ async function startCollector() {
       if (reconnect) setTimeout(startCollector, 3_000);
     }
   });
+
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify' && type !== 'append') return;
-    for (const message of messages) await onMessage(sock, message);
+    for (const message of messages) {
+      saveMessage(message);
+      await onMessage(sock, message);
+    }
   });
 }
 
@@ -296,6 +430,7 @@ if (port) {
       status: 'ok',
       service: 'buysell-whatsapp-collector',
       groups_monitored: targetGroups.size,
+      all_groups_monitored: monitorAllGroups,
       uptime: Math.round(process.uptime()),
     }));
   });

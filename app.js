@@ -7561,7 +7561,10 @@ function ensureWhatsAppListingsAdminPanel() {
 }
 
 function visibleWhatsAppAdminInput(selector) {
- return [...document.querySelectorAll(selector)].find(node => node.offsetParent !== null) || document.querySelector(selector);
+ const nodes = [...document.querySelectorAll(selector)];
+ const filled = nodes.find(node => node.value && node.value.trim().length > 0);
+ if (filled) return filled;
+ return nodes.find(node => node.offsetParent !== null) || nodes[0] || null;
 }
 
 async function adminWhatsAppRequest(command, payload = {}) {
@@ -7638,8 +7641,7 @@ async function adminAddWhatsAppGroup() {
  if (!groupJid) { toast('Group ID required', 'Paste the WhatsApp group ID ending in @g.us.', 'warn'); return; }
  try {
   await adminWhatsAppRequest('add_group', { group_jid: groupJid, display_name: displayName });
-  if (groupInput) groupInput.value = '';
-  if (nameInput) nameInput.value = '';
+  document.querySelectorAll('[data-whatsapp-group-jid], [data-whatsapp-group-name]').forEach(node => { node.value = ''; });
   toast('WhatsApp group added', 'The collector will begin monitoring it within about one minute.', 'success');
   loadAdminWhatsAppListings();
  } catch (error) {
