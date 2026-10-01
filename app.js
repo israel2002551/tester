@@ -818,35 +818,50 @@ let activePageSurface = '';
 
 function setSurfaceRoute(page, historyMode = 'auto') {
   const url = new URL(window.location.href);
-  url.searchParams.set('view', 'shop');
-  if (page) url.searchParams.set('page', page);
-  else url.searchParams.delete('page');
-  url.searchParams.delete('cart');
-  url.searchParams.delete('checkout');
   const current = new URL(window.location.href);
-  const routeAlreadyMatches =
-   current.searchParams.get('view') === 'shop' &&
-   current.searchParams.get('page') === (page || null) &&
-   !current.searchParams.has('cart') &&
-   !current.searchParams.has('checkout');
+
+  if (page === 'checkout') {
+   url.pathname = '/checkout';
+   url.searchParams.delete('view');
+   url.searchParams.delete('page');
+   url.searchParams.delete('cart');
+   url.searchParams.delete('checkout');
+  } else {
+   if (url.pathname === '/checkout') url.pathname = '/';
+   url.searchParams.set('view', 'shop');
+   if (page) url.searchParams.set('page', page);
+   else url.searchParams.delete('page');
+   url.searchParams.delete('cart');
+   url.searchParams.delete('checkout');
+  }
+
+  const target = `${url.pathname}${url.search}${url.hash}`;
+  const currentTarget = `${current.pathname}${current.search}${current.hash}`;
+  const routeAlreadyMatches = target === currentTarget;
   const replace = historyMode === 'replace' || routeAlreadyMatches;
+
   if (window.history?.[replace ? 'replaceState' : 'pushState']) {
    history[replace ? 'replaceState' : 'pushState'](
-    { page: page || 'shop', view: 'shop' },
+    { page: page || 'shop', view: page === 'checkout' ? 'checkout' : 'shop' },
     document.title,
-    `${url.pathname}${url.search}${url.hash}`
+    target
    );
   }
 }
 
 function clearPageSurfaceRoute() {
  const url = new URL(window.location.href);
+ if (url.pathname === '/checkout') url.pathname = '/';
  url.searchParams.delete('page');
  url.searchParams.delete('cart');
  url.searchParams.delete('checkout');
  if (!url.searchParams.get('view')) url.searchParams.set('view', 'shop');
  if (window.history?.replaceState) {
-  history.replaceState({ view: url.searchParams.get('view') || 'shop' }, '', `${url.pathname}${url.search}${url.hash}`);
+  history.replaceState(
+   { view: url.searchParams.get('view') || 'shop' },
+   '',
+   `${url.pathname}${url.search}${url.hash}`
+  );
  }
 }
 
