@@ -235,7 +235,7 @@ async function startCollector() {
     logger: pino({ level: 'silent' }),
     auth: state,
     browser: Browsers.ubuntu('Chrome'),
-    markOnlineOnConnect: false,
+    markOnlineOnConnect: true,
     syncFullHistory: false,
   });
   sock.ev.on('creds.update', saveCreds);
@@ -264,12 +264,16 @@ async function startCollector() {
       console.log('Scan this QR code with the dedicated BUYSELL WhatsApp account:');
       qrcode.generate(qr, { small: true });
     }
-    if (connection === 'open') console.log('BUYSELL WhatsApp collector is monitoring approved groups.');
+    if (connection === 'open') {
+      console.log('BUYSELL WhatsApp collector is monitoring approved groups.');
+      sock.sendPresenceUpdate('available').catch(() => {});
+    }
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode;
       const reconnect = code !== DisconnectReason.loggedOut;
       console.warn(`WhatsApp connection closed (${code || 'unknown'}). Reconnect: ${reconnect}`);
-      if (reconnect) setTimeout(startCollector, 2_000);
+      try { sock.ws?.close(); } catch {}
+      if (reconnect) setTimeout(startCollector, 3_000);
     }
   });
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
