@@ -8,6 +8,13 @@ let runtimePromise;
 
 function revealMarketplaceRoute(root) {
   const params = new URLSearchParams(window.location.search);
+  const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
+
+  if (pathname === '/checkout') {
+    window.startCheckout?.({ historyMode: 'replace' });
+    return;
+  }
+
 
   // The legacy runtime normally reveals this surface from its auth-state
   // listener.  That listener is asynchronous, however, and a public desktop
