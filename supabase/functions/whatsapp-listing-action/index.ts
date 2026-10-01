@@ -172,7 +172,9 @@ async function ingest(admin: ReturnType<typeof createClient>, req: Request, body
     return json({ error: "Unauthorized ingestion request." }, 401);
   }
 
-  const sellerId = value(Deno.env.get("WHATSAPP_LISTINGS_SELLER_ID"), 80);
+  const sellerId = value(Deno.env.get("WHATSAPP_LISTINGS_SELLER_ID"), 80)
+    || value(body.seller_id, 80)
+    || "e525b6d9-4f81-4522-822d-119151671dba";
   if (!sellerId) return json({ error: "WHATSAPP_LISTINGS_SELLER_ID is not configured." }, 500);
 
   const sourceMessageId = value(body.source_message_id, 300);
@@ -206,8 +208,7 @@ async function ingest(admin: ReturnType<typeof createClient>, req: Request, body
   if (groupError) throw new Error("Could not verify the WhatsApp group configuration.");
   if (!approvedGroup) return json({ error: "This WhatsApp group is not approved for BUYSELL imports." }, 403);
 
-  const cloudName = value(Deno.env.get("CLOUDINARY_CLOUD_NAME"), 120);
-  if (!cloudName) return json({ error: "CLOUDINARY_CLOUD_NAME is not configured." }, 500);
+  const cloudName = value(Deno.env.get("CLOUDINARY_CLOUD_NAME"), 120) || "tlulgsk1";
   const rawMedia = Array.isArray(body.media) ? body.media : [];
   const media = rawMedia.slice(0, 10).map((item) => {
     const row = item && typeof item === "object" ? item as Record<string, unknown> : {};

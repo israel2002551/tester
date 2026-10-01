@@ -21,27 +21,47 @@ Return exactly one JSON object with these keys:
 Do not invent price, condition, contact details, availability, or product facts. Output only JSON.
 `;
 
+const FALLBACK_MODELS = [
+  process.env.GROQ_MODEL,
+  'qwen/qwen3.8-27b',
+  'openai/gpt-oss-20b',
+  'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant',
+].filter(Boolean);
+
+let activeModel = FALLBACK_MODELS[0];
+
 export async function parseListingWithGroq(text) {
   const message = String(text || '').trim();
   if (message.length < 6) return { is_commercial_listing: false };
 
-  try {
-    const completion = await groq.chat.completions.create({
-      model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
-      messages: [
-        { role: 'system', content: PROMPT_TEMPLATE },
-        { role: 'user', content: `WhatsApp post:\n"""${message}"""` },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.1,
-      max_tokens: 600,
-    });
-    const parsed = JSON.parse(completion.choices?.[0]?.message?.content || '{}');
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch (error) {
-    console.error('[Groq parser]', error?.message || error);
-    return null;
+  // Try the last successful or preferred model first, then fall back
+  const modelsToTry = [activeModel, ...FALLBACK_MODELS.filter((m) => m !== activeModel)];
+
+  for (const model of modelsToTry) {
+    try {
+      const completion = await groq.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: PROMPT_TEMPLATE },
+          { role: 'user', content: `WhatsApp post:\n"""${message}"""` },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+        max_tokens: 600,
+      });
+      const parsed = JSON.parse(completion.choices?.[0]?.message?.content || '{}');
+      if (parsed && typeof parsed === 'object') {
+        activeModel = model;
+        return parsed;
+      }
+    } catch (error) {
+      console.warn(`[Groq parser] Model ${model} failed (${error?.message || error}), trying fallback...`);
+    }
   }
+
+  console.error('[Groq parser] All candidate models failed to parse listing.');
+  return null;
 }
 
 export function looksLikeSalePost(text) {

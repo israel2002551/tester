@@ -123,6 +123,7 @@ async function processListing(bundle, sock) {
       specs: parsed.specs,
       negotiable: false,
       media,
+      seller_id: process.env.WHATSAPP_LISTINGS_SELLER_ID || 'e525b6d9-4f81-4522-822d-119151671dba',
     });
     if (!listing.created) {
       console.info(`[Deduplicated] ${id}`);
