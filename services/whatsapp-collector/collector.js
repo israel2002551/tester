@@ -5,6 +5,7 @@ import makeWASocket, {
   useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
 import { createHash, randomBytes } from 'node:crypto';
+import { rmSync, existsSync } from 'node:fs';
 import http from 'node:http';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
@@ -270,8 +271,13 @@ async function startCollector() {
     }
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode;
-      const reconnect = code !== DisconnectReason.loggedOut;
+      const isLoggedOut = code === DisconnectReason.loggedOut;
+      const reconnect = !isLoggedOut;
       console.warn(`WhatsApp connection closed (${code || 'unknown'}). Reconnect: ${reconnect}`);
+      if (isLoggedOut) {
+        console.warn('[Session] Session unlinked or logged out. Resetting session directory for fresh pairing.');
+        try { rmSync(sessionDir, { recursive: true, force: true }); } catch {}
+      }
       try { sock.ws?.close(); } catch {}
       if (reconnect) setTimeout(startCollector, 3_000);
     }
