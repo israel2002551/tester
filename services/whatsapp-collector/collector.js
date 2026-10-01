@@ -90,10 +90,14 @@ function rawPhone(senderJid) {
 
 async function processListing(bundle, sock) {
   if (!bundle || !bundle.text || !looksLikeSalePost(bundle.text)) return;
+  console.info(`[Parsing] Checking sale post from ${bundle.senderJid}: "${bundle.text.slice(0, 60)}..."`);
   const parsed = await parseListingWithGroq(bundle.text);
-  if (!parsed?.is_commercial_listing) return;
+  if (!parsed?.is_commercial_listing) {
+    console.info(`[Skipped] ${bundle.senderJid}: Groq determined this is not a commercial sale post.`);
+    return;
+  }
   if (!Number.isFinite(Number(parsed.price)) || Number(parsed.price) <= 0) {
-    console.info(`[Skipped] ${bundle.senderJid}: a fixed price was not found.`);
+    console.info(`[Skipped] ${bundle.senderJid}: A fixed price was not found.`);
     return;
   }
 
@@ -160,10 +164,12 @@ function queueMedia(message, groupJid, senderJid, details, text, sock) {
 
 async function onMessage(sock, message) {
   const remoteJid = message?.key?.remoteJid;
-  if (!remoteJid || message?.key?.fromMe) return;
+  if (!remoteJid) return;
+  const isFromMe = Boolean(message?.key?.fromMe);
   const text = messageText(message);
 
   if (remoteJid.endsWith('@s.whatsapp.net')) {
+    if (isFromMe) return; // avoid looping on bot's own outgoing direct messages
     const command = text.toUpperCase();
     if (!['SOLD', 'DELETE'].includes(command)) return;
     try {
@@ -180,8 +186,6 @@ async function onMessage(sock, message) {
   try {
     await refreshTargetGroups();
   } catch (error) {
-    // Fail closed: a temporary configuration error must never turn into a
-    // broad import of every group joined by the collector account.
     console.error('[Group configuration]', error?.message || error);
     return;
   }
@@ -192,8 +196,13 @@ async function onMessage(sock, message) {
     }
     return;
   }
-  const senderJid = message?.key?.participant || remoteJid;
+
+  const myJid = (sock?.user?.id ? sock.user.id.split(':')[0] : '') + '@s.whatsapp.net';
+  const senderJid = message?.key?.participant || (isFromMe ? myJid : remoteJid);
   const details = mediaDetails(message);
+
+  console.info(`[Group Message] In ${remoteJid} from ${senderJid} (hasMedia: ${Boolean(details)}, fromMe: ${isFromMe}): "${text.slice(0, 50)}"`);
+
   if (!details) {
     if (!looksLikeSalePost(text)) return;
     await processListing({ groupJid: remoteJid, senderJid, text, media: [], messageIds: [message.key?.id] }, sock);
