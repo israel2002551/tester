@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: buysell-whatsapp-collector
+    runtime: node
+    plan: free
+    rootDir: services/whatsapp-collector
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: WHATSAPP_INGEST_SECRET
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: qwen/qwen3.8-27b
+      - key: WHATSAPP_LISTINGS_SELLER_ID
+        value: e525b6d9-4f81-4522-822d-119151671dba
+      - key: PUBLIC_SITE_URL
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER
+        sync: false
+      - key: MAX_MEDIA_BYTES
+        value: "26214400"
