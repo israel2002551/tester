@@ -6,6 +6,12 @@ config.js
 .env.cloudinary-migration
 wa_auth_session/
 */wa_auth_session/
+wa_vision_auth_session/
+*/wa_vision_auth_session/
+wa_admin_dispatcher_session/
+*/wa_admin_dispatcher_session/
+notified_sales.json
+*/notified_sales.json
 
 # Python cache
 __pycache__/

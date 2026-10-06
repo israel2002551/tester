@@ -493,6 +493,76 @@ async function adminDashboardAction(admin: ReturnType<typeof createClient>, req:
   return json({ error: "Unknown administrator action." }, 400);
 }
 
+async function orderWhatsAppSales(admin: ReturnType<typeof createClient>, req: Request, _body: Record<string, unknown>) {
+  const ingestSecret = Deno.env.get("WHATSAPP_INGEST_SECRET") || "";
+  if (!ingestSecret || req.headers.get("x-whatsapp-ingest-secret") !== ingestSecret) {
+    return json({ error: "Unauthorized." }, 401);
+  }
+
+  const { data: orders, error: ordersError } = await admin
+    .from("orders")
+    .select("id,items,total_amount,status,delivery_name,delivery_phone,delivery_address,created_at")
+    .in("status", ["confirmed", "delivered", "shipped"])
+    .order("created_at", { ascending: false })
+    .limit(30);
+
+  if (ordersError) throw new Error("Could not load orders.");
+
+  const allProductIds = new Set<string>();
+  (orders || []).forEach((order: any) => {
+    const items = Array.isArray(order?.items) ? order.items : [];
+    items.forEach((item: any) => {
+      const pid = String(item?.id || item?.product_id || "");
+      if (pid) allProductIds.add(pid);
+    });
+  });
+
+  if (allProductIds.size === 0) return json({ sales: [] });
+
+  const { data: metaList, error: metaError } = await admin
+    .from("whatsapp_listing_meta")
+    .select("product_id,group_jid,sender_jid,sender_phone,source_price,created_at")
+    .in("product_id", Array.from(allProductIds));
+
+  if (metaError || !metaList || metaList.length === 0) return json({ sales: [] });
+
+  const metaMap = new Map((metaList as any[]).map((m: any) => [m.product_id, m]));
+  const groupJids = Array.from(new Set((metaList as any[]).map((m: any) => m.group_jid)));
+  const { data: groupSettings } = await admin
+    .from("whatsapp_group_settings")
+    .select("group_jid,display_name")
+    .in("group_jid", groupJids);
+
+  const groupNameMap = new Map((groupSettings || []).map((g: any) => [g.group_jid, g.display_name]));
+
+  const sales: Array<Record<string, unknown>> = [];
+  (orders || []).forEach((order: any) => {
+    const items = Array.isArray(order?.items) ? order.items : [];
+    items.forEach((item: any) => {
+      const pid = String(item?.id || item?.product_id || "");
+      const meta = metaMap.get(pid);
+      if (meta) {
+        sales.push({
+          order_id: order.id,
+          product_id: pid,
+          product_name: item?.name || item?.title || "Marketplace Product",
+          paid_price: item?.price || order.total_amount,
+          group_jid: meta.group_jid,
+          group_name: groupNameMap.get(meta.group_jid) || "WhatsApp Seller Group",
+          seller_phone: meta.sender_phone || String(meta.sender_jid || "").split("@")[0] || "",
+          source_price: meta.source_price,
+          delivery_name: order.delivery_name || "Customer",
+          delivery_phone: order.delivery_phone || "",
+          delivery_address: order.delivery_address || "",
+          order_created_at: order.created_at,
+        });
+      }
+    });
+  });
+
+  return json({ sales });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -508,6 +578,7 @@ serve(async (req) => {
     if (action === "ingest") return await ingest(admin, req, body);
     if (action === "seller_command") return await sellerCommand(admin, req, body);
     if (action === "collector_groups") return await approvedGroupsForCollector(admin, req);
+    if (action === "order_whatsapp_sales") return await orderWhatsAppSales(admin, req, body);
     if (action === "admin") return await adminDashboardAction(admin, req, body);
     if (action === "manage_get") {
       const listing = await managedListing(admin, body);

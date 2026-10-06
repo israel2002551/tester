@@ -30,5 +30,7 @@ services:
         sync: false
       - key: WHATSAPP_PHONE_NUMBER
         sync: false
+      - key: ADMIN_PHONE_NUMBER
+        sync: false
       - key: MAX_MEDIA_BYTES
         value: "26214400"

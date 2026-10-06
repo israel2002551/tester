@@ -41,4 +41,8 @@ export class BuySellListingsApi {
   listTargetGroups() {
     return this.request({ action: 'collector_groups' });
   }
+
+  getOrderWhatsAppSales() {
+    return this.request({ action: 'order_whatsapp_sales' });
+  }
 }
