@@ -2,11 +2,19 @@ import { useEffect } from 'react';
 import { marketplaceHtml } from '../legacy/marketplaceHtml.js';
 import { ensureRuntimeConfig, loadClassicScript } from '../lib/browserConfig.js';
 import { authReady, getSession, isProtectedMarketplaceRoute, requireAuth } from '../lib/auth.js';
+import { installFrontendUxRedesign } from '../lib/frontendUx.js';
 
 let runtimePromise;
 
 function revealMarketplaceRoute(root) {
   const params = new URLSearchParams(window.location.search);
+  const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
+
+  if (pathname === '/checkout') {
+    window.startCheckout?.({ historyMode: 'replace' });
+    return;
+  }
+
 
   // The legacy runtime normally reveals this surface from its auth-state
   // listener.  That listener is asynchronous, however, and a public desktop
@@ -67,11 +75,13 @@ export function loadMarketplaceRuntime() {
         // its profile hydration prevents seller/dashboard flash on reload.
         await window.ensureCurrentUser?.();
       })
-      .then(() => window.applyPlatformBrandAssets?.());
+      .then(() => window.applyPlatformBrandAssets?.())
+      .then(() => installFrontendUxRedesign());
   } else {
     // If runtime was already loaded and MarketplacePage is remounted, restore the active marketplace view
     setTimeout(() => {
       window.applyPlatformBrandAssets?.();
+      installFrontendUxRedesign();
       if (typeof window.showBuyerView === 'function') {
         window.showBuyerView();
       }

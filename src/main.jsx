@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import '../styles.css';
+import './redesign.css';
 import App from './App.jsx';
 import PwaInstallPrompt from './components/PwaInstallPrompt.jsx';
 import { isProtectedMarketplaceRoute } from './lib/auth.js';
