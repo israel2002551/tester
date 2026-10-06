@@ -1,6 +1,8 @@
 import makeWASocket, {
   Browsers,
   DisconnectReason,
+  extractMessageContent,
+  normalizeMessageContent,
   useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
 import { rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -30,6 +32,49 @@ function saveNotifiedSale(saleKey) {
   try {
     writeFileSync(cacheFile, JSON.stringify(Array.from(notifiedSales).slice(-500)), 'utf8');
   } catch {}
+}
+
+// In-memory message store to satisfy Baileys retry requests and avoid signal session desync
+const messageStore = new Map();
+function saveMessage(message) {
+  const id = message?.key?.id;
+  if (!id) return;
+  messageStore.set(id, message);
+  if (messageStore.size > 500) {
+    const oldestKey = messageStore.keys().next().value;
+    messageStore.delete(oldestKey);
+  }
+}
+
+function unwrapMessage(msg) {
+  let m = msg?.message || msg;
+  if (!m) return {};
+  while (m?.ephemeralMessage || m?.viewOnceMessage || m?.viewOnceMessageV2 || m?.documentWithCaptionMessage) {
+    m = m?.ephemeralMessage?.message
+      || m?.viewOnceMessage?.message
+      || m?.viewOnceMessageV2?.message
+      || m?.documentWithCaptionMessage?.message;
+  }
+  try {
+    m = normalizeMessageContent(m) || m;
+    m = extractMessageContent(m) || m;
+  } catch {}
+  return m || {};
+}
+
+function extractText(msg) {
+  const m = unwrapMessage(msg);
+  return String(
+    m?.conversation
+    || m?.extendedTextMessage?.text
+    || m?.imageMessage?.caption
+    || m?.videoMessage?.caption
+    || m?.documentMessage?.caption
+    || m?.buttonsResponseMessage?.selectedButtonId
+    || m?.templateButtonReplyMessage?.selectedId
+    || m?.listResponseMessage?.singleSelectReply?.selectedRowId
+    || ''
+  ).trim();
 }
 
 function cleanPhone(raw) {
@@ -110,6 +155,10 @@ async function startDispatcher() {
     browser: Browsers.ubuntu('Chrome'),
     markOnlineOnConnect: true,
     syncFullHistory: false,
+    getMessage: async (key) => {
+      const msg = messageStore.get(key.id);
+      return msg?.message || undefined;
+    },
   });
   activeSock = sock;
 
@@ -159,26 +208,51 @@ async function startDispatcher() {
     }
   });
 
-  // Handle direct commands from Admin (e.g. text STATUS, TEST, CHECK)
+  // Handle direct commands from Admin (e.g. text STATUS, TEST, CHECK, HELP)
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify' && type !== 'append') return;
     for (const msg of messages) {
+      saveMessage(msg);
+
       const remoteJid = msg?.key?.remoteJid;
-      // ONLY respond to 1-on-1 direct messages, NEVER group messages
-      if (!remoteJid || !remoteJid.endsWith('@s.whatsapp.net')) return;
+      if (!remoteJid) continue;
 
-      const text = (msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || '').trim().toUpperCase();
-      if (!text) return;
+      // Ignore group chats and broadcast channels
+      if (remoteJid.endsWith('@g.us') || remoteJid.includes('@broadcast')) continue;
 
-      if (text === 'STATUS' || text === 'PING') {
+      const rawText = extractText(msg);
+      if (!rawText) continue;
+
+      const isFromMe = Boolean(msg?.key?.fromMe);
+      const myPhone = sock?.user?.id ? sock.user.id.split(':')[0] : '';
+      const myJid = myPhone ? `${myPhone}@s.whatsapp.net` : '';
+
+      // If from the bot's own linked phone, only respond if it was sent to self (e.g. Note to self or testing)
+      if (isFromMe && remoteJid !== myJid && !remoteJid.startsWith(myPhone)) {
+        continue;
+      }
+
+      // Avoid infinite response loops if bot replies to its own messages
+      if (isFromMe && (rawText.startsWith('✅') || rawText.startsWith('🤖') || rawText.startsWith('🚨') || rawText.startsWith('🔍'))) {
+        continue;
+      }
+
+      console.info(`[Bot 1] Received direct message from ${remoteJid} (fromMe: ${isFromMe}): "${rawText}"`);
+
+      // Clean command: strip leading slashes/dots/exclamations, trim, and uppercase
+      const cmd = rawText.replace(/^[/!#.]\s*/, '').trim().toUpperCase();
+
+      if (cmd === 'STATUS' || cmd === 'PING') {
         const uptimeMin = Math.round(process.uptime() / 60);
-        await sock.sendMessage(remoteJid, {
-          text: `✅ *BUYSELL Admin Dispatcher is Online*\n\n⏱️ *Uptime:* ${uptimeMin} minutes\n📱 *Admin Alert Target:* +${adminPhoneNumber}\n📦 *Sales Alerts Sent:* ${notifiedSales.size}\n\nSend *CHECK* to manually scan for new orders.`
-        }).catch(() => {});
-      } else if (text === 'CHECK') {
-        await sock.sendMessage(remoteJid, { text: '🔍 Scanning for new WhatsApp sales...' }).catch(() => {});
+        const reply = `✅ *BUYSELL Admin Dispatcher is Online*\n\n⏱️ *Uptime:* ${uptimeMin} minutes\n📱 *Admin Alert Target:* +${adminPhoneNumber}\n📦 *Sales Alerts Sent:* ${notifiedSales.size}\n\nSend *CHECK* to manually scan for new orders.`;
+        await sock.sendMessage(remoteJid, { text: reply })
+          .then(() => console.info(`[Bot 1] Sent STATUS reply to ${remoteJid}`))
+          .catch(err => console.error(`[Bot 1] Failed to send STATUS reply to ${remoteJid}:`, err?.message || err));
+      } else if (cmd === 'CHECK') {
+        await sock.sendMessage(remoteJid, { text: '🔍 Scanning for new WhatsApp sales...' })
+          .catch(err => console.error(`[Bot 1] Failed to send CHECK ack:`, err?.message || err));
         await checkAndNotifySales();
-      } else if (text === 'TEST') {
+      } else if (cmd === 'TEST') {
         const testAlert = buildAdminSaleAlert({
           order_id: 'TEST-ORD-001',
           product_name: 'iPhone 13 128GB (Sample Alert)',
@@ -191,7 +265,24 @@ async function startDispatcher() {
           delivery_phone: '08012345678',
           delivery_address: '12 Marina Road, Lagos',
         });
-        await sock.sendMessage(remoteJid, { text: testAlert }).catch(() => {});
+        await sock.sendMessage(remoteJid, { text: testAlert })
+          .then(() => console.info(`[Bot 1] Sent TEST alert to ${remoteJid}`))
+          .catch(err => console.error(`[Bot 1] Failed to send TEST alert:`, err?.message || err));
+      } else {
+        const helpMenu = [
+          '🤖 *BUYSELL Admin Dispatcher (Bot 1)*',
+          '',
+          'I am online and monitoring confirmed marketplace orders 24/7.',
+          '',
+          '*Available Commands:*',
+          '• *STATUS* — View bot uptime & stats',
+          '• *TEST* — Preview a sample sale alert',
+          '• *CHECK* — Scan database for pending sales',
+          '• *PING* — Instant heartbeat check',
+        ].join('\n');
+        await sock.sendMessage(remoteJid, { text: helpMenu })
+          .then(() => console.info(`[Bot 1] Sent Help menu to ${remoteJid}`))
+          .catch(err => console.error(`[Bot 1] Failed to send Help menu:`, err?.message || err));
       }
     }
   });
