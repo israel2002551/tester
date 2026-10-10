@@ -60,11 +60,35 @@ function readCheckoutCartHandoff() {
  }
 }
 
+// Keep the classic checkout compatible with the React drawer. Both surfaces
+// store the same normalized fields in `bs_cart` and the session handoff.
+function normalizeCartItem(item = {}) {
+ const rawQuantity = Number(item.qty ?? item.quantity);
+ const qty = Number.isFinite(rawQuantity) && rawQuantity > 0 ? Math.floor(rawQuantity) : 1;
+ const imageCandidate = item.image_url || item.image || item.images?.[0] || '';
+ const image = typeof imageCandidate === 'string' ? imageCandidate : '';
+ const sellerId = item.seller_id || item.sellerId || item.store_id || item.storeId || item.profiles?.id || item.seller?.id || null;
+ return {
+  ...item,
+  qty,
+  quantity: qty,
+  image_url: image,
+  image,
+  seller_id: sellerId,
+  sellerId,
+  store_id: item.store_id || sellerId,
+ };
+}
+
+function normalizeCartItems(items) {
+ return Array.isArray(items) ? items.filter(item => item?.id).map(normalizeCartItem) : [];
+}
+
 let pendingEntryRole = appStorage.getItem('bs_entry_role') || '';
 // A product page can hand its React cart to this classic checkout runtime. The
 // snapshot is scoped to the browser tab and prevents an immediate navigation
 // from observing an empty/stale localStorage value.
-let cart = readCheckoutCartHandoff() || readStoredJson('bs_cart', []);
+let cart = normalizeCartItems(readCheckoutCartHandoff() || readStoredJson('bs_cart', []));
 if (cart.length) appStorage.setItem('bs_cart', JSON.stringify(cart));
 let products = [], filteredProducts = [], activeFilters = {};
 const PRODUCT_PAGE_SIZE = 60;
@@ -248,7 +272,7 @@ function showMarketLandingPage() {
  const sellerDash = document.getElementById('seller-dashboard');
  const storefront = document.getElementById('storefront-view');
  const accountView = document.getElementById('account-view');
- const hasMarketingLanding = !!marketing?.querySelector('#marketing-landing');
+ const hasMarketingLanding = !!marketing?.children.length;
 
  if (marketing) {
  marketing.classList.toggle('hidden', !hasMarketingLanding);
@@ -343,7 +367,7 @@ function applyLandingMediaRow(row) {
 }
 
 async function loadLandingMedia() {
- if (!document.getElementById('marketing-landing') || !db) return;
+ if (!document.getElementById('marketing-placeholder') || !db) return;
  try {
  const { data, error } = await db
  .from('landing_media')
@@ -642,7 +666,7 @@ window.ensureCurrentUser = ensureCurrentUser;
 async function routeAfterAuthRestore({ resumeGoogleReturn = false } = {}) {
  // The legacy runtime remains loaded while React is showing a product page.
  // Do not let background auth events try to repaint marketplace-only elements.
- if (!document.getElementById('buyer-view') && !document.getElementById('seller-view')) return;
+ if (!document.getElementById('buyer-view') && !document.getElementById('seller-dashboard')) return;
  // Supabase can briefly report an empty initial session while it exchanges an
  // OAuth code. Keep the saved destination intact until the real session arrives.
  if (!currentUser && hasPendingGoogleOAuthCallback()) return;
@@ -681,7 +705,7 @@ async function installAuthStateListener() {
     authBootstrapComplete = true;
     clearGoogleOAuthAttempt();
     clearAuthenticatedSessionUi();
-    if (document.getElementById('buyer-view') || document.getElementById('seller-view')) {
+    if (document.getElementById('buyer-view') || document.getElementById('seller-dashboard')) {
      cleanAuthUrlParams();
      showBuyerView();
      toast('Google Sign In Failed', oauthCallbackError, 'warn', 7000);
@@ -2671,12 +2695,15 @@ document.addEventListener('click', handleSellerSidebarTap, true);
 // ====================================================
 function slideCarousel(dir) {
  const slides = document.querySelectorAll('.carousel-slide').length;
+ if (!slides) return;
  carouselIndex = (carouselIndex + dir + slides) % slides;
  updateCarousel();
 }
 function goSlide(i) { carouselIndex = i; updateCarousel(); }
 function updateCarousel() {
- document.getElementById('carousel-track').style.transform = `translateX(-${carouselIndex * 100}%)`;
+ const track = document.getElementById('carousel-track');
+ if (!track) return;
+ track.style.transform = `translateX(-${carouselIndex * 100}%)`;
  document.querySelectorAll('.carousel-dot').forEach((d,i) => d.classList.toggle('active', i === carouselIndex));
 }
 function startCarousel() {
@@ -3768,10 +3795,10 @@ async function openProduct(id) {
  
  // Flags Layout Array Injections
  const flags = [];
- if (isFlashActive) flags.push('<span class="prod-badge" style="background:var(--red);color:#fff">Flash Flash Sale</span>');
+ if (isFlashActive) flags.push('<span class="prod-badge" style="background:var(--red);color:#fff">Flash Sale</span>');
  if (vidArray.length > 0) flags.push('<span class="prod-badge prod-badge-video"> Video Available</span>');
  if (platformProduct) flags.push('<span class="prod-badge prod-badge-platform"><i class="fa-solid fa-shield-halved"></i> Platform Store</span>');
- if (p.seller_verified) flags.push('<span class="prod-badge prod-badge-verified">OK Verified</span>');
+ if (p.seller_verified) flags.push('<span class="prod-badge prod-badge-verified"><i class="fa-solid fa-circle-check"></i> Verified</span>');
  document.getElementById('modal-flags').innerHTML = flags.join('');
  
  updateModalWishBtn();
@@ -3885,6 +3912,7 @@ function copyStoreLink() {
 // CART
 // ====================================================
 function saveCart() {
+ cart = normalizeCartItems(cart);
  appStorage.setItem('bs_cart', JSON.stringify(cart));
   // Keep the one-tab checkout handoff aligned. Once payment clears the cart,
   // remove it so a later refresh cannot restore purchased items.
@@ -3901,7 +3929,7 @@ function syncCartFromStorage(nextCart = null) {
  const stored = Array.isArray(nextCart)
   ? nextCart
   : (readCheckoutCartHandoff() || readStoredJson('bs_cart', []));
- cart = Array.isArray(stored) ? stored : [];
+ cart = normalizeCartItems(stored);
  if (cart.length) appStorage.setItem('bs_cart', JSON.stringify(cart));
  updateCartCount();
  return cart;
@@ -3914,7 +3942,7 @@ function itemShippingFee(item = {}) {
 }
 
 function cartSellerKey(item = {}) {
- return String(item.seller_id || item.profiles?.id || item.store_id || item.id || 'unknown');
+ return String(item.seller_id || item.sellerId || item.profiles?.id || item.store_id || item.storeId || item.id || 'unknown');
 }
 
 function cartProductTotal() {
@@ -3944,8 +3972,8 @@ function checkoutCartItems(includeDetails = false) {
  feeApplied.add(sellerKey);
  const base = {
  id: item.id,
- seller_id: item.seller_id || item.profiles?.id || item.store_id || null,
- qty: item.qty || 1,
+ seller_id: item.seller_id || item.sellerId || item.profiles?.id || item.store_id || item.storeId || null,
+ qty: item.qty || item.quantity || 1,
  shipping_fee: chargedShipping,
  shipping_cost: chargedShipping,
  };
@@ -3977,13 +4005,15 @@ function updateCheckoutTotals() {
 
 function addToCart(prod) {
  if (!prod?.id) return;
+ cart = normalizeCartItems(cart);
  const shippingFee = itemShippingFee(prod);
 
  const existing = cart.find(c => c.id === prod.id);
 
  if (existing) {
  // Increment quantity
- existing.qty = (existing.qty || 1) + 1;
+ existing.qty = (existing.qty || existing.quantity || 1) + 1;
+ existing.quantity = existing.qty;
  
  // IMPORTANT: Update the price to the current one passed in (in case it changed)
  // This ensures if a user adds a flash sale item, the price is locked correctly.
@@ -3993,7 +4023,7 @@ function addToCart(prod) {
  existing.is_flash = prod.is_flash; 
  } else {
  // Add new item with the provided price (which is the flash price if active)
- cart.push({ ...prod, shipping_fee: shippingFee, shipping_cost: shippingFee, qty: 1 });
+ cart.push(normalizeCartItem({ ...prod, shipping_fee: shippingFee, shipping_cost: shippingFee, qty: 1 }));
  }
 
  saveCart();
@@ -4013,7 +4043,8 @@ function removeFromCart(id) { cart = cart.filter(c => c.id !== id); saveCart(); 
 function changeCartQty(id, delta) {
  const item = cart.find(c => c.id === id);
  if (!item) return;
- item.qty = Math.max(1, (item.qty||1) + delta);
+ item.qty = Math.max(1, (item.qty || item.quantity || 1) + delta);
+ item.quantity = item.qty;
  saveCart();
  renderCartItems();
 }
@@ -4302,7 +4333,7 @@ async function payWithFlutterwave() {
  if (!currentUser) { showModal('auth-modal'); return; }
  if (!isFlutterwaveReady()) return;
 
- const btn = document.querySelector('#pm-flutterwave-panel .btn-flutterwave') || document.querySelector('#pm-paystack-panel .btn-paystack');
+ const btn = document.querySelector('#pm-flutterwave-panel .btn-flutterwave');
  const oldHtml = btn?.innerHTML;
  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Initializing Flutterwave...'; }
 
@@ -4419,13 +4450,14 @@ async function payWithPaystack() { return payWithFlutterwave(); }
 
 // --- NEW WALLET SELECTION METHOD AND ENGINE CORES ---
 function selectCheckoutPaymentMethod(method) {
- const allowedMethods = WALLET_CHECKOUT_ENABLED ? ['flutterwave', 'paystack', 'wallet'] : ['flutterwave', 'paystack'];
- const nextMethod = allowedMethods.includes(method) ? (method === 'paystack' ? 'flutterwave' : method) : 'flutterwave';
+ const allowedMethods = WALLET_CHECKOUT_ENABLED ? ['flutterwave', 'wallet'] : ['flutterwave'];
+ const requestedMethod = method === 'paystack' ? 'flutterwave' : method;
+ const nextMethod = allowedMethods.includes(requestedMethod) ? requestedMethod : 'flutterwave';
  checkoutPaymentMethod = nextMethod;
- const flutterwaveCard = document.getElementById('pm-flutterwave') || document.getElementById('pm-paystack');
+ const flutterwaveCard = document.getElementById('pm-flutterwave');
  const transferCard = document.getElementById('pm-transfer');
  const walletCard = document.getElementById('pm-wallet');
- const flutterwavePanel = document.getElementById('pm-flutterwave-panel') || document.getElementById('pm-paystack-panel');
+ const flutterwavePanel = document.getElementById('pm-flutterwave-panel');
  const transferPanel = document.getElementById('pm-transfer-panel');
 
  if (flutterwaveCard) flutterwaveCard.classList.toggle('selected', nextMethod === 'flutterwave');
@@ -4435,7 +4467,7 @@ function selectCheckoutPaymentMethod(method) {
  if (transferPanel) transferPanel.classList.add('hidden');
  
  // Dynamically flip the submit button execution routing target
- const payBtn = document.querySelector('#pm-flutterwave-panel .btn-flutterwave') || document.querySelector('#pm-paystack-panel .btn-paystack') || document.querySelector('#co-p2 .btn-primary');
+ const payBtn = document.querySelector('#pm-flutterwave-panel .btn-flutterwave') || document.querySelector('#co-p2 .btn-primary');
  if (payBtn) {
  if (nextMethod === 'wallet') {
  payBtn.setAttribute('onclick', 'payWithWalletRevenue()');
@@ -4532,7 +4564,7 @@ async function payWithWalletRevenue() {
  return;
  }
 
- const btn = document.querySelector('#pm-flutterwave-panel .btn-flutterwave') || document.querySelector('#pm-paystack-panel .btn-paystack') || document.querySelector('#pm-flutterwave-panel .btn-primary') || document.querySelector('#pm-paystack-panel .btn-primary');
+ const btn = document.querySelector('#pm-flutterwave-panel .btn-flutterwave') || document.querySelector('#pm-flutterwave-panel .btn-primary');
  const oldHtml = btn?.innerHTML;
  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processing Wallet Debit...'; }
 
@@ -7073,7 +7105,7 @@ async function loadSellerDropshipUpdates() {
 }
 
 async function loadAdminDropshipRequests() {
- const lists = document.querySelectorAll('#admin-dropship-requests-list');
+ const lists = getActiveAdminElements('admin-dropship-requests-list');
  if (!lists.length) return;
  lists.forEach(el => { el.innerHTML = '<div class="skeleton" style="height:120px;border-radius:12px"></div>'; });
  try {
@@ -7474,10 +7506,14 @@ function previewAdminLogo(input) {
  tempLogoFile = input.files[0];
  const reader = new FileReader();
  reader.onload = function(e) {
- document.getElementById('logo-preview-container').classList.remove('hidden');
- document.getElementById('logo-preview-img').src = e.target.result;
- document.getElementById('logo-zone').classList.add('has-file');
- document.querySelector('#logo-zone .upload-label').textContent = tempLogoFile.name;
+ const previewContainer = getActiveAdminElement('logo-preview-container');
+ const previewImage = getActiveAdminElement('logo-preview-img');
+ const uploadZone = getActiveAdminElement('logo-zone');
+ previewContainer?.classList.remove('hidden');
+ if (previewImage) previewImage.src = e.target.result;
+ uploadZone?.classList.add('has-file');
+ const uploadLabel = uploadZone?.querySelector('.upload-label');
+ if (uploadLabel) uploadLabel.textContent = tempLogoFile.name;
  }
  reader.readAsDataURL(tempLogoFile);
  }
@@ -7487,7 +7523,8 @@ async function saveAdminLogo() {
  if (!tempLogoFile) return toast('No file selected', 'Please choose an image first', 'warn');
  if (!isAdmin()) return toast('Access Denied', '', 'error');
 
- const btn = document.getElementById('save-logo-btn');
+ const btn = getActiveAdminElement('save-logo-btn');
+ if (!btn) return;
  btn.disabled = true; 
  btn.innerHTML = '<span class="spinner"></span> Saving...';
 
@@ -7584,17 +7621,18 @@ function applySiteLogo(url) {
 }
  
 function switchAdminTab(tab) {
+ const adminRoot = getActiveAdminRoot();
+ if (!adminRoot) return;
  // Hide all tab panels
- document.querySelectorAll('.adm-tab').forEach(p => p.classList.add('hidden'));
+ adminRoot.querySelectorAll('.adm-tab').forEach(p => p.classList.add('hidden'));
  // Deactivate all sidebar nav items
- document.querySelectorAll('#admin-portal-view .dash-nav-item').forEach(b => b.classList.remove('active'));
- document.querySelectorAll('[id^="atab-"]').forEach(b => b.classList.remove('active'));
- document.querySelectorAll('[data-admin-tab]').forEach(b => b.classList.remove('active'));
+ adminRoot.querySelectorAll('.dash-nav-item, [data-admin-tab]').forEach(b => b.classList.remove('active'));
  // Show selected panel
- document.querySelectorAll('#adm-tab-' + tab).forEach(p => p.classList.remove('hidden'));
+ getActiveAdminElement('adm-tab-' + tab)?.classList.remove('hidden');
  // Highlight sidebar item
- document.getElementById('ap-nav-' + tab)?.classList.add('active');
- document.querySelectorAll('#atab-' + tab + ', [data-admin-tab="' + tab + '"]').forEach(b => b.classList.add('active'));
+ adminRoot.querySelector('#ap-nav-' + tab)?.classList.add('active');
+ getActiveAdminElement('atab-' + tab)?.classList.add('active');
+ adminRoot.querySelectorAll('[data-admin-tab="' + tab + '"]').forEach(b => b.classList.add('active'));
  // Load data
  if (tab === 'overview') loadAdminOverview();
  if (tab === 'sellers') loadAdminSellers();
@@ -7836,15 +7874,41 @@ async function uploadUpcomingMediaFiles(files, kind) {
  return urls;
 }
 
+function isAdminSurfaceVisible(node) {
+ if (!node || !node.isConnected) return false;
+ for (let current = node; current && current !== document.body; current = current.parentElement) {
+  if (current.classList?.contains('hidden')) return false;
+  const styles = window.getComputedStyle?.(current);
+  if (styles?.display === 'none' || styles?.visibility === 'hidden') return false;
+ }
+ return true;
+}
+
+function getActiveAdminRoot() {
+ const portal = document.getElementById('admin-portal-view');
+ const sellerAdmin = document.getElementById('ds-admin');
+ if (isAdminSurfaceVisible(portal)) return portal;
+ if (isAdminSurfaceVisible(sellerAdmin)) return sellerAdmin;
+ return sellerAdmin || portal || null;
+}
+
+function getActiveAdminElements(id) {
+ const root = getActiveAdminRoot();
+ const safeId = String(id).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+ if (root) {
+  const scoped = [...root.querySelectorAll(`[id="${safeId}"], [data-admin-legacy-id="${safeId}"]`)];
+  if (scoped.length) return scoped;
+ }
+ const node = document.getElementById(id);
+ return node ? [node] : [];
+}
+
+function getActiveAdminElement(id) {
+ return getActiveAdminElements(id)[0] || null;
+}
+
 function getVisibleAdminElement(id) {
- const nodes = [...document.querySelectorAll(`#${id}`)];
- return nodes.find(node => {
-  const portal = node.closest('#admin-portal-view');
-  const sellerDash = node.closest('#seller-dashboard');
-  if (portal) return portal.style.display !== 'none' && !portal.classList.contains('hidden');
-  if (sellerDash) return sellerDash.style.display !== 'none' && !sellerDash.classList.contains('hidden');
-  return false;
- }) || nodes[0] || null;
+ return getActiveAdminElement(id);
 }
 
 async function submitUpcomingProduct() {
@@ -7953,12 +8017,11 @@ async function deleteUpcomingProduct(id) {
 
 /* -- OVERVIEW -- */
 function setTextAllById(id, value) {
- document.querySelectorAll(`#${id}`).forEach(node => { node.textContent = value; });
+ getActiveAdminElements(id).forEach(node => { node.textContent = value; });
 }
 
 function getVisibleElementById(id) {
- const nodes = [...document.querySelectorAll(`#${id}`)];
- return nodes.find(node => node.offsetParent !== null) || nodes[0] || null;
+ return getActiveAdminElement(id);
 }
 
 const ONLINE_USER_WINDOW_MS = 5 * 60 * 1000;
@@ -8062,13 +8125,14 @@ async function loadAdminOnlineUsers() {
 // ====================================================
 
 async function askAdminBot(preset) {
- const input = document.getElementById('admin-ai-input');
- const msg = preset || input.value.trim();
+ const input = getActiveAdminElement('admin-ai-input');
+ const msg = preset || input?.value.trim();
  if (!msg) return;
- if (!preset) input.value = '';
+ if (!preset && input) input.value = '';
 
  // Add user message
- const container = document.getElementById('admin-ai-messages');
+ const container = getActiveAdminElement('admin-ai-messages');
+ if (!container) return;
  const userDiv = document.createElement('div');
  userDiv.style.cssText = 'display:flex;flex-direction:row-reverse;gap:.42rem';
  userDiv.innerHTML = `<div style="background:var(--forest);color:#fff;padding:.52rem .82rem;border-radius:14px;font-size:.79rem;max-width:82%;line-height:1.5">${escHtml(msg)}</div>`;
@@ -8091,10 +8155,10 @@ async function askAdminBot(preset) {
  task: 'admin_assistant',
  platform: 'BUYSELL Nigeria',
  admin_email: ADMIN_EMAIL,
- total_sellers: document.getElementById('adm-total-sellers')?.textContent || '?',
- total_buyers: document.getElementById('adm-total-buyers')?.textContent || '?',
- total_revenue: document.getElementById('adm-revenue')?.textContent || '?',
- open_disputes: document.getElementById('adm-disputes')?.textContent || '?',
+ total_sellers: getActiveAdminElement('adm-total-sellers')?.textContent || '?',
+ total_buyers: getActiveAdminElement('adm-total-buyers')?.textContent || '?',
+ total_revenue: getActiveAdminElement('adm-revenue')?.textContent || '?',
+ open_disputes: getActiveAdminElement('adm-disputes')?.textContent || '?',
  }
  }, getAiEndpoints('smooth-handler'));
 
@@ -8151,18 +8215,18 @@ async function executeMassSuspension() {
  
 async function loadAdminSellers() {
  if (!guardAdminPanel()) return;
- document.getElementById('admin-skeleton').classList.remove('hidden');
- document.getElementById('admin-list').classList.add('hidden');
- document.getElementById('admin-empty').classList.add('hidden');
+ getActiveAdminElement('admin-skeleton')?.classList.remove('hidden');
+ getActiveAdminElement('admin-list')?.classList.add('hidden');
+ getActiveAdminElement('admin-empty')?.classList.add('hidden');
 
   const { data: sellers } = await runSelectWithColumnFallback('profiles', SELLER_ADMIN_COLUMNS, q => q
   .eq('role','seller')
   .order('created_at',{ascending:false})
   .limit(DASHBOARD_PAGE_SIZE));
  _adminSellersCache = sellers || [];
- document.getElementById('admin-skeleton').classList.add('hidden');
+ getActiveAdminElement('admin-skeleton')?.classList.add('hidden');
 
- const filter = document.getElementById('adm-seller-filter')?.value || 'all';
+ const filter = getActiveAdminElement('adm-seller-filter')?.value || 'all';
  _renderAdminSellerList(_applySellerFilter(_adminSellersCache, filter));
 }
 
@@ -8174,21 +8238,23 @@ function _applySellerFilter(sellers, filter) {
 }
 
 function filterAdminSellers() {
- const q = (document.getElementById('adm-seller-search')?.value || '').trim().toLowerCase();
+ const q = (getActiveAdminElement('adm-seller-search')?.value || '').trim().toLowerCase();
  let list = _adminSellersCache;
  if (q) list = list.filter(s =>
  (s.name||'').toLowerCase().includes(q) ||
  (s.email||'').toLowerCase().includes(q) ||
  (s.store_name||'').toLowerCase().includes(q)
  );
- const filter = document.getElementById('adm-seller-filter')?.value || 'all';
+ const filter = getActiveAdminElement('adm-seller-filter')?.value || 'all';
  _renderAdminSellerList(_applySellerFilter(list, filter));
 }
 
 function _renderAdminSellerList(sellers) {
- const list = document.getElementById('admin-list');
- const empty = document.getElementById('admin-empty');
- document.getElementById('adm-seller-count').textContent = `${sellers.length} seller${sellers.length !== 1 ? 's' : ''}`;
+ const list = getActiveAdminElement('admin-list');
+ const empty = getActiveAdminElement('admin-empty');
+ const count = getActiveAdminElement('adm-seller-count');
+ if (count) count.textContent = `${sellers.length} seller${sellers.length !== 1 ? 's' : ''}`;
+ if (!list || !empty) return;
  if (!sellers.length) { empty.classList.remove('hidden'); list.classList.add('hidden'); return; }
  empty.classList.add('hidden');
  list.classList.remove('hidden');
@@ -8253,21 +8319,21 @@ async function adminDeleteSeller(id) {
 /* -- ORDERS -- */
 async function loadAdminOrders() {
  if (!isAdmin()) return;
- document.getElementById('adm-orders-skeleton')?.classList.remove('hidden');
- document.getElementById('adm-orders-list')?.classList.add('hidden');
- document.getElementById('adm-orders-empty')?.classList.add('hidden');
- const filter = document.getElementById('adm-order-filter')?.value || 'all';
+ getActiveAdminElement('adm-orders-skeleton')?.classList.remove('hidden');
+ getActiveAdminElement('adm-orders-list')?.classList.add('hidden');
+ getActiveAdminElement('adm-orders-empty')?.classList.add('hidden');
+ const filter = getActiveAdminElement('adm-order-filter')?.value || 'all';
  try {
   const { data: orders = [] } = await runSelectWithColumnFallback('orders', ORDER_LIST_COLUMNS, q => {
    let builder = q.order('created_at', { ascending: false }).limit(120);
    if (filter !== 'all') builder = builder.eq('status', filter);
    return builder;
   });
-  document.getElementById('adm-orders-skeleton')?.classList.add('hidden');
-  const countEl = document.getElementById('adm-order-count');
+  getActiveAdminElement('adm-orders-skeleton')?.classList.add('hidden');
+  const countEl = getActiveAdminElement('adm-order-count');
   if (countEl) countEl.textContent = (orders || []).length + ' orders';
-  const list = document.getElementById('adm-orders-list');
-  if (!orders?.length) { document.getElementById('adm-orders-empty')?.classList.remove('hidden'); return; }
+  const list = getActiveAdminElement('adm-orders-list');
+  if (!orders?.length) { getActiveAdminElement('adm-orders-empty')?.classList.remove('hidden'); return; }
   list?.classList.remove('hidden');
   const sc = {pending:'badge-gold',confirmed:'badge-blue',shipped:'badge-purple',delivered:'badge-green',cancelled:'badge-red',refunded:'badge-gray'};
   list.innerHTML = orders.map(o => `
@@ -8295,8 +8361,8 @@ async function loadAdminOrders() {
  </div>`).join('');
  } catch(err) {
   console.warn('Could not load admin orders:', err);
-  document.getElementById('adm-orders-skeleton')?.classList.add('hidden');
-  document.getElementById('adm-orders-empty')?.classList.remove('hidden');
+  getActiveAdminElement('adm-orders-skeleton')?.classList.add('hidden');
+  getActiveAdminElement('adm-orders-empty')?.classList.remove('hidden');
  }
 }
 
@@ -8313,11 +8379,11 @@ async function adminUpdateOrder(id, status) {
 /* -- DISPUTES -- */
 async function loadAdminDisputes() {
  if (!isAdmin()) return;
- const dl = document.getElementById('admin-disputes-list');
+ const dl = getActiveAdminElement('admin-disputes-list');
  try {
   const { data: disputes = [] } = await runSelectWithColumnFallback('disputes', DISPUTE_LIST_COLUMNS, q => q.order('created_at', { ascending: false }).limit(60));
   const open = (disputes || []).filter(d => d.status === 'open').length;
-  const dispEl = document.getElementById('adm-disputes');
+  const dispEl = getActiveAdminElement('adm-disputes');
   if (dispEl) dispEl.textContent = open;
   if (!disputes?.length) { if (dl) dl.innerHTML = '<p class="color-text3 text-sm">No disputes.</p>'; return; }
   if (dl) dl.innerHTML = disputes.map(d => `
@@ -8361,13 +8427,14 @@ async function refundDispute(disputeId, orderId) {
 /* -- WITHDRAWALS -- */
 async function loadAdminWithdrawals() {
  if (!isAdmin()) return;
- document.getElementById('adm-wd-skeleton').classList.remove('hidden');
- document.getElementById('adm-wd-list').classList.add('hidden');
- document.getElementById('adm-wd-empty').classList.add('hidden');
+ getActiveAdminElement('adm-wd-skeleton')?.classList.remove('hidden');
+ getActiveAdminElement('adm-wd-list')?.classList.add('hidden');
+ getActiveAdminElement('adm-wd-empty')?.classList.add('hidden');
  const { data: wds } = await db.from('withdrawals').select('*,profiles(name,email,whatsapp)').order('created_at',{ascending:false}).limit(80);
- document.getElementById('adm-wd-skeleton').classList.add('hidden');
- if (!wds?.length) { document.getElementById('adm-wd-empty').classList.remove('hidden'); return; }
- const list = document.getElementById('adm-wd-list');
+ getActiveAdminElement('adm-wd-skeleton')?.classList.add('hidden');
+ if (!wds?.length) { getActiveAdminElement('adm-wd-empty')?.classList.remove('hidden'); return; }
+ const list = getActiveAdminElement('adm-wd-list');
+ if (!list) return;
  list.classList.remove('hidden');
  list.innerHTML = wds.map(w => {
  const borderColor = w.status==='pending' ? 'var(--gold)' : w.status==='paid' ? 'var(--green)' : 'var(--danger)';
@@ -8509,19 +8576,19 @@ function renderBroadcastProductPreview(productsForBroadcast = []) {
  const html = productsForBroadcast.length
  ? productsForBroadcast.map(product => broadcastProductCard(product)).join('')
  : '<p class="text-xs color-text3">No active recent products found yet.</p>';
- document.querySelectorAll('#bc-product-preview').forEach(el => {
+ getActiveAdminElements('bc-product-preview').forEach(el => {
   el.innerHTML = html;
  });
 }
 
 async function refreshBroadcastProductPreview() {
- document.querySelectorAll('#bc-product-preview').forEach(el => {
+ getActiveAdminElements('bc-product-preview').forEach(el => {
   el.innerHTML = '<div class="skeleton" style="height:92px;border-radius:12px"></div>';
  });
  try {
   renderBroadcastProductPreview(serializeBroadcastProducts(await loadRecentBroadcastProducts(4)));
  } catch (error) {
-  document.querySelectorAll('#bc-product-preview').forEach(el => {
+  getActiveAdminElements('bc-product-preview').forEach(el => {
    el.innerHTML = `<p class="text-xs color-danger">Could not load recent products: ${escHtml(error.message || 'Unknown error')}</p>`;
   });
  }
@@ -8565,9 +8632,9 @@ function broadcastBodyIntro(body = '') {
 
 async function sendBroadcast() {
  if (!isAdmin()) return;
- const title = document.getElementById('bc-title').value.trim();
- const intro = document.getElementById('bc-body').value.trim();
- const target = document.getElementById('bc-target').value;
+ const title = getActiveAdminElement('bc-title')?.value.trim();
+ const intro = getActiveAdminElement('bc-body')?.value.trim();
+ const target = getActiveAdminElement('bc-target')?.value || 'all';
  const type = document.querySelector('input[name="bc-type"]:checked')?.value || 'info';
   
  if (!title) { toast('Add a broadcast title', '', 'warn'); return; }
@@ -8595,8 +8662,10 @@ async function sendBroadcast() {
  return;
  }
 
- document.getElementById('bc-title').value = '';
- document.getElementById('bc-body').value = '';
+ const titleInput = getActiveAdminElement('bc-title');
+ const bodyInput = getActiveAdminElement('bc-body');
+ if (titleInput) titleInput.value = '';
+ if (bodyInput) bodyInput.value = '';
  renderBroadcastProductPreview([]);
  loadBroadcastHistory();
 }
@@ -8606,7 +8675,7 @@ async function loadBroadcastHistory() {
   .select('id,title,body,type,target,created_at')
   .order('created_at',{ascending:false})
   .limit(10);
-  const el = document.getElementById('bc-history');
+  const el = getActiveAdminElement('bc-history');
   if (!el) return;
   const icons = { info:'Info', success:'OK', warn:'Warning', error:'' };
   const productIds = [...new Set((bcs || []).flatMap(b => extractBroadcastProductIds(b.body)))].slice(0, 20);
@@ -8691,11 +8760,15 @@ async function loadAdminReceipts() {
  const approved = all.filter(r => r.status === 'approved').length;
  const rejected = all.filter(r => r.status === 'rejected').length;
 
- document.getElementById('rcpt-pending').textContent = pending;
- document.getElementById('rcpt-approved').textContent = approved;
- document.getElementById('rcpt-rejected').textContent = rejected;
+ const pendingEl = getActiveAdminElement('rcpt-pending');
+ const approvedEl = getActiveAdminElement('rcpt-approved');
+ const rejectedEl = getActiveAdminElement('rcpt-rejected');
+ if (pendingEl) pendingEl.textContent = pending;
+ if (approvedEl) approvedEl.textContent = approved;
+ if (rejectedEl) rejectedEl.textContent = rejected;
 
- const tbody = document.getElementById('rcpt-table-body');
+ const tbody = getActiveAdminElement('rcpt-table-body');
+ if (!tbody) return;
  if (!all.length) {
  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3)">No receipts submitted yet</td></tr>';
  return;
@@ -8754,7 +8827,8 @@ async function loadAdminAccounts() {
 }
 
 async function loadCommissionActivations() {
- const tbody = document.getElementById('acct-comm-list');
+ const tbody = getActiveAdminElement('acct-comm-list');
+ if (!tbody) return;
  try {
  const { data: receipts } = await db.from('commission_receipts')
  .select('*, profiles(name, email)')
@@ -8783,7 +8857,8 @@ async function loadCommissionActivations() {
 }
 
 async function loadAdPayments() {
- const tbody = document.getElementById('acct-ads-list');
+ const tbody = getActiveAdminElement('acct-ads-list');
+ if (!tbody) return;
  try {
  let { data: ads, error } = await db.from('advertisements')
  .select('*, profiles!advertiser_id(name, email)')
@@ -8820,7 +8895,8 @@ async function loadAdPayments() {
 
 let _trialExtensionsCache = [];
 async function loadTrialExtensions() {
- const tbody = document.getElementById('acct-trials-list');
+ const tbody = getActiveAdminElement('acct-trials-list');
+ if (!tbody) return;
  try {
  const { data: sellers } = await db.from('profiles')
  .select('id,name,email,role,store_name,commission_paid,trial_end,is_suspended,created_at')
@@ -8835,7 +8911,7 @@ async function loadTrialExtensions() {
 }
 
 function filterTrialExtensions() {
- const q = (document.getElementById('acct-trial-search')?.value || '').trim().toLowerCase();
+ const q = (getActiveAdminElement('acct-trial-search')?.value || '').trim().toLowerCase();
  if (!q) return _renderTrialExtensions(_trialExtensionsCache);
  const filtered = _trialExtensionsCache.filter(s => 
  (s.name||'').toLowerCase().includes(q) || 
@@ -8845,7 +8921,8 @@ function filterTrialExtensions() {
 }
 
 function _renderTrialExtensions(sellers) {
- const tbody = document.getElementById('acct-trials-list');
+ const tbody = getActiveAdminElement('acct-trials-list');
+ if (!tbody) return;
  if (!sellers.length) {
  tbody.innerHTML = '<tr><td colspan="5" class="text-center text-sm color-text3 p-3">No sellers found.</td></tr>';
  return;
@@ -8975,7 +9052,7 @@ async function checkBroadcastForUser() {
 
 /* -- REVENUE CHART -- */
 function _renderAdminRevenueChart(orders) {
- const ctx = document.getElementById('admin-revenue-chart');
+ const ctx = getActiveAdminElement('admin-revenue-chart');
  if (!ctx) return;
  const days = 30;
  const dayMap = {};

@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { marketplaceHtml } from '../legacy/marketplaceHtml.js';
+import { prepareMarketplaceDom } from '../legacy/marketplaceDomFixes.js';
 import { ensureRuntimeConfig, loadClassicScript } from '../lib/browserConfig.js';
 import { authReady, getSession, isProtectedMarketplaceRoute, requireAuth } from '../lib/auth.js';
 
@@ -26,9 +27,9 @@ function revealMarketplaceRoute(root) {
     const mainNav = root?.querySelector('#main-nav');
     const landing = root?.querySelector('#landing');
     buyerView?.classList.remove('hidden', 'page-enter');
-    buyerView?.style.setProperty('display', 'block', 'important');
+    buyerView?.style.removeProperty('display');
     mainNav?.classList.remove('hidden');
-    mainNav?.style.setProperty('display', 'block', 'important');
+    mainNav?.style.removeProperty('display');
     landing?.classList.add('hidden');
     landing?.style.setProperty('display', 'none', 'important');
   }
@@ -87,6 +88,10 @@ export function loadMarketplaceRuntime() {
 }
 
 export default function MarketplacePage() {
+  useLayoutEffect(() => {
+    prepareMarketplaceDom(document);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     document.body.classList.remove('product-page');
@@ -123,5 +128,6 @@ export default function MarketplacePage() {
     };
   }, []);
 
-  return <div dangerouslySetInnerHTML={{ __html: marketplaceHtml }} />;
+  const renderedMarketplaceHtml = marketplaceHtml.replace(/Flash\s+Flash\s+Sale/g, 'Flash Sale');
+  return <div dangerouslySetInnerHTML={{ __html: renderedMarketplaceHtml }} />;
 }

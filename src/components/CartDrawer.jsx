@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import { normalizeCart, normalizeCartItem } from '../lib/cart.js';
 import { readJson, writeCheckoutCartHandoff, writeJson } from '../lib/storage.js';
 import { money } from '../lib/format.js';
 
 function cartQuantity(items) {
-  return items.reduce((sum, item) => sum + (Number(item.qty) || 1), 0);
+  return normalizeCart(items).reduce((sum, item) => sum + item.qty, 0);
 }
 
 export default function CartDrawer({ isOpen, onClose, onCartChange }) {
@@ -16,7 +17,8 @@ export default function CartDrawer({ isOpen, onClose, onCartChange }) {
   };
 
   const syncCart = () => {
-    const nextItems = readJson('bs_cart', []);
+    const nextItems = normalizeCart(readJson('bs_cart', []));
+    writeJson('bs_cart', nextItems);
     setItems(nextItems);
     notifyCartChange(nextItems);
   };
@@ -43,13 +45,14 @@ export default function CartDrawer({ isOpen, onClose, onCartChange }) {
     const updated = items
       .map(item => {
         if (item.id !== id) return item;
-        const nextQuantity = (Number(item.qty) || 1) + delta;
-        return nextQuantity > 0 ? { ...item, qty: nextQuantity } : null;
+        const nextQuantity = item.qty + delta;
+        return nextQuantity > 0 ? normalizeCartItem({ ...item, qty: nextQuantity }) : null;
       })
       .filter(Boolean);
-    writeJson('bs_cart', updated);
-    setItems(updated);
-    notifyCartChange(updated);
+    const normalized = normalizeCart(updated);
+    writeJson('bs_cart', normalized);
+    setItems(normalized);
+    notifyCartChange(normalized);
   };
 
   const removeItem = id => {
@@ -68,11 +71,12 @@ export default function CartDrawer({ isOpen, onClose, onCartChange }) {
   const proceedToCheckout = () => {
     // Checkout loads the classic marketplace in a new document. Persist both
     // durable and session-scoped copies before closing this React drawer.
-    writeJson('bs_cart', items);
-    writeCheckoutCartHandoff(items);
+    const normalized = normalizeCart(items);
+    writeJson('bs_cart', normalized);
+    writeCheckoutCartHandoff(normalized);
     // On in-app product navigation, app.js remains alive and otherwise keeps
     // its earlier empty cart array. Bring that legacy checkout state forward.
-    window.syncCartFromStorage?.(items);
+    window.syncCartFromStorage?.(normalized);
     onClose?.();
     // When this drawer was opened from the marketplace shell, preserve its
     // authenticated runtime rather than forcing a full page reload.

@@ -13,6 +13,9 @@
  --cream:#f7f5f0;
  --bg-main:#f8fafc;
  --bg-card:#ffffff;
+ --bg:var(--bg-main);
+ --card:var(--bg-card);
+ --primary:var(--green);
  --text-main:#0f172a;
  --text-muted:#64748b;
  --border-subtle:#e2e8f0;
@@ -29,6 +32,13 @@
  --shadow-md:0 8px 32px rgba(0,0,0,.12);
  --shadow-lg:0 20px 60px rgba(0,0,0,.18);
  --mob-nav-h:60px;
+ --app-ink:#11261b;
+ --app-muted:#617568;
+ --app-line:rgba(12,70,42,.11);
+ --app-soft:#f5f8f4;
+ --app-canvas:#f4f7f2;
+ --app-elevated:0 22px 48px -38px rgba(5,45,25,.64);
+ --app-elevated-hover:0 28px 50px -34px rgba(5,55,29,.5);
 }
 
 .admin-dropship-requests-list {
@@ -2267,7 +2277,7 @@ body.platform-seller-mode .dash-user-card{background:rgba(212,165,116,.1)}
 /* ==========================================================================
  BUYSELL PRE-LANDING DESIGN SYSTEM (COMPATIBLE WITH MAIN THEME)
  ========================================================================== */
-:root {
+.bs-landing {
  --bs-forest: #0b1f14;
  --bs-forest-2: #143024;
  --bs-forest-3: #1a3a2a;
@@ -5906,15 +5916,6 @@ body:not(.is-authenticated) #main-nav #nav-user-btns {
    PLATFORM-WIDE PROFESSIONAL FINISH
    Shared storefront, seller, administrative, checkout and account surfaces.
    =========================================================================== */
-:root {
- --app-ink: #11261b;
- --app-muted: #617568;
- --app-line: rgba(12, 70, 42, .11);
- --app-soft: #f5f8f4;
- --app-canvas: #f4f7f2;
- --app-elevated: 0 22px 48px -38px rgba(5, 45, 25, .64);
- --app-elevated-hover: 0 28px 50px -34px rgba(5, 55, 29, .5);
-}
 body {
  background:
   radial-gradient(circle at 92% -10%, rgba(234, 196, 115, .16), transparent 30rem),
