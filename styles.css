@@ -6098,6 +6098,39 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 }
 #seller-dashboard #ad-preview-el { display: grid; min-height: 190px; place-items: center; }
 
+/* Saved listing pictures in the seller edit form */
+#seller-dashboard .product-image-manager {
+ margin: -.35rem 0 1.1rem;
+ padding: .85rem;
+ border: 1px solid var(--app-line);
+ border-radius: 16px;
+ background: #f8fbf7;
+}
+#seller-dashboard .product-image-manager-head { display: flex; align-items: start; justify-content: space-between; gap: .75rem; margin-bottom: .7rem; }
+#seller-dashboard .product-image-manager-head strong { display: block; color: #173b29; font-size: .86rem; }
+#seller-dashboard .product-image-manager-head span { display: block; margin-top: .12rem; color: var(--app-muted); font-size: .72rem; }
+#seller-dashboard .product-image-manager-help { text-align: right; max-width: 150px; }
+#seller-dashboard .product-image-manager-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(116px, 1fr)); gap: .65rem; }
+#seller-dashboard .product-image-manager-card { position: relative; overflow: hidden; border: 1px solid var(--app-line); border-radius: 11px; background: #fff; }
+#seller-dashboard .product-image-manager-card img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; background: #eef3ed; }
+#seller-dashboard .product-image-manager-cover { position: absolute; top: .42rem; left: .42rem; padding: .18rem .42rem; border-radius: 999px; background: #126f3e; color: #fff; font-size: .63rem; font-weight: 800; }
+#seller-dashboard .product-image-manager-actions { display: flex; align-items: center; justify-content: space-between; gap: .28rem; padding: .35rem; }
+#seller-dashboard .product-image-manager-set-cover,
+#seller-dashboard .product-image-manager-cover-label { min-width: 0; border: 0; background: transparent; color: #356246; font-size: .67rem; font-weight: 750; white-space: nowrap; }
+#seller-dashboard .product-image-manager-set-cover { cursor: pointer; }
+#seller-dashboard .product-image-manager-set-cover:hover { color: #126f3e; text-decoration: underline; }
+#seller-dashboard .product-image-manager-remove { display: grid; width: 28px; height: 28px; flex: 0 0 28px; place-items: center; border: 0; border-radius: 8px; background: #fff1f2; color: #dc2626; cursor: pointer; }
+#seller-dashboard .product-image-manager-remove:hover { background: #fee2e2; }
+#seller-dashboard .product-image-manager-empty,
+#seller-dashboard .product-image-manager-note { margin: 0; color: var(--app-muted); font-size: .73rem; line-height: 1.45; }
+#seller-dashboard .product-image-manager-note { margin-top: .68rem; }
+
+@media (max-width: 640px) {
+ #seller-dashboard .product-image-manager { padding: .72rem; }
+ #seller-dashboard .product-image-manager-help { display: none; }
+ #seller-dashboard .product-image-manager-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .48rem; }
+}
+
 /* Dialogs, checkout and smaller screens retain the same calm visual rhythm. */
 .modal-overlay:not(.app-page-surface) { background: rgba(6, 30, 18, .52); backdrop-filter: blur(5px); }
 .modal-box {

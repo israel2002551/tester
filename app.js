@@ -1444,9 +1444,12 @@ function fileListToArray(inputId) {
  return Array.from(document.getElementById(inputId)?.files || []);
 }
 
-async function uploadProductMediaFiles(files, kind) {
+async function uploadProductMediaFiles(files, kind, limitOverride = null) {
  const isVideo = kind === 'video';
- const maxCount = isVideo ? PRODUCT_VIDEO_LIMIT : PRODUCT_IMAGE_LIMIT;
+ const defaultMaxCount = isVideo ? PRODUCT_VIDEO_LIMIT : PRODUCT_IMAGE_LIMIT;
+ const maxCount = Number.isFinite(limitOverride)
+  ? Math.min(defaultMaxCount, Math.max(0, limitOverride))
+  : defaultMaxCount;
  const maxSize = isVideo ? PRODUCT_MAX_VIDEO_SIZE : PRODUCT_MAX_IMAGE_SIZE;
  const allowedTypes = isVideo ? PRODUCT_ALLOWED_VID_TYPES : PRODUCT_ALLOWED_IMG_TYPES;
  const label = isVideo ? 'video' : 'image';
@@ -5252,9 +5255,16 @@ if (nameVal.length > 300) {
 
  const imgFiles = fileListToArray('p-image');
  const vidFiles = fileListToArray('p-video');
- const imageUrls = await uploadProductMediaFiles(imgFiles, 'image');
+ const savedImageUrls = editingProductId ? [...editingProductImages] : [];
+ const remainingImageSlots = PRODUCT_IMAGE_LIMIT - savedImageUrls.length;
+ if (editingProductId && imgFiles.length && remainingImageSlots <= 0) {
+  toast('Picture limit reached', `Remove a saved picture before adding another. A listing can have up to ${PRODUCT_IMAGE_LIMIT} pictures.`, 'warn');
+  return;
+ }
+ const newImageUrls = await uploadProductMediaFiles(imgFiles, 'image', remainingImageSlots);
+ const imageUrls = editingProductId ? [...savedImageUrls, ...newImageUrls] : newImageUrls;
  const videoUrls = await uploadProductMediaFiles(vidFiles, 'video');
- const imgUrl = imageUrls[0] || '';
+ const imgUrl = imageUrls[0] || null;
  const vidUrl = videoUrls[0] || '';
 
  const price = priceVal;
@@ -5273,9 +5283,15 @@ if (nameVal.length > 300) {
  has_video: videoUrls.length > 0, negotiable: document.getElementById('p-negotiable').checked,
  stock_quantity: stock, low_stock_alert: Math.max(0, parseInt(document.getElementById('p-low-stock').value)||3),
   };
- if (imgUrl) prodData.image_url = imgUrl;
+ if (editingProductId) {
+  // Always include image fields in edit mode so removed pictures are persisted.
+  prodData.image_url = imgUrl;
+  prodData.images = imageUrls;
+ } else if (imgUrl) {
+  prodData.image_url = imgUrl;
+  prodData.images = imageUrls;
+ }
  if (vidUrl) prodData.video_url = vidUrl;
- if (imageUrls.length) prodData.images = imageUrls;
  if (videoUrls.length) prodData.videos = videoUrls;
 
  let productNotificationRecord = null;
@@ -5285,7 +5301,6 @@ if (nameVal.length > 300) {
   oldProductNotificationRecord = await fetchProductForNotification(productIdForNotification);
   // UPDATE mode
   const updateData = { ...prodData };
-  if (!imageUrls.length) { delete updateData.image_url; delete updateData.images; }
   if (!videoUrls.length) { delete updateData.video_url; delete updateData.videos; delete updateData.has_video; }
  await callEdge('manage-product', {
  action: 'update',
@@ -5294,6 +5309,7 @@ if (nameVal.length > 300) {
   });
   productNotificationRecord = await fetchProductForNotification(productIdForNotification);
   editingProductId = null;
+  hideProductImageManager();
   toast('Product Updated! OK', 'Changes saved successfully', 'success');
  const cancelBtn = document.getElementById('edit-cancel-btn');
  if (cancelBtn) cancelBtn.style.display = 'none';
@@ -5361,6 +5377,69 @@ async function toggleProductStatus(id, current) {
 
 // editing state
 let editingProductId = null;
+let editingProductImages = [];
+
+function savedProductImageUrls(product = {}) {
+ const candidates = [product.image_url, ...(Array.isArray(product.images) ? product.images : [])]
+  .map(sanitizeUrl)
+  .filter(Boolean);
+ return [...new Set(candidates)].slice(0, PRODUCT_IMAGE_LIMIT);
+}
+
+function renderProductImageManager() {
+ const manager = document.getElementById('product-image-manager');
+ if (!manager) return;
+ const pictureCount = editingProductImages.length;
+ manager.innerHTML = `
+  <div class="product-image-manager-head">
+   <div><strong>Saved pictures</strong><span>${pictureCount} of ${PRODUCT_IMAGE_LIMIT} picture${pictureCount === 1 ? '' : 's'} currently on this listing</span></div>
+   <span class="product-image-manager-help">The first picture is the cover</span>
+  </div>
+  ${pictureCount ? `<div class="product-image-manager-grid">${editingProductImages.map((url, index) => `
+   <div class="product-image-manager-card">
+    <img src="${escAttr(url)}" alt="Saved product picture ${index + 1}" loading="lazy">
+    ${index === 0 ? '<span class="product-image-manager-cover">Cover</span>' : ''}
+    <div class="product-image-manager-actions">
+     ${index === 0
+      ? '<span class="product-image-manager-cover-label"><i class="fa-solid fa-star"></i> Main picture</span>'
+      : `<button type="button" class="product-image-manager-set-cover" onclick="setExistingProductImageCover(${index})"><i class="fa-solid fa-star"></i> Make cover</button>`}
+     <button type="button" class="product-image-manager-remove" onclick="removeExistingProductImage(${index})" aria-label="Remove saved picture ${index + 1}" title="Remove from listing"><i class="fa-solid fa-trash"></i></button>
+    </div>
+   </div>`).join('')}</div>`
+   : '<p class="product-image-manager-empty">No pictures are currently saved. Add new pictures below before updating this listing.</p>'}
+  <p class="product-image-manager-note"><i class="fa-solid fa-circle-info"></i> Removed pictures are taken off the listing when you select Update Product.</p>`;
+}
+
+function showProductImageManager() {
+ const input = document.getElementById('p-image');
+ if (!input) return;
+ let manager = document.getElementById('product-image-manager');
+ if (!manager) {
+  manager = document.createElement('section');
+  manager.id = 'product-image-manager';
+  manager.className = 'product-image-manager';
+  input.closest('.form-group')?.insertAdjacentElement('afterend', manager);
+ }
+ renderProductImageManager();
+}
+
+function hideProductImageManager() {
+ editingProductImages = [];
+ document.getElementById('product-image-manager')?.remove();
+}
+
+function removeExistingProductImage(index) {
+ if (!editingProductId || !editingProductImages[index]) return;
+ editingProductImages.splice(index, 1);
+ renderProductImageManager();
+}
+
+function setExistingProductImageCover(index) {
+ if (!editingProductId || index < 0 || index >= editingProductImages.length) return;
+ const [image] = editingProductImages.splice(index, 1);
+ editingProductImages.unshift(image);
+ renderProductImageManager();
+}
 
 async function editProduct(id) {
  const { data: p } = await runSelectWithColumnFallback('products', PRODUCT_LIST_COLUMNS, q => q.eq('id', id).single());
@@ -5368,6 +5447,10 @@ async function editProduct(id) {
  if (error || !p) { toast('Could not load product', '', 'error'); return; }
  editingProductId = id;
  showDash('add-product');
+ editingProductImages = savedProductImageUrls(p);
+ showProductImageManager();
+ const imageInput = document.getElementById('p-image');
+ if (imageInput) imageInput.value = '';
  // Pre-fill form
  document.getElementById('p-name').value = p.name || '';
  document.getElementById('p-price').value = p.price || '';
@@ -5409,6 +5492,7 @@ async function editProduct(id) {
 
 function cancelEditProduct() {
  editingProductId = null;
+ hideProductImageManager();
  document.getElementById('add-prod-form').reset();
  document.getElementById('pub-btn-text').textContent = 'Publish Product';
  document.querySelector('#ds-add-product .dash-page-title').textContent = 'Add New Product';
@@ -7599,7 +7683,7 @@ function renderAdminWhatsAppListings(listings) {
   const canPause = !listing.deleted_at && !listing.sold_at && product.status === 'active';
   const sourcePrice = Number(listing.source_price);
   const pricingLine = Number.isFinite(sourcePrice) && sourcePrice > 0
-  ? `Source ${fmtN(sourcePrice)} + ₦${fmtNum(listing.price_markup || 5000)} = <b>${fmtN(product.price)}</b>`
+  ? `Source ${fmtN(sourcePrice)} + ₦${fmtNum(listing.price_markup ?? Math.round(sourcePrice * 0.20))} = <b>${fmtN(product.price)}</b>`
   : `Buyer price: <b>${fmtN(product.price)}</b>`;
   return `<article class="whatsapp-admin-listing-row">
    <div class="whatsapp-admin-product-thumb">${cover ? `<img src="${escAttr(cover)}" alt="">` : '<i class="fa-solid fa-image"></i>'}</div>

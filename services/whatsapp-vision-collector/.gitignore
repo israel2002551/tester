@@ -1,0 +1,7 @@
+node_modules/
+.env
+.env.local
+wa_vision_auth_session/
+wa_auth_session/
+*.log
+.DS_Store

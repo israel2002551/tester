@@ -33,6 +33,8 @@ supabase/*
 supabase/functions/*
 !supabase/functions/telegram-payment-proof/
 !supabase/functions/telegram-payment-proof/index.ts
+!supabase/functions/manage-product/
+!supabase/functions/manage-product/index.ts
 !supabase/functions/whatsapp-listing-action/
 !supabase/functions/whatsapp-listing-action/index.ts
 !supabase/migrations/

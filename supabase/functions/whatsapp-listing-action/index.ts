@@ -10,7 +10,32 @@ const corsHeaders = {
 const PRODUCT_COLUMNS = "id,seller_id,name,description,price,original_price,shipping_fee,shipping_cost,category,condition,location,images,videos,image_url,video_url,has_video,stock_quantity,status,created_at,negotiable";
 const NATIVE_CATEGORIES = new Set(["electronics", "fashion", "home", "phones", "beauty", "sports", "dropship", "other"]);
 const NATIVE_CONDITIONS = new Set(["new", "used-like-new", "used-good"]);
-const WHATSAPP_PRICE_UPLIFT_NAIRA = 5_000;
+const WHATSAPP_PRICE_MARKUP_PERCENT = 20;
+
+function stripPriceFromText(text: string): string {
+  if (!text) return "";
+  return text
+    // Remove "Price: 350k", "Cost: ₦50,000", "Going for 1.5m", "last price 25k", etc.
+    .replace(/(?:\bprice\b|\basking\b|\bcost\b|\bgoing for\b|\bselling for\b|\blast price\b)\s*[:=-]?\s*(?:₦|NGN)?\s*[\d,]+(?:\.\d+)?\s*[kKmM]?/gi, "")
+    // Remove remaining price phrases like "last price", "asking price"
+    .replace(/\b(?:last|asking)\s+price\b/gi, "")
+    // Remove Naira symbols and following numbers e.g. ₦50,000, ₦ 350k
+    .replace(/₦\s*[\d,]+(?:\.\d+)?\s*[kKmM]?/gi, "")
+    // Remove NGN numbers e.g. NGN 50,000
+    .replace(/\bngn\s*[\d,]+(?:\.\d+)?\s*[kKmM]?/gi, "")
+    // Remove standalone shorthand e.g. 350k, 45k, 1.5m, 2.5M
+    .replace(/(^|\s)\d+(?:[.,]\d+)?\s*[kKmM]\b/gi, "$1")
+    // Remove standalone amounts with 4-9 digits if preceded by sale words
+    .replace(/(?:\bfor\b|\bat\b|\b#)\s*[\d,]{4,10}\b/gi, "")
+    // Clean up repetitive or orphaned punctuation
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s*([.,;:!?-])\s*([.,;:!?-])+/g, "$1")
+    .replace(/\s+([.,;:!?])/g, "$1")
+    .replace(/^\s*[,:;-]\s*/gm, "")
+    .replace(/\s*[,:;-]\s*$/gm, "")
+    .replace(/\n\s*\n\s*\n/g, "\n\n")
+    .trim();
+}
 
 function json(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -219,13 +244,17 @@ async function ingest(admin: ReturnType<typeof createClient>, req: Request, body
   }).filter((item) => item.url);
   const images = media.filter((item) => item.type === "image").map((item) => item.url);
   const videos = media.filter((item) => item.type === "video").map((item) => item.url);
-  const description = value(body.description, 2_000);
+  const rawDescription = value(body.description, 2_000);
+  const description = stripPriceFromText(rawDescription);
   const brand = value(body.brand, 80);
-  const specs = value(body.specs, 500);
+  const rawSpecs = value(body.specs, 500);
+  const specs = stripPriceFromText(rawSpecs);
   const detailLines = [description, brand ? `Brand: ${brand}` : "", specs ? `Details: ${specs}` : ""].filter(Boolean);
   const shippingFee = Math.max(0, finiteNumber(Deno.env.get("WHATSAPP_LISTING_SHIPPING_FEE")) ?? 2_500);
 
-  const marketplacePrice = price + WHATSAPP_PRICE_UPLIFT_NAIRA;
+  const markupPercent = Math.max(0, finiteNumber(Deno.env.get("WHATSAPP_PRICE_MARKUP_PERCENT")) ?? WHATSAPP_PRICE_MARKUP_PERCENT);
+  const priceMarkup = Math.round((price * markupPercent) / 100);
+  const marketplacePrice = price + priceMarkup;
   const productPayload = {
     seller_id: sellerId,
     name: title,
@@ -265,7 +294,7 @@ async function ingest(admin: ReturnType<typeof createClient>, req: Request, body
     sender_phone: value(body.sender_phone, 30) || null,
     manage_token_hash: await sha256(manageToken),
     source_price: price,
-    price_markup: WHATSAPP_PRICE_UPLIFT_NAIRA,
+    price_markup: priceMarkup,
   });
   if (metaError) {
     // The source-message unique index handles reconnect/replay races. Remove
