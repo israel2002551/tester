@@ -764,6 +764,16 @@ function processInboundChatRedirects() {
 // ====================================================
 // TOAST
 // ====================================================
+const TOAST_MAX_VISIBLE = 3;
+const TOAST_MAX_TITLE_LENGTH = 72;
+const TOAST_MAX_MESSAGE_LENGTH = 180;
+
+function compactToastText(value, maxLength) {
+ const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+ if (text.length <= maxLength) return text;
+ return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
 function toast(title, msg='', type='success', dur=3500) {
  let tc = document.getElementById('toast-container');
  
@@ -776,6 +786,9 @@ function toast(title, msg='', type='success', dur=3500) {
 
  const el = document.createElement('div');
  el.className = `toast-item ${type}`;
+ const compactTitle = compactToastText(title, TOAST_MAX_TITLE_LENGTH);
+ const compactMessage = compactToastText(msg, TOAST_MAX_MESSAGE_LENGTH);
+ const duration = Math.min(Math.max(Number(dur) || 3500, 1600), 6000);
  
  const icons = {
  success: 'fa-check-circle',
@@ -792,22 +805,21 @@ function toast(title, msg='', type='success', dur=3500) {
  };
  
  el.innerHTML = `
- <i class="fa-solid ${icons[type] || icons.info}" style="color:${cols[type] || cols.info};font-size:1.1rem;flex-shrink:0"></i>
- <div class="ti">
- <div class="ti-title">${title}</div>
- ${msg ? `<div class="ti-msg">${msg}</div>` : ''}
- </div>
- <button onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.85rem;flex-shrink:0">
- <i class="fa-solid fa-times"></i>
- </button>
- `;
- 
+  <i class="fa-solid ${icons[type] || icons.info}" style="color:${cols[type] || cols.info};font-size:1.1rem;flex-shrink:0"></i>
+  <div class="ti">
+  <div class="ti-title">${escHtml(compactTitle)}</div>
+  ${compactMessage ? `<div class="ti-msg">${escHtml(compactMessage)}</div>` : ''}
+  </div>
+  <button type="button" aria-label="Dismiss notification" onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.85rem;flex-shrink:0">
+  <i class="fa-solid fa-times"></i>
+  </button>
+  `;
+ while (tc.children.length >= TOAST_MAX_VISIBLE) tc.firstElementChild?.remove();
  tc.appendChild(el);
- 
- setTimeout(() => { 
- el.classList.add('exiting'); 
- setTimeout(() => el.remove(), 300); 
- }, dur);
+ setTimeout(() => {
+  el.classList.add('exiting');
+  setTimeout(() => el.remove(), 300);
+ }, duration);
 }
 
 // ====================================================
@@ -5175,8 +5187,45 @@ async function loadSellerAnalytics() {
 // ====================================================
 // SELLER PRODUCTS
 // ====================================================
+const NEWLY_COMING_PRODUCT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+function ensureSellerProductFilterOptions() {
+ const select = document.getElementById('prod-filter');
+ if (!select || select.querySelector('optgroup[data-product-filter-group="listing-state"]')) return;
+
+ const group = document.createElement('optgroup');
+ group.label = 'Listing state';
+ group.dataset.productFilterGroup = 'listing-state';
+ [
+  ['activated', 'Activated'],
+  ['not-activated', 'Not Activated'],
+  ['newly-coming', 'Newly Coming'],
+ ].forEach(([value, label]) => {
+  const option = document.createElement('option');
+  option.value = value;
+  option.textContent = label;
+  group.appendChild(option);
+ });
+ select.appendChild(group);
+}
+
+function sellerProductMatchesFilter(product, filter) {
+ const stock = Number(product?.stock_quantity);
+ const status = String(product?.status || '').toLowerCase();
+ if (filter === 'active') return status === 'active';
+ if (filter === 'sold-out') return stock === 0;
+ if (filter === 'activated') return status === 'active' && stock !== 0;
+ if (filter === 'not-activated') return status !== 'active';
+ if (filter === 'newly-coming') {
+  const createdAt = new Date(product?.created_at || '').getTime();
+  return Number.isFinite(createdAt) && Date.now() - createdAt <= NEWLY_COMING_PRODUCT_WINDOW_MS;
+ }
+ return true;
+}
+
 async function loadSellerProds() {
  if (!currentUser) return;
+ ensureSellerProductFilterOptions();
  const filter = document.getElementById('prod-filter')?.value || 'all';
  const skeleton = document.getElementById('sp-skeleton');
  const list = document.getElementById('sp-list');
@@ -5188,7 +5237,7 @@ async function loadSellerProds() {
  const { data, error } = await q;
  skeleton?.classList.add('hidden');
  if (error) { toast('Products unavailable', error.message, 'error'); return; }
- const prods = (data||[]).filter(p => filter==='all'||(filter==='sold-out'&&Number(p.stock_quantity)===0)|| (filter==='active'&&p.status==='active'));
+ const prods = (data || []).filter(product => sellerProductMatchesFilter(product, filter));
  if (!prods.length) { empty?.classList.remove('hidden'); return; }
  empty?.classList.add('hidden');
  list?.classList.remove('hidden');
