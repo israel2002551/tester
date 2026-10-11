@@ -116,6 +116,10 @@
   ],
   "rewrites": [
     {
+      "source": "/checkout",
+      "destination": "/index.html"
+    },
+    {
       "source": "/product",
       "destination": "/product.html"
     },

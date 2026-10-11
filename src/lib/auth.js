@@ -92,7 +92,9 @@ export async function onAuthStateChange(callback) {
 /** Routes whose initial render contains account, order, or seller data. */
 export function isProtectedMarketplaceRoute(location = window.location) {
   const params = new URLSearchParams(location.search);
-  return params.get('dashboard') === 'seller'
+  const pathname = String(location.pathname || '').replace(/\/+$/, '') || '/';
+  return pathname === '/checkout'
+    || params.get('dashboard') === 'seller'
     || params.get('page') === 'checkout'
     || params.get('checkout') === 'open'
     || params.get('page') === 'messages'
