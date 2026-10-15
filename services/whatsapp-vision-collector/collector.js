@@ -7,15 +7,16 @@ import makeWASocket, {
   useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
 import { createHash, randomBytes } from 'node:crypto';
-import { rmSync, existsSync } from 'node:fs';
+import { mkdirSync, rmSync, existsSync } from 'node:fs';
 import http from 'node:http';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import 'dotenv/config';
-import { parseListingWithVision, looksLikeSalePost, stripPriceFromText, hasPriceInText } from './parser.js';
+import { parseListingWithVision, looksLikeSalePost, stripPriceFromText, hasPriceInText, transcribeVideoAudio } from './parser.js';
 import { uploadWhatsAppMedia } from './cloudinary.js';
 import { BuySellListingsApi } from './buysell-api.js';
 import { sendSellerCommandResult, sendSellerConfirmation, sendSellerBatchConfirmation } from './notifier.js';
+import { KeyedTaskQueue } from './queue.js';
 
 const api = new BuySellListingsApi();
 const targetGroups = new Set();
@@ -48,6 +49,99 @@ const envTargetGroups = (process.env.WHATSAPP_TARGET_GROUPS || '')
   .filter(g => g.endsWith('@g.us'));
 
 const monitorAllGroups = String(process.env.WHATSAPP_MONITOR_ALL_GROUPS || 'true').toLowerCase() === 'true';
+const mediaIntakeConcurrency = Math.max(1, Math.min(Number(process.env.WHATSAPP_MEDIA_INTAKE_CONCURRENCY || 2), 4));
+const stagingConcurrency = Math.max(1, Math.min(Number(process.env.WHATSAPP_STAGING_CONCURRENCY || 2), 4));
+const listingWorkerConcurrency = Math.max(1, Math.min(Number(process.env.WHATSAPP_LISTING_WORKER_CONCURRENCY || 1), 3));
+const queuePollMs = Math.max(1_000, Number(process.env.WHATSAPP_QUEUE_POLL_MS || 3_000));
+const priceFollowUpWindowMs = Math.max(60_000, Number(process.env.WHATSAPP_PRICE_FOLLOWUP_WINDOW_MS || 10 * 60_000));
+const queueWorkerId = `vision-${randomBytes(10).toString('hex')}`;
+
+const mediaIntakeQueue = new KeyedTaskQueue({
+  name: 'whatsapp-media-intake',
+  concurrency: mediaIntakeConcurrency,
+  onError: (error, key) => console.error(`[Vision Intake] ${key}:`, error?.message || error),
+});
+const listingStagingQueue = new KeyedTaskQueue({
+  name: 'whatsapp-listing-staging',
+  concurrency: stagingConcurrency,
+  onError: (error, key) => console.error(`[Vision Staging] ${key}:`, error?.message || error),
+});
+let listingWorkersActive = 0;
+let listingClaimInFlight = false;
+let listingQueuePollTimer = null;
+let whatsappConnected = false;
+
+// Keep retry counters across a socket reconnect. Baileys creates this cache per
+// socket by default, which can make a transient reconnect retry the same
+// encrypted message from scratch.
+const messageRetryCounterEntries = new Map();
+const messageRetryCounterCache = {
+  get(key) {
+    const entry = messageRetryCounterEntries.get(key);
+    if (!entry) return undefined;
+    if (entry.expiresAt <= Date.now()) {
+      messageRetryCounterEntries.delete(key);
+      return undefined;
+    }
+    return entry.value;
+  },
+  set(key, value) {
+    messageRetryCounterEntries.set(key, {
+      value,
+      expiresAt: Date.now() + 60 * 60 * 1000,
+    });
+    if (messageRetryCounterEntries.size > 1_000) {
+      messageRetryCounterEntries.delete(messageRetryCounterEntries.keys().next().value);
+    }
+  },
+  del(key) {
+    messageRetryCounterEntries.delete(key);
+  },
+  flushAll() {
+    messageRetryCounterEntries.clear();
+  },
+};
+
+let activeSocket = null;
+let reconnectTimer = null;
+let collectorIsStarting = false;
+let warnedAboutSessionStorage = false;
+
+// libsignal writes complete session objects (including private key material) to
+// the process console when it recovers a stale session. Baileys' pino logger
+// cannot control those direct console calls, so redact only those known events.
+function installSignalLogRedaction() {
+  const sensitiveSignalEvent = /^(?:Session error:|Closing session:|Removing old closed session:|Session already closed)/i;
+  const recoveredSignalEvent = /^Decrypted message with closed session\.?$/i;
+
+  for (const method of ['error', 'warn', 'info']) {
+    const original = console[method].bind(console);
+    console[method] = (...args) => {
+      const message = typeof args[0] === 'string' ? args[0] : '';
+      if (sensitiveSignalEvent.test(message)) {
+        original('[WhatsApp Signal] Stale session detected while processing a message; details redacted.');
+        return;
+      }
+      if (recoveredSignalEvent.test(message)) {
+        original('[WhatsApp Signal] Recovered a message with a closed session.');
+        return;
+      }
+      original(...args);
+    };
+  }
+}
+
+function scheduleReconnect() {
+  if (reconnectTimer) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    startVisionCollector().catch(error => {
+      console.error('[Bot 2] WhatsApp Vision collector failed to reconnect:', error?.message || error);
+    });
+  }, 3_000);
+}
+
+installSignalLogRedaction();
 
 // In-memory message store to satisfy Baileys retry requests and avoid Signal session Bad MAC desync
 const messageStore = new Map();
@@ -123,7 +217,14 @@ function messageText(message) {
 function mediaDetails(message) {
   const content = unwrapMessage(message);
   if (content.imageMessage) return { kind: 'image', media: content.imageMessage };
-  if (content.videoMessage) return { kind: 'video', media: content.videoMessage };
+  if (content.videoMessage) {
+    const preview = content.videoMessage.jpegThumbnail;
+    return {
+      kind: 'video',
+      media: content.videoMessage,
+      previewBuffer: Buffer.isBuffer(preview) ? preview : preview ? Buffer.from(preview) : null,
+    };
+  }
   return null;
 }
 
@@ -139,20 +240,21 @@ function rawPhone(senderJid) {
 }
 
 async function processListing(bundle, sock) {
-  const hasImages = Array.isArray(bundle?.media) && bundle.media.some(m => m?.kind === 'image' && m?.buffer);
-  if (!bundle || (!bundle.text && !hasImages)) return;
-  if (!looksLikeSalePost(bundle.text, hasImages)) return;
+  const hasVisualMedia = Array.isArray(bundle?.media) && bundle.media.some(m => (m?.kind === 'image' || m?.kind === 'video' || m?.type === 'image' || m?.type === 'video') && (m?.buffer || m?.url || m?.vision_urls?.length));
+  if (!bundle || (!bundle.text && !hasVisualMedia)) return { state: 'completed', message: 'Empty bundle skipped.', itemCount: 0 };
+  if (!looksLikeSalePost(bundle.text, hasVisualMedia)) return { state: 'completed', message: 'Not a sale post.', itemCount: 0 };
 
-  console.info(`[Vision Analysis] Scanning post from ${bundle.senderJid} (images: ${bundle.media?.length || 0}, text: "${(bundle.text || '').slice(0, 50).replace(/\n/g, ' ')}")...`);
+  console.info(`[Vision Analysis] Scanning post from ${bundle.senderJid} (media: ${bundle.media?.length || 0}, text: "${(bundle.text || '').slice(0, 50).replace(/\n/g, ' ')}")...`);
 
   const parsed = await parseListingWithVision({
     text: bundle.text,
     media: bundle.media,
+    audioTranscript: bundle.audioTranscript,
   });
 
   if (!parsed?.is_commercial_listing) {
     console.info(`[Skipped] ${bundle.senderJid}: Vision AI determined this is not a commercial sale post.`);
-    return;
+    return { state: 'completed', message: 'Vision determined this is not a commercial sale post.', itemCount: 0 };
   }
 
   // Extract all valid items parsed from this post
@@ -163,34 +265,24 @@ async function processListing(bundle, sock) {
   const validItems = rawItems.filter(item => Number.isFinite(Number(item?.price)) && Number(item.price) > 0);
 
   if (validItems.length === 0) {
-    console.info(`[Skipped] ${bundle.senderJid}: No priced products found in post text or image.`);
-    return;
+    console.info(`[Needs price] ${bundle.senderJid}: Product detected, but no fixed price was found.`);
+    return { state: 'needs_price', message: 'A product was detected but no fixed price was found.', itemCount: rawItems.length };
   }
 
   console.info(`[Vision Found] Detected ${validItems.length} product(s) from ${bundle.senderJid}`);
 
-  // Base identifier for Cloudinary uploads
-  const baseId = sourceId(bundle.groupJid, bundle.senderJid, bundle.messageIds, 0);
-
-  let uploadedMedia = [];
-  try {
-    uploadedMedia = await Promise.all((bundle.media || []).map((item, index) => uploadWhatsAppMedia({
-      buffer: item.buffer,
-      kind: item.kind,
-      mimeType: item.mimeType,
-      sourceId: baseId,
-      index,
-    })));
-  } catch (err) {
-    console.error(`[Vision Cloudinary upload] ${bundle.senderJid}:`, err?.message || err);
-  }
-
+  // Media has already been saved before this durable job was enqueued. This
+  // keeps retries independent of WhatsApp's expiring media download links.
+  const uploadedMedia = (bundle.media || []).filter(item => item?.url && item?.type);
   const createdListings = [];
+  const importErrors = [];
 
   // Ingest each identified product separately
   for (let i = 0; i < validItems.length; i++) {
     const item = validItems[i];
-    const itemSourceId = sourceId(bundle.groupJid, bundle.senderJid, bundle.messageIds, i);
+    const itemSourceId = bundle.sourceKey
+      ? (i > 0 ? `${bundle.sourceKey}_${i}` : bundle.sourceKey)
+      : sourceId(bundle.groupJid, bundle.senderJid, bundle.messageIds, i);
 
     // Ensure title and description never contain the price
     const finalTitle = stripPriceFromText(item.title) || 'Marketplace Item';
@@ -241,71 +333,263 @@ async function processListing(bundle, sock) {
       }
     } catch (error) {
       console.error(`[Vision Product import failed] ${bundle.senderJid} (${finalTitle}):`, error?.message || error);
+      importErrors.push(error);
     }
   }
 
+  if (importErrors.length > 0) {
+    throw new Error(`${importErrors.length} product import${importErrors.length === 1 ? '' : 's'} failed.`);
+  }
+
   // Notify seller of imported listing(s)
-  if (createdListings.length > 0) {
+  if (createdListings.length > 0 && sock) {
     await sendSellerBatchConfirmation(sock, {
       senderJid: bundle.senderJid,
       listings: createdListings,
       publicSiteUrl: process.env.PUBLIC_SITE_URL,
     });
   }
+  return { state: 'completed', message: 'Listing imported.', itemCount: validItems.length };
 }
 
-async function flushBundle(bundle, sock) {
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function bundleSourceKey(bundle) {
+  return bundle.sourceKey || sourceId(bundle.groupJid, bundle.senderJid, bundle.messageIds, 0);
+}
+
+async function retryOperation(action, label, attempts = 3) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await action();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        const pause = Math.min(15_000, 750 * (2 ** (attempt - 1)) + Math.floor(Math.random() * 300));
+        console.warn(`[Retry] ${label} attempt ${attempt}/${attempts} failed; retrying in ${pause}ms.`);
+        await delay(pause);
+      }
+    }
+  }
+  throw lastError || new Error(`${label} failed.`);
+}
+
+async function stageBundleMedia(bundle) {
+  const sourceKey = bundleSourceKey(bundle);
+  const uploadedMedia = [];
+  const transcripts = [];
+  for (let index = 0; index < (bundle.media || []).length; index += 1) {
+    const item = bundle.media[index];
+    if (!Buffer.isBuffer(item?.buffer) || item.buffer.length === 0) {
+      throw new Error(`Media ${index + 1} was empty before staging.`);
+    }
+    if (item.kind === 'video') {
+      const transcript = await transcribeVideoAudio({ buffer: item.buffer, mimeType: item.mimeType });
+      if (transcript) transcripts.push(transcript);
+    }
+    const upload = await retryOperation(
+      () => uploadWhatsAppMedia({
+        buffer: item.buffer,
+        kind: item.kind,
+        mimeType: item.mimeType,
+        sourceId: sourceKey,
+        index,
+      }),
+      `Cloudinary media ${index + 1}`,
+    );
+    uploadedMedia.push(upload);
+  }
+  return { uploadedMedia, audioTranscript: transcripts.join('\n\n') };
+}
+
+function queueBundleForStaging(bundle) {
+  const key = `${bundle.groupJid}:${bundle.senderJid}`;
+  void listingStagingQueue.enqueue(key, async () => {
+    const sourceKey = bundleSourceKey(bundle);
+    const { uploadedMedia, audioTranscript } = await stageBundleMedia(bundle);
+    const queued = await api.queueListing({
+      dedupe_key: sourceKey,
+      group_jid: bundle.groupJid,
+      sender_jid: bundle.senderJid,
+      sender_phone: rawPhone(bundle.senderJid),
+      message_ids: [...new Set(bundle.messageIds || [])],
+      payload: {
+        text: bundle.text || '',
+        audio_transcript: audioTranscript,
+        media: uploadedMedia,
+      },
+    });
+    console.info(`[Vision Queue] ${queued?.updated ? 'Updated' : 'Queued'} ${sourceKey} (${uploadedMedia.length} media file${uploadedMedia.length === 1 ? '' : 's'}).`);
+    scheduleListingJobPump();
+  }).catch(error => {
+    const attempt = Number(bundle.stagingAttempts || 0) + 1;
+    if (attempt < 5) {
+      const pause = Math.min(60_000, 2_000 * (2 ** (attempt - 1)) + Math.floor(Math.random() * 500));
+      console.warn(`[Vision Staging] ${bundle.senderJid} failed; retrying staged upload in ${Math.ceil(pause / 1000)}s.`);
+      setTimeout(() => queueBundleForStaging({ ...bundle, stagingAttempts: attempt }), pause);
+      return;
+    }
+    console.error(`[Vision Staging] ${bundle.senderJid} failed after ${attempt} attempts:`, error?.message || error);
+  });
+}
+
+function listingRetryDelaySeconds(attempt) {
+  const exponential = Math.min(3_600, 30 * (2 ** Math.max(0, attempt - 1)));
+  return exponential + Math.floor(Math.random() * 15);
+}
+
+async function processClaimedListingJob(job) {
+  const payload = job?.payload && typeof job.payload === 'object' ? job.payload : {};
+  const media = Array.isArray(payload.media) ? payload.media : [];
+  const bundle = {
+    groupJid: job.group_jid,
+    senderJid: job.sender_jid,
+    messageIds: Array.isArray(job.message_ids) ? job.message_ids : [],
+    sourceKey: job.dedupe_key,
+    text: String(payload.text || ''),
+    audioTranscript: String(payload.audio_transcript || ''),
+    media,
+  };
+
+  try {
+    const outcome = await processListing(bundle, activeSocket);
+    await api.finishListingJob({
+      jobId: job.id,
+      lockToken: job.lock_token,
+      state: outcome?.state === 'needs_price' ? 'needs_price' : 'completed',
+      result: { message: outcome?.message || 'Listing handled.', item_count: outcome?.itemCount || 0 },
+    });
+  } catch (error) {
+    const attempts = Number(job.attempts || 1);
+    const maxAttempts = Number(job.max_attempts || 5);
+    const terminal = attempts >= maxAttempts;
+    await api.finishListingJob({
+      jobId: job.id,
+      lockToken: job.lock_token,
+      state: terminal ? 'failed' : 'retry',
+      error: error?.message || String(error),
+      retryInSeconds: listingRetryDelaySeconds(attempts),
+      result: { message: terminal ? 'Worker retry limit reached.' : 'Worker failed; retry scheduled.' },
+    }).catch(finishError => {
+      console.warn(`[Vision Queue] Could not mark job ${job?.id || ''} as ${terminal ? 'failed' : 'retry'}:`, finishError?.message || finishError);
+    });
+    console.error(`[Vision Queue] Job ${job?.id || ''} failed:`, error?.message || error);
+  }
+}
+
+async function pumpListingJobs() {
+  if (!whatsappConnected || !activeSocket || listingClaimInFlight) return;
+  listingClaimInFlight = true;
+  try {
+    while (listingWorkersActive < listingWorkerConcurrency) {
+      const claimed = await api.claimListingJobs({ workerId: queueWorkerId, limit: 1, leaseSeconds: 900 });
+      const job = Array.isArray(claimed?.jobs) ? claimed.jobs[0] : null;
+      if (!job) break;
+      listingWorkersActive += 1;
+      void processClaimedListingJob(job).finally(() => {
+        listingWorkersActive -= 1;
+        scheduleListingJobPump();
+      });
+    }
+  } catch (error) {
+    console.warn('[Vision Queue] Could not claim listing jobs:', error?.message || error);
+  } finally {
+    listingClaimInFlight = false;
+  }
+}
+
+function scheduleListingJobPump() {
+  void pumpListingJobs();
+}
+
+function startListingQueuePolling() {
+  if (listingQueuePollTimer) return;
+  listingQueuePollTimer = setInterval(scheduleListingJobPump, queuePollMs);
+  scheduleListingJobPump();
+}
+
+function recentCandidates(key) {
+  return recentUncaptionedMedia.get(key) || [];
+}
+
+function retainUncaptionedCandidate(key, bundle) {
+  const candidate = {
+    media: [...bundle.media],
+    messageIds: [...bundle.messageIds],
+    sourceKey: bundleSourceKey(bundle),
+    expiresTimer: null,
+  };
+  const candidates = recentCandidates(key);
+  candidates.push(candidate);
+  recentUncaptionedMedia.set(key, candidates);
+  candidate.expiresTimer = setTimeout(() => {
+    const current = recentCandidates(key);
+    const remaining = current.filter(entry => entry !== candidate);
+    if (remaining.length) recentUncaptionedMedia.set(key, remaining);
+    else recentUncaptionedMedia.delete(key);
+  }, priceFollowUpWindowMs);
+  return candidate;
+}
+
+function takeLatestUncaptionedCandidate(key) {
+  const candidates = recentCandidates(key);
+  const candidate = candidates.pop() || null;
+  if (candidates.length) recentUncaptionedMedia.set(key, candidates);
+  else recentUncaptionedMedia.delete(key);
+  if (candidate?.expiresTimer) clearTimeout(candidate.expiresTimer);
+  return candidate;
+}
+
+function flushBundle(bundle) {
   const key = `${bundle.groupJid}:${bundle.senderJid}`;
   const combinedText = bundle.texts.join('\n').trim();
 
-  // If media was sent without any text, hold for 25s in case seller sends price separately
+  // Give a photo/video album a short opportunity to receive a follow-up price.
+  // The original media stays attached for a longer window so late price-only
+  // messages can requeue the same durable job instead of being lost.
   if (!combinedText) {
     if (bundle.media.length > 0) {
-      console.info(`[Vision Buffer] ${bundle.senderJid} posted ${bundle.media.length} image(s) without text. Waiting 25s for price follow-up...`);
-      const timer = setTimeout(async () => {
-        recentUncaptionedMedia.delete(key);
-        console.info(`[Vision Scan] Scanning image from ${bundle.senderJid} for visible price or flyer text...`);
-        await processListing({
-          groupJid: bundle.groupJid,
-          senderJid: bundle.senderJid,
+      console.info(`[Vision Buffer] ${bundle.senderJid} posted ${bundle.media.length} media file(s) without text. Waiting 25s for a price follow-up...`);
+      const candidate = retainUncaptionedCandidate(key, bundle);
+      setTimeout(() => {
+        // A price or description already consumed this album into a new bundle.
+        if (!recentCandidates(key).includes(candidate)) return;
+        console.info(`[Vision Scan] Queueing media from ${bundle.senderJid} for visual price and product analysis...`);
+        queueBundleForStaging({
+          ...bundle,
           text: '',
-          media: bundle.media,
-          messageIds: bundle.messageIds,
-        }, sock);
+          sourceKey: bundleSourceKey(bundle),
+        });
       }, 25_000);
-
-      recentUncaptionedMedia.set(key, {
-        media: bundle.media,
-        messageIds: bundle.messageIds,
-        timer,
-      });
     }
     return;
   }
 
-  await processListing({
-    groupJid: bundle.groupJid,
-    senderJid: bundle.senderJid,
+  queueBundleForStaging({
+    ...bundle,
     text: combinedText,
-    media: bundle.media,
-    messageIds: bundle.messageIds,
-  }, sock);
+    sourceKey: bundleSourceKey(bundle),
+  });
 }
 
-function queueListingItem({ groupJid, senderJid, messageId, details, text, sock }) {
+function queueListingItem({ groupJid, senderJid, messageId, details, text }) {
   const key = `${groupJid}:${senderJid}`;
   const cleanText = String(text || '').trim();
-  const msgHasPrice = hasPriceInText(cleanText);
-
   let bundle = pendingBundles.get(key);
+  const latestCandidate = recentCandidates(key).at(-1);
+  const mediaContext = Boolean(details || bundle?.media.length || latestCandidate?.media.length);
+  const msgHasPrice = hasPriceInText(cleanText, { mediaContext });
 
-  // If an existing bundle ALREADY contains a price, AND this new message ALSO introduces a price:
-  // The seller is posting a separate product! Immediately flush the previous bundle and start fresh.
-  const bundleHasPrice = bundle && bundle.texts.some(t => hasPriceInText(t));
+  // If an existing bundle already has a price and the next message introduces
+  // another price, treat it as a new listing without blocking its ingestion.
+  const bundleHasPrice = bundle && bundle.texts.some(entry => hasPriceInText(entry, { mediaContext: Boolean(bundle.media.length) }));
   if (bundle && bundleHasPrice && msgHasPrice) {
     clearTimeout(bundle.timer);
     pendingBundles.delete(key);
-    flushBundle(bundle, sock);
+    flushBundle(bundle);
     bundle = null;
   }
 
@@ -316,66 +600,58 @@ function queueListingItem({ groupJid, senderJid, messageId, details, text, sock 
       texts: [],
       media: [],
       messageIds: [],
+      sourceKey: null,
       timer: null,
     };
     pendingBundles.set(key, bundle);
   }
 
-  if (messageId && !bundle.messageIds.includes(messageId)) {
-    bundle.messageIds.push(messageId);
-  }
-
-  // If there was uncaptioned media buffered recently for this sender, attach it!
-  if (recentUncaptionedMedia.has(key)) {
-    const cached = recentUncaptionedMedia.get(key);
-    clearTimeout(cached.timer);
-    recentUncaptionedMedia.delete(key);
-    bundle.media.push(...cached.media);
-    bundle.messageIds.push(...cached.messageIds);
-  }
-
-  if (details) {
-    bundle.media.push(details);
-  }
-
-  if (cleanText) {
-    if (!bundle.texts.includes(cleanText)) {
-      bundle.texts.push(cleanText);
+  // A follow-up description or price belongs to the newest uncaptioned album.
+  if (cleanText && latestCandidate) {
+    const cached = takeLatestUncaptionedCandidate(key);
+    if (cached) {
+      bundle.media.push(...cached.media);
+      bundle.messageIds.push(...cached.messageIds);
+      bundle.sourceKey = cached.sourceKey;
     }
   }
 
+  if (messageId && !bundle.messageIds.includes(messageId)) bundle.messageIds.push(messageId);
+  if (details) {
+    bundle.media.push(details);
+    if (!bundle.sourceKey && messageId) bundle.sourceKey = sourceId(groupJid, senderJid, [messageId], 0);
+  }
+  if (cleanText && !bundle.texts.includes(cleanText)) bundle.texts.push(cleanText);
+
   if (bundle.timer) clearTimeout(bundle.timer);
-
-  // For complete single-photo posts with price, debounce 2.5s; otherwise normal 4s
   const debounceMs = (details && msgHasPrice) ? 2_500 : bundleWindowMs;
-
-  bundle.timer = setTimeout(async () => {
+  bundle.timer = setTimeout(() => {
     pendingBundles.delete(key);
-    await flushBundle(bundle, sock);
+    flushBundle(bundle);
   }, debounceMs);
 }
 
-async function onMessage(sock, message) {
-  const remoteJid = message?.key?.remoteJid;
-  if (!remoteJid) return;
-  const isFromMe = Boolean(message?.key?.fromMe);
-  const text = messageText(message);
-
-  if (remoteJid.endsWith('@s.whatsapp.net')) {
-    if (isFromMe) return;
-    const command = text.toUpperCase();
-    if (!['SOLD', 'DELETE'].includes(command)) return;
-    try {
-      const result = await api.sellerCommand({ senderJid: remoteJid, command });
-      await sendSellerCommandResult(sock, remoteJid, command, result);
-    } catch (error) {
-      console.error('[Seller command]', error?.message || error);
-      await sock.sendMessage(remoteJid, { text: 'I could not update that listing right now. Please try again shortly.' }).catch(() => {});
-    }
-    return;
+async function handleSellerCommand(sock, remoteJid, command) {
+  try {
+    const result = await api.sellerCommand({ senderJid: remoteJid, command });
+    await sendSellerCommandResult(sock, remoteJid, command, result);
+  } catch (error) {
+    console.error('[Seller command]', error?.message || error);
+    await sock.sendMessage(remoteJid, { text: 'I could not update that listing right now. Please try again shortly.' }).catch(() => {});
   }
+}
 
-  if (!remoteJid.endsWith('@g.us')) return;
+async function downloadIncomingMedia(message) {
+  return retryOperation(async () => {
+    try {
+      return await downloadMediaMessage({ message: unwrapMessage(message) }, 'buffer', {}, { logger: pino({ level: 'silent' }) });
+    } catch {
+      return downloadMediaMessage(message, 'buffer', {}, { logger: pino({ level: 'silent' }) });
+    }
+  }, 'WhatsApp media download');
+}
+
+async function processQueuedIncomingMessage({ sock, message, remoteJid, senderJid, details, text, intakeAttempts = 0 }) {
   try {
     await refreshTargetGroups();
   } catch (error) {
@@ -391,6 +667,68 @@ async function onMessage(sock, message) {
     return;
   }
 
+  let mediaBuffer = null;
+  if (details) {
+    try {
+      mediaBuffer = await downloadIncomingMedia(message);
+    } catch (error) {
+      console.error('[Vision Media download]', error?.message || error);
+      if (intakeAttempts < 4) {
+        const pause = Math.min(60_000, 2_000 * (2 ** intakeAttempts) + Math.floor(Math.random() * 500));
+        console.warn(`[Vision Intake] Requeueing media download for ${senderJid} in ${Math.ceil(pause / 1000)}s.`);
+        setTimeout(() => {
+          void mediaIntakeQueue.enqueue(`${remoteJid}:${senderJid}`, () => processQueuedIncomingMessage({
+            sock,
+            message,
+            remoteJid,
+            senderJid,
+            details,
+            text,
+            intakeAttempts: intakeAttempts + 1,
+          })).catch(() => {});
+        }, pause);
+      }
+      return;
+    }
+  }
+
+  const itemDetails = mediaBuffer ? {
+    buffer: mediaBuffer,
+    kind: details.kind,
+    mimeType: details.media?.mimetype || '',
+    previewBuffer: details.previewBuffer || null,
+  } : null;
+
+  // Do not create durable jobs for ordinary text conversation. Media remains
+  // eligible even without text so flyer OCR and video analysis can decide.
+  // A plain follow-up description is retained when a recent album is waiting.
+  const hasRecentAlbum = recentCandidates(`${remoteJid}:${senderJid}`).length > 0;
+  if (!itemDetails && !hasRecentAlbum && !looksLikeSalePost(text, false)) return;
+
+  queueListingItem({
+    groupJid: remoteJid,
+    senderJid,
+    messageId: message.key?.id,
+    details: itemDetails,
+    text,
+  });
+}
+
+function onMessage(sock, message) {
+  const remoteJid = message?.key?.remoteJid;
+  if (!remoteJid) return;
+  const isFromMe = Boolean(message?.key?.fromMe);
+  const text = messageText(message);
+
+  if (remoteJid.endsWith('@s.whatsapp.net')) {
+    if (isFromMe) return;
+    const command = text.toUpperCase();
+    if (!['SOLD', 'DELETE'].includes(command)) return;
+    void mediaIntakeQueue.enqueue(`command:${remoteJid}`, () => handleSellerCommand(sock, remoteJid, command)).catch(() => {});
+    return;
+  }
+
+  if (!remoteJid.endsWith('@g.us')) return;
   const myPhone = sock?.user?.id ? sock.user.id.split(':')[0] : '';
   const myJid = myPhone ? `${myPhone}@s.whatsapp.net` : '';
   const senderJid = isFromMe
@@ -400,109 +738,112 @@ async function onMessage(sock, message) {
   const details = mediaDetails(message);
 
   console.info(`[Vision Message] In ${remoteJid} from ${senderJid} (hasMedia: ${Boolean(details)}, fromMe: ${isFromMe}): "${text.slice(0, 50).replace(/\n/g, ' ')}"`);
-
-  let mediaBuffer = null;
-  if (details) {
-    try {
-      mediaBuffer = await downloadMediaMessage({ message: unwrapMessage(message) }, 'buffer', {}, { logger: pino({ level: 'silent' }) });
-    } catch {
-      try {
-        mediaBuffer = await downloadMediaMessage(message, 'buffer', {}, { logger: pino({ level: 'silent' }) });
-      } catch (err) {
-        console.error('[Vision Media download]', err?.message || err);
-      }
-    }
-  }
-
-  const itemDetails = mediaBuffer ? {
-    buffer: mediaBuffer,
-    kind: details.kind,
-    mimeType: details.media?.mimetype || '',
-  } : null;
-
-  queueListingItem({
-    groupJid: remoteJid,
-    senderJid,
-    messageId: message.key?.id,
-    details: itemDetails,
-    text,
+  const queueKey = `${remoteJid}:${senderJid}`;
+  void mediaIntakeQueue.enqueue(queueKey, () => processQueuedIncomingMessage({
     sock,
-  });
+    message,
+    remoteJid,
+    senderJid,
+    details,
+    text,
+  })).catch(() => {});
 }
 
 async function startVisionCollector() {
+  if (collectorIsStarting || activeSocket) return;
+  collectorIsStarting = true;
+
   try {
-    await refreshTargetGroups(true);
-  } catch (error) {
-    console.warn('[Vision Groups] Started without approved-group list:', error?.message || error);
-  }
+    try {
+      await refreshTargetGroups(true);
+    } catch (error) {
+      console.warn('[Vision Groups] Started without approved-group list:', error?.message || error);
+    }
 
-  const sessionDir = process.env.SESSION_DIR || './wa_vision_auth_session';
-  const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
-  const phoneNumber = (process.env.WHATSAPP_PHONE_NUMBER || '').replace(/\D/g, '');
+    const sessionDir = process.env.SESSION_DIR || './wa_vision_auth_session';
+    if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });
+    if (!process.env.SESSION_DIR && !warnedAboutSessionStorage) {
+      warnedAboutSessionStorage = true;
+      console.warn('[Session] SESSION_DIR is unset. Use a persistent disk path in production so WhatsApp does not need to be re-paired after a restart.');
+    }
 
-  const sock = makeWASocket({
-    logger: pino({ level: 'silent' }),
-    auth: state,
-    browser: Browsers.ubuntu('Chrome'),
-    markOnlineOnConnect: true,
-    syncFullHistory: false,
-    getMessage: async (key) => {
-      const msg = messageStore.get(key.id);
-      return msg?.message || undefined;
-    },
-  });
-  sock.ev.on('creds.update', saveCreds);
+    const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+    const phoneNumber = (process.env.WHATSAPP_PHONE_NUMBER || '').replace(/\D/g, '');
 
-  if (phoneNumber && !state.creds.registered) {
-    setTimeout(async () => {
-      try {
-        const code = await sock.requestPairingCode(phoneNumber);
-        const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
-        console.log('\n============================================================');
-        console.log(`[BOT 2 VISION] WHATSAPP PAIRING CODE: ${formatted}`);
-        console.log('============================================================');
-        console.log('On your phone for Bot 2:');
-        console.log('1. Open WhatsApp -> Settings -> Linked Devices');
-        console.log('2. Tap "Link a device"');
-        console.log('3. Tap "Link with phone number instead" at the bottom');
-        console.log(`4. Enter code: ${formatted}\n`);
-      } catch (err) {
-        console.error('[Bot 2] Failed to request pairing code:', err?.message || err);
+    const sock = makeWASocket({
+      logger: pino({ level: 'silent' }),
+      auth: state,
+      browser: Browsers.ubuntu('Chrome'),
+      markOnlineOnConnect: true,
+      syncFullHistory: false,
+      msgRetryCounterCache: messageRetryCounterCache,
+      getMessage: async (key) => {
+        const msg = messageStore.get(key.id);
+        return msg?.message || undefined;
+      },
+    });
+    activeSocket = sock;
+    sock.ev.on('creds.update', saveCreds);
+
+    if (phoneNumber && !state.creds.registered) {
+      setTimeout(async () => {
+        if (sock !== activeSocket) return;
+        try {
+          const code = await sock.requestPairingCode(phoneNumber);
+          const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
+          console.log('\n============================================================');
+          console.log(`[BOT 2 VISION] WHATSAPP PAIRING CODE: ${formatted}`);
+          console.log('============================================================');
+          console.log('On your phone for Bot 2:');
+          console.log('1. Open WhatsApp -> Settings -> Linked Devices');
+          console.log('2. Tap "Link a device"');
+          console.log('3. Tap "Link with phone number instead" at the bottom');
+          console.log(`4. Enter code: ${formatted}\n`);
+        } catch (err) {
+          console.error('[Bot 2] Failed to request pairing code:', err?.message || err);
+        }
+      }, 3000);
+    }
+
+    sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+      if (qr && !phoneNumber) {
+        console.log('[BOT 2 VISION] Scan this QR code to link:');
+        qrcode.generate(qr, { small: true });
       }
-    }, 3000);
-  }
-
-  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-    if (qr && !phoneNumber) {
-      console.log('[BOT 2 VISION] Scan this QR code to link:');
-      qrcode.generate(qr, { small: true });
-    }
-    if (connection === 'open') {
-      console.log('BUYSELL WhatsApp Vision Collector (Bot 2) is active and monitoring groups.');
-      sock.sendPresenceUpdate('available').catch(() => {});
-    }
-    if (connection === 'close') {
-      const code = lastDisconnect?.error?.output?.statusCode;
-      const isLoggedOut = code === DisconnectReason.loggedOut;
-      const reconnect = !isLoggedOut;
-      console.warn(`[Bot 2] WhatsApp connection closed (${code || 'unknown'}). Reconnect: ${reconnect}`);
-      if (isLoggedOut) {
-        console.warn('[Session] Session unlinked. Resetting session directory for fresh pairing.');
-        try { rmSync(sessionDir, { recursive: true, force: true }); } catch {}
+      if (connection === 'open') {
+        whatsappConnected = true;
+        console.log('BUYSELL WhatsApp Vision Collector (Bot 2) is active and monitoring groups.');
+        sock.sendPresenceUpdate('available').catch(() => {});
+        startListingQueuePolling();
       }
-      try { sock.ws?.close(); } catch {}
-      if (reconnect) setTimeout(startVisionCollector, 3_000);
-    }
-  });
+      if (connection === 'close') {
+        if (sock !== activeSocket) return;
+        whatsappConnected = false;
+        activeSocket = null;
+        const code = lastDisconnect?.error?.output?.statusCode;
+        const isLoggedOut = code === DisconnectReason.loggedOut;
+        console.warn(`[Bot 2] WhatsApp connection closed (${code || 'unknown'}). Reconnect: true`);
+        if (isLoggedOut) {
+          console.warn('[Session] Session unlinked. Resetting session directory and requesting a fresh pairing.');
+          try { rmSync(sessionDir, { recursive: true, force: true }); } catch {}
+        }
+        try { sock.ws?.close(); } catch {}
+        scheduleReconnect();
+      }
+    });
 
-  sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify' && type !== 'append') return;
-    for (const message of messages) {
-      saveMessage(message);
-      await onMessage(sock, message);
-    }
-  });
+    sock.ev.on('messages.upsert', async ({ messages, type }) => {
+      if (type !== 'notify' && type !== 'append') return;
+      for (const message of messages) {
+        saveMessage(message);
+        // Accept the WhatsApp event immediately. Downloading, transcription,
+        // Cloudinary staging, and Vision work continue in their own queues.
+        onMessage(sock, message);
+      }
+    });
+  } finally {
+    collectorIsStarting = false;
+  }
 }
 
 const port = process.env.PORT || null;
@@ -516,6 +857,13 @@ if (port) {
       model: process.env.GROQ_MODEL || 'qwen/qwen3.8-27b',
       groups_monitored: targetGroups.size,
       all_groups_monitored: monitorAllGroups,
+      whatsapp_connected: whatsappConnected,
+      queue: {
+        media_intake: mediaIntakeQueue.snapshot,
+        listing_staging: listingStagingQueue.snapshot,
+        listing_workers_active: listingWorkersActive,
+        listing_worker_concurrency: listingWorkerConcurrency,
+      },
       uptime: Math.round(process.uptime()),
     }));
   });

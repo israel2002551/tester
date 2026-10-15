@@ -34,3 +34,17 @@ services:
         value: "26214400"
       - key: WHATSAPP_MONITOR_ALL_GROUPS
         value: "true"
+      - key: WHATSAPP_MEDIA_INTAKE_CONCURRENCY
+        value: "2"
+      - key: WHATSAPP_STAGING_CONCURRENCY
+        value: "2"
+      - key: WHATSAPP_LISTING_WORKER_CONCURRENCY
+        value: "1"
+      - key: WHATSAPP_QUEUE_POLL_MS
+        value: "3000"
+      - key: WHATSAPP_PRICE_FOLLOWUP_WINDOW_MS
+        value: "600000"
+      - key: WHATSAPP_TRANSCRIBE_VIDEO_AUDIO
+        value: "true"
+      - key: MAX_AUDIO_TRANSCRIBE_BYTES
+        value: "24000000"

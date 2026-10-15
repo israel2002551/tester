@@ -9,7 +9,8 @@
   "scripts": {
     "start": "node collector.js",
     "list-groups": "node list-groups.js",
-    "check": "node --check collector.js && node --check parser.js && node --check notifier.js && node --check cloudinary.js && node --check buysell-api.js"
+    "check": "node --check collector.js && node --check parser.js && node --check notifier.js && node --check cloudinary.js && node --check buysell-api.js && node --check queue.js",
+    "test": "node --test tests/collector-utils.test.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.9",

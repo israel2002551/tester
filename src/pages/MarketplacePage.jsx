@@ -6,8 +6,9 @@ import { authReady, getSession, isProtectedMarketplaceRoute, requireAuth } from 
 
 let runtimePromise;
 
-function revealMarketplaceRoute(root) {
+async function revealMarketplaceRoute(root) {
   const params = new URLSearchParams(window.location.search);
+  const storeId = params.get('store');
 
   // The legacy runtime normally reveals this surface from its auth-state
   // listener.  That listener is asynchronous, however, and a public desktop
@@ -16,6 +17,18 @@ function revealMarketplaceRoute(root) {
   if (params.get('dashboard') === 'seller') {
     window.showSellerDashboard?.();
     return;
+  }
+
+  // A seller storefront is a marketplace surface in its own right.  Do not
+  // reveal the buyer feed after app.js has already begun resolving a direct
+  // `?store=` link, otherwise the storefront is immediately hidden again.
+  if (storeId && typeof window.viewStorefront === 'function') {
+    try {
+      const opened = await window.viewStorefront(storeId);
+      if (opened !== false) return;
+    } catch (error) {
+      console.warn('Storefront route bootstrap failed:', error);
+    }
   }
 
   if (typeof window.showBuyerView === 'function') {
@@ -59,7 +72,7 @@ export function loadMarketplaceRuntime() {
   if (!runtimePromise) {
     // Version the classic runtime explicitly so an application deploy also
     // refreshes service-worker and notification-route safeguards immediately.
-    const appScriptUrl = import.meta.env.DEV ? `/app.js?t=${Date.now()}` : '/app.js?v=10.36';
+    const appScriptUrl = import.meta.env.DEV ? `/app.js?t=${Date.now()}` : '/app.js?v=10.39';
     runtimePromise = authReady
       .then(() => ensureRuntimeConfig())
       .then(() => loadClassicScript(appScriptUrl))
@@ -115,7 +128,7 @@ export default function MarketplacePage() {
       }
       await loadMarketplaceRuntime();
       if (cancelled) return;
-      revealMarketplaceRoute(document);
+      await revealMarketplaceRoute(document);
       window.syncAuthenticationNavigation?.();
       document.body.classList.remove('auth-pending');
     };

@@ -58,14 +58,15 @@ serve(async (req) => {
 
     const payload = await req.json();
     const transactionId = payload.transaction_id || payload.id;
-    const expectedAmount = Number(payload.expected_amount || 0);
+    const adPrice = Number(Deno.env.get("AD_PRICE_NGN") || 5000);
+    const expectedAmount = Math.max(Number(payload.expected_amount || 0), adPrice);
     const expectedCurrency = String(payload.currency || "NGN").toUpperCase();
     const expectedTxRef = String(payload.tx_ref || "");
-    if (!transactionId || !expectedTxRef || expectedAmount <= 0) {
+    if (!transactionId || !expectedTxRef) {
       throw new Error("Missing ad payment verification details");
     }
 
-    const verifyRes = await fetch(`https://api.flutterwave.com/v3/transactions/${transactionId}/verify`, {
+    const verifyRes = await fetch(`https://api.flutterwave.com/v3/transactions/${encodeURIComponent(String(transactionId))}/verify`, {
       method: "GET",
       headers: { Authorization: `Bearer ${flutterwaveSecret}` },
     });
@@ -80,14 +81,32 @@ serve(async (req) => {
     if (String(tx.tx_ref || "") !== expectedTxRef) throw new Error("Payment reference mismatch");
     if (Number(tx.amount || 0) < expectedAmount) throw new Error("Payment amount mismatch");
 
+    const paymentRef = String(tx.flw_ref || expectedTxRef);
+    const { data: existingAd } = await admin
+      .from("advertisements")
+      .select("id,seller_id")
+      .in("payment_ref", Array.from(new Set([paymentRef, expectedTxRef])))
+      .limit(1)
+      .maybeSingle();
+    if (existingAd?.id) {
+      if (existingAd.seller_id === authData.user.id) return json({ success: true, ad_id: existingAd.id });
+      throw new Error("This payment has already been used");
+    }
+
     const adData = payload.adData || {};
+    const text = (value: unknown, max: number) => String(value ?? "").slice(0, max);
     const ad = await insertWithMissingColumnRetry(admin, "advertisements", {
-      ...adData,
+      title: text(adData.title, 120),
+      description: text(adData.description, 600),
+      media_url: text(adData.media_url, 1000),
+      media_type: adData.media_type === "video" ? "video" : "image",
+      cta_text: text(adData.cta_text, 40),
+      cta_link: text(adData.cta_link, 1000),
       seller_id: authData.user.id,
       advertiser_id: authData.user.id,
       status: "pending",
       payment_method: "flutterwave",
-      payment_ref: String(tx.flw_ref || expectedTxRef),
+      payment_ref: paymentRef,
       paid_amount: Number(tx.amount || expectedAmount),
       starts_at: new Date().toISOString(),
       expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),

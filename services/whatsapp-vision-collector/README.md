@@ -7,6 +7,9 @@ An intelligent WhatsApp collector bot for **BUYSELL Nigeria** powered by **Groq 
 ## 🌟 Key Features
 
 - **Multimodal Visual AI Analysis:** Even if a seller posts an image with **no description** or only a price tag (e.g. `330k`, `₦45,000`, `price: 50k`), the Vision AI inspects the photo, detects the exact item (brand, model, category, specs, condition), and crafts a rich title and description.
+- **Complete Media Intake:** Every received image and video is staged before analysis. Images are processed in Groq-safe batches, while videos supply multiple Cloudinary frame previews and an optional audio transcript.
+- **Nigerian Price Understanding:** Supports `₦5,500`, `N5500`, `5,500`, `5 500`, `5.5k`, `1.2m`, `price 5500`, and written amounts such as `five thousand five hundred naira`. It never invents a missing price.
+- **Durable Listing Queue:** Supabase jobs use leases, retry backoff, idempotent source IDs, and a `needs_price` state, so new uploads keep arriving while Vision and imports are working.
 - **Multi-Product Processing:** When a seller posts multiple products at once (via catalog price lists, albums, or successive captioned photos), Bot 2 detects and extracts each product individually and ingests them with distinct indexed IDs instead of squashing them into one item.
 - **Clean Descriptions (No Embedded Prices):** Descriptions and titles never include the price, currency signs, or payment figures, ensuring clean product descriptions on the marketplace.
 - **20% Dynamic Markup:** Marketplace price automatically includes a 20% platform markup on top of the seller's source price.
@@ -39,7 +42,15 @@ GROQ_MODEL=qwen/qwen3.8-27b
 
 # Bot Settings
 WHATSAPP_PHONE_NUMBER=234...
+SESSION_DIR=/path/to/persistent/wa_vision_auth_session
 WHATSAPP_MONITOR_ALL_GROUPS=true
+WHATSAPP_MEDIA_INTAKE_CONCURRENCY=2
+WHATSAPP_STAGING_CONCURRENCY=2
+WHATSAPP_LISTING_WORKER_CONCURRENCY=1
+WHATSAPP_QUEUE_POLL_MS=3000
+WHATSAPP_PRICE_FOLLOWUP_WINDOW_MS=600000
+WHATSAPP_TRANSCRIBE_VIDEO_AUDIO=true
+MAX_AUDIO_TRANSCRIBE_BYTES=24000000
 WHATSAPP_LISTINGS_SELLER_ID=e525b6d9-4f81-4522-822d-119151671dba
 PUBLIC_SITE_URL=https://your-buysell-site.com
 ```
@@ -56,3 +67,16 @@ PUBLIC_SITE_URL=https://your-buysell-site.com
 2. Add the environment variables listed above.
 3. Check the Render logs on first run to copy your 8-digit **WhatsApp Pairing Code** and link the device on WhatsApp.
 4. Add your Render service URL to **UptimeRobot** (5-minute interval) to keep it awake 24/7.
+
+## WhatsApp session safety
+
+The Baileys authentication directory contains Signal session credentials and must never be committed, logged, or shared. Set `SESSION_DIR` to a persistent disk location in production and run only one collector instance against that directory. If WhatsApp reports repeated `Bad MAC` or session errors, unlink the Bot 2 device in WhatsApp, remove only the collector's old authentication directory, then pair once again. The collector redacts Signal-library session dumps and protects against concurrent reconnects, but a compromised or out-of-sync credential store still needs a clean re-pair.
+
+## Queue lifecycle
+
+1. WhatsApp messages enter a keyed intake queue, so each seller's album remains in receive order while other sellers continue uploading.
+2. Photos and videos are saved to Cloudinary before a private Supabase job is created. Video jobs include frame URLs and, when enabled, a spoken-audio transcript.
+3. The collector claims a small number of leased jobs for Vision analysis and marketplace import. Failures retry with backoff and deterministic source IDs prevent duplicates.
+4. A product without a fixed price is retained as `needs_price`; a later description or price requeues the same album instead of creating an invented-price listing.
+
+Apply the `whatsapp_ingestion_queue` migration and deploy the updated `whatsapp-listing-action` Edge Function before deploying the collector.

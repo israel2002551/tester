@@ -14,6 +14,32 @@ function extensionFor(kind, mimeType = '') {
   return 'jpg';
 }
 
+function transformedDeliveryUrl(url, resourceType, transformation, extension) {
+  const marker = `/${resourceType}/upload/`;
+  if (!url || !url.includes(marker)) return '';
+  const [withoutQuery, query = ''] = String(url).split('?');
+  const transformed = withoutQuery
+    .replace(marker, `${marker}${transformation}/`)
+    .replace(/\.[a-z0-9]+$/i, `.${extension}`);
+  return query ? `${transformed}?${query}` : transformed;
+}
+
+function visionUrlsForUpload(url, kind, duration) {
+  if (kind !== 'video') {
+    const transformed = transformedDeliveryUrl(url, 'image', 'c_limit,w_1600,q_auto,f_jpg', 'jpg');
+    return transformed ? [transformed] : [url];
+  }
+
+  const seconds = Number(duration);
+  const offsets = seconds > 2
+    ? [0, seconds / 2, Math.max(0, seconds - 0.25)]
+    : [0];
+  return [...new Set(offsets.map(offset => {
+    const value = Math.round(offset * 100) / 100;
+    return transformedDeliveryUrl(url, 'video', `so_${value},c_limit,w_1280,q_auto,f_jpg`, 'jpg');
+  }).filter(Boolean))];
+}
+
 /** Uploads a WhatsApp media buffer from the private worker directly to Cloudinary. */
 export async function uploadWhatsAppMedia({ buffer, kind, mimeType, sourceId, index }) {
   const cloudName = required('CLOUDINARY_CLOUD_NAME');
@@ -28,7 +54,10 @@ export async function uploadWhatsAppMedia({ buffer, kind, mimeType, sourceId, in
   const folder = `buysell/whatsapp/${month}`;
   const publicId = `${createHash('sha256').update(String(sourceId)).digest('hex').slice(0, 24)}_${index}`;
   const timestamp = Math.floor(Date.now() / 1000);
-  const signatureBase = `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}${apiSecret}`;
+  // Explicit overwrite makes retries idempotent: if a network failure happens
+  // after Cloudinary accepted an upload, the next staging attempt can safely
+  // reuse the deterministic public ID instead of abandoning the bundle.
+  const signatureBase = `folder=${folder}&overwrite=true&public_id=${publicId}&timestamp=${timestamp}${apiSecret}`;
   const signature = createHash('sha1').update(signatureBase).digest('hex');
   const form = new FormData();
   const contentType = mimeType || (resourceType === 'video' ? 'video/mp4' : 'image/jpeg');
@@ -37,6 +66,7 @@ export async function uploadWhatsAppMedia({ buffer, kind, mimeType, sourceId, in
   form.append('timestamp', String(timestamp));
   form.append('folder', folder);
   form.append('public_id', publicId);
+  form.append('overwrite', 'true');
   form.append('signature', signature);
 
   const response = await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/${resourceType}/upload`, {
@@ -45,5 +75,9 @@ export async function uploadWhatsAppMedia({ buffer, kind, mimeType, sourceId, in
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !data.secure_url) throw new Error(data?.error?.message || 'Cloudinary upload failed.');
-  return { url: data.secure_url, type: resourceType };
+  return {
+    url: data.secure_url,
+    type: resourceType,
+    vision_urls: visionUrlsForUpload(data.secure_url, resourceType, data.duration),
+  };
 }

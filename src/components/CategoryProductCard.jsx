@@ -1,11 +1,14 @@
 import { money, dateLabel } from '../lib/format.js';
 import { productImage, upcomingMedia } from '../lib/categoryData.js';
+import { cloudinaryImage } from '../lib/productData.js';
 import { readJson, writeJson } from '../lib/storage.js';
 
 export function CategoryProductCard({ product }) {
-  const image = productImage(product);
   const videos = Array.isArray(product.videos) ? product.videos.filter(Boolean) : [];
   const hasVideo = videos.length || product.video_url || product.has_video;
+  const images = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
+  const posterVideo = !product.image_url && !images.length ? product.video_url || videos[0] : '';
+  const image = cloudinaryImage(posterVideo || productImage(product), 480, { square: true });
   const rating = Number(product.avg_rating || 5).toFixed(1);
   const seller = product.profiles?.store_name || product.profiles?.name || 'Seller';
   const productHref = product.id ? `/product.html?id=${encodeURIComponent(product.id)}` : '/products';
@@ -13,7 +16,7 @@ export function CategoryProductCard({ product }) {
   return (
     <a className="cat-product-card" href={productHref} aria-label={`View ${product.name || 'product'}`}>
       <div className="cat-product-media">
-        <img src={image} alt={product.name || 'Product'} loading="lazy" />
+        <img src={image} alt={product.name || 'Product'} loading="lazy" decoding="async" />
         <div className="cat-product-badges">
           {hasVideo ? <span><i className="fa-solid fa-video" /> Video</span> : null}
           {product.category === 'dropship' ? <span>Dropship</span> : null}

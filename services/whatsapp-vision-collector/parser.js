@@ -1,24 +1,154 @@
-import Groq from 'groq-sdk';
+import Groq, { toFile } from 'groq-sdk';
 import 'dotenv/config';
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || 'not_configured' });
 
+const PRICE_WORDS = new Map([
+  ['zero', 0], ['one', 1], ['two', 2], ['three', 3], ['four', 4], ['five', 5],
+  ['six', 6], ['seven', 7], ['eight', 8], ['nine', 9], ['ten', 10],
+  ['eleven', 11], ['twelve', 12], ['thirteen', 13], ['fourteen', 14], ['fifteen', 15],
+  ['sixteen', 16], ['seventeen', 17], ['eighteen', 18], ['nineteen', 19],
+  ['twenty', 20], ['thirty', 30], ['forty', 40], ['fifty', 50], ['sixty', 60],
+  ['seventy', 70], ['eighty', 80], ['ninety', 90],
+]);
+
+const PRICE_CONTEXT = '(?:price|cost|amount|rate|asking(?:\\s+price)?|last\\s+price|selling(?:\\s+for)?|going\\s+for|for|at|only|each|per|fixed|firm|nego(?:tiable)?)';
+const NUMERIC_PRICE = '(?:\\d{1,3}(?:[ ,]\\d{3})+(?:\\.\\d+)?|\\d+(?:[.,]\\d+)?)';
+const SCALE = '(?:k|m|thousand|million)';
+const MAX_VISION_IMAGES_PER_REQUEST = 3;
+const MAX_INLINE_IMAGE_BYTES = 4_000_000;
+
+function normalisePriceText(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .replace(/[\u00a0\u202f]/g, ' ')
+    .replace(/[–—]/g, '-')
+    .trim();
+}
+
+function parseNumberWords(value) {
+  const tokens = normalisePriceText(value).toLowerCase()
+    .replace(/\b(?:naira|ngn|only|and)\b/g, ' ')
+    .replace(/[^a-z\s-]/g, ' ')
+    .split(/[\s-]+/)
+    .filter(Boolean);
+  if (!tokens.some(token => PRICE_WORDS.has(token) || token === 'hundred' || token === 'thousand' || token === 'million')) return null;
+
+  let total = 0;
+  let current = 0;
+  for (const token of tokens) {
+    if (PRICE_WORDS.has(token)) {
+      current += PRICE_WORDS.get(token);
+    } else if (token === 'hundred') {
+      current = Math.max(1, current) * 100;
+    } else if (token === 'thousand' || token === 'million') {
+      current = Math.max(1, current) * (token === 'thousand' ? 1_000 : 1_000_000);
+      total += current;
+      current = 0;
+    } else {
+      return null;
+    }
+  }
+  const amount = total + current;
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
+/** Converts common Nigerian price formats to a whole-naira amount. */
+export function parseNairaAmount(value) {
+  if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? Math.round(value) : null;
+  let source = normalisePriceText(value);
+  if (!source) return null;
+
+  const wordAmount = parseNumberWords(source);
+  if (wordAmount !== null && /[a-z]/i.test(source) && !/\d/.test(source)) return wordAmount;
+
+  source = source
+    .toLowerCase()
+    .replace(/(?:₦|\bngn\b|\bnaira\b|\bn(?=\s*\d))/gi, '')
+    .trim();
+  const match = source.match(new RegExp(`(${NUMERIC_PRICE})\\s*(${SCALE})?`, 'i'));
+  if (!match) return null;
+  let numericText = match[1].replace(/\s/g, '');
+  const scale = String(match[2] || '').toLowerCase();
+
+  if (/^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(numericText)) {
+    numericText = numericText.replace(/,/g, '');
+  } else if (/^\d{1,3}(?:\.\d{3})+(?:,\d+)?$/.test(numericText)) {
+    numericText = numericText.replace(/\./g, '').replace(',', '.');
+  } else if (numericText.includes(',') && !numericText.includes('.')) {
+    numericText = numericText.replace(',', '.');
+  }
+
+  const numeric = Number(numericText);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  const multiplier = /^(?:k|thousand)$/i.test(scale) ? 1_000 : /^(?:m|million)$/i.test(scale) ? 1_000_000 : 1;
+  const amount = Math.round(numeric * multiplier);
+  return amount > 0 && amount <= 99_995_000 ? amount : null;
+}
+
+function isLikelyPhoneOrYear(raw, amount) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (digits.length >= 10) return true;
+  return digits.length === 4 && amount >= 1900 && amount <= 2100;
+}
+
+/** Extracts Nigerian price candidates without treating dates and phone numbers as prices. */
+export function extractNairaPriceCandidates(text, { mediaContext = false } = {}) {
+  const source = normalisePriceText(text);
+  if (!source) return [];
+  const candidates = [];
+  const addMatches = (pattern, confidence) => {
+    for (const match of source.matchAll(pattern)) {
+      const raw = match[0];
+      const amount = parseNairaAmount(raw);
+      if (amount === null || isLikelyPhoneOrYear(raw, amount)) continue;
+      candidates.push({ raw, amount, index: match.index ?? 0, confidence });
+    }
+  };
+
+  addMatches(new RegExp(`(?:₦|\\bngn\\b|\\bnaira\\b|\\bN(?=\\s*\\d))\\s*${NUMERIC_PRICE}(?:\\s*${SCALE})?`, 'gi'), 'explicit');
+  addMatches(new RegExp(`\\b${NUMERIC_PRICE}\\s*${SCALE}\\b`, 'gi'), 'scaled');
+  addMatches(new RegExp(`\\b${PRICE_CONTEXT}\\b\\s*[:=#-]?\\s*${NUMERIC_PRICE}(?:\\s*${SCALE})?`, 'gi'), 'contextual');
+  addMatches(new RegExp(`\\b${NUMERIC_PRICE}(?:\\s*${SCALE})?\\s*(?:each|per|only|fixed|firm|nego(?:tiable)?)\\b`, 'gi'), 'contextual');
+  addMatches(/\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/g, 'grouped');
+
+  if (mediaContext) {
+    addMatches(/\b\d{1,3}\s\d{3}\b/g, 'spaced');
+    addMatches(/\b\d{4,8}\b/g, 'media-bare');
+  }
+
+  const wordContext = new RegExp(`(?:\\b${PRICE_CONTEXT}\\b|\\bnaira\\b|\\bngn\\b)\\s*[:=#-]?\\s*([a-z][a-z\\s-]{2,80})`, 'gi');
+  for (const match of source.matchAll(wordContext)) {
+    const raw = match[0];
+    const amount = parseNumberWords(match[1]);
+    if (amount !== null && amount <= 99_995_000) {
+      candidates.push({ raw, amount, index: match.index ?? 0, confidence: 'words' });
+    }
+  }
+  const wordCurrency = /\b([a-z][a-z\s-]{2,80}?)\s+(?:naira|ngn)\b/gi;
+  for (const match of source.matchAll(wordCurrency)) {
+    const amount = parseNumberWords(match[1]);
+    if (amount !== null && amount <= 99_995_000) {
+      candidates.push({ raw: match[0], amount, index: match.index ?? 0, confidence: 'words' });
+    }
+  }
+
+  const unique = new Map();
+  for (const candidate of candidates) {
+    const key = `${candidate.index}:${candidate.raw.toLowerCase()}`;
+    if (!unique.has(key)) unique.set(key, candidate);
+  }
+  return [...unique.values()].sort((a, b) => a.index - b.index);
+}
+
 export function stripPriceFromText(text) {
   if (!text || typeof text !== 'string') return '';
   return text
-    // Remove "Price: 350k", "Cost: ₦50,000", "Going for 1.5m", "last price 25k", etc.
-    .replace(/(?:\bprice\b|\basking\b|\bcost\b|\bgoing for\b|\bselling for\b|\blast price\b)\s*[:=-]?\s*(?:₦|NGN)?\s*[\d,]+(?:\.\d+)?\s*[kKmM]?/gi, '')
-    // Remove remaining price phrases like "last price", "asking price"
-    .replace(/\b(?:last|asking)\s+price\b/gi, '')
-    // Remove Naira symbols and following numbers e.g. ₦50,000, ₦ 350k
-    .replace(/₦\s*[\d,]+(?:\.\d+)?\s*[kKmM]?/gi, '')
-    // Remove NGN numbers e.g. NGN 50,000
-    .replace(/\bngn\s*[\d,]+(?:\.\d+)?\s*[kKmM]?/gi, '')
-    // Remove standalone shorthand e.g. 350k, 45k, 1.5m, 2.5M
+    .replace(new RegExp(`\\b${PRICE_CONTEXT}\\b\\s*[:=#-]?\\s*(?:₦|NGN|Naira|N)?\\s*${NUMERIC_PRICE}(?:\\s*${SCALE})?`, 'gi'), '')
+    .replace(new RegExp(`(?:₦|\\bngn\\b|\\bnaira\\b|\\bN(?=\\s*\\d))\\s*${NUMERIC_PRICE}(?:\\s*${SCALE})?`, 'gi'), '')
+    .replace(/\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/g, '')
     .replace(/(^|\s)\d+(?:[.,]\d+)?\s*[kKmM]\b/gi, '$1')
-    // Remove standalone amounts with 4-9 digits if preceded by sale words
     .replace(/(?:\bfor\b|\bat\b|\b#)\s*[\d,]{4,10}\b/gi, '')
-    // Clean up repetitive or orphaned punctuation
     .replace(/[ \t]+/g, ' ')
     .replace(/\s*([.,;:!?-])\s*([.,;:!?-])+/g, '$1')
     .replace(/\s+([.,;:!?])/g, '$1')
@@ -28,87 +158,84 @@ export function stripPriceFromText(text) {
     .trim();
 }
 
-export function hasPriceInText(text) {
-  const source = String(text || '').trim();
-  return /(?:\b\d+(?:[.,]\d+)?\s*[km]\b|₦|\bngn\b|\b\d{4,9}\b)/i.test(source);
+export function hasPriceInText(text, { mediaContext = false } = {}) {
+  return extractNairaPriceCandidates(text, { mediaContext }).length > 0;
 }
 
 const PROMPT_TEMPLATE = `
-You extract marketplace listing fields from WhatsApp sale posts and product images for BUYSELL Nigeria.
+You extract marketplace listing fields from WhatsApp sale posts, product images, and video frames for BUYSELL Nigeria.
 
-A WhatsApp post may contain ONE product or A LIST OF MULTIPLE PRODUCTS being offered for sale (e.g. inventory catalogs, multiple items with distinct prices, or multiple items pictured in photos).
+A WhatsApp post may contain one product or a list of several products. A post can have no written description; in that case, use the visual input and any visible flyer text. An audio transcript, when supplied, is only an aid and may contain recognition errors.
 
 CRITICAL STRICT RULES:
-1. DESCRIPTION AND TITLE MUST NEVER CONTAIN THE PRICE, CURRENCY, OR PAYMENT TERMS:
-   Under NO circumstance should the price, currency (₦, Naira, NGN), or amount figures (e.g. "350k", "₦50,000", "1.5m", "45,000") appear in the 'title' or 'description'. Prices belong EXCLUSIVELY in the 'price' field.
-   The description must focus entirely on what the item is: brand, model, color, physical condition, aesthetics, specifications, materials, and included accessories.
+1. DESCRIPTION AND TITLE MUST NEVER CONTAIN THE PRICE, CURRENCY, OR PAYMENT TERMS. Prices belong exclusively in the price field. Describe brand, model, colour, physical condition, specifications, materials, and included accessories instead.
 2. MULTI-PRODUCT PARSING:
-   - If the post contains ONE product, return an "items" array with 1 item object.
-   - If the post contains SEVERAL products (e.g. "1. iPhone 11 - 220k, 2. iPhone 12 - 340k"), extract EACH distinct product as a separate object in the "items" array.
-   - Do NOT merge multiple different products into one item.
+   - Return one item for each distinct product that is actually offered for sale.
+   - Do not merge different products, and do not emit duplicate items for different photos/frames of the same product.
 3. PRICE EXTRACTION:
-   - Extract the exact numeric price for EACH item from text or flyer image.
-   - Expand Nigerian shorthand: "350k" -> 350000, "1.5m" -> 1500000, "45k" -> 45000, "₦60,000" -> 60000.
-   - Do not invent a price if none was stated in text or visible in the image. Set price to null if not found.
+   - Extract the exact numeric price for each item from text, audio transcript, flyer image, or video frame.
+   - Expand Nigerian formats: "350k" -> 350000, "1.5m" -> 1500000, "₦60,000" -> 60000, "N5500" -> 5500, "5 500" -> 5500, and written amounts such as "five thousand five hundred naira" -> 5500.
+   - Return both price_raw (the wording seen) and price (the normalized whole-naira integer).
+   - Never invent a price. Set price and price_raw to null when no fixed price is stated.
 
 Return exactly one JSON object with these keys:
-- is_commercial_listing: boolean (true if one or more commercial items/services are offered for sale; false for general chat, memes, complaints, requests to buy)
+- is_commercial_listing: boolean (true if one or more commercial items/services are offered for sale; false for chat, memes, complaints, or requests to buy)
 - seller_phone: Nigerian seller phone digits only or null
 - location: city, area, campus, or town or null
 - items: array of product objects, where each object has:
-  * title: concise, attractive product title (maximum 80 characters, NO price)
-  * description: clear, appealing product description (1-3 sentences detailing features/condition, STRICTLY NO price or currency figures)
-  * price: whole Nigerian naira amount as a number, or null when there is no stated fixed price
+  * title: concise, attractive product title (maximum 80 characters, no price)
+  * description: clear, appealing product description (1-3 sentences, no price or currency figures)
+  * price: whole Nigerian naira amount as a number, or null
+  * price_raw: exact written price or null
   * category: one of "Phones & Tablets", "Computers & Laptops", "Electronics", "Vehicles", "Fashion", "Home & Furniture", "Beauty & Health", "Services", "Other"
   * condition: one of "brand_new", "foreign_used", "local_used", "refurbished", "unknown"
   * brand: manufacturer/brand or null
   * specs: short factual specification summary or null
-  * image_index: 0-based index of the matching image, or 0 if single item or all photos belong to it
+  * image_index: 0-based index of the matching visual input, or 0 if all visuals belong to it
 
 Output only JSON.
 `;
 
-const VISION_MODELS = [
+const VISION_MODELS = [...new Set([
   process.env.GROQ_MODEL,
   'qwen/qwen3.8-27b',
-].filter(Boolean);
+].filter(Boolean))];
 
 const FALLBACK_TEXT_MODELS = [
   'llama-3.3-70b-versatile',
   'llama-3.1-8b-instant',
 ];
 
-function normalizeParsedResult(parsed) {
+function normalizeParsedResult(parsed, { mediaIndexMap = [] } = {}) {
   if (!parsed || typeof parsed !== 'object') return null;
 
   let items = Array.isArray(parsed.items) && parsed.items.length > 0
     ? parsed.items
-    : (parsed.title || parsed.price ? [parsed] : []);
+    : (parsed.title || parsed.price || parsed.price_raw ? [parsed] : []);
 
-  // Sanitize each item: ensure prices are numbers and strip any price text from description and title
   items = items.map((item, idx) => {
-    const rawPrice = item.price;
-    const numPrice = Number(rawPrice);
-    const validPrice = Number.isFinite(numPrice) && numPrice > 0 ? numPrice : null;
-
-    const rawTitle = String(item.title || 'Marketplace Item').trim();
+    const row = item && typeof item === 'object' ? item : {};
+    const rawPrice = row.price ?? row.price_raw;
+    const validPrice = parseNairaAmount(rawPrice);
+    const rawTitle = String(row.title || 'Marketplace Item').trim();
     const cleanTitle = stripPriceFromText(rawTitle) || 'Marketplace Item';
-
-    const rawDesc = String(item.description || cleanTitle).trim();
+    const rawDesc = String(row.description || cleanTitle).trim();
     const cleanDesc = stripPriceFromText(rawDesc) || cleanTitle;
+    const inputIndex = Number.isInteger(row.image_index) && row.image_index >= 0 ? row.image_index : idx;
 
     return {
       title: cleanTitle.slice(0, 100),
       description: cleanDesc.slice(0, 1500),
       price: validPrice,
-      category: item.category || 'Other',
-      condition: item.condition || 'unknown',
-      brand: item.brand || null,
-      specs: item.specs ? stripPriceFromText(item.specs) : null,
-      location: item.location || parsed.location || null,
-      image_index: Number.isInteger(item.image_index) ? item.image_index : idx,
+      price_raw: row.price_raw || (validPrice ? String(rawPrice) : null),
+      category: row.category || 'Other',
+      condition: row.condition || 'unknown',
+      brand: row.brand || null,
+      specs: row.specs ? stripPriceFromText(row.specs) : null,
+      location: row.location || parsed.location || null,
+      image_index: mediaIndexMap[inputIndex] ?? mediaIndexMap[idx] ?? inputIndex,
     };
-  }).filter(item => item.price !== null);
+  }).filter(item => item.title && item.description);
 
   return {
     is_commercial_listing: Boolean(parsed.is_commercial_listing && items.length > 0),
@@ -118,91 +245,158 @@ function normalizeParsedResult(parsed) {
   };
 }
 
-export async function parseListingWithVision({ text = '', media = [] } = {}) {
-  const message = String(text || '').trim();
-  const imageItems = (media || []).filter(
-    (m) => m?.kind === 'image' && Buffer.isBuffer(m?.buffer) && m.buffer.length > 0,
-  );
+function visualUrlFromBuffer(item) {
+  const buffer = Buffer.isBuffer(item?.buffer) ? item.buffer : Buffer.isBuffer(item?.previewBuffer) ? item.previewBuffer : null;
+  if (!buffer || !buffer.length || buffer.length > MAX_INLINE_IMAGE_BYTES) return '';
+  const mimeType = item?.kind === 'video' || item?.type === 'video' ? 'image/jpeg' : (item?.mimeType || 'image/jpeg');
+  return `data:${mimeType};base64,${buffer.toString('base64')}`;
+}
 
-  // If no text and no images, nothing to parse
-  if (!message && imageItems.length === 0) {
-    return { is_commercial_listing: false, items: [] };
+function visualInputs(media) {
+  const inputs = [];
+  for (let mediaIndex = 0; mediaIndex < (media || []).length; mediaIndex += 1) {
+    const item = media[mediaIndex] || {};
+    const kind = item.kind || item.type;
+    if (kind === 'image') {
+      const url = item.vision_url || item.url || visualUrlFromBuffer(item);
+      if (url) inputs.push({ url, mediaIndex });
+      continue;
+    }
+    if (kind === 'video') {
+      const urls = Array.isArray(item.vision_urls) ? item.vision_urls : Array.isArray(item.preview_urls) ? item.preview_urls : [];
+      const fallBackUrl = visualUrlFromBuffer(item);
+      for (const url of [...urls, fallBackUrl].filter(Boolean)) {
+        inputs.push({ url, mediaIndex });
+      }
+    }
   }
+  return inputs;
+}
 
-  // Multimodal prompt construction
-  if (imageItems.length > 0) {
-    const userContent = [
-      {
-        type: 'text',
-        text: message
-          ? `Seller's WhatsApp post:\n"""${message}"""\n\nPlease examine the attached product image(s). Identify all products being sold, extract individual prices, and generate professional titles and descriptions (without mentioning prices in descriptions).`
-          : `A seller posted product image(s) without text description. Please examine the image(s), identify all items shown or flyer price text, extract prices, and generate appealing marketplace titles and descriptions (without mentioning prices in descriptions).`,
-      },
-    ];
+function chunk(items, size) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
+  return chunks;
+}
 
-    // Attach up to 4 images while keeping total payload safely under Groq limit
-    let totalBytes = 0;
-    for (const item of imageItems.slice(0, 4)) {
-      if (item.buffer.length > 3_500_000) continue;
-      if (totalBytes + item.buffer.length > 4_500_000) break;
-      totalBytes += item.buffer.length;
+function mergeParsedResults(results) {
+  const valid = results.filter(Boolean);
+  if (!valid.length) return null;
+  const itemsByTitle = new Map();
+  for (const result of valid) {
+    for (const item of result.items || []) {
+      const key = String(item.title || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const existing = itemsByTitle.get(key);
+      if (!existing || (!existing.price && item.price)) itemsByTitle.set(key, item);
+    }
+  }
+  const first = valid[0];
+  return {
+    is_commercial_listing: valid.some(result => result.is_commercial_listing) && itemsByTitle.size > 0,
+    seller_phone: valid.map(result => result.seller_phone).find(Boolean) || null,
+    location: valid.map(result => result.location).find(Boolean) || null,
+    items: [...itemsByTitle.values()],
+  };
+}
 
-      const mime = item.mimeType || 'image/jpeg';
-      userContent.push({
-        type: 'image_url',
-        image_url: {
-          url: `data:${mime};base64,${item.buffer.toString('base64')}`,
-        },
+async function parseVisionChunk(message, visualChunk) {
+  const mediaIndexMap = visualChunk.map(input => input.mediaIndex);
+  const visualContext = visualChunk.map((input, index) => `visual input ${index} is source media ${input.mediaIndex}`).join(', ');
+  const text = message
+    ? `Seller's WhatsApp post:\n"""${message}"""\n\n${visualContext}. Examine every visual input. Identify all products being sold, extract individual prices, and generate professional titles and descriptions without prices.`
+    : `A seller posted product visual(s) without a written description. ${visualContext}. Examine every visual input for the product, flyer text, and visible price. Generate professional titles and descriptions without prices.`;
+  const userContent = [
+    { type: 'text', text },
+    ...visualChunk.map(input => ({ type: 'image_url', image_url: { url: input.url } })),
+  ];
+
+  for (const model of VISION_MODELS) {
+    try {
+      const completion = await groq.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: PROMPT_TEMPLATE },
+          { role: 'user', content: userContent },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+        max_tokens: 1_500,
       });
-    }
-
-    for (const model of VISION_MODELS) {
-      try {
-        const completion = await groq.chat.completions.create({
-          model,
-          messages: [
-            { role: 'system', content: PROMPT_TEMPLATE },
-            { role: 'user', content: userContent },
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.1,
-          max_tokens: 1500,
-        });
-        const parsed = JSON.parse(completion.choices?.[0]?.message?.content || '{}');
-        const normalized = normalizeParsedResult(parsed);
-        if (normalized) {
-          return normalized;
-        }
-      } catch (error) {
-        console.warn(`[Vision parser] Model ${model} failed (${error?.message || error}), trying next...`);
-      }
+      const parsed = JSON.parse(completion.choices?.[0]?.message?.content || '{}');
+      const normalized = normalizeParsedResult(parsed, { mediaIndexMap });
+      if (normalized) return normalized;
+    } catch (error) {
+      console.warn(`[Vision parser] Model ${model} failed (${error?.message || error}), trying next...`);
     }
   }
+  return null;
+}
 
-  // Fallback to text-only parsing if image vision failed or no images were provided
-  if (message.length >= 3) {
-    const textModelsToTry = [...new Set([...VISION_MODELS, ...FALLBACK_TEXT_MODELS])];
-    for (const model of textModelsToTry) {
-      try {
-        const completion = await groq.chat.completions.create({
-          model,
-          messages: [
-            { role: 'system', content: PROMPT_TEMPLATE },
-            { role: 'user', content: `WhatsApp sale post:\n"""${message}"""` },
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.1,
-          max_tokens: 1500,
-        });
-        const parsed = JSON.parse(completion.choices?.[0]?.message?.content || '{}');
-        const normalized = normalizeParsedResult(parsed);
-        if (normalized) {
-          return normalized;
-        }
-      } catch (error) {
-        console.warn(`[Text parser] Model ${model} failed (${error?.message || error}), trying fallback...`);
-      }
+async function parseTextOnly(message) {
+  const textModelsToTry = [...new Set([...VISION_MODELS, ...FALLBACK_TEXT_MODELS])];
+  for (const model of textModelsToTry) {
+    try {
+      const completion = await groq.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: PROMPT_TEMPLATE },
+          { role: 'user', content: `WhatsApp sale post:\n"""${message}"""` },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+        max_tokens: 1_500,
+      });
+      const parsed = JSON.parse(completion.choices?.[0]?.message?.content || '{}');
+      const normalized = normalizeParsedResult(parsed);
+      if (normalized) return normalized;
+    } catch (error) {
+      console.warn(`[Text parser] Model ${model} failed (${error?.message || error}), trying fallback...`);
     }
+  }
+  return null;
+}
+
+/** Transcribes video audio before its binary leaves the collector process. */
+export async function transcribeVideoAudio({ buffer, mimeType = '' } = {}) {
+  if (String(process.env.WHATSAPP_TRANSCRIBE_VIDEO_AUDIO || 'true').toLowerCase() === 'false') return '';
+  const maxBytes = Math.max(1_000_000, Number(process.env.MAX_AUDIO_TRANSCRIBE_BYTES || 24_000_000));
+  if (!Buffer.isBuffer(buffer) || !buffer.length || buffer.length > maxBytes) return '';
+  try {
+    const file = await toFile(buffer, 'whatsapp-video.mp4', { type: mimeType || 'video/mp4' });
+    const result = await groq.audio.transcriptions.create({
+      file,
+      model: 'whisper-large-v3',
+      language: 'en',
+      prompt: 'Transcribe product names, Nigerian naira prices, sizes, colours, condition, and location accurately.',
+      temperature: 0,
+    });
+    return String(result?.text || '').trim().slice(0, 12_000);
+  } catch (error) {
+    console.warn(`[Video transcription] ${error?.message || error}`);
+    return '';
+  }
+}
+
+export async function parseListingWithVision({ text = '', media = [], audioTranscript = '' } = {}) {
+  const message = [String(text || '').trim(), String(audioTranscript || '').trim() ? `Video audio transcript (may contain recognition errors):\n${String(audioTranscript).trim()}` : '']
+    .filter(Boolean)
+    .join('\n\n');
+  const inputs = visualInputs(media);
+  if (!message && inputs.length === 0) return { is_commercial_listing: false, items: [] };
+
+  if (inputs.length > 0) {
+    const parsedChunks = [];
+    for (const visualChunk of chunk(inputs, MAX_VISION_IMAGES_PER_REQUEST)) {
+      const parsed = await parseVisionChunk(message, visualChunk);
+      if (parsed) parsedChunks.push(parsed);
+    }
+    const merged = mergeParsedResults(parsedChunks);
+    if (merged?.items.length) return merged;
+  }
+
+  if (message.length >= 3) {
+    const parsed = await parseTextOnly(message);
+    if (parsed) return parsed;
   }
 
   console.error('[Vision parser] All candidate models failed to parse listing.');
@@ -210,13 +404,10 @@ export async function parseListingWithVision({ text = '', media = [] } = {}) {
 }
 
 export function looksLikeSalePost(text = '', hasMedia = false) {
-  const source = String(text || '').toLowerCase().trim();
+  const source = String(text || '').trim();
+  const saleTerms = /(?:\bfor sale\b|\bavailable\b|\bselling\b|\bprice\b|\bnego\b|\bforeign used\b|\btokunbo\b|\bdm\b|\bcall\b|\bdeal\b|\bcondition\b)/i;
   if (hasMedia) {
-    if (!source) return true; // Image with no text can be scanned for flyer/price stickers
-    // When media is attached, any price shorthand, naira symbols, digits, or sale terms match
-    if (/(?:\b\d+(?:[.,]\d+)?\s*[km]\b|₦|\bngn\b|\b\d{4,9}\b|\bprice\b|\bavailable\b|\bselling\b|\bfor sale\b|\bdm\b|\bcall\b|\bdeal\b|\bcondition\b)/i.test(source)) {
-      return true;
-    }
+    return !source || hasPriceInText(source, { mediaContext: true }) || saleTerms.test(source);
   }
-  return /(?:\bfor sale\b|\bavailable\b|\bselling\b|\bprice\b|\b\d+(?:[.,]\d+)?\s*[km]\b|₦|\bngn\b|\bnego\b|\bforeign used\b|\btokunbo\b|\bdm\b|\bcall\b)/i.test(source);
+  return hasPriceInText(source) || saleTerms.test(source);
 }

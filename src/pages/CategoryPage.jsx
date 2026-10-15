@@ -4,6 +4,7 @@ import CategoryNav from '../components/CategoryNav.jsx';
 import CategoryTrustBar from '../components/CategoryTrustBar.jsx';
 import LoadingGrid from '../components/LoadingGrid.jsx';
 import CartDrawer from '../components/CartDrawer.jsx';
+import Pagination from '../components/Pagination.jsx';
 import { CategoryProductCard, UpcomingProductCard } from '../components/CategoryProductCard.jsx';
 import { createSupabaseClient } from '../lib/browserConfig.js';
 import { categoryConfig, categoryProductColumns, upcomingColumns } from '../lib/categoryData.js';
@@ -13,6 +14,8 @@ const categoryColumnFallbacks = [
   'id,seller_id,name,description,price,original_price,category,condition,location,images,videos,image_url,video_url,has_video,stock_quantity,status,created_at,avg_rating,review_count',
   'id,seller_id,name,description,price,category,condition,location,image_url,status,created_at',
 ];
+
+const ITEMS_PER_PAGE = 24;
 
 function sortItems(items, sort, isUpcoming) {
   const sorted = [...items];
@@ -74,13 +77,37 @@ async function fetchCategoryRows(db, category) {
   let lastError = null;
   for (const columns of categoryColumnFallbacks) {
     for (const status of ['active', 'approved']) {
-      let query = db.from('products').select(columns).eq('status', status).order('created_at', { ascending: false }).limit(160);
-      const { data, error } = await query;
-      if (error) {
-        lastError = error;
-        continue;
+      let allRows = [];
+      let batchStart = 0;
+      const BATCH_SIZE = 1000;
+      let hasMore = true;
+      let hadError = false;
+
+      while (hasMore) {
+        const query = db
+          .from('products')
+          .select(columns)
+          .eq('status', status)
+          .order('created_at', { ascending: false })
+          .range(batchStart, batchStart + BATCH_SIZE - 1);
+        const { data, error } = await query;
+        if (error) {
+          lastError = error;
+          hadError = true;
+          break;
+        }
+        const batch = data || [];
+        allRows.push(...batch);
+        if (batch.length < BATCH_SIZE) {
+          hasMore = false;
+        } else {
+          batchStart += BATCH_SIZE;
+        }
       }
-      const rows = (data || []).filter(product => matchesCategory(product, category));
+
+      if (hadError) continue;
+
+      const rows = allRows.filter(product => matchesCategory(product, category));
       if (rows.length || category === 'all' || category === 'trending') return rows;
     }
   }
@@ -99,6 +126,10 @@ export default function CategoryPage({ category = 'all' }) {
     const savedSort = new URLSearchParams(window.location.search).get('sort');
     return ['newest', 'price-asc', 'price-desc', 'rating'].includes(savedSort) ? savedSort : 'newest';
   });
+  const [page, setPage] = useState(() => {
+    const p = parseInt(new URLSearchParams(window.location.search).get('page') || '1', 10);
+    return Number.isFinite(p) && p > 0 ? p : 1;
+  });
   const [status, setStatus] = useState('loading');
   const [isCartOpen, setIsCartOpen] = useState(false);
 
@@ -107,6 +138,10 @@ export default function CategoryPage({ category = 'all' }) {
     document.body.dataset.category = normalizedCategory;
     document.title = `${config.title} - BUYSELL Nigeria`;
   }, [normalizedCategory, config.title]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [normalizedCategory, search, sort]);
 
   useEffect(() => {
     let cancelled = false;
@@ -160,8 +195,10 @@ export default function CategoryPage({ category = 'all' }) {
     else url.searchParams.delete('q');
     if (sort !== 'newest') url.searchParams.set('sort', sort);
     else url.searchParams.delete('sort');
+    if (page > 1) url.searchParams.set('page', String(page));
+    else url.searchParams.delete('page');
     window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
-  }, [search, sort]);
+  }, [search, sort, page]);
 
   const visibleItems = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -172,6 +209,14 @@ export default function CategoryPage({ category = 'all' }) {
       : items;
     return sortItems(filtered, sort, isUpcoming);
   }, [items, search, sort, isUpcoming]);
+
+  const totalPages = Math.ceil(visibleItems.length / ITEMS_PER_PAGE) || 1;
+  const currentPage = Math.min(Math.max(1, page), totalPages);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, visibleItems.length);
+  const paginatedItems = useMemo(() => {
+    return visibleItems.slice(startIndex, endIndex);
+  }, [visibleItems, startIndex, endIndex]);
 
   return (
     <>
@@ -210,15 +255,40 @@ export default function CategoryPage({ category = 'all' }) {
             <option value="rating">{isUpcoming ? 'Priority' : 'Top rated'}</option>
             </select>
           </label>
-          <span className="category-results-count" aria-live="polite"><strong>{visibleItems.length}</strong> {visibleItems.length === 1 ? 'item' : 'items'}{search ? ` for "${search.trim()}"` : ''}</span>
+          <span className="category-results-count" aria-live="polite">
+            {visibleItems.length > 0 ? (
+              <>
+                Showing <strong>{startIndex + 1}–{endIndex}</strong> of <strong>{visibleItems.length}</strong> {visibleItems.length === 1 ? 'item' : 'items'}
+                {totalPages > 1 ? ` (Page ${currentPage} of ${totalPages})` : ''}
+                {search ? ` for "${search.trim()}"` : ''}
+              </>
+            ) : (
+              <><strong>0</strong> items{search ? ` for "${search.trim()}"` : ''}</>
+            )}
+          </span>
         </section>
         {status === 'loading' ? <LoadingGrid /> : null}
         {status === 'error' ? <div className="category-empty"><i className="fa-solid fa-triangle-exclamation" /><p>Could not load products. Please try again.</p></div> : null}
         {status === 'ready' && !visibleItems.length ? <div className="category-empty"><i className="fa-solid fa-box-open" /><h2>No matches found</h2><p>{search ? 'Try a shorter search term, another spelling, or clear the search to browse this category.' : 'No products found here yet. Check back soon for new listings.'}</p>{search ? <button className="btn btn-outline btn-sm" type="button" onClick={() => setSearch('')}>Clear search</button> : null}</div> : null}
         {status === 'ready' && visibleItems.length ? (
-          <div className="category-products-grid" id="category-products">
-            {visibleItems.map(item => isUpcoming ? <UpcomingProductCard product={item} key={item.id} /> : <CategoryProductCard product={item} key={item.id} />)}
-          </div>
+          <>
+            <div className="category-products-grid" id="category-products">
+              {paginatedItems.map(item => isUpcoming ? <UpcomingProductCard product={item} key={item.id} /> : <CategoryProductCard product={item} key={item.id} />)}
+            </div>
+            <Pagination
+              totalPages={totalPages}
+              currentPage={currentPage}
+              totalItems={visibleItems.length}
+              startIndex={startIndex}
+              endIndex={endIndex}
+              onPageChange={newPage => {
+                setPage(newPage);
+                const el = document.getElementById('category-products') || document.querySelector('.category-toolbar');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              itemLabel={isUpcoming ? 'upcoming drops' : 'items'}
+            />
+          </>
         ) : null}
       </main>
       <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />

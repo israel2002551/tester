@@ -11,6 +11,11 @@ const SELLER_ROLES = new Set(["seller", "admin", "both", "service_provider"]);
 const ACTIVE_STATUSES = new Set(["active", "paused", "draft", "pending", "sold", "out_of_stock"]);
 const VALID_CATEGORIES = new Set(["electronics", "fashion", "home", "phones", "beauty", "sports", "dropship", "other"]);
 const VALID_CONDITIONS = new Set(["new", "used-like-new", "used-good"]);
+// This is deliberately server-owned. Browsers submit the seller's amount;
+// only this function calculates the buyer-facing marketplace amount.
+const PLATFORM_COMMISSION_PERCENT = 20;
+const PLATFORM_COMMISSION_MULTIPLIER = 1 + (PLATFORM_COMMISSION_PERCENT / 100);
+const MAX_BULK_PRODUCTS = 100;
 
 function json(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -26,6 +31,19 @@ function cleanString(value: unknown, max = 500) {
 function cleanNumber(value: unknown, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+function wholeNaira(value: unknown, fallback = 0) {
+  const number = cleanNumber(value, fallback);
+  return Number.isFinite(number) ? Math.round(number) : fallback;
+}
+
+function buyerPriceForSellerPrice(sellerPrice: unknown) {
+  return Math.round(wholeNaira(sellerPrice) * PLATFORM_COMMISSION_MULTIPLIER);
+}
+
+function sellerPriceForBuyerPrice(buyerPrice: unknown) {
+  return Math.max(0, Math.round(wholeNaira(buyerPrice) / PLATFORM_COMMISSION_MULTIPLIER));
 }
 
 function cleanUrlArray(value: unknown, limit = 8) {
@@ -45,8 +63,14 @@ function buildProductPayload(data: Record<string, unknown>, sellerId: string, is
   const description = cleanString(data.description, 2000);
   const category = cleanString(data.category, 40);
   const condition = cleanString(data.condition, 40);
-  const price = cleanNumber(data.price);
-  const originalPrice = Math.max(cleanNumber(data.original_price, price), price);
+  // `data.price` and `data.original_price` are the amounts the seller enters.
+  // The public products table stores only the price that a buyer pays, while
+  // the private product_seller_pricing table keeps the exact seller amount for
+  // payouts and BOGO calculations.
+  const sellerPrice = wholeNaira(data.price);
+  const sellerOriginalPrice = Math.max(wholeNaira(data.original_price, sellerPrice), sellerPrice);
+  const price = buyerPriceForSellerPrice(sellerPrice);
+  const originalPrice = Math.max(buyerPriceForSellerPrice(sellerOriginalPrice), price);
   const shippingFee = Math.max(0, cleanNumber(data.shipping_fee ?? data.shipping_cost, 0));
   const stock = Math.max(0, Math.min(100000, Math.trunc(cleanNumber(data.stock_quantity, 0))));
   const lowStockAlert = Math.max(0, Math.trunc(cleanNumber(data.low_stock_alert, 3)));
@@ -59,7 +83,7 @@ function buildProductPayload(data: Record<string, unknown>, sellerId: string, is
     if (name.length < 3) throw new Error("Product name must be at least 3 characters.");
   }
   if (isCreate || data.price !== undefined) {
-    if (price <= 0 || price > 100000000) throw new Error("Enter a valid product price.");
+    if (sellerPrice <= 0 || sellerPrice > 100000000) throw new Error("Enter a valid seller product price.");
   }
   if (isCreate || data.category !== undefined) {
     if (!VALID_CATEGORIES.has(category)) throw new Error("Please select a valid product category.");
@@ -130,6 +154,145 @@ async function ensureSellerAccess(admin: ReturnType<typeof createClient>, userId
   }).eq("id", userId);
 }
 
+/**
+ * Keep the seller's base price in the private pricing table. Public product
+ * rows remain safe to expose to marketplace clients while checkout can still
+ * calculate commission-funded promotions from an authoritative seller price.
+ */
+async function upsertSellerPrice(
+  admin: ReturnType<typeof createClient>,
+  productId: string,
+  sellerPrice: number,
+  recordedBy: string,
+) {
+  const { error } = await admin.from("product_seller_pricing").upsert({
+    product_id: productId,
+    seller_price: sellerPrice,
+    source: "seller_submission",
+    recorded_by: recordedBy,
+  }, { onConflict: "product_id" });
+  if (error) throw error;
+}
+
+async function createProducts(
+  admin: ReturnType<typeof createClient>,
+  rawProducts: Record<string, unknown>[],
+  sellerId: string,
+) {
+  if (!rawProducts.length) throw new Error("At least one product is required.");
+  if (rawProducts.length > MAX_BULK_PRODUCTS) {
+    throw new Error(`You can upload up to ${MAX_BULK_PRODUCTS} products at once.`);
+  }
+
+  // Validate every row before writing anything so an invalid CSV row cannot
+  // leave the seller with a partially imported batch.
+  const rows = rawProducts.map((data) => ({
+    payload: buildProductPayload(data, sellerId, true),
+    sellerPrice: wholeNaira(data.price),
+  }));
+  const { data: products, error: productError } = await admin
+    .from("products")
+    .insert(rows.map((row) => row.payload))
+    .select("*");
+  if (productError || !products || products.length !== rows.length) {
+    throw new Error(productError?.message || "Could not create the marketplace products.");
+  }
+
+  const { error: pricingError } = await admin.from("product_seller_pricing").upsert(
+    products.map((product: Record<string, unknown>, index: number) => ({
+      product_id: String(product.id),
+      seller_price: rows[index].sellerPrice,
+      source: "seller_submission",
+      recorded_by: sellerId,
+    })),
+    { onConflict: "product_id" },
+  );
+  if (pricingError) {
+    // A public product without its authoritative seller price would break
+    // payouts and BOGO. Remove this just-created batch before reporting it.
+    await admin.from("products").delete().in("id", products.map((product: Record<string, unknown>) => String(product.id)));
+    throw new Error(pricingError.message || "Could not save seller pricing for the uploaded products.");
+  }
+
+  return products;
+}
+
+async function productForSeller(
+  admin: ReturnType<typeof createClient>,
+  productId: string,
+  sellerId: string,
+) {
+  const { data: product, error: productError } = await admin
+    .from("products")
+    .select("*")
+    .eq("id", productId)
+    .eq("seller_id", sellerId)
+    .maybeSingle();
+  if (productError) throw productError;
+  if (!product) throw new Error("Product not found.");
+
+  const { data: pricing, error: pricingError } = await admin
+    .from("product_seller_pricing")
+    .select("seller_price")
+    .eq("product_id", productId)
+    .maybeSingle();
+  if (pricingError) throw pricingError;
+
+  const sellerPrice = pricing?.seller_price === undefined || pricing?.seller_price === null
+    ? null
+    : wholeNaira(pricing.seller_price);
+  const buyerPrice = wholeNaira(product.price);
+  // New products have public price = seller price × 1.20. Older listings may
+  // predate this rule, in which case their original price is already a seller
+  // amount and must not be divided a second time when the edit form opens.
+  const priceHasCommission = sellerPrice !== null && buyerPrice === buyerPriceForSellerPrice(sellerPrice);
+  const sellerOriginalPrice = sellerPrice === null
+    ? null
+    : Math.max(
+      sellerPrice,
+      priceHasCommission
+        ? sellerPriceForBuyerPrice(product.original_price ?? product.price)
+        : wholeNaira(product.original_price ?? product.price, sellerPrice),
+    );
+
+  return {
+    ...product,
+    seller_price: sellerPrice,
+    seller_original_price: sellerOriginalPrice,
+  };
+}
+
+async function productsForSeller(
+  admin: ReturnType<typeof createClient>,
+  sellerId: string,
+) {
+  const { data: products, error: productsError } = await admin
+    .from("products")
+    .select("id,name,price,shipping_fee,shipping_cost,image_url,has_video,stock_quantity,status,created_at")
+    .eq("seller_id", sellerId)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (productsError) throw productsError;
+
+  const productIds = (products || []).map((product: Record<string, unknown>) => String(product.id));
+  if (!productIds.length) return [];
+  const { data: prices, error: pricesError } = await admin
+    .from("product_seller_pricing")
+    .select("product_id,seller_price")
+    .in("product_id", productIds);
+  if (pricesError) throw pricesError;
+  const sellerPriceById = new Map(
+    (prices || []).map((price: Record<string, unknown>) => [String(price.product_id), wholeNaira(price.seller_price)]),
+  );
+
+  return products.map((product: Record<string, unknown>) => ({
+    ...product,
+    // This response is only returned to the authenticated owner after the
+    // seller-role check above; do not expose this through public product APIs.
+    seller_price: sellerPriceById.get(String(product.id)) ?? null,
+  }));
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -142,14 +305,24 @@ serve(async (req) => {
 
     const user = await getAuthedUser(req, supabaseUrl, anonKey);
     const admin = createClient(supabaseUrl, serviceRoleKey);
-    const { action, product_id, data = {} } = await req.json();
+    const { action, product_id, data = {}, products = [] } = await req.json();
     await ensureSellerAccess(admin, user.id);
 
     if (action === "create") {
-      const payload = buildProductPayload(data, user.id, true);
-      const { data: product, error } = await admin.from("products").insert(payload).select("*").single();
-      if (error) throw error;
+      const [product] = await createProducts(admin, [data], user.id);
       return json({ product, product_id: product.id });
+    }
+
+    if (action === "bulk_create") {
+      if (!Array.isArray(products)) throw new Error("Products must be an array.");
+      const inputRows = products.map((product) => product && typeof product === "object" ? product as Record<string, unknown> : {});
+      const created = await createProducts(admin, inputRows, user.id);
+      return json({ products: created, product_ids: created.map((product: Record<string, unknown>) => product.id), count: created.length });
+    }
+
+    if (action === "list") {
+      const sellerProducts = await productsForSeller(admin, user.id);
+      return json({ products: sellerProducts, count: sellerProducts.length });
     }
 
     if (!product_id) throw new Error("Product id is required.");
@@ -162,10 +335,18 @@ serve(async (req) => {
     if (!product) throw new Error("Product not found.");
     if (product.seller_id !== user.id) throw new Error("You can only manage your own products.");
 
+    if (action === "get") {
+      const fullProduct = await productForSeller(admin, String(product_id), user.id);
+      return json({ product: fullProduct, product_id: fullProduct.id });
+    }
+
     if (action === "update") {
       const payload = buildProductPayload(data, user.id, false);
       const { data: updated, error } = await admin.from("products").update(payload).eq("id", product_id).select("*").single();
       if (error) throw error;
+      if (data.price !== undefined) {
+        await upsertSellerPrice(admin, updated.id, wholeNaira(data.price), user.id);
+      }
       return json({ product: updated, product_id: updated.id });
     }
 

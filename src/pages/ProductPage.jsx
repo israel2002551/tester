@@ -4,7 +4,7 @@ import CartDrawer from '../components/CartDrawer.jsx';
 import BrandLogo from '../components/BrandLogo.jsx';
 import { createSupabaseClient } from '../lib/browserConfig.js';
 import { money } from '../lib/format.js';
-import { productColumns, productMedia, shippingFee } from '../lib/productData.js';
+import { categoryLabel, cloudinaryImage, productColumns, productMedia, shippingFee } from '../lib/productData.js';
 import { readJson, writeJson } from '../lib/storage.js';
 
 const productColumnFallbacks = [
@@ -27,13 +27,6 @@ function cartCount() {
 function isConfigError(error) {
   const message = String(error?.message || error || '').toLowerCase();
   return message.includes('invalid api key') || message.includes('supabase config unavailable') || message.includes('jwt');
-}
-
-function cloudinaryImage(url, width, { square = false } = {}) {
-  const source = String(url || '');
-  if (!source.includes('res.cloudinary.com/') || !source.includes('/upload/')) return source;
-  const crop = square ? `c_fill,g_auto,w_${width},h_${width}` : `c_limit,w_${width}`;
-  return source.replace('/upload/', `/upload/f_auto,q_auto:good,dpr_auto,${crop}/`);
 }
 
 function cloudinarySrcSet(url, widths = [640, 960, 1280]) {
@@ -122,7 +115,19 @@ export default function ProductPage() {
   const sliderRef = useRef(null);
   const thumbsRef = useRef(null);
   const relatedRailRef = useRef(null);
+  const purchaseRef = useRef(null);
   const sliderFrameRef = useRef(0);
+  const [showStickyBar, setShowStickyBar] = useState(false);
+
+  useEffect(() => {
+    const target = purchaseRef.current;
+    if (!target || typeof IntersectionObserver === 'undefined') return undefined;
+    const observer = new IntersectionObserver(([entry]) => {
+      setShowStickyBar(!entry.isIntersecting && entry.boundingClientRect.top < 0);
+    });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [status]);
 
   useEffect(() => {
     document.body.classList.add('product-page');
@@ -360,7 +365,7 @@ export default function ProductPage() {
         <nav className="product-breadcrumb" aria-label="Breadcrumb">
           <a href="/?view=shop">Marketplace</a>
           <i className="fa-solid fa-chevron-right" aria-hidden="true" />
-          <a href="/products">{product.category || 'Products'}</a>
+          <a href="/products">{categoryLabel(product.category, 'Products')}</a>
           <i className="fa-solid fa-chevron-right" aria-hidden="true" />
           <span>{product.name || 'Product'}</span>
         </nav>
@@ -466,7 +471,7 @@ export default function ProductPage() {
           <article className="product-detail-panel">
             <header className="product-detail-heading">
               <div className="product-detail-overline">
-                <span className="product-detail-kicker">{product.category || 'BUYSELL Product'}</span>
+                <span className="product-detail-kicker">{categoryLabel(product.category, 'BUYSELL Product')}</span>
                 <button className="product-detail-share" onClick={shareProduct} type="button" title="Share product" aria-label="Share product">
                   <i className="fa-solid fa-share-nodes" />
                 </button>
@@ -474,7 +479,7 @@ export default function ProductPage() {
               <h1>{product.name || 'Product'}</h1>
             </header>
             <div className="product-detail-rating">
-              <span aria-label={reviewCount ? `${rating.toFixed(1)} out of 5 stars` : 'New listing'}>{Array.from({ length: 5 }, (_, index) => <i className="fa-solid fa-star" key={index} />)}</span>
+              <span aria-label={reviewCount ? `${rating.toFixed(1)} out of 5 stars` : 'New listing'}>{Array.from({ length: 5 }, (_, index) => <i className={`${reviewCount && index < Math.round(rating) ? 'fa-solid' : 'fa-regular'} fa-star`} key={index} />)}</span>
               {reviewCount ? <><strong>{rating.toFixed(1)}</strong><em>{reviewCount} {reviewCount === 1 ? 'review' : 'reviews'}</em></> : <em>New listing - No reviews yet</em>}
             </div>
             <div className="product-detail-price">
@@ -496,11 +501,11 @@ export default function ProductPage() {
             </div>
             <p className="product-detail-desc">{product.description || 'A BUYSELL marketplace product with seller support, checkout, and delivery tracking.'}</p>
             <div className="product-detail-meta" aria-label="Product details">
-              <span><i className="fa-solid fa-tag" /> {product.condition || 'New'}</span>
+              <span><i className="fa-solid fa-tag" /> {categoryLabel(product.condition, 'New')}</span>
               <span><i className="fa-solid fa-location-dot" /> {product.location || 'Nigeria'}</span>
               <span><i className="fa-solid fa-shield-heart" /> Buyer support</span>
             </div>
-            <section className="product-purchase-block" aria-label="Purchase options">
+            <section className="product-purchase-block" aria-label="Purchase options" ref={purchaseRef}>
               <div className="product-quantity-control">
                 <span>Quantity</span>
                 <div>
@@ -531,7 +536,7 @@ export default function ProductPage() {
             <div className="product-related-heading">
               <div>
                 <span><i className="fa-solid fa-compass" /> Keep browsing</span>
-                <h2 id="product-related-title">More {product.category ? `in ${product.category}` : 'products for you'}</h2>
+                <h2 id="product-related-title">More {product.category ? `in ${categoryLabel(product.category)}` : 'products for you'}</h2>
                 <p>Swipe across to discover another listing without leaving the product experience.</p>
               </div>
               <div className="product-related-controls" aria-label="More products controls">
@@ -551,8 +556,18 @@ export default function ProductPage() {
           <TrustItem icon="fa-shield-halved" title="Marketplace Review" text="Admin support for order issues" />
         </section>
       </main>
+      {inStock ? (
+        <div className={`product-sticky-buy ${showStickyBar && !isCartOpen ? 'is-visible' : ''}`} aria-hidden={!showStickyBar || isCartOpen}>
+          <div className="product-sticky-buy__copy">
+            <span>{product.name || 'Product'}</span>
+            <strong>{money(product.price)}</strong>
+          </div>
+          <button className="btn btn-outline" type="button" onClick={() => addToCart(quantity)} aria-label="Add to cart" tabIndex={showStickyBar ? 0 : -1}><i className="fa-solid fa-cart-plus" /></button>
+          <button className="btn btn-gold" type="button" onClick={buyNow} tabIndex={showStickyBar ? 0 : -1}><i className="fa-solid fa-bolt" /> Buy Now</button>
+        </div>
+      ) : null}
       <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} onCartChange={cnt => setCount(cnt)} />
-      {toast ? <div className="product-page-toast show">{toast}</div> : null}
+      {toast ? <div className={`product-page-toast show ${showStickyBar ? 'above-sticky-buy' : ''}`}>{toast}</div> : null}
     </>
   );
 }
@@ -598,7 +613,7 @@ function RelatedProductCard({ product }) {
         {product.original_price > product.price ? <span>Save {Math.round((1 - product.price / product.original_price) * 100)}%</span> : null}
       </div>
       <div className="product-related-copy">
-        <small>{product.category || 'Marketplace'}</small>
+        <small>{categoryLabel(product.category, 'Marketplace')}</small>
         <h3>{product.name || 'Product'}</h3>
         <strong>{money(product.price)}</strong>
         <p><i className="fa-solid fa-location-dot" /> {product.location || 'Nigeria'}</p>

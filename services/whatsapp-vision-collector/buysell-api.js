@@ -41,4 +41,29 @@ export class BuySellListingsApi {
   listTargetGroups() {
     return this.request({ action: 'collector_groups' });
   }
+
+  queueListing(job) {
+    return this.request({ action: 'queue_enqueue', ...job });
+  }
+
+  claimListingJobs({ workerId, limit = 1, leaseSeconds = 900 } = {}) {
+    return this.request({
+      action: 'queue_claim',
+      worker_id: workerId,
+      limit,
+      lease_seconds: leaseSeconds,
+    });
+  }
+
+  finishListingJob({ jobId, lockToken, state, error = '', retryInSeconds = 60, result = {} } = {}) {
+    return this.request({
+      action: 'queue_finish',
+      job_id: jobId,
+      lock_token: lockToken,
+      state,
+      error,
+      retry_in_seconds: retryInSeconds,
+      result,
+    });
+  }
 }

@@ -10,7 +10,7 @@ let chatHistory = [];
 let adminAiHistory = [];
 let currentUser = null, currentRole = 'buyer', currentProd = null, currentStoreShare = null;
 const PUBLIC_SITE_URL = 'https://buysell-marketplace.com';
-const SERVICE_WORKER_APP_VERSION = '2026-09-30-desktop-1';
+const SERVICE_WORKER_APP_VERSION = '2026-10-14-bogo-1';
 const GOOGLE_OAUTH_RETURN_KEY = 'bs_google_oauth_return';
 const GOOGLE_OAUTH_RETURN_MAX_AGE_MS = 20 * 60 * 1000;
 let googleSignInInFlight = false;
@@ -92,6 +92,15 @@ let cart = normalizeCartItems(readCheckoutCartHandoff() || readStoredJson('bs_ca
 if (cart.length) appStorage.setItem('bs_cart', JSON.stringify(cart));
 let products = [], filteredProducts = [], activeFilters = {};
 const PRODUCT_PAGE_SIZE = 60;
+const MARKETPLACE_PAGE_SIZE = 24;
+let marketplaceCurrentPage = (() => {
+ try {
+  const p = parseInt(new URLSearchParams(window.location.search).get('page') || '1', 10);
+  return Number.isFinite(p) && p > 0 ? p : 1;
+ } catch {
+  return 1;
+ }
+})();
 const DASHBOARD_PAGE_SIZE = 80;
 const CACHE_TTL_MS = 45000;
 const PRODUCT_LIST_COLUMNS = [
@@ -102,7 +111,7 @@ const PRODUCT_LIST_COLUMNS = [
 const PRODUCT_MINIMAL_COLUMNS = ['id','seller_id','name','price','category','status','created_at','image_url'];
 const PRODUCT_PROFILE_HYDRATE_COLUMNS = ['id','name','email','role','accounts','store_name','store_description','whatsapp','bank_name','account_number','account_name','paystack_key','logo_url','store_address'];
 const SELLER_PRODUCT_COLUMNS = 'id,name,price,shipping_fee,shipping_cost,image_url,has_video,stock_quantity,status,created_at';
-const ORDER_LIST_COLUMNS = ['id','status','total_amount','created_at','delivery_name','delivery_address','items','payment_method','proof_url','seller_id','buyer_id'];
+const ORDER_LIST_COLUMNS = ['id','status','total_amount','created_at','delivery_name','delivery_address','items','payment_method','proof_url','seller_id','buyer_id','is_bogo_order','bogo_primary_item_id','bogo_free_item_id','platform_promo_discount_amount','bogo_extra_customer_charge','shipping_discount_amount','is_free_shipping_applied','platform_shipping_subsidy'];
 const DISPUTE_LIST_COLUMNS = ['id','order_id','buyer_id','seller_id','dispute_type','reason','description','status','created_at'];
 const DROPSHIP_REQUEST_COLUMNS = ['id','status','total_amount','created_at','delivery_name','delivery_address','items','payment_method','seller_id','buyer_id','name','contact','destination','request','admin_note','tracking_update','updated_at'];
 const MESSAGE_LIST_COLUMNS = ['id','sender_id','receiver_id','content','message','body','order_id','is_read','created_at'];
@@ -111,9 +120,12 @@ const PROFILE_COLUMNS = ['id','name','email','role','accounts','store_name','sto
 const KYC_LIST_COLUMNS = ['id','user_id','status','document_type','document_number','full_name','front_url','back_url','selfie_url','created_at','reviewed_at','admin_note'];
 const appCache = new Map();
 let carouselIndex = 0, carouselTimer = null;
-let selectedRating = 0, checkoutPaymentMethod = 'buysell_transfer';
+let selectedRating = 0, checkoutPaymentMethod = 'buysell_bank_transfer';
 const WALLET_CHECKOUT_ENABLED = false;
 const BUYSELL_DELIVERY_FEE = 2500;
+// Seller-facing UI only. The matching 20% calculation is enforced again in
+// the manage-product Edge Function before every product write.
+const SELLER_PRICE_COMMISSION_RATE = 0.20;
 const BUYSELL_BANK_ACCOUNT_NUMBER = '9061484256';
 const BUYSELL_BANK_NAME = 'Moniepoint';
 const BUYSELL_BANK_ACCOUNT_NAME = 'Israel Efe';
@@ -127,6 +139,18 @@ let previousAppView = 'buyer';
 let currentChatPartner = null;
 let currentChatProductId = null;
 let messageChannel = null;
+// BOGO state only represents a server quote. Product prices and the promotion
+// allowance are never calculated from this browser state.
+let bogoCheckoutState = {
+ loading: false,
+ settings: null,
+ quote: null,
+ primaryItemId: null,
+ freeItemId: null,
+ gifts: [],
+ error: '',
+ requestId: 0,
+};
 // MOVE THESE TWO LINES HERE (TO THE TOP VARIABLES AREA):
 let wishlist = readStoredJson('bs_wishlist', []);
 let compareList = readStoredJson('bs_compare', []);
@@ -2504,7 +2528,7 @@ function showDash(section) {
  if (section === 'products') loadSellerProds();
  if (section === 'orders') loadSellerOrders();
  if (section === 'reviews') loadSellerReviews();
- if (section === 'admin') { if (!guardAdminPanel()) return; ensureWhatsAppListingsAdminPanel(); loadAdminOverview(); }
+ if (section === 'admin') { if (!guardAdminPanel()) return; ensureWhatsAppListingsAdminPanel(); ensureBogoPromoAdminPanel(); loadAdminOverview(); }
  if (section === 'settings') loadSettings();
  if (section === 'withdrawals') { loadWithdrawalData(); loadWithdrawalHistory(); }
  if (section === 'dropshipping') loadDropshipData();
@@ -2512,6 +2536,7 @@ function showDash(section) {
   if (section === 'advertise') loadSellerAds();
   if (section === 'add-product') {
   setupProductCategoryField();
+  ensureSellerPriceCommissionUI();
   const shippingInput = document.getElementById('p-shipping-fee');
   const shippingGroup = shippingInput?.closest('.form-group');
   if (shippingGroup) shippingGroup.innerHTML = `<label class="form-label">BUYSELL delivery fee</label><div class="form-input" style="display:flex;align-items:center;background:var(--cream);color:var(--green);font-weight:700">${fmtN(BUYSELL_DELIVERY_FEE)} flat fee per order — set by BUYSELL</div>`;
@@ -2722,12 +2747,13 @@ function stopCarousel() { if (carouselTimer) clearInterval(carouselTimer); }
 // PRODUCTS
 // ====================================================
 async function loadProducts(options = {}) {
- const { preferCache = true, page = 0 } = options;
+ const { preferCache = true } = options;
  const skeleton = document.getElementById('prods-skeleton');
  const grid = document.getElementById('prods-grid');
  const empty = document.getElementById('prods-empty');
  const errorEl = document.getElementById('prods-error');
- const key = cacheKey('products', { page });
+ const paginationEl = document.getElementById('prods-pagination');
+ const key = cacheKey('products', { all: true });
  const cached = preferCache ? getCachedData(key) : null;
  if (cached?.length) {
   products = cached;
@@ -2736,21 +2762,32 @@ async function loadProducts(options = {}) {
  } else {
   skeleton?.classList.remove('hidden');
   grid?.classList.add('hidden');
+  paginationEl?.classList.add('hidden');
  }
  empty?.classList.add('hidden');
  errorEl?.classList.add('hidden');
  try {
-  const { data } = await fetchProductRows(q => q
-  .eq('status', 'active')
-  .order('created_at', { ascending: false })
-  .range(page * PRODUCT_PAGE_SIZE, page * PRODUCT_PAGE_SIZE + PRODUCT_PAGE_SIZE - 1));
-  products = setCachedData(key, await hydrateProductProfiles(data || []));
+  let allActive = [];
+  let batchStart = 0;
+  const BATCH_SIZE = 1000;
+  while (true) {
+   const { data } = await fetchProductRows(q => q
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .range(batchStart, batchStart + BATCH_SIZE - 1));
+   const batch = data || [];
+   allActive.push(...batch);
+   if (batch.length < BATCH_SIZE) break;
+   batchStart += BATCH_SIZE;
+  }
+  products = setCachedData(key, await hydrateProductProfiles(allActive));
   filteredProducts = [...products];
   applyCurrentFilters();
-  } catch(e) {
+ } catch(e) {
   skeleton?.classList.add('hidden');
   errorEl?.classList.remove('hidden');
-   }
+  paginationEl?.classList.add('hidden');
+ }
 }
 
 async function loadUpcomingProducts() {
@@ -2838,14 +2875,96 @@ function renderProducts(prods) {
  renderCustomCategoryChips();
  renderMarketplaceSearchStatus();
  const grid = document.getElementById('prods-grid');
- if (!prods.length) { grid.classList.add('hidden'); document.getElementById('prods-empty').classList.remove('hidden'); return; }
+ const paginationEl = document.getElementById('prods-pagination');
+ if (!prods.length) {
+  grid.classList.add('hidden');
+  document.getElementById('prods-empty').classList.remove('hidden');
+  if (paginationEl) paginationEl.classList.add('hidden');
+  return;
+ }
  document.getElementById('prods-empty').classList.add('hidden');
  grid.classList.remove('hidden');
- grid.innerHTML = renderMarketplaceFeedWithSponsoredAds(prods);
+
+ const totalPages = Math.ceil(prods.length / MARKETPLACE_PAGE_SIZE) || 1;
+ if (marketplaceCurrentPage > totalPages) marketplaceCurrentPage = totalPages;
+ if (marketplaceCurrentPage < 1) marketplaceCurrentPage = 1;
+
+ const startIndex = (marketplaceCurrentPage - 1) * MARKETPLACE_PAGE_SIZE;
+ const endIndex = Math.min(startIndex + MARKETPLACE_PAGE_SIZE, prods.length);
+ const pageProds = prods.slice(startIndex, endIndex);
+
+ grid.innerHTML = renderMarketplaceFeedWithSponsoredAds(pageProds);
  observeSponsoredAdViews(grid);
  renderRecentlyViewed();
  renderBuyerDealShelf();
+ renderMarketplacePagination(totalPages, marketplaceCurrentPage, prods.length, startIndex, endIndex);
 }
+
+function renderMarketplacePagination(totalPages, currentPage, totalCount, startIdx, endIdx) {
+ const container = document.getElementById('prods-pagination');
+ if (!container) return;
+ if (totalPages <= 1) {
+  container.classList.add('hidden');
+  container.innerHTML = '';
+  return;
+ }
+
+ const pages = [];
+ if (totalPages <= 7) {
+  for (let i = 1; i <= totalPages; i++) pages.push(i);
+ } else {
+  pages.push(1);
+  if (currentPage > 3) pages.push('ellipsis-start');
+  const start = Math.max(2, currentPage - 1);
+  const end = Math.min(totalPages - 1, currentPage + 1);
+  for (let i = start; i <= end; i++) pages.push(i);
+  if (currentPage < totalPages - 2) pages.push('ellipsis-end');
+  pages.push(totalPages);
+ }
+
+ const pageButtonsHtml = pages.map((p, idx) => {
+  if (typeof p === 'string') {
+   return '<span class="bs-page-ellipsis" aria-hidden="true">…</span>';
+  }
+  const isActive = p === currentPage;
+  return `<button type="button" class="bs-page-btn ${isActive ? 'active' : ''}" ${isActive ? 'aria-current="page"' : ''} onclick="changeMarketplacePage(${p})">${p}</button>`;
+ }).join('');
+
+ container.innerHTML = `
+  <div class="bs-pagination-info">
+   Showing <strong>${startIdx + 1}–${endIdx}</strong> of <strong>${totalCount}</strong> products (Page ${currentPage} of ${totalPages})
+  </div>
+  <div class="bs-pagination-controls">
+   <button type="button" class="bs-page-btn bs-page-prev" ${currentPage <= 1 ? 'disabled' : ''} onclick="changeMarketplacePage(${currentPage - 1})" aria-label="Previous page">
+    <i class="fa-solid fa-chevron-left" aria-hidden="true"></i> Prev
+   </button>
+   ${pageButtonsHtml}
+   <button type="button" class="bs-page-btn bs-page-next" ${currentPage >= totalPages ? 'disabled' : ''} onclick="changeMarketplacePage(${currentPage + 1})" aria-label="Next page">
+    Next <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+   </button>
+  </div>
+ `;
+ container.classList.remove('hidden');
+}
+
+function changeMarketplacePage(newPage) {
+ const totalPages = Math.ceil(filteredProducts.length / MARKETPLACE_PAGE_SIZE) || 1;
+ if (newPage < 1 || newPage > totalPages) return;
+ marketplaceCurrentPage = newPage;
+ try {
+  const url = new URL(window.location.href);
+  if (newPage > 1) url.searchParams.set('page', String(newPage));
+  else url.searchParams.delete('page');
+  window.history.replaceState({ page: newPage }, '', `${url.pathname}${url.search}${url.hash}`);
+ } catch (_) {}
+ renderProducts(filteredProducts);
+ const scrollTarget = document.querySelector('.products-section') || document.getElementById('prods-grid');
+ if (scrollTarget) {
+  scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
+ }
+}
+window.changeMarketplacePage = changeMarketplacePage;
+
 
 function renderMarketplaceFeedWithSponsoredAds(prods) {
  if (!adPopupAds.length) return prods.map(product => prodCard(product)).join('');
@@ -3189,12 +3308,14 @@ function setCategoryUrl(cat) {
  else url.searchParams.set('category', cat);
  url.searchParams.delete('product');
  url.searchParams.delete('store');
+ url.searchParams.delete('page');
  if (window.history?.replaceState) {
-  history.replaceState({ category: cat || 'all', view: 'shop' }, '', `${url.pathname}${url.search}${url.hash}`);
+  history.replaceState({ category: cat || 'all', view: 'shop', page: 1 }, '', `${url.pathname}${url.search}${url.hash}`);
  }
 }
 
 function filterCat(cat, options = {}) {
+ marketplaceCurrentPage = 1;
  const selected = normalizeProductCategory(cat) || 'all';
  document.querySelectorAll('.cat-chip').forEach(c => c.classList.toggle('active', c.dataset.cat === selected));
  document.querySelectorAll('[data-category-link]').forEach(btn => btn.classList.toggle('active', btn.dataset.categoryLink === selected));
@@ -3375,6 +3496,7 @@ function renderMarketplaceSearchStatus() {
 
 function runMarketplaceSearch(query, options = {}) {
  const { updateUrl = true, scroll = false, focus = false } = options;
+ marketplaceCurrentPage = 1;
  const input = document.getElementById('search-input');
  const normalizedQuery = normalizeMarketplaceSearch(query);
  if (input && input.value !== normalizedQuery) input.value = normalizedQuery;
@@ -3439,6 +3561,7 @@ function applyFilters() {
 }
 
 function toggleQuickFilter(key) {
+ marketplaceCurrentPage = 1;
  if (activeFilters[key]) delete activeFilters[key];
  else activeFilters[key] = true;
  syncQuickFilterChips();
@@ -3448,6 +3571,7 @@ function toggleQuickFilter(key) {
 }
 
 function applyDealFilter() {
+ marketplaceCurrentPage = 1;
  activeFilters.priceMax = 10000;
  syncQuickFilterChips();
  applyCurrentFilters();
@@ -3484,6 +3608,7 @@ function renderActiveFilters() {
 }
 
 function removeFilter(key) {
+ marketplaceCurrentPage = 1;
  if(key==='price'){delete activeFilters.priceMin;delete activeFilters.priceMax;}
  else delete activeFilters[key];
  syncQuickFilterChips();
@@ -3493,6 +3618,7 @@ function removeFilter(key) {
 }
 
 function clearFilters() {
+ marketplaceCurrentPage = 1;
  activeFilters = {};
  const searchInput = document.getElementById('search-input');
  if (searchInput) searchInput.value = '';
@@ -3991,12 +4117,236 @@ function cartPayableSubtotal() {
  return cartProductTotal() + cartShippingTotal();
 }
 
+function checkoutBogoPayload() {
+ return {
+  cart: checkoutCartItems(),
+  bogo_primary_item_id: bogoCheckoutState.primaryItemId || null,
+  bogo_free_item_id: bogoCheckoutState.freeItemId || null,
+  delivery_mode: currentMode === 'pickup' ? 'pickup' : 'delivery',
+ };
+}
+
+function bogoNumber(value, fallback = 0) {
+ const amount = Number(value);
+ return Number.isFinite(amount) ? amount : fallback;
+}
+
+function resetBogoCheckoutState() {
+ bogoCheckoutState = {
+  loading: false,
+  settings: null,
+  quote: null,
+  primaryItemId: null,
+  freeItemId: null,
+  gifts: [],
+  error: '',
+  requestId: bogoCheckoutState.requestId + 1,
+ };
+}
+
+function bogoQuoteTotal() {
+ const total = bogoNumber(bogoCheckoutState.quote?.total_amount, NaN);
+ return Number.isFinite(total) && total > 0 ? total : null;
+}
+
+function bogoSettingsFromQuote(quote = {}) {
+  const settings = quote?.settings || {};
+  const bogo = quote?.bogo || quote?.promotion || {};
+  const freeShipping = quote?.free_shipping || quote?.shipping_promo || {};
+  return {
+   bogo_promo_enabled: settings.bogo_promo_enabled === true || bogo.enabled === true,
+   bogo_profit_share_percent: bogoNumber(settings.bogo_profit_share_percent, 10),
+   bogo_min_order_value: bogoNumber(settings.bogo_min_order_value ?? bogo.min_order_value, 0),
+   free_shipping_promo_enabled: settings.free_shipping_promo_enabled === true || freeShipping.enabled === true,
+   free_shipping_mode: String(settings.free_shipping_mode || freeShipping.mode || 'HYBRID').toUpperCase(),
+   free_shipping_profit_share_percent: bogoNumber(settings.free_shipping_profit_share_percent ?? freeShipping.profit_share_percent, 10),
+   free_shipping_min_order_value: bogoNumber(settings.free_shipping_min_order_value ?? freeShipping.min_order_value, 100),
+   allow_promo_stacking: settings.allow_promo_stacking === true || freeShipping.allow_promo_stacking === true,
+  };
+}
+
+function renderCheckoutQuotedItems(quote) {
+ const host = document.getElementById('co-items');
+ if (!host || !Array.isArray(quote?.items) || !quote.items.length) return;
+ host.innerHTML = quote.items.map(item => {
+  const quantity = Math.max(1, Number(item.qty || item.quantity || 1));
+  const lineTotal = bogoNumber(item.total, bogoNumber(item.price, 0) * quantity);
+  const isGift = item.is_bogo_gift === true;
+  const detail = isGift
+   ? (lineTotal > 0 ? 'BOGO gift — top-up shown' : 'BOGO gift — fully covered')
+   : `Qty: ${quantity}`;
+  const image = sanitizeUrl(item.image_url || '') || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=100';
+  return `<div class="order-item${isGift ? ' bogo-order-gift' : ''}"><img src="${escAttr(image)}" alt="" loading="lazy"><div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(item.name || 'Marketplace item')}</div><div class="color-text3 text-xs">${escHtml(detail)}</div></div><div class="font-bold text-sm">${isGift && lineTotal === 0 ? 'FREE' : fmtN(lineTotal)}</div></div>`;
+ }).join('');
+}
+
+function renderCheckoutFreeShippingPromo() {
+ const itemsHost = document.getElementById('co-items');
+ if (!itemsHost) return;
+ const quote = bogoCheckoutState.quote || {};
+ const settings = bogoCheckoutState.settings || bogoSettingsFromQuote(quote);
+ const shipping = quote.free_shipping || quote.shipping_promo || {};
+ const enabled = settings.free_shipping_promo_enabled === true || shipping.enabled === true;
+ let host = document.getElementById('co-free-shipping-promo');
+ if (!enabled && !bogoCheckoutState.loading) { host?.remove(); return; }
+ if (!host) {
+  host = document.createElement('section');
+  host.id = 'co-free-shipping-promo';
+  host.className = 'bogo-checkout-card';
+  const bogoHost = document.getElementById('co-bogo-promo');
+  (bogoHost || itemsHost).insertAdjacentElement('afterend', host);
+ }
+ if (bogoCheckoutState.loading && !bogoCheckoutState.quote) {
+  host.innerHTML = '<div class="bogo-checkout-head"><div><span class="admin-command-kicker"><i class="fa-solid fa-truck-fast"></i> Delivery promotion</span><h3>Checking your shipping offer...</h3></div><span class="spinner" aria-label="Loading"></span></div>';
+  return;
+ }
+ const shippingTotal = bogoNumber(shipping.shipping_total ?? quote.shipping_total, 0);
+ const customerCharge = bogoNumber(shipping.customer_shipping_charge ?? quote.customer_shipping_charge, shippingTotal);
+ const subsidy = bogoNumber(shipping.shipping_discount_amount ?? quote.shipping_discount_amount, 0);
+ const applied = shipping.is_applied === true || quote.is_free_shipping_applied === true || subsidy > 0;
+ const mode = String(shipping.mode || settings.free_shipping_mode || 'HYBRID').replace(/_/g, ' ').toLowerCase();
+ const reason = shipping.qualification_reason || (enabled ? 'Your delivery subsidy will be calculated from the platform commission.' : 'This promotion is not available for this checkout.');
+ host.innerHTML = `<div class="bogo-checkout-head"><div><span class="admin-command-kicker"><i class="fa-solid fa-truck-fast"></i> Delivery promotion</span><h3>Platform-funded shipping</h3><p class="text-xs color-text3">${enabled ? `Mode: ${escHtml(mode)}. The courier receives the full shipping fee; BUYSELL covers any subsidy.` : escHtml(reason)}</p></div><span class="badge ${applied ? 'badge-green' : 'badge-gray'}">${applied ? 'Applied' : 'Not applied'}</span></div>${shippingTotal > 0 ? `<div class="bogo-price-summary"><span>Delivery fee</span><strong>${fmtN(shippingTotal)}</strong></div>${subsidy > 0 ? `<div class="bogo-price-summary"><span><i class="fa-solid fa-circle-check"></i> BUYSELL shipping subsidy</span><strong>-${fmtN(subsidy)}</strong></div>` : ''}<div class="bogo-price-summary"><span>Customer delivery charge</span><strong>${customerCharge === 0 ? 'FREE' : fmtN(customerCharge)}</strong></div>` : ''}${!applied && reason ? `<p class="bogo-qualification-note"><i class="fa-solid fa-circle-info"></i> ${escHtml(reason)}</p>` : ''}`;
+}
+
+function renderCheckoutBogoPromo() {
+ const itemsHost = document.getElementById('co-items');
+ if (!itemsHost) return;
+ let host = document.getElementById('co-bogo-promo');
+ if (!host) {
+  host = document.createElement('section');
+  host.id = 'co-bogo-promo';
+  host.className = 'bogo-checkout-card';
+  itemsHost.insertAdjacentElement('afterend', host);
+ }
+ renderCheckoutFreeShippingPromo();
+
+ const settings = bogoCheckoutState.settings || {};
+ const promoEnabled = settings.bogo_promo_enabled === true;
+ if (!bogoCheckoutState.loading && !promoEnabled && !bogoCheckoutState.error) {
+  host.remove();
+  return;
+ }
+
+ if (bogoCheckoutState.loading && !bogoCheckoutState.quote) {
+  host.innerHTML = '<div class="bogo-checkout-head"><div><span class="admin-command-kicker"><i class="fa-solid fa-gift"></i> Promotion</span><h3>Checking your BUY 1, Get 1 offer…</h3></div><span class="spinner" aria-label="Loading"></span></div>';
+  return;
+ }
+
+ if (!promoEnabled) {
+  host.innerHTML = `<div class="bogo-checkout-head"><div><span class="admin-command-kicker"><i class="fa-solid fa-gift"></i> Promotion</span><h3>BUY 1, Get 1</h3><p class="text-xs color-text3">${escHtml(bogoCheckoutState.error || 'This promotion is not available for this checkout.')}</p></div></div>`;
+  return;
+ }
+
+ const quote = bogoCheckoutState.quote || {};
+ const bogo = quote.bogo || quote.promotion || quote;
+ const primaryOptions = cart.map(item => {
+  const id = String(item.id || '');
+  const quantity = Number(item.qty || item.quantity || 1);
+  const label = `${item.name || 'Cart item'}${quantity > 1 ? ` (qty ${quantity})` : ''}`;
+  return `<option value="${escAttr(id)}" ${id === String(bogoCheckoutState.primaryItemId || '') ? 'selected' : ''}>${escHtml(label)}</option>`;
+ }).join('');
+ const giftOptions = (bogoCheckoutState.gifts || []).map(gift => {
+  const id = String(gift.id || '');
+  const displayPrice = bogoNumber(gift.customer_price ?? gift.display_price ?? gift.price, 0);
+  const label = displayPrice > 0 ? `${gift.name || 'Eligible product'} — ${fmtN(displayPrice)}` : (gift.name || 'Eligible product');
+  return `<option value="${escAttr(id)}" ${id === String(bogoCheckoutState.freeItemId || '') ? 'selected' : ''}>${escHtml(label)}</option>`;
+ }).join('');
+ const canChooseGift = Boolean(bogoCheckoutState.primaryItemId && bogo.eligible);
+ const contribution = bogoNumber(bogo.platform_promo_contribution ?? bogo.platform_promo_discount_amount, 0);
+ const extra = bogoNumber(bogo.extra_customer_charge, 0);
+ const qualificationMessage = bogo.qualification_reason || (bogoCheckoutState.primaryItemId ? 'Choose a valid one-quantity cart item to continue.' : 'Choose the paid item that should unlock your gift.');
+ const selectedGiftSummary = bogo.is_bogo_order
+  ? `<div class="bogo-price-summary"><span><i class="fa-solid fa-circle-check"></i> Platform contribution</span><strong>${fmtN(contribution)}</strong></div>${extra > 0 ? `<div class="bogo-price-summary"><span>Extra for selected gift</span><strong>${fmtN(extra)}</strong></div>` : '<p class="bogo-free-note"><i class="fa-solid fa-gift"></i> Your selected gift is fully covered.</p>'}`
+  : '';
+
+ host.innerHTML = `
+  <div class="bogo-checkout-head">
+   <div>
+    <span class="admin-command-kicker"><i class="fa-solid fa-gift"></i> Limited promotion</span>
+    <h3>Buy 1, Get 1</h3>
+     <p class="text-xs color-text3">Choose one paid item and add one qualifying gift. The platform funds part of the gift from its commission; any shipping promotion is calculated separately below.</p>
+   </div>
+   <span class="badge badge-green">Available</span>
+  </div>
+  <div class="form-group bogo-primary-field">
+   <label class="form-label" for="co-bogo-primary">Paid item for this offer</label>
+   <select id="co-bogo-primary" class="form-select" onchange="selectBogoPrimary(this.value)">
+    <option value="">Select a cart item</option>${primaryOptions}
+   </select>
+  </div>
+  ${bogoCheckoutState.primaryItemId ? '<p class="bogo-allowance"><i class="fa-solid fa-sack-dollar"></i> Choose from the items covered by this purchase’s platform-funded gift allowance.</p>' : ''}
+  ${canChooseGift ? `<div class="form-group"><label class="form-label" for="co-bogo-gift">Choose your free gift <span class="text-xs color-text3">(optional)</span></label><select id="co-bogo-gift" class="form-select" onchange="selectBogoFreeGift(this.value)"><option value="">No gift for this order</option>${giftOptions}</select>${bogoCheckoutState.loading ? '<p class="text-xs color-text3 mt-1"><span class="spinner"></span> Finding eligible gifts…</p>' : (giftOptions ? '' : '<p class="text-xs color-text3 mt-1">No qualifying gifts are available at the moment.</p>')}</div>` : `<p class="bogo-qualification-note"><i class="fa-solid fa-circle-info"></i> ${escHtml(qualificationMessage)}</p>`}
+  ${selectedGiftSummary}
+  ${bogoCheckoutState.error ? `<p class="bogo-qualification-note bogo-error"><i class="fa-solid fa-triangle-exclamation"></i> ${escHtml(bogoCheckoutState.error)}</p>` : ''}`;
+}
+
+// Public checkout helper for the promotion endpoint. It deliberately sends
+// only IDs and quantities; eligible gift pricing is determined on the server.
+async function getEligibleFreeGifts(mainItemId = bogoCheckoutState.primaryItemId) {
+ return callEdge('bogo-promo', {
+  action: 'eligible_gifts',
+  ...checkoutBogoPayload(),
+  bogo_primary_item_id: mainItemId || null,
+  bogo_free_item_id: null,
+ });
+}
+
+async function refreshBogoCheckout({ loadGifts = false } = {}) {
+ if (!currentUser || !cart.length) return null;
+ const requestId = ++bogoCheckoutState.requestId;
+ bogoCheckoutState.loading = true;
+ bogoCheckoutState.error = '';
+ renderCheckoutBogoPromo();
+ try {
+  const result = await callEdge('bogo-promo', { action: 'quote', ...checkoutBogoPayload() });
+  if (requestId !== bogoCheckoutState.requestId) return bogoCheckoutState.quote;
+  const quote = result?.quote || result || {};
+  bogoCheckoutState.settings = result?.settings || quote.settings || bogoSettingsFromQuote(quote);
+  bogoCheckoutState.quote = quote;
+  renderCheckoutQuotedItems(quote);
+
+  const shouldLoadGifts = bogoCheckoutState.settings?.bogo_promo_enabled === true
+   && Boolean(bogoCheckoutState.primaryItemId)
+  && (quote?.bogo?.eligible === true || quote?.eligible === true)
+   && (loadGifts || !bogoCheckoutState.gifts.length);
+  if (shouldLoadGifts) {
+   const giftsResult = await getEligibleFreeGifts();
+   if (requestId !== bogoCheckoutState.requestId) return bogoCheckoutState.quote;
+   bogoCheckoutState.gifts = giftsResult?.gifts || giftsResult?.products || [];
+  }
+  bogoCheckoutState.loading = false;
+  renderCheckoutBogoPromo();
+  updateCheckoutTotals();
+  return quote;
+ } catch (error) {
+  if (requestId !== bogoCheckoutState.requestId) return bogoCheckoutState.quote;
+  bogoCheckoutState.loading = false;
+  bogoCheckoutState.error = error?.message || 'Promotion pricing could not be loaded.';
+  renderCheckoutBogoPromo();
+  updateCheckoutTotals();
+  return null;
+ }
+}
+
+function selectBogoPrimary(productId) {
+ bogoCheckoutState.primaryItemId = productId ? String(productId) : null;
+ bogoCheckoutState.freeItemId = null;
+ bogoCheckoutState.gifts = [];
+ refreshBogoCheckout({ loadGifts: true });
+}
+
+function selectBogoFreeGift(productId) {
+ bogoCheckoutState.freeItemId = productId ? String(productId) : null;
+ refreshBogoCheckout();
+}
+
 function isCustomProductCategoryValue(value) {
  return ['__custom__', 'custom', 'custom-category', 'custom_category'].includes(String(value || '').trim().toLowerCase());
 }
 
 function updateCheckoutTotals() {
- const total = cartPayableSubtotal();
+ const total = bogoQuoteTotal() ?? cartPayableSubtotal();
  const totalEl = document.getElementById('co-total');
  const payAmountEl = document.getElementById('co-pay-amount');
  if (totalEl) totalEl.textContent = fmtN(total);
@@ -4135,15 +4485,24 @@ function isSellerAccount(profile = currentUser?.profile || {}) {
 async function getSellerAvailableRevenue(sellerId = currentUser?.id) {
  if (!sellerId) return { available: 0, revenue: 0, pending: 0, paid: 0, walletDebits: 0 };
 
- const [{ data: orders }, { data: withdrawals }, { data: walletTransactions }] = await Promise.all([
+ const sellerLedger = sellerId === currentUser?.id
+  ? callEdge('bogo-promo', { action: 'seller_payout_summary' }).catch(() => null)
+  : Promise.resolve(null);
+ const [{ data: orders }, { data: withdrawals }, { data: walletTransactions }, ledgerResult] = await Promise.all([
  db.from('orders').select('total_amount,status').eq('seller_id', sellerId),
  db.from('withdrawals').select('amount,status').eq('seller_id', sellerId),
- db.from('wallet_transactions').select('amount,type').eq('seller_id', sellerId)
+ db.from('wallet_transactions').select('amount,type').eq('seller_id', sellerId),
+ sellerLedger,
  ]);
 
- const revenue = (orders || [])
+ const legacyRevenue = (orders || [])
  .filter(o => o.status === 'delivered')
  .reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+ // New orders have a private, per-seller allocation ledger. The server
+ // combines those with pre-ledger legacy orders without exposing any seller
+ // price or another seller's data to the browser.
+ const serverRevenue = bogoNumber(ledgerResult?.summary?.total_delivered_revenue, NaN);
+ const revenue = Number.isFinite(serverRevenue) ? serverRevenue : legacyRevenue;
  const pending = (withdrawals || [])
  .filter(w => ['pending', 'processing', 'in_review'].includes(String(w.status || '')))
  .reduce((sum, w) => sum + Number(w.amount || 0), 0);
@@ -4173,6 +4532,7 @@ async function startCheckout(options = {}) {
  if (authM) authM.classList.remove('open');
  if (!cart.length) { toast('Cart is empty','','warn'); return; }
  currentMode = 'home';
+ resetBogoCheckoutState();
 
  let availableBalance = Number(currentUser?.profile?.wallet_balance || 0);
  const isSeller = isSellerAccount();
@@ -4231,7 +4591,7 @@ async function startCheckout(options = {}) {
  }
  
  // Every marketplace order is paid into the BUYSELL account and reviewed by an admin.
- checkoutPaymentMethod = 'buysell_transfer';
+ checkoutPaymentMethod = 'buysell_bank_transfer';
  const methodGrid = document.getElementById('co-p2');
  if (methodGrid) {
  methodGrid.innerHTML = `
@@ -4263,6 +4623,10 @@ async function startCheckout(options = {}) {
  }
  
  updateCheckoutTotals();
+ // The server re-reads seller prices and config before it displays the offer.
+ // A temporary quote failure is shown in the checkout, and payment creation
+ // still repeats this validation before a pending order is written.
+ refreshBogoCheckout().catch(() => {});
 }
 function goCheckoutStep(step) {
  document.querySelectorAll('.checkout-panel').forEach(p => p.classList.remove('active'));
@@ -4327,9 +4691,13 @@ async function resolveFlutterwaveReference(response, fallback = '') {
 }
 
 async function payWithFlutterwave() {
+ // Marketplace checkout is intentionally bank-transfer only. Keep this guard
+ // even for stale cached markup that still calls the old payment handler.
+ checkoutPaymentMethod = 'buysell_bank_transfer';
+ toast('Bank transfer only', 'Transfer to the BUYSELL account shown here, then upload your receipt for verification.', 'info');
+ return;
+
  if (cart.length === 0) { toast('Cart is empty', '', 'warn'); return; }
- const rawProductTotal = cartPayableSubtotal();
- if (rawProductTotal <= 0) { toast('Invalid total amount', '', 'error'); return; }
  if (!currentUser) { showModal('auth-modal'); return; }
  if (!isFlutterwaveReady()) return;
 
@@ -4339,9 +4707,7 @@ async function payWithFlutterwave() {
 
  try {
  const checkoutPayload = {
- cart: checkoutCartItems(),
- shipping_total: cartShippingTotal(),
- shipping_groups: cartSellerShippingGroups(),
+ ...checkoutBogoPayload(),
  delivery_name: document.getElementById('co-name').value.trim(),
  delivery_phone: document.getElementById('co-phone').value.trim(),
  delivery_address: document.getElementById('co-address').value.trim(),
@@ -4353,25 +4719,30 @@ async function payWithFlutterwave() {
  return;
  }
 
- // --- INVISIBLE COMMISSION MATHEMATICS ---
- const secretComm = Math.round(rawProductTotal * PLATFORM_FEE_PCT);
- const hiddenTotalBillAmount = rawProductTotal + secretComm;
+ // Ask the server for an authoritative quote immediately before opening the
+ // payment sheet. This includes the 20% customer price and any BOGO top-up.
+ const quote = await refreshBogoCheckout();
+ const quotedTotal = bogoNumber(quote?.total_amount, 0);
+ if (quotedTotal <= 0) throw new Error('Could not calculate the checkout total. Please refresh and try again.');
  
   const reference = 'bs_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-  const pendingOrder = await callEdge('verify-flutterwave-payment', {
-  action: 'create_pending',
+  const pendingOrder = await callEdge('bogo-promo', {
+  action: 'create_flutterwave_pending',
   tx_ref: reference,
-  expected_amount: hiddenTotalBillAmount,
+  payment_ref: reference,
+  expected_amount: quotedTotal,
   currency: 'NGN',
   ...checkoutPayload,
   payment_method: 'flutterwave',
   });
   if (!pendingOrder?.order_id) throw new Error('Could not prepare your order for payment');
+  const paymentAmount = bogoNumber(pendingOrder.total_amount ?? pendingOrder.total, 0);
+  if (paymentAmount <= 0) throw new Error('Could not calculate the payment amount. Please refresh and try again.');
   let verificationStarted = false;
   let paymentConfirmed = false;
   openFlutterwaveTransaction({
  tx_ref: reference,
- amount: hiddenTotalBillAmount,
+ amount: paymentAmount,
  currency: 'NGN',
  payment_options: 'card,banktransfer,ussd',
  customer: {
@@ -4390,7 +4761,7 @@ async function payWithFlutterwave() {
  const result = await callEdge('verify-flutterwave-payment', {
  transaction_id: response.transaction_id || response.id,
  tx_ref: response.tx_ref || reference,
-  expected_amount: hiddenTotalBillAmount,
+  expected_amount: paymentAmount,
   currency: 'NGN',
   order_id: pendingOrder.order_id,
  ...checkoutPayload,
@@ -4406,13 +4777,13 @@ async function payWithFlutterwave() {
  seller_id: cart[0]?.seller_id,
  order_id: result.order_id,
  quantity: cart.reduce((sum,c)=>sum+(c.qty||1),0),
- amount: result.total_paid || hiddenTotalBillAmount,
- metadata: { payment_method: 'flutterwave' },
+ amount: result.total_paid || paymentAmount,
+ metadata: { payment_method: 'flutterwave', is_bogo_order: Boolean(bogoCheckoutState.freeItemId) },
  });
  
  cart = []; saveCart();
  document.getElementById('co-order-id').textContent = result.order_id || '';
- document.getElementById('co-order-total').textContent = fmtN(result.total_paid || hiddenTotalBillAmount);
+ document.getElementById('co-order-total').textContent = fmtN(result.total_paid || paymentAmount);
  goCheckoutStep(3);
  toast('Payment Verified!', 'Your order is confirmed. BUYSELL delivery team will manage pickup and tracking.', 'success');
  }
@@ -4450,35 +4821,21 @@ async function payWithPaystack() { return payWithFlutterwave(); }
 
 // --- NEW WALLET SELECTION METHOD AND ENGINE CORES ---
 function selectCheckoutPaymentMethod(method) {
- const allowedMethods = WALLET_CHECKOUT_ENABLED ? ['flutterwave', 'wallet'] : ['flutterwave'];
- const requestedMethod = method === 'paystack' ? 'flutterwave' : method;
- const nextMethod = allowedMethods.includes(requestedMethod) ? requestedMethod : 'flutterwave';
- checkoutPaymentMethod = nextMethod;
+ // There is one supported marketplace checkout method: a bank transfer to
+ // BUYSELL followed by receipt verification. This guard also protects stale
+ // cached checkout markup that may still call selectPM('flutterwave').
+ checkoutPaymentMethod = 'buysell_bank_transfer';
  const flutterwaveCard = document.getElementById('pm-flutterwave');
  const transferCard = document.getElementById('pm-transfer');
  const walletCard = document.getElementById('pm-wallet');
  const flutterwavePanel = document.getElementById('pm-flutterwave-panel');
  const transferPanel = document.getElementById('pm-transfer-panel');
 
- if (flutterwaveCard) flutterwaveCard.classList.toggle('selected', nextMethod === 'flutterwave');
- if (transferCard) transferCard.classList.remove('selected');
- if (walletCard) walletCard.classList.toggle('selected', nextMethod === 'wallet');
- if (flutterwavePanel) flutterwavePanel.classList.remove('hidden');
- if (transferPanel) transferPanel.classList.add('hidden');
- 
- // Dynamically flip the submit button execution routing target
- const payBtn = document.querySelector('#pm-flutterwave-panel .btn-flutterwave') || document.querySelector('#co-p2 .btn-primary');
- if (payBtn) {
- if (nextMethod === 'wallet') {
- payBtn.setAttribute('onclick', 'payWithWalletRevenue()');
- payBtn.innerHTML = '<i class="fa-solid fa-wallet"></i> Pay with Wallet Balance';
- payBtn.className = 'btn btn-primary btn-full btn-lg';
- } else {
- payBtn.setAttribute('onclick', 'payWithFlutterwave()');
- payBtn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Proceed with Flutterwave';
- payBtn.className = 'btn btn-flutterwave btn-full btn-lg';
- }
- }
+ if (flutterwaveCard) flutterwaveCard.classList.remove('selected');
+ if (walletCard) walletCard.classList.remove('selected');
+ if (transferCard) transferCard.classList.add('selected');
+ if (flutterwavePanel) flutterwavePanel.classList.add('hidden');
+ if (transferPanel) transferPanel.classList.remove('hidden');
 }
 
 async function insertWithMissingColumnRetry(tableName, row, selectCols = '*') {
@@ -4551,6 +4908,10 @@ async function createWalletRevenueOrder(checkoutPayload, totalAmount, walletRef)
 }
 
 async function payWithWalletRevenue() {
+ checkoutPaymentMethod = 'buysell_bank_transfer';
+ toast('Bank transfer only', 'Wallet payments are unavailable. Transfer to BUYSELL and submit your receipt instead.', 'info');
+ return;
+
  if (cart.length === 0) { toast('Cart is empty', '', 'warn'); return; }
  const rawProductTotal = cartPayableSubtotal();
  if (!currentUser) { showModal('auth-modal'); return; }
@@ -5221,6 +5582,43 @@ async function loadSellerAnalytics() {
 // ====================================================
 const NEWLY_COMING_PRODUCT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
+function buyerFacingPriceForSellerPrice(value) {
+ const amount = Number(value);
+ return Number.isFinite(amount) && amount > 0 ? Math.round(amount * (1 + SELLER_PRICE_COMMISSION_RATE)) : 0;
+}
+
+function ensureSellerPriceCommissionUI() {
+ const priceInput = document.getElementById('p-price');
+ if (!priceInput) return;
+ const originalInput = document.getElementById('p-orig-price');
+ const priceGroup = priceInput.closest('.form-group');
+ const originalGroup = originalInput?.closest('.form-group');
+ const priceLabel = priceGroup?.querySelector('label');
+ const originalLabel = originalGroup?.querySelector('label');
+ if (priceLabel) priceLabel.innerHTML = 'Your seller price (₦) <span class="req">*</span>';
+ if (originalLabel) originalLabel.textContent = 'Your original seller price (optional)';
+ let preview = document.getElementById('p-buyer-price-preview');
+ if (!preview && priceGroup) {
+  preview = document.createElement('div');
+  preview.id = 'p-buyer-price-preview';
+  preview.className = 'text-xs color-text3 mt-1';
+  priceInput.insertAdjacentElement('afterend', preview);
+ }
+ const updatePreview = () => {
+  if (!preview) return;
+  const sellerPrice = Number(priceInput.value);
+  const buyerPrice = buyerFacingPriceForSellerPrice(sellerPrice);
+  preview.innerHTML = buyerPrice > 0
+   ? `<i class="fa-solid fa-circle-check" style="color:var(--green)"></i> Buyer sees ${fmtN(buyerPrice)} (includes BUYSELL's 20% commission).`
+   : 'BUYSELL adds 20% to this amount for the buyer-facing price.';
+ };
+ if (!priceInput.dataset.commissionPreviewBound) {
+  priceInput.addEventListener('input', updatePreview);
+  priceInput.dataset.commissionPreviewBound = 'true';
+ }
+ updatePreview();
+}
+
 function ensureSellerProductFilterOptions() {
  const select = document.getElementById('prod-filter');
  if (!select || select.querySelector('optgroup[data-product-filter-group="listing-state"]')) return;
@@ -5265,8 +5663,34 @@ async function loadSellerProds() {
  skeleton?.classList.remove('hidden');
  list?.classList.add('hidden');
  empty?.classList.add('hidden');
- let q = db.from('products').select(SELLER_PRODUCT_COLUMNS).eq('seller_id', currentUser.id).order('created_at', {ascending: false}).limit(DASHBOARD_PAGE_SIZE);
- const { data, error } = await q;
+ let data;
+ let error = null;
+ try {
+  // Use the authenticated seller endpoint so this view can show the seller's
+  // own base price without exposing it in public product queries.
+  const result = await callEdge('manage-product', { action: 'list' });
+  data = Array.isArray(result?.products) ? result.products : [];
+ } catch (requestError) {
+  // A rolling web deployment can reach a newer app.js before its matching
+  // manage-product function is published. Keep the seller dashboard usable
+  // during that short window; the direct query exposes only the owner's own
+  // public listings and never the private seller-pricing table.
+  if (/product id is required/i.test(requestError?.message || '')) {
+   try {
+    const fallback = await runSelectWithColumnFallback(
+     'products',
+     SELLER_PRODUCT_COLUMNS,
+     q => q.eq('seller_id', currentUser.id).order('created_at', { ascending: false }).limit(DASHBOARD_PAGE_SIZE),
+    );
+    data = fallback.data || [];
+    console.warn('manage-product list endpoint is not deployed yet; using the seller product fallback.');
+   } catch (fallbackError) {
+    error = fallbackError;
+   }
+  } else {
+   error = requestError;
+  }
+ }
  skeleton?.classList.add('hidden');
  if (error) { toast('Products unavailable', error.message, 'error'); return; }
  const prods = (data || []).filter(product => sellerProductMatchesFilter(product, filter));
@@ -5278,7 +5702,8 @@ async function loadSellerProds() {
  <img class="prod-list-img" src="${p.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=200'}" alt="" loading="lazy">
  <div class="prod-list-info">
  <div class="prod-list-name">${escHtml(p.name)}</div>
- <div class="prod-list-price">${fmtN(p.price)}</div>
+  <div class="prod-list-price">Buyer price: ${fmtN(p.price)}</div>
+  ${Number(p.seller_price) > 0 ? `<div class="text-xs color-text3">Your price: ${fmtN(p.seller_price)} <span aria-hidden="true">•</span> +20% BUYSELL commission</div>` : '<div class="text-xs color-text3">Buyer price includes BUYSELL commission</div>'}
  <div class="text-xs color-text3">BUYSELL delivery fee: ${fmtN(itemShippingFee(p))}</div>
  <div class="prod-list-meta">
  <span class="badge badge-${p.status==='active'?'green':'gray'}">${p.status}</span>
@@ -5297,8 +5722,9 @@ async function loadSellerProds() {
 }
 
 async function submitProduct(e) {
- e.preventDefault();
- if (!currentUser) return;
+  e.preventDefault();
+  if (!currentUser) return;
+  ensureSellerPriceCommissionUI();
  const btn = document.getElementById('pub-btn');
  btn.disabled = true;
  document.getElementById('pub-btn-text').textContent = '';
@@ -5408,9 +5834,10 @@ if (nameVal.length > 300) {
   : { ...prodData, status: 'active', seller_id: currentUser.id };
   toast('Product Published! ', 'Your product is now live', 'success');
   }
-  notifyProductIfActive(productNotificationRecord, oldProductNotificationRecord);
-  document.getElementById('add-prod-form').reset();
- showDash('products');
+   notifyProductIfActive(productNotificationRecord, oldProductNotificationRecord);
+   document.getElementById('add-prod-form').reset();
+   ensureSellerPriceCommissionUI();
+   showDash('products');
  } catch(err) {
  toast('Error', err.message, 'error');
  } finally {
@@ -5523,19 +5950,30 @@ function setExistingProductImageCover(index) {
 }
 
 async function editProduct(id) {
- const { data: p } = await runSelectWithColumnFallback('products', PRODUCT_LIST_COLUMNS, q => q.eq('id', id).single());
- const error = null;
- if (error || !p) { toast('Could not load product', '', 'error'); return; }
+ let p = null;
+ try {
+  // The server returns the seller's private base price only to the listing
+  // owner. Public products.price is the buyer-facing amount and must never be
+  // fed back into the form as though it were the seller's price.
+  const result = await callEdge('manage-product', { action: 'get', product_id: id });
+  p = result?.product || null;
+ } catch (error) {
+  toast('Could not load product', error.message || 'Please try again.', 'error');
+  return;
+ }
+ if (!p) { toast('Could not load product', '', 'error'); return; }
  editingProductId = id;
  showDash('add-product');
+ ensureSellerPriceCommissionUI();
  editingProductImages = savedProductImageUrls(p);
  showProductImageManager();
  const imageInput = document.getElementById('p-image');
  if (imageInput) imageInput.value = '';
  // Pre-fill form
  document.getElementById('p-name').value = p.name || '';
- document.getElementById('p-price').value = p.price || '';
- document.getElementById('p-orig-price').value = p.original_price || '';
+ document.getElementById('p-price').value = p.seller_price ?? p.price ?? '';
+ document.getElementById('p-orig-price').value = p.seller_original_price ?? p.original_price ?? '';
+ document.getElementById('p-price').dispatchEvent(new Event('input'));
   const shippingFeeInput = document.getElementById('p-shipping-fee');
   if (shippingFeeInput) shippingFeeInput.value = BUYSELL_DELIVERY_FEE;
  document.getElementById('p-stock').value = p.stock_quantity ?? '';
@@ -5575,6 +6013,7 @@ function cancelEditProduct() {
  editingProductId = null;
  hideProductImageManager();
  document.getElementById('add-prod-form').reset();
+ ensureSellerPriceCommissionUI();
  document.getElementById('pub-btn-text').textContent = 'Publish Product';
  document.querySelector('#ds-add-product .dash-page-title').textContent = 'Add New Product';
  document.querySelector('#ds-add-product .dash-page-sub').textContent = 'Products with videos get 3x more sales! ';
@@ -6472,7 +6911,7 @@ function renderDropshipSection() {
  <p class="text-xs color-text3 mb-3">Paste a 1688 product URL or copied product-page code. BUYSELL will use it to prepare your listing and sourcing request.</p>
  <textarea id="ds-1688-url" class="form-textarea" rows="5" placeholder="Paste https://detail.1688.com/offer/... or copied 1688 page code"></textarea>
  <div class="form-grid form-grid-2 mt-2">
- <div class="form-group"><label class="form-label">Desired selling price (₦)</label><input id="ds-1688-sell-price" class="form-input" type="number" inputmode="numeric" placeholder="e.g. 35000" oninput="updateDropshipCalculator()"></div>
+ <div class="form-group"><label class="form-label">Your seller price (₦)</label><input id="ds-1688-sell-price" class="form-input" type="number" inputmode="numeric" placeholder="e.g. 35000" oninput="updateDropshipCalculator()"><p class="text-xs color-text3 mt-1">BUYSELL adds 20% to create the buyer-facing price.</p></div>
  <div class="form-group"><label class="form-label">Quantity</label><input id="ds-1688-qty" class="form-input" type="number" min="1" value="1" inputmode="numeric"></div>
  </div>
  <div class="flex gap-2 wrap mt-2"><button class="btn btn-primary" onclick="extract1688Product(event)"><i class="fa-solid fa-wand-magic-sparkles"></i> Extract Details</button><button class="btn btn-outline" onclick="addExtracted1688ToCart()"><i class="fa-solid fa-cart-plus"></i> Add to Cart</button></div>
@@ -6837,7 +7276,7 @@ async function publish1688Product(event) {
  const btn = event?.currentTarget;
  const oldHtml = btn?.innerHTML || '';
  const price = Number(document.getElementById('ds-1688-sell-price')?.value || document.getElementById('ds-calc-price')?.value || 0);
- if (!price || price < 100) { toast('Add Selling Price', 'Enter your BUYSELL selling price before publishing.', 'warn'); return; }
+ if (!price || price < 100) { toast('Add Seller Price', 'Enter your base seller price before publishing.', 'warn'); return; }
  const productData = {
   name: extracted1688Product.title,
   description: `${extracted1688Product.note || ''}\n\n1688 source: ${extracted1688Product.url}\nSupplier: ${extracted1688Product.supplier}\nMOQ: ${extracted1688Product.moq}\nBUYSELL sourcing and delivery team handles confirmation, collection, shipping updates, and tracking.`,
@@ -6857,7 +7296,7 @@ async function publish1688Product(event) {
  try {
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-dark"></span> Publishing...'; }
   await callEdge('manage-product', { action: 'create', data: productData });
-  toast('1688 Listing Published', 'The product is now connected to BUYSELL sourcing and delivery.', 'success');
+   toast('1688 Listing Published', `Buyers see ${fmtN(buyerFacingPriceForSellerPrice(price))}, including BUYSELL's 20% commission.`, 'success');
   loadDropshipData();
   loadSellerProds();
  } catch (error) {
@@ -7651,6 +8090,7 @@ function switchAdminTab(tab) {
  if (tab === 'online') loadAdminOnlineUsers();
  if (tab === 'upcoming') loadAdminUpcomingProducts();
  if (tab === 'whatsapp-listings') loadAdminWhatsAppListings();
+ if (tab === 'bogo-promo') loadAdminBogoPromo();
 }
 
 function whatsappListingsPanelMarkup() {
@@ -7728,6 +8168,195 @@ function ensureWhatsAppListingsAdminPanel() {
   navItem.addEventListener('click', event => { event.preventDefault(); switchAdminTab('whatsapp-listings'); });
   const upcomingLink = sidebarNav.querySelector('#ap-nav-upcoming');
   upcomingLink?.insertAdjacentElement('afterend', navItem) || sidebarNav.appendChild(navItem);
+ }
+}
+
+function bogoPromoPanelMarkup() {
+ return `<div class="bogo-admin-workspace" data-bogo-promo-workspace>
+  <section class="card card-pad-lg bogo-admin-card">
+   <div class="flex justify-between items-start gap-3 flex-wrap mb-3">
+    <div>
+     <span class="admin-command-kicker"><i class="fa-solid fa-tags"></i> Promotions &amp; Discounts</span>
+     <h3 class="mb-1">Commission-funded promotions</h3>
+     <p class="text-xs color-text3">BOGO and delivery subsidies are calculated from private seller prices and the platform's 20% commission.</p>
+    </div>
+    <span class="badge badge-gray" data-bogo-promo-status>Loading…</span>
+   </div>
+   <div class="bogo-admin-toggle-row">
+    <div><strong>Enable commission-funded BOGO promo</strong><p class="text-xs color-text3">Buyers can choose one qualifying gift at checkout.</p></div>
+    <label class="bogo-toggle" aria-label="Enable commission-funded BOGO promo"><input type="checkbox" data-bogo-promo-enabled><span></span></label>
+   </div>
+    <div class="form-grid form-grid-2 mt-3">
+    <div class="form-group"><label class="form-label">Platform profit share for gift (%)</label><input type="number" min="0" max="20" step="0.01" inputmode="decimal" class="form-input" data-bogo-profit-share placeholder="10"><p class="text-xs color-text3 mt-1">Maximum 20% because customer pricing has a 20% markup.</p></div>
+    <div class="form-group"><label class="form-label">Minimum qualifying order value (₦)</label><input type="number" min="0" step="1" inputmode="numeric" class="form-input" data-bogo-min-order placeholder="0"><p class="text-xs color-text3 mt-1">Optional customer merchandise threshold before delivery.</p></div>
+    </div>
+    <hr style="border:0;border-top:1px solid var(--border);margin:1.25rem 0">
+    <div class="flex justify-between items-start gap-3 flex-wrap mb-2">
+     <div><h3 class="mb-1"><i class="fa-solid fa-truck-fast color-green"></i> Platform-funded free shipping</h3><p class="text-xs color-text3">BUYSELL pays the courier subsidy; seller product payouts remain unchanged.</p></div>
+     <span class="badge badge-gray" data-free-shipping-status>Loadingâ€¦</span>
+    </div>
+    <div class="bogo-admin-toggle-row">
+     <div><strong>Enable platform-funded free shipping</strong><p class="text-xs color-text3">Apply a full or capped delivery subsidy at checkout.</p></div>
+     <label class="bogo-toggle" aria-label="Enable platform-funded free shipping"><input type="checkbox" data-free-shipping-enabled><span></span></label>
+    </div>
+    <div class="form-grid form-grid-2 mt-3">
+     <div class="form-group"><label class="form-label">Free-shipping mode</label><select class="form-select" data-free-shipping-mode><option value="HYBRID">Hybrid — full at threshold, capped below</option><option value="FULL_THRESHOLD">Full only after threshold</option><option value="PERCENTAGE_CAP">Percentage cap only</option></select></div>
+     <div class="form-group"><label class="form-label">Platform commission share for shipping (%)</label><input type="number" min="0" max="20" step="0.01" inputmode="decimal" class="form-input" data-free-shipping-profit-share placeholder="10"><p class="text-xs color-text3 mt-1">Maximum 20% of the main item's seller price.</p></div>
+     <div class="form-group"><label class="form-label">Minimum customer merchandise total (â‚¦)</label><input type="number" min="0" step="1" inputmode="numeric" class="form-input" data-free-shipping-min-order placeholder="100"><p class="text-xs color-text3 mt-1">Used for full threshold and hybrid modes.</p></div>
+     <div class="form-group"><label class="form-label">Promotion stacking</label><label class="flex items-center gap-2 text-sm" style="min-height:42px"><input type="checkbox" data-allow-promo-stacking> Allow BOGO and free shipping together</label><p class="text-xs color-text3 mt-1">When off, selecting a BOGO gift disables the shipping subsidy.</p></div>
+    </div>
+   <div class="flex justify-between items-center gap-2 flex-wrap mt-2">
+    <p class="text-xs color-text3" style="margin:0"><i class="fa-solid fa-shield-halved"></i> Eligibility and final amounts are recalculated on the server at payment time.</p>
+     <button class="btn btn-primary" type="button" onclick="saveAdminBogoPromo()"><i class="fa-solid fa-floppy-disk"></i> Save promotion settings</button>
+   </div>
+  </section>
+ </div>`;
+}
+
+function ensureBogoPromoAdminPanel() {
+ const appendPanel = (host) => {
+  if (!host || host.querySelector('[data-bogo-promo-panel]')) return;
+  const panel = document.createElement('div');
+  const portalHost = panel.closest?.('#admin-portal-view') || host.closest?.('#admin-portal-view');
+  panel.id = portalHost ? 'adm-tab-bogo-promo-portal' : 'adm-tab-bogo-promo';
+  if (portalHost) panel.dataset.adminLegacyId = 'adm-tab-bogo-promo';
+  panel.className = 'adm-tab hidden';
+  panel.dataset.bogoPromoPanel = 'true';
+  panel.innerHTML = bogoPromoPanelMarkup();
+  host.appendChild(panel);
+ };
+
+ document.querySelectorAll('#admin-content .admin-tab-bar, #ap-mobile-tabs').forEach(tabBar => {
+  if (tabBar.querySelector('[data-admin-tab="bogo-promo"]')) return;
+  const tab = document.createElement('button');
+  tab.type = 'button';
+  tab.className = 'buyer-tab';
+  tab.dataset.adminTab = 'bogo-promo';
+   tab.innerHTML = '<i class="fa-solid fa-tags"></i> Promotions';
+  tab.addEventListener('click', () => switchAdminTab('bogo-promo'));
+  tabBar.appendChild(tab);
+ });
+
+ appendPanel(document.getElementById('admin-content'));
+ const portalOverview = document.querySelector('#admin-portal-view #adm-tab-overview');
+ appendPanel(portalOverview?.parentElement);
+
+ const sidebarNav = document.querySelector('#admin-portal-view .admin-sidebar nav');
+ if (sidebarNav && !sidebarNav.querySelector('#ap-nav-bogo-promo')) {
+  const navItem = document.createElement('a');
+  navItem.href = '#';
+  navItem.id = 'ap-nav-bogo-promo';
+  navItem.className = 'dash-nav-item';
+  navItem.style.cssText = 'margin-bottom:.3rem;display:flex';
+   navItem.innerHTML = '<i class="fa-solid fa-tags"></i> Promotions';
+  navItem.addEventListener('click', event => { event.preventDefault(); switchAdminTab('bogo-promo'); });
+  const whatsappLink = sidebarNav.querySelector('#ap-nav-whatsapp-listings');
+  whatsappLink?.insertAdjacentElement('afterend', navItem) || sidebarNav.appendChild(navItem);
+ }
+}
+
+function visibleBogoAdminInput(selector) {
+ const nodes = [...document.querySelectorAll(selector)];
+ return nodes.find(node => node.offsetParent !== null) || nodes[0] || null;
+}
+
+async function adminBogoPromoRequest(action, payload = {}) {
+ if (!isAdmin()) throw new Error('Administrator access is required.');
+ return callEdge('bogo-promo', { action, ...payload });
+}
+
+function applyAdminBogoPromoSettings(settings = {}) {
+  const enabled = settings.bogo_promo_enabled === true;
+  const share = bogoNumber(settings.bogo_profit_share_percent, 10);
+  const minimum = bogoNumber(settings.bogo_min_order_value, 0);
+  const freeShippingEnabled = settings.free_shipping_promo_enabled === true;
+  const freeShippingMode = ['FULL_THRESHOLD', 'PERCENTAGE_CAP', 'HYBRID'].includes(String(settings.free_shipping_mode || '').toUpperCase())
+   ? String(settings.free_shipping_mode).toUpperCase()
+   : 'HYBRID';
+  const freeShippingShare = bogoNumber(settings.free_shipping_profit_share_percent, 10);
+  const freeShippingMinimum = bogoNumber(settings.free_shipping_min_order_value, 100);
+  const stacking = settings.allow_promo_stacking === true;
+  document.querySelectorAll('[data-bogo-promo-enabled]').forEach(node => { node.checked = enabled; });
+  document.querySelectorAll('[data-bogo-profit-share]').forEach(node => { node.value = share; });
+  document.querySelectorAll('[data-bogo-min-order]').forEach(node => { node.value = minimum; });
+  document.querySelectorAll('[data-free-shipping-enabled]').forEach(node => { node.checked = freeShippingEnabled; });
+  document.querySelectorAll('[data-free-shipping-mode]').forEach(node => { node.value = freeShippingMode; });
+  document.querySelectorAll('[data-free-shipping-profit-share]').forEach(node => { node.value = freeShippingShare; });
+  document.querySelectorAll('[data-free-shipping-min-order]').forEach(node => { node.value = freeShippingMinimum; });
+  document.querySelectorAll('[data-allow-promo-stacking]').forEach(node => { node.checked = stacking; });
+  document.querySelectorAll('[data-bogo-promo-status]').forEach(node => {
+   node.className = `badge ${enabled ? 'badge-green' : 'badge-gray'}`;
+   node.textContent = enabled ? 'Enabled' : 'Disabled';
+  });
+  document.querySelectorAll('[data-free-shipping-status]').forEach(node => {
+   node.className = `badge ${freeShippingEnabled ? 'badge-green' : 'badge-gray'}`;
+   node.textContent = freeShippingEnabled ? 'Enabled' : 'Disabled';
+  });
+}
+
+async function loadAdminBogoPromo() {
+  if (!isAdmin()) return;
+  ensureBogoPromoAdminPanel();
+  document.querySelectorAll('[data-free-shipping-status]').forEach(node => { node.className = 'badge badge-gray'; node.textContent = 'Loading...'; });
+ document.querySelectorAll('[data-bogo-promo-status]').forEach(node => { node.className = 'badge badge-gray'; node.textContent = 'Loading…'; });
+ try {
+  const result = await adminBogoPromoRequest('admin_get_config');
+  applyAdminBogoPromoSettings(result?.settings || result?.config || result || {});
+ } catch (error) {
+  document.querySelectorAll('[data-bogo-promo-status]').forEach(node => { node.className = 'badge badge-red'; node.textContent = 'Unavailable'; });
+  toast('Could not load promotion settings', error.message || 'Please try again.', 'error');
+ }
+}
+
+async function saveAdminBogoPromo() {
+  const enabledInput = visibleBogoAdminInput('[data-bogo-promo-enabled]');
+  const shareInput = visibleBogoAdminInput('[data-bogo-profit-share]');
+  const minimumInput = visibleBogoAdminInput('[data-bogo-min-order]');
+  const freeShippingEnabledInput = visibleBogoAdminInput('[data-free-shipping-enabled]');
+  const freeShippingModeInput = visibleBogoAdminInput('[data-free-shipping-mode]');
+  const freeShippingShareInput = visibleBogoAdminInput('[data-free-shipping-profit-share]');
+  const freeShippingMinimumInput = visibleBogoAdminInput('[data-free-shipping-min-order]');
+  const stackingInput = visibleBogoAdminInput('[data-allow-promo-stacking]');
+  const profitShare = bogoNumber(shareInput?.value, NaN);
+  const minimumOrderValue = bogoNumber(minimumInput?.value, NaN);
+  const freeShippingShare = bogoNumber(freeShippingShareInput?.value, NaN);
+  const freeShippingMinimum = bogoNumber(freeShippingMinimumInput?.value, NaN);
+  const freeShippingMode = String(freeShippingModeInput?.value || '').toUpperCase();
+ if (!Number.isFinite(profitShare) || profitShare < 0 || profitShare > 20) {
+  toast('Invalid profit share', 'Enter a value from 0 to 20%.', 'warn');
+  return;
+ }
+ if (!Number.isFinite(minimumOrderValue) || minimumOrderValue < 0) {
+  toast('Invalid minimum order value', 'Enter zero or a positive naira amount.', 'warn');
+  return;
+ }
+  if (!['FULL_THRESHOLD', 'PERCENTAGE_CAP', 'HYBRID'].includes(freeShippingMode)) {
+   toast('Invalid free-shipping mode', 'Choose full threshold, percentage cap, or hybrid.', 'warn');
+   return;
+  }
+  if (!Number.isFinite(freeShippingShare) || freeShippingShare < 0 || freeShippingShare > 20) {
+   toast('Invalid shipping share', 'Enter a value from 0 to 20%.', 'warn');
+   return;
+  }
+  if (!Number.isFinite(freeShippingMinimum) || freeShippingMinimum < 0) {
+   toast('Invalid shipping minimum', 'Enter zero or a positive naira amount.', 'warn');
+   return;
+  }
+ try {
+  const result = await adminBogoPromoRequest('admin_update_config', {
+   bogo_promo_enabled: Boolean(enabledInput?.checked),
+   bogo_profit_share_percent: profitShare,
+   bogo_min_order_value: minimumOrderValue,
+   free_shipping_promo_enabled: Boolean(freeShippingEnabledInput?.checked),
+   free_shipping_mode: freeShippingMode,
+   free_shipping_profit_share_percent: freeShippingShare,
+   free_shipping_min_order_value: freeShippingMinimum,
+   allow_promo_stacking: Boolean(stackingInput?.checked),
+  });
+  applyAdminBogoPromoSettings(result?.settings || result?.config || result || {});
+  toast('Promotion settings saved', enabledInput?.checked ? 'The BOGO offer is now available at checkout.' : 'The BOGO offer is now disabled.', 'success');
+ } catch (error) {
+  toast('Could not save promotion settings', error.message || 'Please try again.', 'error');
  }
 }
 
@@ -9132,10 +9761,10 @@ function getChatSystemPrompt(context) {
 function getChatFallback(message, context = {}) {
  const text = String(message || '').toLowerCase();
  if (text.includes('pay') || text.includes('payment') || text.includes('paystack') || text.includes('flutterwave')) {
- return 'You can pay with Flutterwave at checkout for card, bank, USSD, and other supported options. BUYSELL manages the order handoff and delivery tracking after payment.';
+ return 'BUYSELL checkout currently uses bank transfer only. Transfer the displayed amount to BUYSELL, upload your receipt, and wait for admin verification before delivery is scheduled.';
  }
  if (text.includes('order') || text.includes('track')) {
- return 'Open My Orders to view your order status. If you just paid with Flutterwave, wait for verification to finish, then your confirmed order will appear there.';
+ return 'Open My Orders to view your order status. After you submit a bank-transfer receipt, wait for BUYSELL to verify it; then your confirmed order and delivery updates will appear there.';
  }
  if (text.includes('review')) {
  return 'Open the product, choose a star rating, write your experience, and submit the review. Reviews help other buyers know which sellers are reliable.';
@@ -9258,17 +9887,17 @@ function handleCsvUpload(input) {
 
  const preview = document.getElementById('csv-preview');
  preview.classList.remove('hidden');
- preview.innerHTML = `
- <div class="card card-pad" style="background:var(--cream)">
- <div class="flex justify-between items-center mb-2">
- <span class="font-600 text-sm">${csvRows.length} products found</span>
- <span class="text-xs color-text3">${file.name}</span>
- </div>
- <div style="max-height:130px;overflow-y:auto">
- ${csvRows.slice(0,5).map(r => `<div class="flex justify-between text-xs py-1 border-b border-border"><span>${escHtml(r.name)}</span><span class="font-bold color-green">${fmtN(parseFloat(r.price)||0)}</span></div>`).join('')}
- ${csvRows.length>5 ? `<div class="text-xs color-text3 mt-1 text-center">+${csvRows.length-5} more...</div>` : ''}
- </div>
- </div>`;
+  preview.innerHTML = `
+  <div class="card card-pad" style="background:var(--cream)">
+  <div class="flex justify-between items-center mb-2">
+  <span class="font-600 text-sm">${csvRows.length} products found</span>
+  <span class="text-xs color-text3">Prices are seller prices</span>
+  </div>
+  <div style="max-height:130px;overflow-y:auto">
+  ${csvRows.slice(0,5).map(r => { const sellerPrice = parseFloat(r.price) || 0; const buyerPrice = buyerFacingPriceForSellerPrice(sellerPrice); return `<div class="flex justify-between text-xs py-1 border-b border-border gap-2"><span>${escHtml(r.name)}</span><span class="font-bold color-green">Seller ${fmtN(sellerPrice)} <span class="color-text3">→ Buyer ${fmtN(buyerPrice)}</span></span></div>`; }).join('')}
+  ${csvRows.length>5 ? `<div class="text-xs color-text3 mt-1 text-center">+${csvRows.length-5} more...</div>` : ''}
+  </div>
+  </div>`;
  document.getElementById('csv-import-btn').classList.remove('hidden');
  };
  reader.readAsText(file);
@@ -9278,11 +9907,10 @@ async function importCsvProducts() {
  if (!csvRows.length || !currentUser) return;
  const btn = document.getElementById('csv-import-btn');
  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Importing...';
- const toInsert = csvRows.map(r => {
+ const toCreate = csvRows.map(r => {
   const imageUrls = [sanitizeUrl(r.image_url || ''), ...splitMediaUrls(r.images)].filter(Boolean);
   const videoUrls = [sanitizeUrl(r.video_url || ''), ...splitMediaUrls(r.videos)].filter(Boolean);
   return {
-  seller_id: currentUser.id,
   name: r.name, description: r.description||r.name,
   price: parseFloat(r.price)||0,
   original_price: parseFloat(r.original_price)||parseFloat(r.price)||0,
@@ -9298,25 +9926,33 @@ async function importCsvProducts() {
   video_url: videoUrls[0] || '',
   videos: videoUrls,
   has_video: videoUrls.length > 0,
-  status: 'active', avg_rating: 5, review_count: 0,
-  created_at: new Date().toISOString()
+  status: 'active'
   };
  });
  const BATCH = 50;
  let imported = 0;
- for (let i = 0; i < toInsert.length; i += BATCH) {
- const { error } = await db.from('products').insert(toInsert.slice(i, i+BATCH));
- if (!error) imported += Math.min(BATCH, toInsert.length - i);
+ try {
+  for (let i = 0; i < toCreate.length; i += BATCH) {
+   // Server-side pricing is required for every row. The Edge Function stores
+   // the seller price privately and writes the 20%-inclusive buyer price.
+   const result = await callEdge('manage-product', { action: 'bulk_create', products: toCreate.slice(i, i + BATCH) });
+   imported += Number(result?.count || 0);
+  }
+  toast(`${imported} Products Imported! `, 'Buyer prices include BUYSELL\'s 20% commission.', 'success');
+  csvRows = [];
+  document.getElementById('csv-file').value = '';
+  document.getElementById('csv-preview').classList.add('hidden');
+  btn.classList.add('hidden');
+  document.getElementById('csv-zone').classList.remove('has-file');
+  document.getElementById('csv-zone').querySelector('.upload-label').textContent = 'Click to upload CSV file';
+  loadSellerProds();
+ } catch (error) {
+  const completed = imported ? ` ${imported} product${imported === 1 ? '' : 's'} imported before the error.` : '';
+  toast('CSV import failed', `${error.message || 'Could not import the products.'}${completed}`, 'error');
+ } finally {
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa-solid fa-upload"></i> Import Products';
  }
- toast(`${imported} Products Imported! `, 'All products are now live', 'success');
- csvRows = [];
- document.getElementById('csv-file').value = '';
- document.getElementById('csv-preview').classList.add('hidden');
- btn.classList.add('hidden');
- document.getElementById('csv-zone').classList.remove('has-file');
- document.getElementById('csv-zone').querySelector('.upload-label').textContent = 'Click to upload CSV file';
- btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-upload"></i> Import Products';
- loadSellerProds();
 }
 
 // ====================================================
@@ -9425,9 +10061,7 @@ async function notifyTelegramPaymentProof(orderId) {
 async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
  try {
  const payload = {
- cart: checkoutCartItems(true),
- shipping_total: cartShippingTotal(),
- shipping_groups: cartSellerShippingGroups(),
+ ...checkoutBogoPayload(),
  delivery_name: document.getElementById('co-name').value.trim(),
  delivery_phone: document.getElementById('co-phone').value.trim(),
  delivery_address: document.getElementById('co-address').value.trim(),
@@ -9437,51 +10071,15 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
  referral_code: appStorage.getItem('bs_ref') || ''
  };
 
- let orderId;
- let totalAmount = cartPayableSubtotal();
-
- try {
- // ATTEMPT 1: Route through the Edge Function
- const result = await callEdge('create-order', payload);
- if (!result.success) throw new Error(result.error || 'request failed');
- 
- orderId = result.order_id;
- totalAmount = result.total || totalAmount;
- 
- } catch (edgeError) {
- console.warn('Edge Function failed, using direct database fallback:', edgeError);
- 
- // ATTEMPT 2: Direct Database Insertion (Bypasses the failing Edge Function)
- if (!currentUser) throw new Error("User not authenticated.");
- 
- const sellerId = cart[0]?.seller_id;
- if (!sellerId) throw new Error("Seller information missing from cart.");
-
- const orderData = {
- id: crypto.randomUUID(),
- buyer_id: currentUser.id,
- seller_id: sellerId,
- items: payload.cart,
- total_amount: totalAmount,
- status: 'pending',
- payment_method: method,
- payment_ref: payload.payment_ref,
- proof_url: proofUrl,
- delivery_name: payload.delivery_name,
- delivery_phone: payload.delivery_phone,
- delivery_address: payload.delivery_address
- };
-
- // Insert directly into the orders table
- const { data: insertedData, error: dbError } = await db
- .from('orders')
- .insert(orderData)
- .select('id')
- .single();
-
- if (dbError) throw new Error(dbError.message || 'Direct database insertion failed');
- orderId = insertedData.id;
- }
+ // Never write orders directly from the browser. The server re-prices the
+ // cart, verifies BOGO eligibility, and writes the seller allocation ledger
+ // together with the pending transfer order.
+ const result = await callEdge('bogo-promo', { action: 'create_transfer_order', ...payload });
+ if (!result?.success || !result?.order_id) throw new Error(result?.error || 'Order creation request failed.');
+ const orderId = result.order_id;
+ const totalAmount = bogoNumber(result.total_amount ?? result.total ?? result.quote?.total_amount, 0);
+ if (totalAmount <= 0) throw new Error('The server did not return a valid order total.');
+ if (result.quote) bogoCheckoutState.quote = result.quote;
 
  // --- Cleanup, Notifications, and Analytics ---
  appStorage.removeItem('bs_ref');
@@ -9494,7 +10092,7 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
  order_id: orderId,
  quantity: cart.reduce((sum, c) => sum + (c.qty || 1), 0),
  amount: totalAmount,
- metadata: { payment_method: method || 'transfer' },
+ metadata: { payment_method: method || 'transfer', is_bogo_order: Boolean(result.is_bogo_order ?? bogoCheckoutState.freeItemId) },
  });
 
  // --- Update the UI ---
@@ -9522,25 +10120,39 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
 // ====================================================
 // viewStorefront - full implementation with order count + reviews
 async function viewStorefront(sellerId) {
- if (!sellerId) return;
+ if (!sellerId) return false;
  closeModal('product-modal');
  const buyerView = document.getElementById('buyer-view');
  const storefrontView = document.getElementById('storefront-view');
- if (buyerView) {
- buyerView.classList.add('hidden');
- buyerView.style.display = 'none';
+ const sellerDash = document.getElementById('seller-dashboard');
+ const adminPortal = document.getElementById('admin-portal-view');
+ const accountView = document.getElementById('account-view');
+ const landing = document.getElementById('landing');
+ const marketing = document.getElementById('marketing-placeholder');
+
+ // Profiles have evolved over time, so use the application's existing column
+ // fallback instead of making a storefront depend on every optional field.
+ // Resolve it before changing views: a missing/deleted seller must leave the
+ // visitor on their current page instead of creating a blank screen.
+ let seller = null;
+ try {
+  seller = await fetchProfileById(sellerId);
+ } catch (error) {
+  console.warn('Storefront profile lookup failed:', error);
  }
- if (storefrontView) {
- storefrontView.classList.remove('hidden');
- storefrontView.style.display = 'block';
- }
- document.body.classList.remove('platform-seller-mode');
-  const { data: seller } = await db.from('profiles')
-  .select('id,name,email,role,accounts,store_name,store_description,whatsapp,logo_url,store_address,kyc_status,seller_verified,verification_status')
-  .eq('id', sellerId)
-  .single();
-  if (!seller) { toast('Store not found','','error'); return; }
-  const platformStore = isPlatformProfile(seller);
+ if (!seller) { toast('Store not found','','error'); return false; }
+
+ // Storefront links are used from product cards, direct URLs, adverts, and
+ // the Admin "View store" control.  Hide every competing top-level surface
+ // so the admin/seller workspace cannot remain layered over the store page.
+ [buyerView, sellerDash, adminPortal, accountView, landing, marketing].forEach(view => {
+  if (!view) return;
+  view.classList.add('hidden');
+  view.style.setProperty('display', 'none', 'important');
+ });
+ revealView(storefrontView);
+ document.body.classList.remove('in-seller', 'platform-seller-mode');
+   const platformStore = isPlatformProfile(seller);
   const storeLabel = platformStore ? 'BUYSELL Platform Store' : getPlatformStoreLabel(seller);
   const storeDescription = platformStore
   ? (seller.store_description || 'Official BUYSELL marketplace store for platform-listed products and trusted offers.')
@@ -9597,7 +10209,7 @@ async function viewStorefront(sellerId) {
  .eq('seller_id', sellerId)
  .eq('status','active')
  .order('created_at', { ascending: false })
- .limit(PRODUCT_PAGE_SIZE));
+ .range(0, 999));
   const sfProds = (prods || []).map(product => ({ ...product, profiles: seller }));
  document.getElementById('sf-prod-count').textContent = sfProds.length;
  // Real order count
@@ -9633,6 +10245,7 @@ async function viewStorefront(sellerId) {
  // Update page title
   document.title = `${storeLabel} - BUYSELL Nigeria`;
  history.pushState(null,'',`?store=${sellerId}`);
+ return true;
 }
 
 // ====================================================
@@ -12224,6 +12837,7 @@ async function requestNotificationPermission() {
  try {
  await syncUserNotificationToken();
   } catch (error) {
+  document.querySelectorAll('[data-free-shipping-status]').forEach(node => { node.className = 'badge badge-red'; node.textContent = 'Unavailable'; });
   updateNotificationButtonState();
   toast('Notifications Not Saved', friendlyNotificationError(error), 'error');
   return;

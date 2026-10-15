@@ -15,6 +15,9 @@ const WHATSAPP_PRICE_MARKUP_PERCENT = 20;
 function stripPriceFromText(text: string): string {
   if (!text) return "";
   return text
+    .replace(/(?:\bprice\b|\basking\b|\bcost\b|\bgoing for\b|\bselling for\b|\blast price\b|\bfor\b|\bat\b|\bonly\b|\beach\b)\s*[:=#-]?\s*(?:₦|NGN|Naira|N)?\s*(?:\d{1,3}(?:[ ,]\d{3})+|\d+(?:[.,]\d+)?)(?:\s*(?:k|m|thousand|million))?/gi, "")
+    .replace(/(?:₦|\bngn\b|\bnaira\b|\bN(?=\s*\d))\s*(?:\d{1,3}(?:[ ,]\d{3})+|\d+(?:[.,]\d+)?)(?:\s*(?:k|m|thousand|million))?/gi, "")
+    .replace(/\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/g, "")
     // Remove "Price: 350k", "Cost: ₦50,000", "Going for 1.5m", "last price 25k", etc.
     .replace(/(?:\bprice\b|\basking\b|\bcost\b|\bgoing for\b|\bselling for\b|\blast price\b)\s*[:=-]?\s*(?:₦|NGN)?\s*[\d,]+(?:\.\d+)?\s*[kKmM]?/gi, "")
     // Remove remaining price phrases like "last price", "asking price"
@@ -106,6 +109,164 @@ function safeUrl(input: unknown, expectedCloudName = "") {
   } catch {
     return "";
   }
+}
+
+function requireCollectorSecret(req: Request) {
+  const ingestSecret = Deno.env.get("WHATSAPP_INGEST_SECRET") || "";
+  return Boolean(ingestSecret && req.headers.get("x-whatsapp-ingest-secret") === ingestSecret);
+}
+
+function queuePayload(input: unknown, cloudName: string) {
+  const raw = input && typeof input === "object" ? input as Record<string, unknown> : {};
+  const rawMedia = Array.isArray(raw.media) ? raw.media : [];
+  const media = rawMedia.slice(0, 30).map((item) => {
+    const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    const type = value(row.type, 10) === "video" ? "video" : "image";
+    const url = safeUrl(row.url, cloudName);
+    const visionUrls = (Array.isArray(row.vision_urls) ? row.vision_urls : [])
+      .slice(0, 6)
+      .map((url) => safeUrl(url, cloudName))
+      .filter(Boolean);
+    return { url, type, vision_urls: visionUrls };
+  }).filter((item) => item.url);
+
+  return {
+    text: value(raw.text, 12_000),
+    audio_transcript: value(raw.audio_transcript, 12_000),
+    media,
+  };
+}
+
+function queueResult(input: unknown) {
+  const raw = input && typeof input === "object" ? input as Record<string, unknown> : {};
+  const itemCount = finiteNumber(raw.item_count);
+  return {
+    message: value(raw.message, 1_000),
+    item_count: itemCount === null ? 0 : Math.max(0, Math.min(Math.floor(itemCount), 100)),
+  };
+}
+
+async function collectorGroupIsApproved(admin: ReturnType<typeof createClient>, groupJid: string) {
+  const { data, error } = await admin
+    .from("whatsapp_group_settings")
+    .select("id")
+    .eq("group_jid", groupJid)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (error) throw new Error("Could not verify the WhatsApp group configuration.");
+  return Boolean(data);
+}
+
+async function queueListingJob(admin: ReturnType<typeof createClient>, req: Request, body: Record<string, unknown>) {
+  if (!requireCollectorSecret(req)) return json({ error: "Unauthorized ingestion queue request." }, 401);
+
+  const groupJid = value(body.group_jid, 200);
+  const senderJid = value(body.sender_jid, 200);
+  const senderPhone = value(body.sender_phone, 30) || null;
+  const dedupeKey = value(body.dedupe_key, 300);
+  const rawMessageIds = Array.isArray(body.message_ids) ? body.message_ids : [];
+  const messageIds = [...new Set(rawMessageIds.map((id) => value(id, 300)).filter(Boolean))].slice(0, 100);
+  const cloudName = value(Deno.env.get("CLOUDINARY_CLOUD_NAME"), 120) || "tlulgsk1";
+  const payload = queuePayload(body.payload, cloudName);
+
+  if (!validGroupJid(groupJid) || !senderJid || dedupeKey.length < 16 || messageIds.length === 0) {
+    return json({ error: "Queue source, sender, group, and message identifiers are required." }, 400);
+  }
+  if (!(await collectorGroupIsApproved(admin, groupJid))) {
+    return json({ error: "This WhatsApp group is not approved for BUYSELL imports." }, 403);
+  }
+
+  const { data: existing, error: existingError } = await admin
+    .from("whatsapp_ingestion_jobs")
+    .select("id,state")
+    .eq("dedupe_key", dedupeKey)
+    .maybeSingle();
+  if (existingError) throw new Error("Could not check the incoming queue job.");
+
+  const write = {
+    group_jid: groupJid,
+    sender_jid: senderJid,
+    sender_phone: senderPhone,
+    message_ids: messageIds,
+    payload,
+    state: "queued",
+    available_at: new Date().toISOString(),
+    lease_until: null,
+    lock_token: null,
+    locked_by: null,
+    last_error: null,
+  };
+
+  if (existing) {
+    if (existing.state === "completed") {
+      return json({ queued: false, duplicate: true, job_id: existing.id, state: existing.state });
+    }
+    const { data, error } = await admin
+      .from("whatsapp_ingestion_jobs")
+      .update(write)
+      .eq("id", existing.id)
+      .select("id,state")
+      .single();
+    if (error || !data) throw new Error(error?.message || "Could not refresh the queued WhatsApp post.");
+    return json({ queued: true, updated: true, job_id: data.id, state: data.state });
+  }
+
+  const { data, error } = await admin
+    .from("whatsapp_ingestion_jobs")
+    .insert({ ...write, dedupe_key: dedupeKey })
+    .select("id,state")
+    .single();
+  if (error || !data) throw new Error(error?.message || "Could not queue the WhatsApp post.");
+  return json({ queued: true, job_id: data.id, state: data.state });
+}
+
+async function claimListingJobs(admin: ReturnType<typeof createClient>, req: Request, body: Record<string, unknown>) {
+  if (!requireCollectorSecret(req)) return json({ error: "Unauthorized ingestion queue request." }, 401);
+  const workerId = value(body.worker_id, 120);
+  const limit = Math.max(1, Math.min(Math.floor(finiteNumber(body.limit) || 1), 5));
+  const leaseSeconds = Math.max(60, Math.min(Math.floor(finiteNumber(body.lease_seconds) || 900), 3600));
+  const { data, error } = await admin.rpc("claim_whatsapp_ingestion_jobs", {
+    p_worker_id: workerId,
+    p_limit: limit,
+    p_lease_seconds: leaseSeconds,
+  });
+  if (error) throw new Error(error.message || "Could not claim WhatsApp queue jobs.");
+  return json({ jobs: Array.isArray(data) ? data : [] });
+}
+
+async function finishListingJob(admin: ReturnType<typeof createClient>, req: Request, body: Record<string, unknown>) {
+  if (!requireCollectorSecret(req)) return json({ error: "Unauthorized ingestion queue request." }, 401);
+  const jobId = value(body.job_id, 80);
+  const lockToken = value(body.lock_token, 80);
+  const state = value(body.state, 30);
+  if (!jobId || !lockToken || !["completed", "needs_price", "retry", "failed"].includes(state)) {
+    return json({ error: "A claimed job and valid completion state are required." }, 400);
+  }
+
+  const retryInSeconds = Math.max(30, Math.min(Math.floor(finiteNumber(body.retry_in_seconds) || 60), 86_400));
+  const update: Record<string, unknown> = {
+    state,
+    lease_until: null,
+    lock_token: null,
+    locked_by: null,
+    last_error: state === "retry" || state === "failed" ? value(body.error, 2_000) || "The listing worker could not finish this job." : null,
+    result: queueResult(body.result),
+  };
+  if (state === "retry") {
+    update.available_at = new Date(Date.now() + retryInSeconds * 1_000).toISOString();
+  }
+
+  const { data, error } = await admin
+    .from("whatsapp_ingestion_jobs")
+    .update(update)
+    .eq("id", jobId)
+    .eq("lock_token", lockToken)
+    .eq("state", "processing")
+    .select("id,state,attempts,max_attempts")
+    .maybeSingle();
+  if (error) throw new Error(error.message || "Could not finish the WhatsApp queue job.");
+  if (!data) return json({ error: "This job lease has expired or was replaced by a newer post." }, 409);
+  return json({ job: data });
 }
 
 function nativeCategory(input: unknown) {
@@ -235,7 +396,7 @@ async function ingest(admin: ReturnType<typeof createClient>, req: Request, body
 
   const cloudName = value(Deno.env.get("CLOUDINARY_CLOUD_NAME"), 120) || "tlulgsk1";
   const rawMedia = Array.isArray(body.media) ? body.media : [];
-  const media = rawMedia.slice(0, 10).map((item) => {
+  const media = rawMedia.slice(0, 30).map((item) => {
     const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
     return {
       url: safeUrl(row.url, cloudName),
@@ -252,7 +413,10 @@ async function ingest(admin: ReturnType<typeof createClient>, req: Request, body
   const detailLines = [description, brand ? `Brand: ${brand}` : "", specs ? `Details: ${specs}` : ""].filter(Boolean);
   const shippingFee = Math.max(0, finiteNumber(Deno.env.get("WHATSAPP_LISTING_SHIPPING_FEE")) ?? 2_500);
 
-  const markupPercent = Math.max(0, finiteNumber(Deno.env.get("WHATSAPP_PRICE_MARKUP_PERCENT")) ?? WHATSAPP_PRICE_MARKUP_PERCENT);
+  // Bot 2 writes straight to the public products table instead of going
+  // through manage-product. Its amount below is therefore already the final
+  // buyer price and must receive this one 20% commission only once.
+  const markupPercent = WHATSAPP_PRICE_MARKUP_PERCENT;
   const priceMarkup = Math.round((price * markupPercent) / 100);
   const marketplacePrice = price + priceMarkup;
   const productPayload = {
@@ -309,6 +473,22 @@ async function ingest(admin: ReturnType<typeof createClient>, req: Request, body
       return json({ created: false, product_id: duplicate?.product_id || null });
     }
     throw new Error(metaError.message || "Could not secure the seller management link.");
+  }
+
+  // This is intentionally stored separately from the public marketplace price.
+  // BOGO and seller payouts must be based on the exact verified WhatsApp source
+  // price, which must never be exposed through the public products query.
+  const { error: sellerPriceError } = await admin.from("product_seller_pricing").upsert({
+    product_id: product.id,
+    seller_price: price,
+    source: "whatsapp_verified",
+    recorded_by: null,
+  }, { onConflict: "product_id" });
+  if (sellerPriceError) {
+    // product deletion cascades to the private WhatsApp metadata row, so a
+    // retry never leaves a public listing without an authoritative base price.
+    await admin.from("products").delete().eq("id", product.id);
+    throw new Error(sellerPriceError.message || "Could not save the verified seller price.");
   }
 
   const siteUrl = value(Deno.env.get("PUBLIC_SITE_URL"), 500).replace(/\/+$/, "");
@@ -383,15 +563,36 @@ async function manageUpdate(admin: ReturnType<typeof createClient>, body: Record
     if ("location" in updates) patch.location = value(updates.location, 100);
     if ("category" in updates) patch.category = nativeCategory(updates.category);
     if ("condition" in updates) patch.condition = nativeCondition(updates.condition);
+    let revisedSourcePrice: number | null = null;
+    let revisedPriceMarkup = 0;
     if ("price" in updates) {
       const price = finiteNumber(updates.price);
       if (price === null || price <= 0 || price > 100_000_000) return json({ error: "Enter a valid price in naira." }, 400);
-      patch.price = price;
-      patch.original_price = price;
+      // The management page edits the seller/source price. Keep Bot 2 at its
+      // existing single 20% markup instead of treating this public listing as
+      // a regular seller-dashboard submission (which would add it again).
+      revisedSourcePrice = price;
+      revisedPriceMarkup = Math.round((price * WHATSAPP_PRICE_MARKUP_PERCENT) / 100);
+      patch.price = price + revisedPriceMarkup;
+      patch.original_price = patch.price;
     }
     if (!Object.keys(patch).length) return json({ error: "No valid changes were provided." }, 400);
     const { error } = await admin.from("products").update(patch).eq("id", listing.product.id);
     if (error) throw new Error("Could not save your changes.");
+    if (revisedSourcePrice !== null) {
+      const { error: sellerPriceError } = await admin.from("product_seller_pricing").upsert({
+        product_id: listing.product.id,
+        seller_price: revisedSourcePrice,
+        source: "whatsapp_verified",
+        recorded_by: null,
+      }, { onConflict: "product_id" });
+      if (sellerPriceError) throw new Error("Could not save the verified seller price.");
+      const { error: metaError } = await admin.from("whatsapp_listing_meta").update({
+        source_price: revisedSourcePrice,
+        price_markup: revisedPriceMarkup,
+      }).eq("product_id", listing.product.id);
+      if (metaError) throw new Error("Could not save the WhatsApp price details.");
+    }
   }
 
   const refreshed = await managedListing(admin, body);
@@ -605,6 +806,9 @@ serve(async (req) => {
     const admin = createClient(supabaseUrl, serviceKey);
 
     if (action === "ingest") return await ingest(admin, req, body);
+    if (action === "queue_enqueue") return await queueListingJob(admin, req, body);
+    if (action === "queue_claim") return await claimListingJobs(admin, req, body);
+    if (action === "queue_finish") return await finishListingJob(admin, req, body);
     if (action === "seller_command") return await sellerCommand(admin, req, body);
     if (action === "collector_groups") return await approvedGroupsForCollector(admin, req);
     if (action === "order_whatsapp_sales") return await orderWhatsAppSales(admin, req, body);

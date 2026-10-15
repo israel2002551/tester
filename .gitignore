@@ -37,6 +37,10 @@ supabase/functions/*
 !supabase/functions/manage-product/index.ts
 !supabase/functions/whatsapp-listing-action/
 !supabase/functions/whatsapp-listing-action/index.ts
+!supabase/functions/bogo-promo/
+!supabase/functions/bogo-promo/index.ts
+!supabase/functions/_shared/
+!supabase/functions/_shared/bogo.ts
 !supabase/migrations/
 !supabase/migrations/*.sql
 

@@ -42,7 +42,7 @@ async function updateWithMissingColumnRetry(
 }
 
 async function verifyFlutterwaveTransaction(transactionId: string, secretKey: string) {
-  const res = await fetch(`https://api.flutterwave.com/v3/transactions/${transactionId}/verify`, {
+  const res = await fetch(`https://api.flutterwave.com/v3/transactions/${encodeURIComponent(transactionId)}/verify`, {
     method: "GET",
     headers: { Authorization: `Bearer ${secretKey}` },
   });
@@ -51,6 +51,18 @@ async function verifyFlutterwaveTransaction(transactionId: string, secretKey: st
     throw new Error(body?.message || "Flutterwave transaction verification failed");
   }
   return body.data || {};
+}
+
+async function markSellerAllocationsFunded(client: any, orderId: string) {
+  const { error } = await client
+    .from("order_seller_allocations")
+    .update({ payout_status: "funded", funded_at: new Date().toISOString() })
+    .eq("order_id", orderId)
+    .eq("payout_status", "pending");
+  // A webhook must remain idempotent. If this runs during a staggered deploy
+  // before the BOGO migration, the payment confirmation is still preserved;
+  // the verifier retries the same funding update on its next confirmation.
+  if (error) console.error("Could not mark order seller allocations funded", { orderId, error: error.message });
 }
 
 function orPaymentRef(refA: string, refB: string) {
@@ -101,23 +113,47 @@ serve(async (req) => {
     const refFilter = orPaymentRef(flwRef, txRef);
 
     let order = null;
+    let underpaidOrderId: string | null = null;
     if (refFilter) {
-      order = await updateWithMissingColumnRetry(
-        admin,
-        "orders",
-        {
-          status: "confirmed",
-          payment_status: "paid",
-          payment_method: "flutterwave",
-          payment_ref: flwRef || txRef,
-          payment_reference: flwRef || txRef,
-          flutterwave_transaction_id: transactionId,
-          paid_amount: amount,
-          currency,
-          updated_at: new Date().toISOString(),
-        },
-        (query) => query.or(refFilter),
-      ).catch(() => null);
+      let { data: matched, error: lookupError } = await admin
+        .from("orders")
+        .select("id,total_amount,status")
+        .or(refFilter)
+        .limit(1)
+        .maybeSingle();
+      if (lookupError) {
+        ({ data: matched } = await admin
+          .from("orders")
+          .select("id,total_amount,status")
+          .in("payment_ref", [flwRef, txRef].filter(Boolean))
+          .limit(1)
+          .maybeSingle());
+      }
+      if (matched?.id && paymentType !== "advertisement" && !txRef.startsWith("ad_")) {
+        if (amount + 0.01 < Number(matched.total_amount || 0)) {
+          underpaidOrderId = matched.id;
+        } else {
+          order = await updateWithMissingColumnRetry(
+            admin,
+            "orders",
+            {
+              status: "confirmed",
+              payment_status: "paid",
+              payment_method: "flutterwave",
+              payment_ref: flwRef || txRef,
+              payment_reference: flwRef || txRef,
+              flutterwave_transaction_id: transactionId,
+              paid_amount: amount,
+              currency,
+              updated_at: new Date().toISOString(),
+            },
+            (query) => query.eq("id", matched.id),
+          ).catch(() => null);
+        }
+      }
+    }
+    if (underpaidOrderId) {
+      console.warn("Flutterwave payment below order total", { order_id: underpaidOrderId, amount, txRef });
     }
 
     let ad = null;
@@ -141,6 +177,7 @@ serve(async (req) => {
     }
 
     if (order?.id) {
+      await markSellerAllocationsFunded(admin, order.id);
       await admin.from("order_tracking").insert({
         order_id: order.id,
         status: "confirmed",
@@ -156,6 +193,7 @@ serve(async (req) => {
       tx_ref: txRef,
       flw_ref: flwRef,
       order_id: order?.id || null,
+      underpaid_order_id: underpaidOrderId,
       ad_id: ad?.id || null,
     });
   } catch (error) {

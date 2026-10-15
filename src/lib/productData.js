@@ -13,3 +13,23 @@ export function productMedia(product = {}) {
 export function shippingFee(product = {}) {
   return Math.max(0, Number(product.shipping_fee ?? product.shipping_cost ?? product.shipping ?? 0) || 0);
 }
+
+// Cloudinary rejects image transforms (f_auto, g_auto) on /video/upload/, so videos get a first-frame JPG poster.
+export function cloudinaryImage(url, width, { square = false } = {}) {
+  const source = String(url || '');
+  if (!source.includes('res.cloudinary.com/') || !source.includes('/upload/')) return source;
+  if (source.includes('/video/upload/')) {
+    const crop = square ? `c_fill,w_${width},h_${width}` : `c_limit,w_${width}`;
+    return source
+      .replace('/video/upload/', `/video/upload/so_0,q_auto,${crop}/`)
+      .replace(/\.(mp4|mov|webm|m4v|avi|mkv)(\?.*)?$/i, '.jpg');
+  }
+  const crop = square ? `c_fill,g_auto,w_${width},h_${width}` : `c_limit,w_${width}`;
+  return source.replace('/upload/', `/upload/f_auto,q_auto:good,dpr_auto,${crop}/`);
+}
+
+export function categoryLabel(category, fallback) {
+  const text = String(category || '').trim();
+  if (!text) return fallback;
+  return text.replace(/[-_]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
+}
