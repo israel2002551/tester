@@ -204,10 +204,13 @@ const VISION_MODELS = [...new Set([
   'qwen/qwen3.8-27b',
 ].filter(Boolean))];
 
-const FALLBACK_TEXT_MODELS = [
-  'llama-3.3-70b-versatile',
-  'llama-3.1-8b-instant',
-];
+const FALLBACK_TEXT_MODELS = [...new Set([
+  process.env.GROQ_TEXT_MODEL,
+  process.env.GROQ_MODEL,
+  'qwen/qwen3.8-27b',
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
+].filter(Boolean))];
 
 function normalizeParsedResult(parsed, { mediaIndexMap = [] } = {}) {
   if (!parsed || typeof parsed !== 'object') return null;
