@@ -6924,3 +6924,30 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   .native-promo-card .native-ad-body p { margin: .42rem 0 .8rem; font-size: .76rem; -webkit-line-clamp: 2; }
   .native-promo-cta { padding: .55rem .7rem; font-size: .72rem; }
 }
+
+/* Hero Carousel and Deal Board Promo Styles */
+.carousel-slide-promo .slide-tag {
+  background: var(--gold);
+  color: var(--forest);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4);
+  font-weight: 800;
+}
+.carousel-slide-promo h2 {
+  text-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+.deal-board-card-promo {
+  border-color: #f59e0b !important;
+  background: linear-gradient(135deg, #fffdf7, #fffbeb) !important;
+  position: relative;
+  overflow: hidden;
+}
+.deal-board-card-promo i {
+  background: #f59e0b !important;
+  color: #fff !important;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.35);
+}
+.deal-board-card-promo:hover {
+  border-color: #d97706 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(245, 158, 11, 0.18) !important;
+}

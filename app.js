@@ -2733,14 +2733,69 @@ function updateCarousel() {
  track.style.transform = `translateX(-${carouselIndex * 100}%)`;
  document.querySelectorAll('.carousel-dot').forEach((d,i) => d.classList.toggle('active', i === carouselIndex));
 }
+function rebuildCarouselDots() {
+ const dotsContainer = document.querySelector('.carousel-dots');
+ if (!dotsContainer) return;
+ const totalSlides = document.querySelectorAll('.carousel-slide').length;
+ dotsContainer.innerHTML = Array.from({ length: totalSlides }, (_, i) => 
+  `<button class="carousel-dot ${i === carouselIndex ? 'active' : ''}" onclick="goSlide(${i})" aria-label="Slide ${i + 1}"></button>`
+ ).join('');
+}
+
+function updateHeroCarouselPromos() {
+ const track = document.getElementById('carousel-track');
+ if (!track) return;
+ const promos = typeof getActiveOngoingPromos === 'function' ? getActiveOngoingPromos() : [];
+ 
+ // Remove any existing dynamic promo slides
+ track.querySelectorAll('.carousel-slide-promo').forEach(el => el.remove());
+
+ if (promos.length) {
+  const promoSlidesHtml = promos.map(promo => {
+   const isShip = promo.isShipping;
+   const tagBg = isShip ? '#0284c7' : '#f59e0b';
+   const tagColor = isShip ? '#ffffff' : '#0b1f14';
+   const btnClass = isShip ? 'btn btn-primary btn-sm' : 'btn btn-gold btn-sm';
+   const imgUrl = isShip 
+     ? 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1600&h=620&fit=crop&q=82'
+     : 'https://images.unsplash.com/photo-1513151233558-d860c5398176?w=1600&h=620&fit=crop&q=82';
+   
+   return `<div class="carousel-slide carousel-slide-promo" data-promo-slide="${escAttr(promo.type)}">
+    <img src="${imgUrl}" alt="${escAttr(promo.title)}" loading="lazy">
+    <div class="slide-overlay"></div>
+    <div class="slide-content">
+     <span class="slide-tag" style="background:${tagBg};color:${tagColor}">
+      <i class="fa-solid ${escAttr(promo.badgeIcon)}"></i> ACTIVE PROMOTION
+     </span>
+     <h2>${escHtml(promo.title)}</h2>
+     <p>${escHtml(promo.description)}</p>
+     <button type="button" class="${btnClass}" onclick="openPromoInfoModal('${escAttr(promo.type)}')">
+      ${escHtml(promo.ctaText)} <i class="fa-solid fa-arrow-right"></i>
+     </button>
+    </div>
+   </div>`;
+  }).join('');
+  track.insertAdjacentHTML('afterbegin', promoSlidesHtml);
+ }
+
+ rebuildCarouselDots();
+ const total = document.querySelectorAll('.carousel-slide').length;
+ if (carouselIndex >= total) {
+  carouselIndex = 0;
+ }
+ updateCarousel();
+}
+
 function startCarousel() {
  stopCarousel();
+ updateHeroCarouselPromos();
  carouselTimer = setInterval(() => slideCarousel(1), 5000);
  // Touch swipe
  const el = document.getElementById('hero-carousel');
- if (el) {
- el.addEventListener('touchstart', e => { carouselStartX = e.touches[0].clientX; }, { passive: true });
- el.addEventListener('touchend', e => { const dx = e.changedTouches[0].clientX - carouselStartX; if (Math.abs(dx) > 40) slideCarousel(dx < 0 ? 1 : -1); }, { passive: true });
+ if (el && !el.dataset.swipeBound) {
+  el.dataset.swipeBound = '1';
+  el.addEventListener('touchstart', e => { carouselStartX = e.touches[0].clientX; }, { passive: true });
+  el.addEventListener('touchend', e => { const dx = e.changedTouches[0].clientX - carouselStartX; if (Math.abs(dx) > 40) slideCarousel(dx < 0 ? 1 : -1); }, { passive: true });
  }
 }
 function stopCarousel() { if (carouselTimer) clearInterval(carouselTimer); }
@@ -3019,6 +3074,34 @@ function renderOngoingPromoCard(promo) {
    <button type="button" class="native-promo-cta" onclick="openPromoInfoModal('${escAttr(promo.type)}')">${escHtml(promo.ctaText)} <i class="fa-solid fa-arrow-right"></i></button>
   </div>
  </article>`;
+}
+
+function updateDealBoardPromos() {
+ const board = document.querySelector('.buyer-deal-board');
+ if (!board) return;
+ const promos = getActiveOngoingPromos();
+ let promoCard = board.querySelector('.deal-board-card-promo');
+ if (!promos.length) {
+  promoCard?.remove();
+  return;
+ }
+ const primary = promos[0];
+ if (!promoCard) {
+  promoCard = document.createElement('button');
+  promoCard.className = 'deal-board-card deal-board-card-promo';
+  const flashPicks = board.querySelector('.deal-board-card-orange');
+  if (flashPicks) {
+   board.insertBefore(promoCard, flashPicks);
+  } else {
+   board.appendChild(promoCard);
+  }
+ }
+ promoCard.onclick = () => openPromoInfoModal(primary.type);
+ promoCard.innerHTML = `
+  <i class="fa-solid ${escAttr(primary.badgeIcon)}"></i>
+  <span>Active Promo</span>
+  <strong>${primary.isShipping ? 'Free Shipping' : 'Free Gift Offer'}</strong>
+`;
 }
 
 function renderOngoingPromosBanner() {
@@ -13215,3 +13298,7 @@ function setLanguage(lang) {
 // =================================================================
 // BUYSELL NIGERIA UNIFIED AUTH HEADER SYNCHRONIZATION ENGINE
 // =================================================================
+
+window.openPromoInfoModal = openPromoInfoModal;
+window.updateHeroCarouselPromos = updateHeroCarouselPromos;
+window.updateDealBoardPromos = updateDealBoardPromos;
