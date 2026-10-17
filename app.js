@@ -11,7 +11,7 @@ let chatHistory = [];
 let adminAiHistory = [];
 let currentUser = null, currentRole = 'buyer', currentProd = null, currentStoreShare = null;
 const PUBLIC_SITE_URL = 'https://buysell-marketplace.com';
-const SERVICE_WORKER_APP_VERSION = '2026-10-17-promo-2';
+const SERVICE_WORKER_APP_VERSION = '2026-10-17-promo-3';
 const GOOGLE_OAUTH_RETURN_KEY = 'bs_google_oauth_return';
 const GOOGLE_OAUTH_RETURN_MAX_AGE_MS = 20 * 60 * 1000;
 let googleSignInInFlight = false;
@@ -2747,18 +2747,32 @@ function updateHeroCarouselPromos() {
  if (!track) return;
  const promos = typeof getActiveOngoingPromos === 'function' ? getActiveOngoingPromos() : [];
  
- // Remove any existing dynamic promo slides
- track.querySelectorAll('.carousel-slide-promo').forEach(el => el.remove());
+ const existingPromoSlides = track.querySelectorAll('.carousel-slide-promo');
 
- if (promos.length) {
+ if (!promos.length) {
+  existingPromoSlides.forEach(el => el.remove());
+  rebuildCarouselDots();
+  if (carouselIndex >= document.querySelectorAll('.carousel-slide').length) {
+   carouselIndex = 0;
+  }
+  updateCarousel();
+  return;
+ }
+
+ const existingTypes = Array.from(existingPromoSlides).map(el => el.dataset.promoSlide);
+ const promoTypes = promos.map(p => p.type);
+ const matches = existingTypes.length === promoTypes.length && existingTypes.every((t, i) => t === promoTypes[i]);
+ 
+ if (!matches) {
+  existingPromoSlides.forEach(el => el.remove());
   const promoSlidesHtml = promos.map(promo => {
    const isShip = promo.isShipping;
    const tagBg = isShip ? '#0284c7' : '#f59e0b';
    const tagColor = isShip ? '#ffffff' : '#0b1f14';
    const btnClass = isShip ? 'btn btn-primary btn-sm' : 'btn btn-gold btn-sm';
-   const imgUrl = isShip 
+   const imgUrl = promo.imageUrl || (isShip 
      ? 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1600&h=620&fit=crop&q=82'
-     : 'https://images.unsplash.com/photo-1513151233558-d860c5398176?w=1600&h=620&fit=crop&q=82';
+     : 'https://images.unsplash.com/photo-1513151233558-d860c5398176?w=1600&h=620&fit=crop&q=82');
    
    return `<div class="carousel-slide carousel-slide-promo" data-promo-slide="${escAttr(promo.type)}">
     <img src="${imgUrl}" alt="${escAttr(promo.title)}" loading="lazy">
@@ -3030,7 +3044,10 @@ let activePromotionsState = {
 
 function getActiveOngoingPromos() {
  const settings = activePromotionsState?.settings || bogoCheckoutState?.settings || null;
- if (!settings) return [];
+ const bogoEnabled = settings ? settings.bogo_promo_enabled === true : true;
+ const shipEnabled = settings ? settings.free_shipping_promo_enabled === true : false;
+ const share = settings ? bogoNumber(settings.bogo_profit_share_percent, 10) : 10;
+ if (!bogoEnabled && !shipEnabled) return [];
  const list = [];
  if (settings.bogo_promo_enabled === true) {
   const share = bogoNumber(settings.bogo_profit_share_percent, 10);
@@ -3160,6 +3177,8 @@ async function loadActivePromotions() {
    }
    renderOngoingPromosBanner();
    updateAnnouncementPromos();
+   updateHeroCarouselPromos();
+   updateDealBoardPromos();
    if (products && products.length) renderProducts(filteredProducts);
   }
  } catch (e) {
