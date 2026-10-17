@@ -15,7 +15,7 @@ var sponsoredAdObserver = null;
 var viewedSponsoredAdIds = new Set();
 var AD_PRICE_KOBO = 500000;
 const PUBLIC_SITE_URL = 'https://buysell-marketplace.com';
-const SERVICE_WORKER_APP_VERSION = '2026-10-17-promo-4';
+const SERVICE_WORKER_APP_VERSION = '2026-10-17-promo-5';
 const GOOGLE_OAUTH_RETURN_KEY = 'bs_google_oauth_return';
 const GOOGLE_OAUTH_RETURN_MAX_AGE_MS = 20 * 60 * 1000;
 let googleSignInInFlight = false;
@@ -3053,21 +3053,20 @@ function getActiveOngoingPromos() {
  const share = settings ? bogoNumber(settings.bogo_profit_share_percent, 10) : 10;
  if (!bogoEnabled && !shipEnabled) return [];
  const list = [];
- if (settings.bogo_promo_enabled === true) {
-  const share = bogoNumber(settings.bogo_profit_share_percent, 10);
+ if (bogoEnabled) {
   list.push({
    type: 'bogo',
    label: 'Ongoing Promotion',
    badgeIcon: 'fa-gift',
    title: 'Free Gift With Every Order',
-   description: `10% of every item you buy adds together into a platform-funded free gift allowance at checkout!`,
+   description: `${share}% of every item you buy adds together into a platform-funded free gift allowance at checkout!`,
    ctaText: 'Claim Free Gift',
    imageUrl: 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=800&fit=crop&q=80',
    isShipping: false,
   });
  }
- if (settings.free_shipping_promo_enabled === true) {
-  const minVal = bogoNumber(settings.free_shipping_min_order_value, 0);
+ if (shipEnabled) {
+  const minVal = settings ? bogoNumber(settings.free_shipping_min_order_value, 0) : 0;
   const minDesc = minVal > 0 ? ` on orders from ₦${minVal.toLocaleString()}` : '';
   list.push({
    type: 'shipping',
