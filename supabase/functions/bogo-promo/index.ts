@@ -109,44 +109,62 @@ function calculateBogoPricing(input: BogoPricingInput) {
 
   if (!paidItems.length) throw new Error("A paid item is required for checkout.");
 
-  const primary = paidItems.find(item => item.id === String(input.primary_item_id || "")) || null;
+  const primary = paidItems.find(item => item.id === String(input.primary_item_id || ""))
+    || [...paidItems].sort((left, right) => (right.seller_price * right.qty) - (left.seller_price * left.qty))[0]
+    || null;
   const paidMerchandiseTotal = paidItems.reduce(
     (sum, item) => sum + customerPriceForSellerPrice(item.seller_price) * item.qty,
     0,
   );
-  const primaryItemTotal = primary ? customerPriceForSellerPrice(primary.seller_price) : 0;
-  const primaryCap = primary
-    ? amountForBps(primary.seller_price, percentToBps(settings.bogo_profit_share_percent, 1_000))
-    : 0;
+  const primaryItemTotal = primary ? customerPriceForSellerPrice(primary.seller_price) * primary.qty : 0;
+
+  // The 10% (profit share) from EVERY item ordered adds up together for the free gift allowance
+  const profitShareBps = percentToBps(settings.bogo_profit_share_percent, 1_000);
+  const totalGiftAllowance = paidItems.reduce((sum, item) => {
+    const itemTotalSeller = item.seller_price * item.qty;
+    return sum + amountForBps(itemTotalSeller, profitShareBps);
+  }, 0);
   const minOrderMet = paidMerchandiseTotal >= settings.bogo_min_order_value;
 
   let qualificationReason = "";
-  if (!settings.bogo_promo_enabled) qualificationReason = "The BUY 1, Get 1 promotion is not active.";
-  else if (!primary) qualificationReason = "Choose one paid cart item as the promotion item.";
-  else if (primary.qty !== 1) qualificationReason = "The promotion item must have a quantity of one.";
-  else if (!minOrderMet) qualificationReason = `This order needs at least ₦${settings.bogo_min_order_value.toLocaleString()} in merchandise to qualify.`;
+  if (!settings.bogo_promo_enabled) qualificationReason = "The Free Gift promotion is not active.";
+  else if (!minOrderMet) qualificationReason = `This order needs at least ₦${settings.bogo_min_order_value.toLocaleString()} in merchandise to qualify for a free gift.`;
+  else if (totalGiftAllowance < 1) qualificationReason = "No gift allowance available for this order.";
 
   const qualified = !qualificationReason;
   const requestedGift = input.free_gift
     ? { ...input.free_gift, seller_price: wholeNaira(input.free_gift.seller_price), qty: 1 }
     : null;
   if (requestedGift && !qualified) throw new Error(qualificationReason);
-  if (requestedGift && requestedGift.id === primary?.id) throw new Error("The free gift must be different from the main item.");
   if (requestedGift && paidItems.some(item => item.id === requestedGift.id)) {
     throw new Error("Choose a gift that is not already a paid cart item.");
   }
   if (requestedGift && requestedGift.seller_price <= 0) throw new Error("The selected gift has no valid seller price.");
 
-  const promoContribution = requestedGift ? Math.min(requestedGift.seller_price, primaryCap) : 0;
+  const promoContribution = requestedGift ? Math.min(requestedGift.seller_price, totalGiftAllowance) : 0;
   const giftSellerBalance = requestedGift ? Math.max(0, requestedGift.seller_price - promoContribution) : 0;
   const extraCustomerCharge = requestedGift ? customerPriceForSellerPrice(giftSellerBalance) : 0;
-  const mainPlatformMarkup = primary ? amountForBps(primary.seller_price, CUSTOMER_MARKUP_BPS) : 0;
+  const mainPlatformMarkup = primary ? amountForBps(primary.seller_price * primary.qty, CUSTOMER_MARKUP_BPS) : 0;
 
-  const allocations: BogoAllocation[] = paidItems.map(item => {
-    const isPrimary = Boolean(requestedGift && item.id === primary?.id);
+  // Allocate promo contribution proportionally across all paid items based on their contribution to the gift allowance
+  let allocatedPromoDiscount = 0;
+  const allocations: BogoAllocation[] = paidItems.map((item, index) => {
     const sellerAmount = item.seller_price * item.qty;
     const customerAmount = customerPriceForSellerPrice(item.seller_price) * item.qty;
     const itemMarkup = customerAmount - sellerAmount;
+    const itemMaxCap = amountForBps(sellerAmount, profitShareBps);
+
+    let itemPromoDiscount = 0;
+    if (requestedGift && promoContribution > 0 && totalGiftAllowance > 0) {
+      if (index === paidItems.length - 1) {
+        itemPromoDiscount = Math.min(itemMarkup, Math.max(0, promoContribution - allocatedPromoDiscount));
+      } else {
+        itemPromoDiscount = Math.min(itemMarkup, Math.round((promoContribution * itemMaxCap) / totalGiftAllowance));
+        allocatedPromoDiscount += itemPromoDiscount;
+      }
+    }
+
+    const isPrimary = Boolean(requestedGift && (item.id === primary?.id || itemPromoDiscount > 0));
     return {
       allocation_key: `paid:${item.id}`,
       allocation_type: isPrimary ? "bogo_primary" : "paid_item",
@@ -154,8 +172,8 @@ function calculateBogoPricing(input: BogoPricingInput) {
       product_id: item.id,
       seller_amount: sellerAmount,
       customer_amount: customerAmount,
-      platform_revenue_amount: isPrimary ? Math.max(0, itemMarkup - promoContribution) : itemMarkup,
-      platform_promo_discount_amount: isPrimary ? promoContribution : 0,
+      platform_revenue_amount: Math.max(0, itemMarkup - itemPromoDiscount),
+      platform_promo_discount_amount: itemPromoDiscount,
     };
   });
 
@@ -224,7 +242,8 @@ function calculateBogoPricing(input: BogoPricingInput) {
     qualification_reason: qualificationReason || null,
     paid_merchandise_total: paidMerchandiseTotal,
     main_item_total: primaryItemTotal,
-    max_free_seller_price: primaryCap,
+    max_free_seller_price: totalGiftAllowance,
+    max_free_customer_price: customerPriceForSellerPrice(totalGiftAllowance),
     selected_free_item_seller_price: requestedGift?.seller_price || 0,
     platform_promo_contribution: promoContribution,
     platform_promo_discount_amount: promoContribution,
@@ -493,7 +512,7 @@ function shippingGroupsFor(items: PricedProduct[], deliveryMode: "delivery" | "p
 async function buildCheckoutQuote(admin: ReturnType<typeof createClient>, body: Record<string, unknown>): Promise<CheckoutQuote> {
   const cart = normaliseCart(body.cart);
   const settings = await loadSettings(admin);
-  const primaryItemId = primaryIdFor(body);
+  const requestedPrimaryId = primaryIdFor(body);
   const freeGiftId = freeGiftIdFor(body);
   const ids = [...cart.map((item) => item.id), ...(freeGiftId ? [freeGiftId] : [])];
   const productsById = await loadPricedProducts(admin, ids);
@@ -506,9 +525,10 @@ async function buildCheckoutQuote(admin: ReturnType<typeof createClient>, body: 
     }
     return { ...product, qty: cartItem.qty };
   });
-  if (primaryItemId && !paidItems.some((item) => item.id === primaryItemId)) {
-    throw new RequestError("Choose a promotion item that is already in your cart.");
-  }
+
+  const primaryItemId = (requestedPrimaryId && paidItems.some((item) => item.id === requestedPrimaryId))
+    ? requestedPrimaryId
+    : (paidItems[0]?.id || null);
 
   const gift = freeGiftId ? productsById.get(freeGiftId) || null : null;
   if (freeGiftId && !gift) throw new RequestError("The selected free gift is no longer available.", 409);
@@ -590,8 +610,10 @@ function publicQuote(quote: CheckoutQuote) {
       min_order_value: quote.settings.bogo_min_order_value,
       eligible: pricing.eligible,
       qualification_reason: pricing.qualification_reason,
-      primary_item_id: quote.primary_item_id,
+      primary_item_id: pricing.bogo_primary_item_id || quote.primary_item_id,
       free_item_id: pricing.bogo_free_item_id,
+      max_free_seller_price: pricing.max_free_seller_price,
+      max_free_customer_price: pricing.max_free_customer_price,
       is_bogo_order: pricing.is_bogo_order,
       platform_promo_discount_amount: pricing.platform_promo_discount_amount,
       extra_customer_charge: pricing.extra_customer_charge,

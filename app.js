@@ -4120,7 +4120,7 @@ function cartPayableSubtotal() {
 function checkoutBogoPayload() {
  return {
   cart: checkoutCartItems(),
-  bogo_primary_item_id: bogoCheckoutState.primaryItemId || null,
+  bogo_primary_item_id: bogoCheckoutState.primaryItemId || (cart[0]?.id ? String(cart[0].id) : null),
   bogo_free_item_id: bogoCheckoutState.freeItemId || null,
   delivery_mode: currentMode === 'pickup' ? 'pickup' : 'delivery',
  };
@@ -4240,42 +4240,31 @@ function renderCheckoutBogoPromo() {
 
  const quote = bogoCheckoutState.quote || {};
  const bogo = quote.bogo || quote.promotion || quote;
- const primaryOptions = cart.map(item => {
-  const id = String(item.id || '');
-  const quantity = Number(item.qty || item.quantity || 1);
-  const label = `${item.name || 'Cart item'}${quantity > 1 ? ` (qty ${quantity})` : ''}`;
-  return `<option value="${escAttr(id)}" ${id === String(bogoCheckoutState.primaryItemId || '') ? 'selected' : ''}>${escHtml(label)}</option>`;
- }).join('');
  const giftOptions = (bogoCheckoutState.gifts || []).map(gift => {
   const id = String(gift.id || '');
   const displayPrice = bogoNumber(gift.customer_price ?? gift.display_price ?? gift.price, 0);
   const label = displayPrice > 0 ? `${gift.name || 'Eligible product'} — ${fmtN(displayPrice)}` : (gift.name || 'Eligible product');
   return `<option value="${escAttr(id)}" ${id === String(bogoCheckoutState.freeItemId || '') ? 'selected' : ''}>${escHtml(label)}</option>`;
  }).join('');
- const canChooseGift = Boolean(bogoCheckoutState.primaryItemId && bogo.eligible);
+ const canChooseGift = Boolean(bogo.eligible);
+ const allowance = bogoNumber(bogo.max_free_customer_price, 0);
  const contribution = bogoNumber(bogo.platform_promo_contribution ?? bogo.platform_promo_discount_amount, 0);
  const extra = bogoNumber(bogo.extra_customer_charge, 0);
- const qualificationMessage = bogo.qualification_reason || (bogoCheckoutState.primaryItemId ? 'Choose a valid one-quantity cart item to continue.' : 'Choose the paid item that should unlock your gift.');
+ const qualificationMessage = bogo.qualification_reason || 'Add items to your cart to qualify for a free gift.';
  const selectedGiftSummary = bogo.is_bogo_order
-  ? `<div class="bogo-price-summary"><span><i class="fa-solid fa-circle-check"></i> Platform contribution</span><strong>${fmtN(contribution)}</strong></div>${extra > 0 ? `<div class="bogo-price-summary"><span>Extra for selected gift</span><strong>${fmtN(extra)}</strong></div>` : '<p class="bogo-free-note"><i class="fa-solid fa-gift"></i> Your selected gift is fully covered.</p>'}`
+  ? `<div class="bogo-price-summary"><span><i class="fa-solid fa-circle-check"></i> Platform gift contribution</span><strong>-${fmtN(contribution)}</strong></div>${extra > 0 ? `<div class="bogo-price-summary"><span>Extra for selected gift</span><strong>+${fmtN(extra)}</strong></div>` : '<p class="bogo-free-note"><i class="fa-solid fa-gift"></i> Your selected gift is fully covered!</p>'}`
   : '';
 
  host.innerHTML = `
   <div class="bogo-checkout-head">
    <div>
-    <span class="admin-command-kicker"><i class="fa-solid fa-gift"></i> Limited promotion</span>
-    <h3>Buy 1, Get 1</h3>
-     <p class="text-xs color-text3">Choose one paid item and add one qualifying gift. The platform funds part of the gift from its commission; any shipping promotion is calculated separately below.</p>
+    <span class="admin-command-kicker"><i class="fa-solid fa-gift"></i> Platform Gift Promotion</span>
+    <h3>Free Gift With Purchase</h3>
+    <p class="text-xs color-text3">Enjoy a free gift funded by the platform! 10% of every item in your order is combined together for your gift allowance.</p>
    </div>
-   <span class="badge badge-green">Available</span>
+   <span class="badge ${bogo.eligible ? 'badge-green' : 'badge-gray'}">${bogo.eligible ? 'Available' : 'Unavailable'}</span>
   </div>
-  <div class="form-group bogo-primary-field">
-   <label class="form-label" for="co-bogo-primary">Paid item for this offer</label>
-   <select id="co-bogo-primary" class="form-select" onchange="selectBogoPrimary(this.value)">
-    <option value="">Select a cart item</option>${primaryOptions}
-   </select>
-  </div>
-  ${bogoCheckoutState.primaryItemId ? '<p class="bogo-allowance"><i class="fa-solid fa-sack-dollar"></i> Choose from the items covered by this purchase’s platform-funded gift allowance.</p>' : ''}
+  ${bogo.eligible && allowance > 0 ? `<p class="bogo-allowance"><i class="fa-solid fa-gift"></i> <strong>Free Gift Allowance: ${fmtN(allowance)}</strong> (10% of all items in your order combined)</p>` : ''}
   ${canChooseGift ? `<div class="form-group"><label class="form-label" for="co-bogo-gift">Choose your free gift <span class="text-xs color-text3">(optional)</span></label><select id="co-bogo-gift" class="form-select" onchange="selectBogoFreeGift(this.value)"><option value="">No gift for this order</option>${giftOptions}</select>${bogoCheckoutState.loading ? '<p class="text-xs color-text3 mt-1"><span class="spinner"></span> Finding eligible gifts…</p>' : (giftOptions ? '' : '<p class="text-xs color-text3 mt-1">No qualifying gifts are available at the moment.</p>')}</div>` : `<p class="bogo-qualification-note"><i class="fa-solid fa-circle-info"></i> ${escHtml(qualificationMessage)}</p>`}
   ${selectedGiftSummary}
   ${bogoCheckoutState.error ? `<p class="bogo-qualification-note bogo-error"><i class="fa-solid fa-triangle-exclamation"></i> ${escHtml(bogoCheckoutState.error)}</p>` : ''}`;
@@ -4287,7 +4276,7 @@ async function getEligibleFreeGifts(mainItemId = bogoCheckoutState.primaryItemId
  return callEdge('bogo-promo', {
   action: 'eligible_gifts',
   ...checkoutBogoPayload(),
-  bogo_primary_item_id: mainItemId || null,
+  bogo_primary_item_id: mainItemId || (cart[0]?.id ? String(cart[0].id) : null),
   bogo_free_item_id: null,
  });
 }
@@ -4307,8 +4296,7 @@ async function refreshBogoCheckout({ loadGifts = false } = {}) {
   renderCheckoutQuotedItems(quote);
 
   const shouldLoadGifts = bogoCheckoutState.settings?.bogo_promo_enabled === true
-   && Boolean(bogoCheckoutState.primaryItemId)
-  && (quote?.bogo?.eligible === true || quote?.eligible === true)
+   && (quote?.bogo?.eligible === true || quote?.eligible === true)
    && (loadGifts || !bogoCheckoutState.gifts.length);
   if (shouldLoadGifts) {
    const giftsResult = await getEligibleFreeGifts();
