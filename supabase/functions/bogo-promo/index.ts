@@ -1055,6 +1055,24 @@ serve(async (req) => {
     const body = asRecord(await req.json().catch(() => ({})));
     const action = cleanString(body.action, 60).toLowerCase();
     const admin = createClient(supabaseUrl, serviceKey);
+
+    if (action === "public_active_promos" || action === "active_promos" || action === "get_active_promos") {
+      const settings = await loadSettings(admin);
+      return json({
+        success: true,
+        settings: {
+          bogo_promo_enabled: settings.bogo_promo_enabled,
+          bogo_profit_share_percent: settings.bogo_profit_share_percent,
+          bogo_min_order_value: settings.bogo_min_order_value,
+          free_shipping_promo_enabled: settings.free_shipping_promo_enabled,
+          free_shipping_mode: settings.free_shipping_mode,
+          free_shipping_min_order_value: settings.free_shipping_min_order_value,
+          free_shipping_profit_share_percent: settings.free_shipping_profit_share_percent,
+          allow_promo_stacking: settings.allow_promo_stacking,
+        },
+      });
+    }
+
     const user = await requireUser(admin, req);
 
     if (action === "quote") {

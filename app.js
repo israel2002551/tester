@@ -2169,6 +2169,7 @@ function showBuyerView() {
   if (typeof startCarousel === 'function') startCarousel();
   if (typeof loadProducts === 'function') loadProducts({ preferCache: true });
  if (typeof loadActiveAds === 'function') loadActiveAds();
+ if (typeof loadActivePromotions === 'function') loadActivePromotions();
   if (typeof updateCartCount === 'function') updateCartCount();
 }
 
@@ -2966,21 +2967,221 @@ function changeMarketplacePage(newPage) {
 window.changeMarketplacePage = changeMarketplacePage;
 
 
+let activePromotionsState = {
+ loading: false,
+ settings: null,
+};
+
+function getActiveOngoingPromos() {
+ const settings = activePromotionsState?.settings || bogoCheckoutState?.settings || null;
+ if (!settings) return [];
+ const list = [];
+ if (settings.bogo_promo_enabled === true) {
+  const share = bogoNumber(settings.bogo_profit_share_percent, 10);
+  list.push({
+   type: 'bogo',
+   label: 'Ongoing Promotion',
+   badgeIcon: 'fa-gift',
+   title: 'Free Gift With Every Order',
+   description: `10% of every item you buy adds together into a platform-funded free gift allowance at checkout!`,
+   ctaText: 'Claim Free Gift',
+   imageUrl: 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=800&fit=crop&q=80',
+   isShipping: false,
+  });
+ }
+ if (settings.free_shipping_promo_enabled === true) {
+  const minVal = bogoNumber(settings.free_shipping_min_order_value, 0);
+  const minDesc = minVal > 0 ? ` on orders from ₦${minVal.toLocaleString()}` : '';
+  list.push({
+   type: 'shipping',
+   label: 'Ongoing Promotion',
+   badgeIcon: 'fa-truck-fast',
+   title: 'Platform-Funded Free Shipping',
+   description: `Enjoy free or subsidized courier delivery${minDesc}. BUYSELL pays your shipping subsidy!`,
+   ctaText: 'Shop Eligible Deals',
+   imageUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=800&fit=crop&q=80',
+   isShipping: true,
+  });
+ }
+ return list;
+}
+
+function renderOngoingPromoCard(promo) {
+ return `<article class="native-sponsored-card native-promo-card ${promo.isShipping ? 'promo-shipping' : ''}" data-promo-card="${escAttr(promo.type)}">
+  <div class="native-ad-media">
+   <img src="${escAttr(promo.imageUrl)}" alt="${escAttr(promo.title)}" loading="lazy">
+  </div>
+  <div class="native-ad-body">
+   <span class="native-promo-label"><i class="fa-solid ${escAttr(promo.badgeIcon)}"></i> ${escHtml(promo.label)}</span>
+   <h3>${escHtml(promo.title)}</h3>
+   <p>${escHtml(promo.description)}</p>
+   <button type="button" class="native-promo-cta" onclick="openPromoInfoModal('${escAttr(promo.type)}')">${escHtml(promo.ctaText)} <i class="fa-solid fa-arrow-right"></i></button>
+  </div>
+ </article>`;
+}
+
+function renderOngoingPromosBanner() {
+ const prodsGrid = document.getElementById('prods-grid') || document.getElementById('prods-skeleton');
+ if (!prodsGrid) return;
+ const promos = getActiveOngoingPromos();
+ let banner = document.getElementById('ongoing-promos-banner');
+ if (!promos.length) {
+  banner?.remove();
+  return;
+ }
+ if (!banner) {
+  banner = document.createElement('div');
+  banner.id = 'ongoing-promos-banner';
+  banner.className = 'buyer-inner ongoing-promos-strip';
+  prodsGrid.parentNode.insertBefore(banner, prodsGrid);
+ }
+ banner.innerHTML = promos.map(promo => `
+  <div class="promo-strip-card ${promo.isShipping ? 'promo-shipping' : ''}" onclick="openPromoInfoModal('${escAttr(promo.type)}')">
+   <div class="promo-strip-icon"><i class="fa-solid ${escAttr(promo.badgeIcon)}"></i></div>
+   <div class="promo-strip-text">
+    <strong>${escHtml(promo.title)}</strong>
+    <span>${escHtml(promo.description)}</span>
+   </div>
+   <span class="promo-strip-badge">Live Offer <i class="fa-solid fa-arrow-right"></i></span>
+  </div>
+ `).join('');
+}
+
+function updateAnnouncementPromos() {
+ const promos = getActiveOngoingPromos();
+ if (!promos.length) return;
+ const promoItems = promos.map(p => `<span><i class="fa-solid ${escAttr(p.badgeIcon)}" style="color:${p.isShipping ? '#38bdf8' : 'var(--gold)'}"></i> <strong>${escHtml(p.title)}:</strong> ${escHtml(p.description)}</span>`).join('');
+ document.querySelectorAll('.nav-announcement, .landing-announcement').forEach(bar => {
+  if (!bar.dataset.originalAnnouncement) bar.dataset.originalAnnouncement = bar.innerHTML;
+  bar.innerHTML = `${promoItems}${bar.dataset.originalAnnouncement}`;
+ });
+}
+
+async function loadActivePromotions() {
+ try {
+  activePromotionsState.loading = true;
+  const res = await fetch(`${EDGE_URL}/bogo-promo`, {
+   method: 'POST',
+   headers: {
+    'Content-Type': 'application/json',
+    'apikey': SB_KEY
+   },
+   body: JSON.stringify({ action: 'active_promos' })
+  });
+  const data = await res.json();
+  if (data?.settings) {
+   activePromotionsState.settings = data.settings;
+   if (bogoCheckoutState && !bogoCheckoutState.settings) {
+    bogoCheckoutState.settings = data.settings;
+   }
+   renderOngoingPromosBanner();
+   updateAnnouncementPromos();
+   if (products && products.length) renderProducts(filteredProducts);
+  }
+ } catch (e) {
+  console.warn('Could not load active promotions:', e);
+ } finally {
+  activePromotionsState.loading = false;
+ }
+}
+
+function openPromoInfoModal(type = 'bogo') {
+ let modal = document.getElementById('promo-info-modal');
+ if (!modal) {
+  modal = document.createElement('div');
+  modal.id = 'promo-info-modal';
+  modal.className = 'modal-overlay';
+  document.body.appendChild(modal);
+ }
+
+ const isShipping = type === 'shipping';
+ const settings = activePromotionsState?.settings || bogoCheckoutState?.settings || {};
+ const sharePercent = bogoNumber(settings.bogo_profit_share_percent, 10);
+ const minOrder = bogoNumber(settings.bogo_min_order_value, 0);
+ const shippingMin = bogoNumber(settings.free_shipping_min_order_value, 0);
+
+ modal.innerHTML = `
+  <div class="modal-box" style="max-width:540px;padding:1.5rem">
+   <button class="modal-close" onclick="closeModal('promo-info-modal')" aria-label="Close"><i class="fa-solid fa-times"></i></button>
+   <div style="text-align:center;margin-bottom:1.25rem">
+    <div style="width:58px;height:58px;margin:0 auto .75rem;border-radius:16px;background:${isShipping ? '#e0f2fe' : '#fef3c7'};color:${isShipping ? '#0284c7' : '#b45309'};display:flex;align-items:center;justify-content:center;font-size:1.75rem">
+     <i class="fa-solid ${isShipping ? 'fa-truck-fast' : 'fa-gift'}"></i>
+    </div>
+    <span class="badge ${isShipping ? 'badge-blue' : 'badge-gold'}" style="margin-bottom:.5rem">${isShipping ? 'Free Delivery Promo' : 'Free Gift Promo'}</span>
+    <h2 style="font-size:1.35rem;margin:0 0 .4rem">${isShipping ? 'Platform-Funded Free Shipping' : 'Free Gift with Every Purchase'}</h2>
+    <p class="text-xs color-text3" style="max-width:420px;margin:0 auto">${isShipping ? 'BUYSELL pays the courier delivery subsidy on qualifying orders.' : 'Enjoy a free gift funded directly from the platform commission.'}</p>
+   </div>
+
+   <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:1rem;margin-bottom:1.25rem">
+    <h4 style="font-size:.85rem;margin:0 0 .75rem;display:flex;align-items:center;gap:.4rem;color:var(--text)"><i class="fa-solid fa-circle-check color-green"></i> How It Works:</h4>
+    <div style="display:flex;flex-direction:column;gap:.65rem;font-size:.8rem;color:var(--text2)">
+     ${isShipping ? `
+      <div style="display:flex;gap:.65rem;align-items:flex-start">
+       <span style="width:20px;height:20px;border-radius:50%;background:#0284c7;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;flex-shrink:0">1</span>
+       <span>Browse marketplace products and add items to your cart.</span>
+      </div>
+      <div style="display:flex;gap:.65rem;align-items:flex-start">
+       <span style="width:20px;height:20px;border-radius:50%;background:#0284c7;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;flex-shrink:0">2</span>
+       <span>${shippingMin > 0 ? `Orders with merchandise total of <strong>₦${shippingMin.toLocaleString()}</strong> or more qualify for platform delivery subsidy.` : 'Qualifying checkouts receive automatic platform delivery subsidy.'}</span>
+      </div>
+      <div style="display:flex;gap:.65rem;align-items:flex-start">
+       <span style="width:20px;height:20px;border-radius:50%;background:#0284c7;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;flex-shrink:0">3</span>
+       <span>Discount is applied automatically at checkout — no coupon code needed!</span>
+      </div>
+     ` : `
+      <div style="display:flex;gap:.65rem;align-items:flex-start">
+       <span style="width:20px;height:20px;border-radius:50%;background:#b45309;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;flex-shrink:0">1</span>
+       <span>Add any items from verified sellers to your cart.</span>
+      </div>
+      <div style="display:flex;gap:.65rem;align-items:flex-start">
+       <span style="width:20px;height:20px;border-radius:50%;background:#b45309;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;flex-shrink:0">2</span>
+       <span><strong>${sharePercent}% of every item ordered</strong> is combined together into your free gift allowance.</span>
+      </div>
+      <div style="display:flex;gap:.65rem;align-items:flex-start">
+       <span style="width:20px;height:20px;border-radius:50%;background:#b45309;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;flex-shrink:0">3</span>
+       <span>At checkout, choose your free gift from the eligible catalogue. If covered by your allowance, it is 100% free!</span>
+      </div>
+     `}
+    </div>
+   </div>
+
+   <button type="button" class="btn btn-primary btn-full" onclick="closeModal('promo-info-modal');scrollToMarketplaceProducts()"><i class="fa-solid fa-bag-shopping"></i> Start Shopping &amp; Qualify</button>
+  </div>
+ `;
+ showModal('promo-info-modal');
+}
+
+function scrollToMarketplaceProducts() {
+ const el = document.getElementById('prods-grid') || document.querySelector('.products-section');
+ if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function renderMarketplaceFeedWithSponsoredAds(prods) {
- if (!adPopupAds.length) return prods.map(product => prodCard(product)).join('');
+ const promoCards = getActiveOngoingPromos().map(renderOngoingPromoCard);
+ const hasAds = Boolean(adPopupAds.length);
+ const hasPromos = Boolean(promoCards.length);
+
+ if (!hasAds && !hasPromos) return prods.map(product => prodCard(product)).join('');
 
  const feed = [];
  let adIndex = 0;
+ let promoIndex = 0;
  const firstPlacement = Math.min(4, prods.length);
 
  prods.forEach((product, index) => {
   feed.push(prodCard(product));
   const productPosition = index + 1;
-  const shouldPlaceAd = productPosition === firstPlacement
-   || (productPosition > firstPlacement && (productPosition - firstPlacement) % 12 === 0);
-  if (shouldPlaceAd) {
-   feed.push(renderSponsoredAdCard(adPopupAds[adIndex % adPopupAds.length]));
-   adIndex++;
+  const shouldPlace = productPosition === firstPlacement
+   || (productPosition > firstPlacement && (productPosition - firstPlacement) % 10 === 0);
+  if (shouldPlace) {
+   // Alternate between ongoing promotions and sponsored ads in the feed
+   if (hasPromos && (!hasAds || (productPosition === firstPlacement) || (promoIndex < promoCards.length))) {
+    feed.push(promoCards[promoIndex % promoCards.length]);
+    promoIndex++;
+   } else if (hasAds) {
+    feed.push(renderSponsoredAdCard(adPopupAds[adIndex % adPopupAds.length]));
+    adIndex++;
+   }
   }
  });
 
@@ -8342,6 +8543,7 @@ async function saveAdminBogoPromo() {
    allow_promo_stacking: Boolean(stackingInput?.checked),
   });
   applyAdminBogoPromoSettings(result?.settings || result?.config || result || {});
+  loadActivePromotions().catch(() => {});
   toast('Promotion settings saved', enabledInput?.checked ? 'The BOGO offer is now available at checkout.' : 'The BOGO offer is now disabled.', 'success');
  } catch (error) {
   toast('Could not save promotion settings', error.message || 'Please try again.', 'error');
@@ -12621,9 +12823,11 @@ async function loadActiveAds() {
  if (error) throw error;
  adPopupAds = (data || []).filter(ad => ad.media_url || ad.title);
  adPopupIndex = 0;
+ loadActivePromotions().catch(() => {});
  if (products.length) renderProducts(filteredProducts);
  } catch (e) {
  console.warn('Could not load active ads:', e);
+ loadActivePromotions().catch(() => {});
  }
 }
 

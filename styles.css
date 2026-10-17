@@ -6745,3 +6745,182 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
     padding: 0 0.6rem;
   }
 }
+
+/* ==================================================== */
+/* ONGOING PROMOTIONS SYSTEM (Free Gift & Free Shipping) */
+/* ==================================================== */
+
+/* Native promo card in marketplace feed - matching sponsored ad cards */
+.native-promo-card {
+  grid-column: span 2;
+  display: grid;
+  grid-template-columns: minmax(190px, 42%) minmax(0, 1fr);
+  min-height: 224px;
+  overflow: hidden;
+  border: 1px solid rgba(217, 119, 6, .24);
+  border-radius: 22px;
+  background: linear-gradient(135deg, #fffdf5 0%, #fef8e7 100%);
+  box-shadow: 0 12px 30px rgba(180, 83, 9, .08);
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.native-promo-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 38px rgba(180, 83, 9, .15);
+}
+.native-promo-card.promo-shipping {
+  border-color: rgba(2, 132, 199, .24);
+  background: linear-gradient(135deg, #f8fcff 0%, #edf7fd 100%);
+  box-shadow: 0 12px 30px rgba(2, 132, 199, .08);
+}
+.native-promo-card.promo-shipping:hover {
+  box-shadow: 0 18px 38px rgba(2, 132, 199, .15);
+}
+.native-promo-label {
+  display: inline-flex;
+  align-items: center;
+  gap: .38rem;
+  margin-bottom: .7rem;
+  padding: .33rem .65rem;
+  border-radius: 999px;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid rgba(245, 158, 11, .3);
+  font-size: .68rem;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.native-promo-card.promo-shipping .native-promo-label {
+  color: #0369a1;
+  background: #e0f2fe;
+  border-color: rgba(14, 165, 233, .3);
+}
+.native-promo-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  margin-top: auto;
+  padding: .68rem 1rem;
+  border-radius: 10px;
+  color: #fff;
+  background: #b45309;
+  font-size: .8rem;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+  border: none;
+  transition: background .18s ease;
+}
+.native-promo-cta:hover,
+.native-promo-cta:focus-visible {
+  color: #fff;
+  background: #78350f;
+  outline: 3px solid rgba(245, 158, 11, .35);
+  outline-offset: 2px;
+}
+.native-promo-card.promo-shipping .native-promo-cta {
+  background: #0284c7;
+}
+.native-promo-card.promo-shipping .native-promo-cta:hover,
+.native-promo-card.promo-shipping .native-promo-cta:focus-visible {
+  background: #0369a1;
+  outline: 3px solid rgba(14, 165, 233, .35);
+}
+
+/* Ongoing Promos Horizontal Strip on Marketplace Home */
+.ongoing-promos-strip {
+  display: flex;
+  gap: 1rem;
+  margin: .5rem 0 1.25rem;
+  flex-wrap: wrap;
+}
+.promo-strip-card {
+  flex: 1 1 300px;
+  display: flex;
+  align-items: center;
+  gap: .95rem;
+  padding: .9rem 1.2rem;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #fffdf5 0%, #fef3c7 100%);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  box-shadow: 0 4px 16px rgba(180, 83, 9, 0.08);
+  cursor: pointer;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.promo-strip-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(180, 83, 9, 0.14);
+}
+.promo-strip-card.promo-shipping {
+  background: linear-gradient(135deg, #f8fcff 0%, #e0f2fe 100%);
+  border-color: rgba(14, 165, 233, 0.28);
+  box-shadow: 0 4px 16px rgba(2, 132, 199, 0.08);
+}
+.promo-strip-card.promo-shipping:hover {
+  box-shadow: 0 8px 24px rgba(2, 132, 199, 0.14);
+}
+.promo-strip-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  color: #b45309;
+  background: #fde68a;
+  flex-shrink: 0;
+}
+.promo-strip-card.promo-shipping .promo-strip-icon {
+  color: #0284c7;
+  background: #bae6fd;
+}
+.promo-strip-text {
+  flex: 1;
+  min-width: 0;
+}
+.promo-strip-text strong {
+  display: block;
+  font-size: .9rem;
+  color: #78350f;
+  line-height: 1.25;
+}
+.promo-strip-card.promo-shipping .promo-strip-text strong {
+  color: #075985;
+}
+.promo-strip-text span {
+  display: block;
+  font-size: .78rem;
+  color: #92400e;
+  line-height: 1.4;
+  margin-top: 2px;
+}
+.promo-strip-card.promo-shipping .promo-strip-text span {
+  color: #0369a1;
+}
+.promo-strip-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .35rem .65rem;
+  border-radius: 8px;
+  background: #b45309;
+  color: #fff;
+  font-size: .72rem;
+  font-weight: 750;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.promo-strip-card.promo-shipping .promo-strip-badge {
+  background: #0284c7;
+}
+
+@media (max-width: 720px) {
+  .native-promo-card { grid-column: 1 / -1; grid-template-columns: minmax(118px, 38%) minmax(0, 1fr); min-height: 168px; border-radius: 18px; }
+  .native-promo-card .native-ad-media img { min-height: 168px; }
+  .native-promo-card .native-ad-body { padding: 1rem; }
+  .native-promo-label { margin-bottom: .45rem; font-size: .61rem; }
+  .native-promo-card .native-ad-body h3 { font-size: 1rem; }
+  .native-promo-card .native-ad-body p { margin: .42rem 0 .8rem; font-size: .76rem; -webkit-line-clamp: 2; }
+  .native-promo-cta { padding: .55rem .7rem; font-size: .72rem; }
+}
