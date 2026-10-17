@@ -64,7 +64,7 @@ export function parseNairaAmount(value) {
 
   source = source
     .toLowerCase()
-    .replace(/(?:₦|\bngn\b|\bnaira\b|\bn(?=\s*\d))/gi, '')
+    .replace(/(?:₦|\bngn\b|\bnaira\b|\bn(?=\s*\d)|#(?=\s*\d))/gi, '')
     .trim();
   const match = source.match(new RegExp(`(${NUMERIC_PRICE})\\s*(${SCALE})?`, 'i'));
   if (!match) return null;
@@ -106,7 +106,7 @@ export function extractNairaPriceCandidates(text, { mediaContext = false } = {})
     }
   };
 
-  addMatches(new RegExp(`(?:₦|\\bngn\\b|\\bnaira\\b|\\bN(?=\\s*\\d))\\s*${NUMERIC_PRICE}(?:\\s*${SCALE})?`, 'gi'), 'explicit');
+  addMatches(new RegExp(`(?:₦|\\bngn\\b|\\bnaira\\b|\\bN(?=\\s*\\d)|#(?=\\s*\\d))\\s*${NUMERIC_PRICE}(?:\\s*${SCALE})?`, 'gi'), 'explicit');
   addMatches(new RegExp(`\\b${NUMERIC_PRICE}\\s*${SCALE}\\b`, 'gi'), 'scaled');
   addMatches(new RegExp(`\\b${PRICE_CONTEXT}\\b\\s*[:=#-]?\\s*${NUMERIC_PRICE}(?:\\s*${SCALE})?`, 'gi'), 'contextual');
   addMatches(new RegExp(`\\b${NUMERIC_PRICE}(?:\\s*${SCALE})?\\s*(?:each|per|only|fixed|firm|nego(?:tiable)?)\\b`, 'gi'), 'contextual');
@@ -115,6 +115,9 @@ export function extractNairaPriceCandidates(text, { mediaContext = false } = {})
   if (mediaContext) {
     addMatches(/\b\d{1,3}\s\d{3}\b/g, 'spaced');
     addMatches(/\b\d{4,8}\b/g, 'media-bare');
+  } else {
+    // In text context, detect 5-8 digit whole naira amounts (e.g. 50000, 180000, 450000)
+    addMatches(/\b\d{5,8}\b/g, 'text-bare');
   }
 
   const wordContext = new RegExp(`(?:\\b${PRICE_CONTEXT}\\b|\\bnaira\\b|\\bngn\\b)\\s*[:=#-]?\\s*([a-z][a-z\\s-]{2,80})`, 'gi');
@@ -144,8 +147,8 @@ export function extractNairaPriceCandidates(text, { mediaContext = false } = {})
 export function stripPriceFromText(text) {
   if (!text || typeof text !== 'string') return '';
   return text
-    .replace(new RegExp(`\\b${PRICE_CONTEXT}\\b\\s*[:=#-]?\\s*(?:₦|NGN|Naira|N)?\\s*${NUMERIC_PRICE}(?:\\s*${SCALE})?`, 'gi'), '')
-    .replace(new RegExp(`(?:₦|\\bngn\\b|\\bnaira\\b|\\bN(?=\\s*\\d))\\s*${NUMERIC_PRICE}(?:\\s*${SCALE})?`, 'gi'), '')
+    .replace(new RegExp(`\\b${PRICE_CONTEXT}\\b\\s*[:=#-]?\\s*(?:₦|NGN|Naira|N|#)?\\s*${NUMERIC_PRICE}(?:\\s*${SCALE})?`, 'gi'), '')
+    .replace(new RegExp(`(?:₦|\\bngn\\b|\\bnaira\\b|\\bN(?=\\s*\\d)|#(?=\\s*\\d))\\s*${NUMERIC_PRICE}(?:\\s*${SCALE})?`, 'gi'), '')
     .replace(/\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/g, '')
     .replace(/(^|\s)\d+(?:[.,]\d+)?\s*[kKmM]\b/gi, '$1')
     .replace(/(?:\bfor\b|\bat\b|\b#)\s*[\d,]{4,10}\b/gi, '')
@@ -333,7 +336,7 @@ async function parseVisionChunk(message, visualChunk) {
 }
 
 async function parseTextOnly(message) {
-  const textModelsToTry = [...new Set([...VISION_MODELS, ...FALLBACK_TEXT_MODELS])];
+  const textModelsToTry = [...new Set([...FALLBACK_TEXT_MODELS, ...VISION_MODELS])];
   for (const model of textModelsToTry) {
     try {
       const completion = await groq.chat.completions.create({
@@ -372,19 +375,45 @@ export async function transcribeVideoAudio({ buffer, mimeType = '' } = {}) {
     });
     return String(result?.text || '').trim().slice(0, 12_000);
   } catch (error) {
-    console.warn(`[Video transcription] ${error?.message || error}`);
+    const errorMsg = error?.message || String(error);
+    if (/no[_\s]audio[_\s]stream|no audio track/i.test(errorMsg)) {
+      // Normal for silent or muted product videos; proceed with visual analysis
+      return '';
+    }
+    console.warn(`[Video transcription] ${errorMsg}`);
     return '';
   }
 }
 
 export async function parseListingWithVision({ text = '', media = [], audioTranscript = '' } = {}) {
-  const message = [String(text || '').trim(), String(audioTranscript || '').trim() ? `Video audio transcript (may contain recognition errors):\n${String(audioTranscript).trim()}` : '']
+  const cleanText = String(text || '').trim();
+  const transcript = String(audioTranscript || '').trim();
+  const message = [cleanText, transcript ? `Video audio transcript (may contain recognition errors):\n${transcript}` : '']
     .filter(Boolean)
     .join('\n\n');
   const inputs = visualInputs(media);
   if (!message && inputs.length === 0) return { is_commercial_listing: false, items: [] };
 
+  // 1. FAST TEXT PARSING: When the seller has provided a written description,
+  // parse the product details directly using fast text models (Llama-3.3-70B / 3.1-8B).
+  // Do NOT send images to Vision AI when the product already has a clear description.
+  const hasDescription = cleanText.length >= 8 && /[a-zA-Z]{2,}/.test(cleanText);
+  if (hasDescription) {
+    const textParsed = await parseTextOnly(message);
+    if (textParsed?.is_commercial_listing && textParsed.items?.length > 0) {
+      const hasPrices = textParsed.items.some(item => Number(item?.price) > 0);
+      if (hasPrices || inputs.length === 0) {
+        console.info(`[Listing Parser] Parsed ${textParsed.items.length} product(s) directly from written description without Vision AI.`);
+        return textParsed;
+      }
+      console.info('[Listing Parser] Written description lacked price. Checking visual inputs for visible price/flyer...');
+    }
+  }
+
+  // 2. VISION AI: Only used when the post DOES NOT have a description,
+  // or when the description lacked a price and flyer OCR is needed.
   if (inputs.length > 0) {
+    console.info(`[Vision AI] Post has no written description (or lacked price). Inspecting ${inputs.length} visual input(s)...`);
     const parsedChunks = [];
     for (const visualChunk of chunk(inputs, MAX_VISION_IMAGES_PER_REQUEST)) {
       const parsed = await parseVisionChunk(message, visualChunk);
@@ -394,6 +423,7 @@ export async function parseListingWithVision({ text = '', media = [], audioTrans
     if (merged?.items.length) return merged;
   }
 
+  // 3. Fallback to text parsing if visual models failed or weren't used
   if (message.length >= 3) {
     const parsed = await parseTextOnly(message);
     if (parsed) return parsed;
@@ -404,10 +434,31 @@ export async function parseListingWithVision({ text = '', media = [], audioTrans
 }
 
 export function looksLikeSalePost(text = '', hasMedia = false) {
+  // In WhatsApp Buy/Sell groups, ANY photo or video is presumed to be a product!
+  // Never discard a media post as non-sale.
+  if (hasMedia) return true;
+
   const source = String(text || '').trim();
-  const saleTerms = /(?:\bfor sale\b|\bavailable\b|\bselling\b|\bprice\b|\bnego\b|\bforeign used\b|\btokunbo\b|\bdm\b|\bcall\b|\bdeal\b|\bcondition\b)/i;
-  if (hasMedia) {
-    return !source || hasPriceInText(source, { mediaContext: true }) || saleTerms.test(source);
-  }
-  return hasPriceInText(source) || saleTerms.test(source);
+  if (!source) return false;
+
+  // Filter out pure conversational greetings or administrative messages
+  const nonSaleChat = /^(?:good morning|good afternoon|good evening|happy sunday|happy new month|amen|congrats|congratulations|hello admin|admin please|scam alert|fake alert|please remove|thanks|thank you|ok|okay|noted|lol|lmao|yes|no)[.!]?$/i;
+  if (nonSaleChat.test(source)) return false;
+
+  // Check for any price figures
+  if (hasPriceInText(source, { mediaContext: false })) return true;
+
+  // Expanded commercial sale terms
+  const saleTerms = /(?:\bfor sale\b|\bavailable\b|\bselling\b|\bprice\b|\bnego\b|\bforeign used\b|\btokunbo\b|\bdm\b|\bcall\b|\bdeal\b|\bcondition\b|\bswap\b|\bpay on delivery\b|\bpod\b|\bwaybill\b|\bpickup\b|\bgiveaway\b|\bpromo\b|\bdiscount\b|\borders?\b|\bstock\b|\bwholesale\b|\bretail\b|\bclean\b|\bgrade a\b|\bbrand new\b|\buk used\b|\bdirect belgium\b|\btested ok\b|\bworking perfect\b|\bbattery health\b|\bbh\b)/i;
+  if (saleTerms.test(source)) return true;
+
+  // Product categories commonly posted in Nigerian marketplace groups
+  const productTerms = /(?:\biphone\b|\bsamsung\b|\bpixel\b|\bredmi\b|\btecno\b|\binfinix\b|\bmacbook\b|\blaptop\b|\bhp\b|\bdell\b|\blenovo\b|\basus\b|\bacer\b|\bplaystation\b|\bps[45]\b|\bxbox\b|\btv\b|\bsneakers?\b|\bshoes?\b|\bcrocs\b|\bwatch(?:es)?\b|\brolex\b|\bbags?\b|\bperfumes?\b|\bwigs?\b|\bhair\b|\bdress(?:es)?\b|\bshirts?\b|\bcars?\b|\btoyota\b|\blexus\b|\bbenz\b|\bhonda\b|\bgenerator\b|\binverter\b|\bsolar\b|\bpower bank\b|\bairpods\b|\bchargers?\b)/i;
+  if (productTerms.test(source)) return true;
+
+  // Hardware/apparel specifications like "128gb", "256gb", "16gb ram", "size 42", etc.
+  const specTerms = /(?:\b\d+\s*(?:gb|tb|mb|ram|rom|mah)\b|\bsize\s*\d+\b|\b\d+\s*(?:inches|inch)\b)/i;
+  if (specTerms.test(source)) return true;
+
+  return false;
 }

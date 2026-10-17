@@ -155,6 +155,7 @@ async function startDispatcher() {
     browser: Browsers.ubuntu('Chrome'),
     markOnlineOnConnect: true,
     syncFullHistory: false,
+    shouldIgnoreJid: (jid) => jid.endsWith('@g.us') || jid.endsWith('@broadcast') || jid.endsWith('@newsletter'),
     getMessage: async (key) => {
       const msg = messageStore.get(key.id);
       return msg?.message || undefined;

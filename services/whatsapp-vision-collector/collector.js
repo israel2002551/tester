@@ -111,15 +111,24 @@ let warnedAboutSessionStorage = false;
 // the process console when it recovers a stale session. Baileys' pino logger
 // cannot control those direct console calls, so redact only those known events.
 function installSignalLogRedaction() {
-  const sensitiveSignalEvent = /^(?:Session error:|Closing session:|Removing old closed session:|Session already closed)/i;
+  const sensitiveSignalEvent = /^(?:Session error:|Closing session:|Removing old closed session:|Session already closed|Failed to decrypt message with any known session)/i;
   const recoveredSignalEvent = /^Decrypted message with closed session\.?$/i;
+  let lastStaleNoticeAt = 0;
+  let throttledStaleCount = 0;
 
   for (const method of ['error', 'warn', 'info']) {
     const original = console[method].bind(console);
     console[method] = (...args) => {
       const message = typeof args[0] === 'string' ? args[0] : '';
       if (sensitiveSignalEvent.test(message)) {
-        original('[WhatsApp Signal] Stale session detected while processing a message; details redacted.');
+        throttledStaleCount++;
+        const now = Date.now();
+        if (now - lastStaleNoticeAt > 30_000) {
+          lastStaleNoticeAt = now;
+          const countInfo = throttledStaleCount > 1 ? ` (${throttledStaleCount} events throttled)` : '';
+          throttledStaleCount = 0;
+          original(`[WhatsApp Signal] Stale or desynced session detected for incoming message(s); sessions re-negotiating in background (details redacted${countInfo}).`);
+        }
         return;
       }
       if (recoveredSignalEvent.test(message)) {
@@ -158,6 +167,7 @@ function saveMessage(message) {
 // Multi-message buffering for photos and follow-up prices / descriptions
 const pendingBundles = new Map();
 const recentUncaptionedMedia = new Map();
+const recentPendingTexts = new Map();
 const bundleWindowMs = 4_000;
 
 async function refreshTargetGroups(force = false) {
@@ -543,16 +553,44 @@ function takeLatestUncaptionedCandidate(key) {
   return candidate;
 }
 
+function retainPendingTextCandidate(key, bundle) {
+  const candidate = {
+    bundle: { ...bundle, texts: [...bundle.texts], messageIds: [...bundle.messageIds] },
+    expiresTimer: null,
+  };
+  recentPendingTexts.set(key, candidate);
+  candidate.expiresTimer = setTimeout(() => {
+    if (recentPendingTexts.get(key) === candidate) {
+      recentPendingTexts.delete(key);
+      console.info(`[Vision Queue] Staging text-only listing from ${bundle.senderJid} (no media sent within 30s)...`);
+      queueBundleForStaging({
+        ...bundle,
+        text: bundle.texts.join('\n').trim(),
+        sourceKey: bundleSourceKey(bundle),
+      });
+    }
+  }, 30_000);
+  return candidate;
+}
+
+function takePendingTextCandidate(key) {
+  const candidate = recentPendingTexts.get(key);
+  if (candidate) {
+    recentPendingTexts.delete(key);
+    if (candidate.expiresTimer) clearTimeout(candidate.expiresTimer);
+    return candidate.bundle;
+  }
+  return null;
+}
+
 function flushBundle(bundle) {
   const key = `${bundle.groupJid}:${bundle.senderJid}`;
   const combinedText = bundle.texts.join('\n').trim();
 
-  // Give a photo/video album a short opportunity to receive a follow-up price.
-  // The original media stays attached for a longer window so late price-only
-  // messages can requeue the same durable job instead of being lost.
+  // Case 1: Photos/videos posted without text -> wait 45s for seller description/price follow-up
   if (!combinedText) {
     if (bundle.media.length > 0) {
-      console.info(`[Vision Buffer] ${bundle.senderJid} posted ${bundle.media.length} media file(s) without text. Waiting 25s for a price follow-up...`);
+      console.info(`[Vision Buffer] ${bundle.senderJid} posted ${bundle.media.length} media file(s) without text. Waiting 45s for follow-up description/price...`);
       const candidate = retainUncaptionedCandidate(key, bundle);
       setTimeout(() => {
         // A price or description already consumed this album into a new bundle.
@@ -563,11 +601,19 @@ function flushBundle(bundle) {
           text: '',
           sourceKey: bundleSourceKey(bundle),
         });
-      }, 25_000);
+      }, 45_000);
     }
     return;
   }
 
+  // Case 2: Text posted without media -> wait up to 30s for seller to attach photos/videos
+  if (bundle.media.length === 0) {
+    console.info(`[Vision Buffer] ${bundle.senderJid} posted listing text without media. Waiting 30s for matching photos/video...`);
+    retainPendingTextCandidate(key, bundle);
+    return;
+  }
+
+  // Case 3: Both media and text are present -> queue immediately
   queueBundleForStaging({
     ...bundle,
     text: combinedText,
@@ -606,7 +652,21 @@ function queueListingItem({ groupJid, senderJid, messageId, details, text }) {
     pendingBundles.set(key, bundle);
   }
 
-  // A follow-up description or price belongs to the newest uncaptioned album.
+  // If this message brings media, merge any recently pending text from this seller!
+  if (details) {
+    const pendingText = takePendingTextCandidate(key);
+    if (pendingText) {
+      for (const t of pendingText.texts) {
+        if (!bundle.texts.includes(t)) bundle.texts.push(t);
+      }
+      for (const mId of pendingText.messageIds) {
+        if (!bundle.messageIds.includes(mId)) bundle.messageIds.push(mId);
+      }
+      if (!bundle.sourceKey && pendingText.sourceKey) bundle.sourceKey = pendingText.sourceKey;
+    }
+  }
+
+  // If this message brings text, merge any uncaptioned media album from this seller!
   if (cleanText && latestCandidate) {
     const cached = takeLatestUncaptionedCandidate(key);
     if (cached) {
@@ -624,7 +684,8 @@ function queueListingItem({ groupJid, senderJid, messageId, details, text }) {
   if (cleanText && !bundle.texts.includes(cleanText)) bundle.texts.push(cleanText);
 
   if (bundle.timer) clearTimeout(bundle.timer);
-  const debounceMs = (details && msgHasPrice) ? 2_500 : bundleWindowMs;
+  const hasBoth = bundle.media.length > 0 && bundle.texts.length > 0;
+  const debounceMs = (hasBoth && msgHasPrice) ? 2_500 : bundleWindowMs;
   bundle.timer = setTimeout(() => {
     pendingBundles.delete(key);
     flushBundle(bundle);
@@ -688,7 +749,11 @@ async function processQueuedIncomingMessage({ sock, message, remoteJid, senderJi
           })).catch(() => {});
         }, pause);
       }
-      return;
+      if (text && looksLikeSalePost(text, false)) {
+        console.warn(`[Vision Media download] Media could not be downloaded for ${senderJid}, proceeding with text listing.`);
+      } else {
+        return;
+      }
     }
   }
 
@@ -701,9 +766,10 @@ async function processQueuedIncomingMessage({ sock, message, remoteJid, senderJi
 
   // Do not create durable jobs for ordinary text conversation. Media remains
   // eligible even without text so flyer OCR and video analysis can decide.
-  // A plain follow-up description is retained when a recent album is waiting.
+  // A plain follow-up description is retained when a recent album or pending text is waiting.
   const hasRecentAlbum = recentCandidates(`${remoteJid}:${senderJid}`).length > 0;
-  if (!itemDetails && !hasRecentAlbum && !looksLikeSalePost(text, false)) return;
+  const hasPendingText = recentPendingTexts.has(`${remoteJid}:${senderJid}`);
+  if (!itemDetails && !hasRecentAlbum && !hasPendingText && !looksLikeSalePost(text, false)) return;
 
   queueListingItem({
     groupJid: remoteJid,
@@ -777,6 +843,7 @@ async function startVisionCollector() {
       markOnlineOnConnect: true,
       syncFullHistory: false,
       msgRetryCounterCache: messageRetryCounterCache,
+      shouldIgnoreJid: (jid) => jid.endsWith('@broadcast') || jid.endsWith('@newsletter'),
       getMessage: async (key) => {
         const msg = messageStore.get(key.id);
         return msg?.message || undefined;
