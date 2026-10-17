@@ -4552,12 +4552,6 @@ function renderCheckoutBogoPromo() {
 
  const quote = bogoCheckoutState.quote || {};
  const bogo = quote.bogo || quote.promotion || quote;
- const giftOptions = (bogoCheckoutState.gifts || []).map(gift => {
-  const id = String(gift.id || '');
-  const displayPrice = bogoNumber(gift.customer_price ?? gift.display_price ?? gift.price, 0);
-  const label = displayPrice > 0 ? `${gift.name || 'Eligible product'} — ${fmtN(displayPrice)}` : (gift.name || 'Eligible product');
-  return `<option value="${escAttr(id)}" ${id === String(bogoCheckoutState.freeItemId || '') ? 'selected' : ''}>${escHtml(label)}</option>`;
- }).join('');
  const canChooseGift = Boolean(bogo.eligible);
  const allowance = bogoNumber(bogo.max_free_customer_price, 0);
  const contribution = bogoNumber(bogo.platform_promo_contribution ?? bogo.platform_promo_discount_amount, 0);
@@ -4566,6 +4560,55 @@ function renderCheckoutBogoPromo() {
  const selectedGiftSummary = bogo.is_bogo_order
   ? `<div class="bogo-price-summary"><span><i class="fa-solid fa-circle-check"></i> Platform gift contribution</span><strong>-${fmtN(contribution)}</strong></div>${extra > 0 ? `<div class="bogo-price-summary"><span>Extra for selected gift</span><strong>+${fmtN(extra)}</strong></div>` : '<p class="bogo-free-note"><i class="fa-solid fa-gift"></i> Your selected gift is fully covered!</p>'}`
   : '';
+
+ const selectedGiftId = String(bogoCheckoutState.freeItemId || bogo.free_item_id || '');
+ const chosenGift = selectedGiftId
+  ? ((bogoCheckoutState.gifts || []).find(g => String(g.id) === selectedGiftId)
+     || (quote?.items || []).find(i => String(i.id) === selectedGiftId && i.is_bogo_gift))
+  : null;
+
+ let giftSelectorHtml = '';
+ if (canChooseGift) {
+  if (chosenGift) {
+   const giftImg = sanitizeUrl(chosenGift.image_url || '') || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=120';
+   const giftPrice = bogoNumber(chosenGift.customer_price ?? chosenGift.display_price ?? chosenGift.price ?? chosenGift.total, allowance);
+   giftSelectorHtml = `
+    <div class="bogo-chosen-gift-preview">
+     <img src="${escAttr(giftImg)}" class="bogo-chosen-gift-img" alt="${escAttr(chosenGift.name || '')}">
+     <div class="bogo-chosen-gift-details">
+      <div class="bogo-chosen-gift-badge"><i class="fa-solid fa-gift"></i> 100% FREE GIFT</div>
+      <div class="bogo-chosen-gift-title">${escHtml(chosenGift.name || 'Selected Free Gift')}</div>
+      <div class="bogo-chosen-gift-price">
+       <span class="orig-price">${fmtN(giftPrice)}</span>
+       <span class="free-pill">FREE</span>
+      </div>
+     </div>
+     <div class="bogo-chosen-gift-actions">
+      <button type="button" class="btn btn-outline btn-xs bogo-change-btn" onclick="openBogoGiftModal()"><i class="fa-solid fa-pen-to-square"></i> Change</button>
+      <button type="button" class="bogo-remove-btn" onclick="selectBogoFreeGift('')" title="Remove free gift"><i class="fa-solid fa-trash-can"></i></button>
+     </div>
+    </div>`;
+  } else {
+   giftSelectorHtml = `
+    <div class="bogo-gift-cta-card" onclick="openBogoGiftModal()">
+     <div class="bogo-gift-cta-left">
+      <div class="bogo-gift-cta-icon"><i class="fa-solid fa-gift"></i></div>
+      <div class="bogo-gift-cta-text">
+       <div class="bogo-gift-cta-title">Choose Your Free Gift</div>
+       <div class="bogo-gift-cta-sub">${allowance > 0 ? `Up to ${fmtN(allowance)} allowance • Tap to browse gifts` : 'Tap to browse free gifts'}</div>
+      </div>
+     </div>
+     <button type="button" class="bogo-gift-browse-btn">
+      Browse <i class="fa-solid fa-chevron-right"></i>
+     </button>
+    </div>`;
+  }
+  if (bogoCheckoutState.loading) {
+   giftSelectorHtml += '<p class="text-xs color-text3 mt-1"><span class="spinner"></span> Finding eligible gifts…</p>';
+  }
+ } else {
+  giftSelectorHtml = `<p class="bogo-qualification-note"><i class="fa-solid fa-circle-info"></i> ${escHtml(qualificationMessage)}</p>`;
+ }
 
  host.innerHTML = `
   <div class="bogo-checkout-head">
@@ -4577,20 +4620,258 @@ function renderCheckoutBogoPromo() {
    <span class="badge ${bogo.eligible ? 'badge-green' : 'badge-gray'}">${bogo.eligible ? 'Available' : 'Unavailable'}</span>
   </div>
   ${bogo.eligible && allowance > 0 ? `<p class="bogo-allowance"><i class="fa-solid fa-gift"></i> <strong>Free Gift Allowance: ${fmtN(allowance)}</strong> (10% of all items in your order combined)</p>` : ''}
-  ${canChooseGift ? `<div class="form-group"><label class="form-label" for="co-bogo-gift">Choose your free gift <span class="text-xs color-text3">(optional)</span></label><select id="co-bogo-gift" class="form-select" onchange="selectBogoFreeGift(this.value)"><option value="">No gift for this order</option>${giftOptions}</select>${bogoCheckoutState.loading ? '<p class="text-xs color-text3 mt-1"><span class="spinner"></span> Finding eligible gifts…</p>' : (giftOptions ? '' : '<p class="text-xs color-text3 mt-1">No qualifying gifts are available at the moment.</p>')}</div>` : `<p class="bogo-qualification-note"><i class="fa-solid fa-circle-info"></i> ${escHtml(qualificationMessage)}</p>`}
+  ${giftSelectorHtml}
   ${selectedGiftSummary}
   ${bogoCheckoutState.error ? `<p class="bogo-qualification-note bogo-error"><i class="fa-solid fa-triangle-exclamation"></i> ${escHtml(bogoCheckoutState.error)}</p>` : ''}`;
 }
 
 // Public checkout helper for the promotion endpoint. It deliberately sends
 // only IDs and quantities; eligible gift pricing is determined on the server.
-async function getEligibleFreeGifts(mainItemId = bogoCheckoutState.primaryItemId) {
+async function getEligibleFreeGifts(options = {}) {
+ const mainItemId = typeof options === 'string' ? options : (options?.mainItemId || bogoCheckoutState.primaryItemId);
+ const search = typeof options === 'object' ? options?.search : undefined;
+ const category = typeof options === 'object' ? options?.category : undefined;
+ const sort = typeof options === 'object' ? (options?.sort || 'closest') : 'closest';
  return callEdge('bogo-promo', {
   action: 'eligible_gifts',
   ...checkoutBogoPayload(),
   bogo_primary_item_id: mainItemId || (cart[0]?.id ? String(cart[0].id) : null),
   bogo_free_item_id: null,
+  search: search || undefined,
+  category: category || undefined,
+  sort: sort,
  });
+}
+
+window.bogoGiftModalState = {
+ search: '',
+ category: 'all',
+ sort: 'closest',
+};
+
+function ensureBogoGiftModal() {
+ let modal = document.getElementById('bogo-gift-modal');
+ if (modal) return modal;
+ modal = document.createElement('div');
+ modal.id = 'bogo-gift-modal';
+ modal.className = 'modal-overlay';
+ modal.innerHTML = `
+  <div class="modal-box bogo-modal-box">
+   <div class="bogo-modal-top">
+    <div class="bogo-modal-header-row">
+     <h2 class="bogo-modal-title"><i class="fa-solid fa-gift color-green"></i> Choose Your Free Gift</h2>
+     <button class="modal-close" onclick="closeModal('bogo-gift-modal')"><i class="fa-solid fa-times"></i></button>
+    </div>
+    <div class="bogo-allowance-pill">
+     <div class="bogo-allowance-left">
+      <i class="fa-solid fa-award"></i>
+      <div class="bogo-allowance-text">
+       <div>Free Gift Allowance (10% order bonus):</div>
+       <div class="bogo-allowance-amount" id="bogo-modal-allowance">₦0</div>
+      </div>
+     </div>
+     <div class="bogo-allowance-tag">100% Covered</div>
+    </div>
+   </div>
+   <div class="bogo-modal-filter-bar">
+    <div class="bogo-modal-search-wrap">
+     <i class="fa-solid fa-magnifying-glass search-icon"></i>
+     <input type="search" id="bogo-modal-search" class="bogo-modal-search-input" placeholder="Search gifts by name (e.g. phone, shoes, bag...)" oninput="handleBogoSearchInput(this.value)">
+     <button type="button" id="bogo-modal-search-clear" class="bogo-modal-search-clear hidden" onclick="clearBogoModalSearch()"><i class="fa-solid fa-times"></i></button>
+    </div>
+    <div class="bogo-chips-scroll" id="bogo-category-chips"></div>
+   </div>
+   <div class="bogo-modal-body" id="bogo-modal-body">
+    <div class="bogo-gifts-grid" id="bogo-gifts-grid"></div>
+   </div>
+   <div class="bogo-modal-bottom">
+    <button type="button" class="bogo-skip-btn" onclick="selectBogoFreeGiftAndClose('')"><i class="fa-solid fa-ban"></i> No gift for this order</button>
+    <button type="button" class="btn btn-outline btn-sm" onclick="closeModal('bogo-gift-modal')">Done</button>
+   </div>
+  </div>`;
+ document.body.appendChild(modal);
+ modal.addEventListener('click', e => { if (e.target === modal) closeModal('bogo-gift-modal'); });
+ return modal;
+}
+
+function openBogoGiftModal() {
+ ensureBogoGiftModal();
+ const quote = bogoCheckoutState.quote || {};
+ const bogo = quote.bogo || quote.promotion || quote;
+ const allowance = bogoNumber(bogo.max_free_customer_price, 0);
+
+ const allowanceEl = document.getElementById('bogo-modal-allowance');
+ if (allowanceEl) allowanceEl.textContent = fmtN(allowance);
+
+ window.bogoGiftModalState = {
+  search: '',
+  category: 'all',
+  sort: 'closest',
+ };
+
+ const searchInput = document.getElementById('bogo-modal-search');
+ if (searchInput) searchInput.value = '';
+ const clearBtn = document.getElementById('bogo-modal-search-clear');
+ if (clearBtn) clearBtn.classList.add('hidden');
+
+ renderBogoCategoryChips();
+ renderBogoModalGifts();
+
+ showModal('bogo-gift-modal');
+
+ if (!bogoCheckoutState.gifts || !bogoCheckoutState.gifts.length) {
+  refreshBogoModalGifts();
+ }
+}
+
+async function refreshBogoModalGifts() {
+ const grid = document.getElementById('bogo-gifts-grid');
+ if (grid) {
+  grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:3rem 1rem;color:#64748b;"><span class="spinner" style="width:28px;height:28px;margin-bottom:0.75rem;"></span><p>Finding gifts close to your allowance…</p></div>';
+ }
+ try {
+  const result = await getEligibleFreeGifts();
+  bogoCheckoutState.gifts = result?.gifts || result?.products || [];
+  renderBogoCategoryChips();
+  renderBogoModalGifts();
+ } catch (err) {
+  if (grid) {
+   grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:2.5rem 1rem;color:#b91c1c;"><i class="fa-solid fa-triangle-exclamation" style="font-size:2rem;margin-bottom:0.5rem;"></i><p>Could not load gift products. Please try again.</p><button type="button" class="btn btn-outline btn-sm mt-2" onclick="refreshBogoModalGifts()">Retry</button></div>`;
+  }
+ }
+}
+
+function renderBogoCategoryChips() {
+ const host = document.getElementById('bogo-category-chips');
+ if (!host) return;
+ const gifts = bogoCheckoutState.gifts || [];
+ const cats = Array.from(new Set(gifts.map(g => (g.category || '').trim()).filter(Boolean)));
+ 
+ const currentCat = window.bogoGiftModalState?.category || 'all';
+ const currentSort = window.bogoGiftModalState?.sort || 'closest';
+
+ let html = `
+  <button type="button" class="bogo-chip ${currentSort === 'closest' ? 'active' : ''}" onclick="setBogoSort('closest')">💎 Closest to Allowance</button>
+  <button type="button" class="bogo-chip ${currentSort === 'price_asc' ? 'active' : ''}" onclick="setBogoSort('price_asc')">🏷️ Price: Low to High</button>
+  <button type="button" class="bogo-chip ${currentCat === 'all' ? 'active' : ''}" onclick="setBogoCategory('all')">All Products (${gifts.length})</button>
+ `;
+
+ cats.forEach(cat => {
+  const count = gifts.filter(g => (g.category || '').toLowerCase() === cat.toLowerCase()).length;
+  const active = currentCat.toLowerCase() === cat.toLowerCase() ? 'active' : '';
+  html += `<button type="button" class="bogo-chip ${active}" onclick="setBogoCategory('${escAttr(cat)}')">${escHtml(cat)} (${count})</button>`;
+ });
+
+ host.innerHTML = html;
+}
+
+function setBogoCategory(cat) {
+ if (!window.bogoGiftModalState) window.bogoGiftModalState = {};
+ window.bogoGiftModalState.category = cat;
+ renderBogoCategoryChips();
+ renderBogoModalGifts();
+}
+
+function setBogoSort(sort) {
+ if (!window.bogoGiftModalState) window.bogoGiftModalState = {};
+ window.bogoGiftModalState.sort = sort;
+ renderBogoCategoryChips();
+ renderBogoModalGifts();
+}
+
+function handleBogoSearchInput(val) {
+ const clearBtn = document.getElementById('bogo-modal-search-clear');
+ if (clearBtn) clearBtn.classList.toggle('hidden', !val);
+ if (!window.bogoGiftModalState) window.bogoGiftModalState = {};
+ window.bogoGiftModalState.search = String(val || '').trim();
+ renderBogoModalGifts();
+}
+
+function clearBogoModalSearch() {
+ const searchInput = document.getElementById('bogo-modal-search');
+ if (searchInput) searchInput.value = '';
+ const clearBtn = document.getElementById('bogo-modal-search-clear');
+ if (clearBtn) clearBtn.classList.add('hidden');
+ if (!window.bogoGiftModalState) window.bogoGiftModalState = {};
+ window.bogoGiftModalState.search = '';
+ renderBogoModalGifts();
+}
+
+function renderBogoModalGifts() {
+ const grid = document.getElementById('bogo-gifts-grid');
+ if (!grid) return;
+ let gifts = [...(bogoCheckoutState.gifts || [])];
+ const query = (window.bogoGiftModalState?.search || '').toLowerCase();
+ const cat = (window.bogoGiftModalState?.category || 'all').toLowerCase();
+ const sort = window.bogoGiftModalState?.sort || 'closest';
+
+ if (cat !== 'all') {
+  gifts = gifts.filter(g => (g.category || '').toLowerCase() === cat);
+ }
+ if (query) {
+  gifts = gifts.filter(g => (g.name || '').toLowerCase().includes(query) || (g.category || '').toLowerCase().includes(query));
+ }
+
+ if (sort === 'price_asc') {
+  gifts.sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
+ } else {
+  // closest to allowance (highest price first)
+  gifts.sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0));
+ }
+
+ if (!gifts.length) {
+  grid.innerHTML = `
+   <div style="grid-column: 1 / -1; text-align: center; padding: 3rem 1rem; color: #64748b;">
+    <i class="fa-solid fa-magnifying-glass" style="font-size: 2.2rem; color: #cbd5e1; margin-bottom: 0.75rem;"></i>
+    <h4 style="color: #334155; margin-bottom: 0.35rem;">No gifts found</h4>
+    <p style="font-size: 0.85rem; margin-bottom: 1rem;">${query ? `No items match "${escHtml(query)}"` : 'No qualifying gifts available for this filter.'}</p>
+    <button type="button" class="btn btn-outline btn-sm" onclick="clearBogoModalSearch(); setBogoCategory('all');">Clear Filters</button>
+   </div>`;
+  return;
+ }
+
+ const selectedId = String(bogoCheckoutState.freeItemId || '');
+ grid.innerHTML = gifts.map(gift => {
+  const isSelected = String(gift.id) === selectedId;
+  const img = sanitizeUrl(gift.image_url || '') || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=300';
+  const displayPrice = bogoNumber(gift.customer_price ?? gift.display_price ?? gift.price, 0);
+  const catTag = gift.category ? `<span class="bogo-card-category-tag">${escHtml(gift.category)}</span>` : '';
+  return `
+   <div class="bogo-gift-card ${isSelected ? 'is-selected' : ''}" onclick="selectBogoFreeGiftAndClose('${escAttr(gift.id)}')">
+    <div class="bogo-card-img-wrap">
+     <img src="${escAttr(img)}" alt="${escAttr(gift.name)}" loading="lazy">
+     <span class="bogo-card-free-tag"><i class="fa-solid fa-gift"></i> FREE</span>
+     ${isSelected ? '<span class="bogo-card-selected-tag"><i class="fa-solid fa-check"></i> SELECTED</span>' : ''}
+     ${catTag}
+    </div>
+    <div class="bogo-card-info">
+     <h4 class="bogo-card-name" title="${escAttr(gift.name)}">${escHtml(gift.name)}</h4>
+     <div class="bogo-card-pricing">
+      <div class="bogo-card-pricing-left">
+       <span class="bogo-card-free-price">FREE</span>
+       <span class="bogo-card-orig-price">${fmtN(displayPrice)}</span>
+      </div>
+     </div>
+     <button type="button" class="bogo-card-select-btn ${isSelected ? 'btn-active-choice' : 'btn-choose'}">
+      ${isSelected ? '<i class="fa-solid fa-check"></i> Selected' : '<i class="fa-solid fa-gift"></i> Choose as Gift'}
+     </button>
+    </div>
+   </div>`;
+ }).join('');
+}
+
+function selectBogoFreeGiftAndClose(productId) {
+ const id = productId ? String(productId) : null;
+ selectBogoFreeGift(id);
+ closeModal('bogo-gift-modal');
+ if (id) {
+  const gift = (bogoCheckoutState.gifts || []).find(g => String(g.id) === id);
+  if (gift?.name) {
+   toast('Free Gift Selected! 🎁', gift.name, 'success', 2500);
+  }
+ } else {
+  toast('Free Gift Removed', 'You can choose a gift anytime before placing your order.', 'info', 2000);
+ }
 }
 
 async function refreshBogoCheckout({ loadGifts = false } = {}) {

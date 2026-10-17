@@ -6622,11 +6622,552 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .bogo-toggle input:checked + span::after { transform: translateX(20px); }
 .bogo-toggle input:focus-visible + span { outline: 3px solid rgba(27, 139, 75, .28); outline-offset: 3px; }
 
+/* Free Gift Promotion Visual Selector & Modal ----------------------- */
+.bogo-gift-cta-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  margin-top: 0.75rem;
+  background: linear-gradient(135deg, rgba(16, 122, 58, 0.08) 0%, rgba(245, 158, 11, 0.08) 100%);
+  border: 1.5px dashed rgba(16, 122, 58, 0.4);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.bogo-gift-cta-card:hover {
+  background: linear-gradient(135deg, rgba(16, 122, 58, 0.12) 0%, rgba(245, 158, 11, 0.12) 100%);
+  border-color: #107a3a;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(16, 122, 58, 0.12);
+}
+.bogo-gift-cta-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.bogo-gift-cta-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #107a3a;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(16, 122, 58, 0.25);
+}
+.bogo-gift-cta-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.bogo-gift-cta-title {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: #073c24;
+}
+.bogo-gift-cta-sub {
+  font-size: 0.76rem;
+  color: #4b6354;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bogo-gift-browse-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  background: #107a3a;
+  color: #fff;
+  font-weight: 600;
+  border: none;
+}
+
+/* Selected Gift Showcase Card */
+.bogo-chosen-gift-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.8rem;
+  margin-top: 0.75rem;
+  background: #fff;
+  border: 1.5px solid rgba(16, 122, 58, 0.35);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(16, 122, 58, 0.08);
+}
+.bogo-chosen-gift-img {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #f1f5f9;
+  flex-shrink: 0;
+  border: 1px solid rgba(0,0,0,0.06);
+}
+.bogo-chosen-gift-details {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+.bogo-chosen-gift-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #087334;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.bogo-chosen-gift-title {
+  font-weight: 600;
+  font-size: 0.86rem;
+  color: #0f172a;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.bogo-chosen-gift-price {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+}
+.bogo-chosen-gift-price .orig-price {
+  text-decoration: line-through;
+  color: #8b98a5;
+  font-size: 0.76rem;
+}
+.bogo-chosen-gift-price .free-pill {
+  font-weight: 800;
+  color: #107a3a;
+  background: #e8f7ee;
+  padding: 0.1rem 0.45rem;
+  border-radius: 5px;
+  font-size: 0.72rem;
+}
+.bogo-chosen-gift-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+.bogo-change-btn {
+  font-size: 0.74rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.bogo-remove-btn {
+  font-size: 0.78rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  color: #dc2626;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+/* BOGO Gift Catalogue Modal */
+#bogo-gift-modal.modal-overlay {
+  z-index: 2500;
+}
+#bogo-gift-modal .modal-box.bogo-modal-box {
+  max-width: 840px;
+  max-height: 88vh;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+  position: relative;
+}
+.bogo-modal-top {
+  padding: 1.1rem 1.25rem 0.85rem;
+  background: #fbfdfc;
+  border-bottom: 1px solid rgba(16, 122, 58, 0.12);
+  flex-shrink: 0;
+  position: relative;
+}
+.bogo-modal-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+.bogo-modal-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #073c24;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.bogo-allowance-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  background: linear-gradient(135deg, #107a3a 0%, #0d632f 100%);
+  color: #fff;
+  padding: 0.65rem 1rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(16, 122, 58, 0.2);
+}
+.bogo-allowance-left {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+.bogo-allowance-left i {
+  font-size: 1.15rem;
+  color: #fde047;
+}
+.bogo-allowance-text {
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+.bogo-allowance-amount {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.bogo-allowance-tag {
+  background: rgba(255,255,255,0.2);
+  backdrop-filter: blur(4px);
+  padding: 0.25rem 0.6rem;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* Modal Search & Filters */
+.bogo-modal-filter-bar {
+  padding: 0.75rem 1.25rem;
+  background: #fff;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+.bogo-modal-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.bogo-modal-search-wrap i.search-icon {
+  position: absolute;
+  left: 0.85rem;
+  color: #94a3b8;
+  font-size: 0.88rem;
+  pointer-events: none;
+}
+.bogo-modal-search-input {
+  width: 100%;
+  padding: 0.55rem 2.2rem 0.55rem 2.3rem;
+  border-radius: 10px;
+  border: 1.5px solid #e2e8f0;
+  font-size: 0.85rem;
+  background: #f8fafc;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+.bogo-modal-search-input:focus {
+  outline: none;
+  background: #fff;
+  border-color: #107a3a;
+  box-shadow: 0 0 0 3px rgba(16, 122, 58, 0.12);
+}
+.bogo-modal-search-clear {
+  position: absolute;
+  right: 0.65rem;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0.3rem;
+  font-size: 0.8rem;
+}
+
+.bogo-chips-scroll {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+.bogo-chips-scroll::-webkit-scrollbar { display: none; }
+.bogo-chip {
+  flex-shrink: 0;
+  padding: 0.32rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.bogo-chip:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+.bogo-chip.active {
+  background: #107a3a;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(16, 122, 58, 0.25);
+}
+
+/* Gifts Content & Grid */
+.bogo-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem;
+  background: #f8fafc;
+  -webkit-overflow-scrolling: touch;
+}
+.bogo-gifts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 1rem;
+}
+.bogo-gift-card {
+  background: #fff;
+  border-radius: 14px;
+  border: 1.5px solid #e2e8f0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+}
+.bogo-gift-card:hover {
+  transform: translateY(-2px);
+  border-color: #107a3a;
+  box-shadow: 0 8px 20px rgba(16, 122, 58, 0.12);
+}
+.bogo-gift-card.is-selected {
+  border-color: #107a3a;
+  box-shadow: 0 0 0 2px #107a3a, 0 8px 24px rgba(16, 122, 58, 0.15);
+}
+.bogo-card-img-wrap {
+  position: relative;
+  width: 100%;
+  padding-top: 85%;
+  background: #f1f5f9;
+  overflow: hidden;
+}
+.bogo-card-img-wrap img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+.bogo-gift-card:hover .bogo-card-img-wrap img {
+  transform: scale(1.04);
+}
+.bogo-card-free-tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: #107a3a;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  letter-spacing: 0.04em;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+.bogo-card-selected-tag {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #073c24;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+.bogo-card-category-tag {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(4px);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  text-transform: capitalize;
+}
+.bogo-card-info {
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.bogo-card-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.35;
+  margin: 0 0 0.45rem 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  height: 2.3rem;
+}
+.bogo-card-pricing {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-top: auto;
+  padding-bottom: 0.65rem;
+}
+.bogo-card-pricing-left {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+.bogo-card-free-price {
+  font-size: 1rem;
+  font-weight: 900;
+  color: #107a3a;
+}
+.bogo-card-orig-price {
+  font-size: 0.75rem;
+  text-decoration: line-through;
+  color: #94a3b8;
+}
+.bogo-card-select-btn {
+  width: 100%;
+  padding: 0.45rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+.bogo-card-select-btn.btn-choose {
+  background: #107a3a;
+  color: #fff;
+}
+.bogo-card-select-btn.btn-choose:hover {
+  background: #0e6c33;
+}
+.bogo-card-select-btn.btn-active-choice {
+  background: #e2fbe8;
+  color: #087334;
+  border: 1px solid #107a3a;
+}
+
+/* Modal Bottom / Skip */
+.bogo-modal-bottom {
+  padding: 0.75rem 1.25rem;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.bogo-skip-btn {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.bogo-skip-btn:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+/* Responsive Mobile Bottom-Sheet */
 @media (max-width: 640px) {
- .bogo-checkout-card { padding: .85rem; }
- .bogo-checkout-head { gap: .55rem; }
- .bogo-checkout-head .badge { flex: 0 0 auto; }
- .bogo-admin-toggle-row { align-items: flex-start; }
+  #bogo-gift-modal .modal-box.bogo-modal-box {
+    width: 100%;
+    max-width: 100%;
+    height: 94vh;
+    max-height: 94vh;
+    border-radius: 20px 20px 0 0;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: 0;
+  }
+  .bogo-gifts-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.65rem;
+  }
+  .bogo-card-img-wrap {
+    padding-top: 90%;
+  }
+  .bogo-card-info {
+    padding: 0.65rem;
+  }
+  .bogo-card-name {
+    font-size: 0.78rem;
+    height: 2.1rem;
+  }
+  .bogo-card-free-price {
+    font-size: 0.88rem;
+  }
+  .bogo-modal-top {
+    padding: 0.85rem 1rem 0.65rem;
+  }
+  .bogo-modal-body {
+    padding: 0.85rem;
+  }
 }
 
 /* ====================================================

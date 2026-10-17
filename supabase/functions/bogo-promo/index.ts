@@ -683,51 +683,118 @@ async function eligibleGifts(admin: ReturnType<typeof createClient>, body: Recor
       qualification_reason: pricing.qualification_reason || "This order does not qualify for a free gift.",
       gifts: [],
       quote: base,
+      max_allowance: 0,
     });
   }
 
   const paidIds = new Set(quote.paid_items.map((item) => item.id));
-  const { data: priceRows, error: priceError } = await admin
-    .from("product_seller_pricing")
-    .select("product_id,seller_price")
-    .gt("seller_price", 0)
-    .lte("seller_price", pricing.max_free_seller_price)
-    .order("seller_price", { ascending: true })
-    .limit(MAX_GIFT_RESULTS * 5);
-  if (priceError) throw new Error("Could not load eligible gifts.");
+  const searchTerm = cleanString(body.search || body.q, 100);
+  const categoryFilter = cleanString(body.category, 60);
+  const sortMode = cleanString(body.sort, 40).toLowerCase();
 
-  const orderedIds = (priceRows || [])
-    .map((row: any) => String(row.product_id || ""))
-    .filter((id: string) => isSafeProductId(id) && !paidIds.has(id))
-    .slice(0, MAX_GIFT_RESULTS * 3);
-  if (!orderedIds.length) {
-    return json({ success: true, eligible: true, qualification_reason: null, gifts: [], quote: base });
+  // Query active products strictly capped by the accumulated 10% allowance
+  let query = admin
+    .from("products")
+    .select("id,seller_id,name,image_url,images,price,category,status,stock_quantity,created_at")
+    .eq("status", "active")
+    .gt("stock_quantity", 0)
+    .gt("price", 0)
+    .lte("price", pricing.max_free_customer_price);
+
+  if (searchTerm) {
+    query = query.ilike("name", `%${searchTerm}%`);
+  }
+  if (categoryFilter && categoryFilter.toLowerCase() !== "all") {
+    query = query.ilike("category", `%${categoryFilter}%`);
   }
 
-  const { data: products, error: productError } = await admin
-    .from("products")
-    .select("id,name,image_url,images,price,category,status,stock_quantity")
-    .in("id", orderedIds)
-    .eq("status", "active")
-    .gt("stock_quantity", 0);
-  if (productError) throw new Error("Could not load eligible gift products.");
+  // Ordering: default to closest to allowance (highest price first)
+  if (sortMode === "asc" || sortMode === "price_asc") {
+    query = query.order("price", { ascending: true });
+  } else if (sortMode === "newest") {
+    query = query.order("created_at", { ascending: false });
+  } else {
+    // Default: 'closest' / highest value first so gifts close to the allowance appear first
+    query = query.order("price", { ascending: false });
+  }
 
-  const productById = new Map((products || []).map((product: any) => [String(product.id), product]));
-  const gifts = orderedIds
-    .map((id) => productById.get(id))
-    .filter(Boolean)
-    .slice(0, MAX_GIFT_RESULTS)
-    .map((product: any) => ({
-      id: String(product.id),
+  query = query.limit(MAX_GIFT_RESULTS * 2);
+
+  const { data: rawProducts, error: productError } = await query;
+  if (productError) throw new Error("Could not load eligible gifts.");
+
+  const candidateProducts = (rawProducts || [])
+    .filter((p: any) => isSafeProductId(String(p.id)) && !paidIds.has(String(p.id)));
+
+  if (!candidateProducts.length) {
+    return json({
+      success: true,
+      eligible: true,
+      qualification_reason: null,
+      gifts: [],
+      quote: base,
+      max_allowance: pricing.max_free_customer_price,
+    });
+  }
+
+  const candidateIds = candidateProducts.map((p: any) => String(p.id));
+  const { data: priceRows } = await admin
+    .from("product_seller_pricing")
+    .select("product_id,seller_price")
+    .in("product_id", candidateIds);
+
+  const priceByProduct = new Map((priceRows || []).map((row: any) => [String(row.product_id), wholeNaira(row.seller_price)]));
+
+  const validGifts: any[] = [];
+  const unpricedToUpsert: { product_id: string; seller_price: number; source: string }[] = [];
+
+  for (const product of candidateProducts) {
+    const id = String(product.id);
+    const publicPrice = wholeNaira(product.price);
+    let sellerPrice = priceByProduct.get(id) || 0;
+
+    if (sellerPrice < 1) {
+      sellerPrice = Math.max(1, Math.round(publicPrice / 1.20));
+      unpricedToUpsert.push({
+        product_id: id,
+        seller_price: sellerPrice,
+        source: "derived_from_public_price",
+      });
+    }
+
+    // In all cases, the gift must not exceed the accumulated 10% allowance
+    if (sellerPrice > pricing.max_free_seller_price || publicPrice > pricing.max_free_customer_price) {
+      continue;
+    }
+
+    validGifts.push({
+      id,
       name: cleanString(product.name, 300) || "Marketplace product",
       image_url: publicImage(product),
       category: cleanString(product.category, 80) || null,
-      // This is the existing public catalogue price, never a seller price.
-      price: wholeNaira(product.price),
+      price: publicPrice,
+      seller_price: sellerPrice,
       is_eligible_free_gift: true,
-    }));
+    });
 
-  return json({ success: true, eligible: true, qualification_reason: null, gifts, quote: base });
+    if (validGifts.length >= MAX_GIFT_RESULTS) break;
+  }
+
+  // Asynchronously persist any derived seller prices so checkout never blocks
+  if (unpricedToUpsert.length > 0) {
+    try {
+      await admin.from("product_seller_pricing").upsert(unpricedToUpsert, { onConflict: "product_id" });
+    } catch (_) {}
+  }
+
+  return json({
+    success: true,
+    eligible: true,
+    qualification_reason: null,
+    gifts: validGifts,
+    quote: base,
+    max_allowance: pricing.max_free_customer_price,
+  });
 }
 
 function validateProofUrl(value: unknown) {
