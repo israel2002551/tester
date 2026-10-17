@@ -1,4 +1,4 @@
-const CACHE_NAME = 'buysell-shell-2026-10-17-promo-3';
+const CACHE_NAME = 'buysell-shell-2026-10-17-promo-4';
 const APP_SHELL = [
   '/',
   '/?view=shop',

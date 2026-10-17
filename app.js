@@ -10,8 +10,12 @@ var supabase = (typeof window !== 'undefined' ? (window.BUYSELL_AUTH?.supabase |
 let chatHistory = []; 
 let adminAiHistory = [];
 let currentUser = null, currentRole = 'buyer', currentProd = null, currentStoreShare = null;
+var adPopupAds = [], adPopupIndex = 0, adSkipTimer = null;
+var sponsoredAdObserver = null;
+var viewedSponsoredAdIds = new Set();
+var AD_PRICE_KOBO = 500000;
 const PUBLIC_SITE_URL = 'https://buysell-marketplace.com';
-const SERVICE_WORKER_APP_VERSION = '2026-10-17-promo-3';
+const SERVICE_WORKER_APP_VERSION = '2026-10-17-promo-4';
 const GOOGLE_OAUTH_RETURN_KEY = 'bs_google_oauth_return';
 const GOOGLE_OAUTH_RETURN_MAX_AGE_MS = 20 * 60 * 1000;
 let googleSignInInFlight = false;
@@ -3260,35 +3264,40 @@ function scrollToMarketplaceProducts() {
 }
 
 function renderMarketplaceFeedWithSponsoredAds(prods) {
- const promoCards = getActiveOngoingPromos().map(renderOngoingPromoCard);
- const hasAds = Boolean(adPopupAds.length);
- const hasPromos = Boolean(promoCards.length);
+ try {
+  const promoCards = typeof getActiveOngoingPromos === 'function' ? getActiveOngoingPromos().map(renderOngoingPromoCard) : [];
+  const ads = (typeof adPopupAds !== 'undefined' && Array.isArray(adPopupAds)) ? adPopupAds : [];
+  const hasAds = Boolean(ads.length);
+  const hasPromos = Boolean(promoCards.length);
 
- if (!hasAds && !hasPromos) return prods.map(product => prodCard(product)).join('');
+  if (!hasAds && !hasPromos) return prods.map(product => prodCard(product)).join('');
 
- const feed = [];
- let adIndex = 0;
- let promoIndex = 0;
- const firstPlacement = Math.min(4, prods.length);
+  const feed = [];
+  let adIndex = 0;
+  let promoIndex = 0;
+  const firstPlacement = Math.min(4, prods.length);
 
- prods.forEach((product, index) => {
-  feed.push(prodCard(product));
-  const productPosition = index + 1;
-  const shouldPlace = productPosition === firstPlacement
-   || (productPosition > firstPlacement && (productPosition - firstPlacement) % 10 === 0);
-  if (shouldPlace) {
-   // Alternate between ongoing promotions and sponsored ads in the feed
-   if (hasPromos && (!hasAds || (productPosition === firstPlacement) || (promoIndex < promoCards.length))) {
-    feed.push(promoCards[promoIndex % promoCards.length]);
-    promoIndex++;
-   } else if (hasAds) {
-    feed.push(renderSponsoredAdCard(adPopupAds[adIndex % adPopupAds.length]));
-    adIndex++;
+  prods.forEach((product, index) => {
+   feed.push(prodCard(product));
+   const productPosition = index + 1;
+   const shouldPlace = productPosition === firstPlacement
+    || (productPosition > firstPlacement && (productPosition - firstPlacement) % 10 === 0);
+   if (shouldPlace) {
+    if (hasPromos && (!hasAds || (productPosition === firstPlacement) || (promoIndex < promoCards.length))) {
+     feed.push(promoCards[promoIndex % promoCards.length]);
+     promoIndex++;
+    } else if (hasAds) {
+     feed.push(renderSponsoredAdCard(ads[adIndex % ads.length]));
+     adIndex++;
+    }
    }
-  }
- });
+  });
 
- return feed.join('');
+  return feed.join('');
+ } catch (err) {
+  console.warn('Feed rendering fallback to regular products:', err);
+  return prods.map(product => prodCard(product)).join('');
+ }
 }
 
 function renderSponsoredAdCard(ad) {
@@ -12481,10 +12490,9 @@ async function createFlashSale() {
 // ====================================================
 // AD SYSTEM
 // ====================================================
-let adPopupAds = [], adPopupIndex = 0, adSkipTimer = null;
-let sponsoredAdObserver = null;
-const viewedSponsoredAdIds = new Set();
-const AD_PRICE_KOBO = 500000;
+// Ad variables hoisted to top of file
+adPopupAds = adPopupAds || [];
+sponsoredAdObserver = sponsoredAdObserver || null;
 
 function resetAdForm() {
  document.getElementById('ad-title').value = '';

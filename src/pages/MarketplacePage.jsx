@@ -72,7 +72,7 @@ export function loadMarketplaceRuntime() {
   if (!runtimePromise) {
     // Version the classic runtime explicitly so an application deploy also
     // refreshes service-worker and notification-route safeguards immediately.
-    const appScriptUrl = import.meta.env.DEV ? `/app.js?t=${Date.now()}` : '/app.js?v=10.42';
+    const appScriptUrl = import.meta.env.DEV ? `/app.js?t=${Date.now()}` : '/app.js?v=10.44';
     runtimePromise = authReady
       .then(() => ensureRuntimeConfig())
       .then(() => loadClassicScript(appScriptUrl))
