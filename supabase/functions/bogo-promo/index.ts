@@ -489,11 +489,15 @@ async function loadPricedProducts(admin: ReturnType<typeof createClient>, ids: s
         // Derive seller price by reversing the 20% platform markup
         sellerPrice = Math.max(1, Math.round(publicPrice / 1.20));
         // Persist into product_seller_pricing so future operations have it cached
-        await admin.from("product_seller_pricing").upsert({
-          product_id: id,
-          seller_price: sellerPrice,
-          source: "derived_from_public_price",
-        }, { onConflict: "product_id" }).catch(() => {});
+        try {
+          await admin.from("product_seller_pricing").upsert({
+            product_id: id,
+            seller_price: sellerPrice,
+            source: "derived_from_public_price",
+          }, { onConflict: "product_id" });
+        } catch (_err) {
+          // Non-blocking caching attempt
+        }
       } else {
         throw new RequestError("This product is not ready for secure checkout.", 409);
       }
