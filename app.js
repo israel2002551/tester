@@ -4431,12 +4431,12 @@ function renderCheckoutBogoPromo() {
  }
 
  if (bogoCheckoutState.loading && !bogoCheckoutState.quote) {
-  host.innerHTML = '<div class="bogo-checkout-head"><div><span class="admin-command-kicker"><i class="fa-solid fa-gift"></i> Promotion</span><h3>Checking your BUY 1, Get 1 offer…</h3></div><span class="spinner" aria-label="Loading"></span></div>';
+  host.innerHTML = '<div class="bogo-checkout-head"><div><span class="admin-command-kicker"><i class="fa-solid fa-gift"></i> Promotion</span><h3>Checking your Free Gift offer…</h3></div><span class="spinner" aria-label="Loading"></span></div>';
   return;
  }
 
  if (!promoEnabled) {
-  host.innerHTML = `<div class="bogo-checkout-head"><div><span class="admin-command-kicker"><i class="fa-solid fa-gift"></i> Promotion</span><h3>BUY 1, Get 1</h3><p class="text-xs color-text3">${escHtml(bogoCheckoutState.error || 'This promotion is not available for this checkout.')}</p></div></div>`;
+  host.innerHTML = `<div class="bogo-checkout-head"><div><span class="admin-command-kicker"><i class="fa-solid fa-gift"></i> Promotion</span><h3>Free Gift Offer</h3><p class="text-xs color-text3">${escHtml(bogoCheckoutState.error || 'This promotion is not available for this checkout.')}</p></div></div>`;
   return;
  }
 

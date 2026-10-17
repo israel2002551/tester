@@ -475,7 +475,7 @@ async function loadPricedProducts(admin: ReturnType<typeof createClient>, ids: s
   const result = new Map<string, PricedProduct>();
   for (const id of uniqueIds) {
     const product: any = productById.get(id);
-    const sellerPrice = priceByProduct.get(id) || 0;
+    let sellerPrice = priceByProduct.get(id) || 0;
     const stock = Math.floor(Number(product?.stock_quantity));
     if (String(product?.status || "").toLowerCase() !== "active") {
       throw new RequestError("An item in your cart is no longer active.", 409);
@@ -484,9 +484,19 @@ async function loadPricedProducts(admin: ReturnType<typeof createClient>, ids: s
       throw new RequestError("An item in your cart is out of stock.", 409);
     }
     if (sellerPrice < 1) {
-      // A missing private price must never fall back to a browser-visible
-      // product price; doing so would let legacy client values set payouts.
-      throw new RequestError("This product is not ready for secure checkout.", 409);
+      const publicPrice = wholeNaira(product?.price);
+      if (publicPrice > 0) {
+        // Derive seller price by reversing the 20% platform markup
+        sellerPrice = Math.max(1, Math.round(publicPrice / 1.20));
+        // Persist into product_seller_pricing so future operations have it cached
+        await admin.from("product_seller_pricing").upsert({
+          product_id: id,
+          seller_price: sellerPrice,
+          source: "derived_from_public_price",
+        }, { onConflict: "product_id" }).catch(() => {});
+      } else {
+        throw new RequestError("This product is not ready for secure checkout.", 409);
+      }
     }
     result.set(id, {
       id,
