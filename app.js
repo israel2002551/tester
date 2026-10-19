@@ -11885,11 +11885,15 @@ async function submitKyc(event) {
   created_at: new Date().toISOString(),
  });
 
+ try {
  await updateWithMissingColumnRetry('profiles', {
  kyc_status: 'pending',
  verification_status: 'pending',
  seller_verified: false,
  }, { id: currentUser.id });
+ } catch (profileError) {
+ console.warn('Direct profile KYC status update skipped (managed by database trigger/platform operations):', profileError.message || profileError);
+ }
  currentUser.profile = { ...(currentUser.profile || {}), kyc_status: 'pending' };
 
   let autoKycResult = null;
