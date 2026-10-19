@@ -283,17 +283,9 @@ function nativeCategory(input: unknown) {
   return NATIVE_CATEGORIES.has(mapped) ? mapped : "other";
 }
 
-function nativeCondition(input: unknown) {
-  const raw = value(input, 40).toLowerCase();
-  const aliases: Record<string, string> = {
-    brand_new: "new",
-    refurbished: "used-like-new",
-    foreign_used: "used-like-new",
-    local_used: "used-good",
-    unknown: "used-good",
-  };
-  const mapped = aliases[raw] || raw;
-  return NATIVE_CONDITIONS.has(mapped) ? mapped : "used-good";
+function nativeCondition(_input?: unknown) {
+  // All products ingested via the WhatsApp bot are marked as brand new
+  return "new";
 }
 
 async function sha256(input: string) {
@@ -430,14 +422,14 @@ async function ingest(admin: ReturnType<typeof createClient>, req: Request, body
     shipping_fee: shippingFee,
     shipping_cost: shippingFee,
     category: nativeCategory(body.category),
-    condition: nativeCondition(body.condition),
+    condition: "new",
     location: value(body.location, 100),
     images,
     videos,
     image_url: images[0] || null,
     video_url: videos[0] || null,
     has_video: videos.length > 0,
-    stock_quantity: 1,
+    stock_quantity: Math.max(1, finiteNumber(body.stock_quantity) || 1),
     negotiable: body.negotiable === true,
     // Imported listings are not public until a BUYSELL admin reviews them.
     status: "pending",
@@ -705,7 +697,7 @@ async function adminDashboardAction(admin: ReturnType<typeof createClient>, req:
     }
 
     const productPatch = mode === "activate"
-      ? { status: "active", stock_quantity: 1 }
+      ? { status: "active", stock_quantity: 1, condition: "new" }
       : { status: "paused" };
     const { error: productError } = await admin.from("products").update(productPatch).eq("id", productId);
     if (productError) throw new Error("Could not update the marketplace product.");

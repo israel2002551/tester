@@ -4182,7 +4182,8 @@ async function openProduct(id) {
  discEl.classList.add('hidden'); 
  }
 
- document.getElementById('modal-condition').textContent = p.condition || 'New';
+ const pCond = String(p.condition || '').toLowerCase();
+ document.getElementById('modal-condition').textContent = (pCond === 'new' || pCond === 'brand_new') ? 'Brand New' : (p.condition || 'Brand New');
  document.getElementById('modal-location').textContent = p.location || 'Nigeria';
  const modalShippingEl = document.getElementById('modal-shipping-fee');
  if (modalShippingEl) modalShippingEl.textContent = `BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} flat fee per order`;

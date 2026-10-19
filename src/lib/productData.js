@@ -31,5 +31,6 @@ export function cloudinaryImage(url, width, { square = false } = {}) {
 export function categoryLabel(category, fallback) {
   const text = String(category || '').trim();
   if (!text) return fallback;
+  if (text.toLowerCase() === 'new' || text.toLowerCase() === 'brand_new') return 'Brand New';
   return text.replace(/[-_]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 }
