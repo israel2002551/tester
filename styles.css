@@ -1259,9 +1259,9 @@ body[data-category="upcoming"] .category-hero{background-image:linear-gradient(9
 /* ====================================================
  MODALS
 ==================================================== */
-.modal-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:1rem;overflow-y:auto}
+.modal-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:1rem;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .modal-overlay.open{display:flex}
-.modal-box{background:#fff;border-radius:20px;width:100%;max-height:92vh;overflow-y:auto;animation:fadeUp .3s ease both;position:relative;margin:auto}
+.modal-box{background:#fff;border-radius:20px;width:100%;max-height:92vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;animation:fadeUp .3s ease both;position:relative;margin:auto}
 .modal-close{position:absolute;top:.82rem;right:.82rem;background:var(--cream);border:1.5px solid var(--border);width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);font-size:.82rem;transition:all .2s;z-index:10}
 .modal-close:hover{background:var(--danger);border-color:var(--danger);color:#fff}
 
@@ -5261,7 +5261,12 @@ body.auth-pending { visibility: hidden; }
   linear-gradient(135deg, rgba(4, 30, 17, .82), rgba(4, 48, 29, .76));
 }
 #auth-modal .modal-box {
- overflow: hidden;
+ overflow-x: hidden;
+ overflow-y: auto;
+ -webkit-overflow-scrolling: touch;
+ overscroll-behavior-y: contain;
+ touch-action: pan-y;
+ max-height: min(90vh, calc(100dvh - 2rem));
  padding: 0 1.65rem 1.65rem;
  border-color: rgba(245, 255, 247, .74);
  background: linear-gradient(160deg, #edf6ec 0, #fff 30%);
@@ -5271,6 +5276,8 @@ body.auth-pending { visibility: hidden; }
  display: block;
  height: 7px;
  margin: 0 -1.65rem 1.3rem;
+ border-top-left-radius: 20px;
+ border-top-right-radius: 20px;
  background: linear-gradient(90deg, #0c6039, #22a765 53%, #e2b255);
 }
 #auth-modal .auth-logo { margin-bottom: 1.35rem; }
@@ -5485,9 +5492,27 @@ body.auth-pending { visibility: hidden; }
  #account-view .account-page-card { border-radius: 18px; }
  #account-view .account-page-head { align-items: flex-start; }
  #account-view .account-summary-grid { grid-template-columns: 1fr; }
- #auth-modal .modal-box { padding: 0 1.05rem 1.1rem; border-radius: 18px; }
- #auth-modal .modal-box::before { margin: 0 -1.05rem 1rem; }
- .modal-overlay:not(.app-page-surface) .modal-box { max-height: calc(100dvh - 1rem); }
+ #auth-modal.modal-overlay {
+  align-items: center;
+  padding: .75rem .5rem calc(.75rem + env(safe-area-inset-bottom, 0px));
+  -webkit-overflow-scrolling: touch;
+ }
+ #auth-modal .modal-box {
+  padding: 0 1.05rem calc(1.75rem + env(safe-area-inset-bottom, 0px));
+  border-radius: 18px;
+  max-height: min(90vh, calc(100dvh - 1.5rem));
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+ }
+ #auth-modal .modal-box::before {
+  margin: 0 -1.05rem 1rem;
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+ }
+ .modal-overlay:not(.app-page-surface) .modal-box { max-height: min(92vh, calc(100dvh - 1.5rem)); }
  .message-box { border-radius: 16px; }
  .message-head { padding: .78rem .75rem; }
  .inbox-thread { padding: .68rem; }
