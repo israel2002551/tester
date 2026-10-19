@@ -3059,7 +3059,7 @@ function getActiveOngoingPromos() {
    label: 'Ongoing Promotion',
    badgeIcon: 'fa-gift',
    title: 'Free Gift With Every Order',
-   description: `${share}% of every item you buy adds together into a platform-funded free gift allowance at checkout!`,
+   description: 'Every order unlocks a complimentary gift reward. Pick your free bonus items at checkout!',
    ctaText: 'Claim Free Gift',
    imageUrl: 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=800&fit=crop&q=80',
    isShipping: false,
@@ -3215,7 +3215,7 @@ function openPromoInfoModal(type = 'bogo') {
     </div>
     <span class="badge ${isShipping ? 'badge-blue' : 'badge-gold'}" style="margin-bottom:.5rem">${isShipping ? 'Free Delivery Promo' : 'Free Gift Promo'}</span>
     <h2 style="font-size:1.35rem;margin:0 0 .4rem">${isShipping ? 'Platform-Funded Free Shipping' : 'Free Gift with Every Purchase'}</h2>
-    <p class="text-xs color-text3" style="max-width:420px;margin:0 auto">${isShipping ? 'BUYSELL pays the courier delivery subsidy on qualifying orders.' : 'Enjoy a free gift funded directly from the platform commission.'}</p>
+    <p class="text-xs color-text3" style="max-width:420px;margin:0 auto">${isShipping ? 'BUYSELL pays the courier delivery subsidy on qualifying orders.' : 'Enjoy a complimentary gift reward on qualifying marketplace orders.'}</p>
    </div>
 
    <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:1rem;margin-bottom:1.25rem">
@@ -3241,7 +3241,7 @@ function openPromoInfoModal(type = 'bogo') {
       </div>
       <div style="display:flex;gap:.65rem;align-items:flex-start">
        <span style="width:20px;height:20px;border-radius:50%;background:#b45309;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;flex-shrink:0">2</span>
-       <span><strong>${sharePercent}% of every item ordered</strong> is combined together into your free gift allowance.</span>
+       <span><strong>Every qualifying order unlocks</strong> a complimentary gift reward allowance.</span>
       </div>
       <div style="display:flex;gap:.65rem;align-items:flex-start">
        <span style="width:20px;height:20px;border-radius:50%;background:#b45309;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;flex-shrink:0">3</span>
@@ -4615,11 +4615,11 @@ function renderCheckoutBogoPromo() {
    <div>
     <span class="admin-command-kicker"><i class="fa-solid fa-gift"></i> Platform Gift Promotion</span>
     <h3>Free Gift With Purchase</h3>
-    <p class="text-xs color-text3">Enjoy a free gift funded by the platform! 10% of every item in your order is combined together for your gift allowance.</p>
+    <p class="text-xs color-text3">Enjoy a complimentary gift reward on your order! Pick your free gift below before completing checkout.</p>
    </div>
    <span class="badge ${bogo.eligible ? 'badge-green' : 'badge-gray'}">${bogo.eligible ? 'Available' : 'Unavailable'}</span>
   </div>
-  ${bogo.eligible && allowance > 0 ? `<p class="bogo-allowance"><i class="fa-solid fa-gift"></i> <strong>Free Gift Allowance: ${fmtN(allowance)}</strong> (10% of all items in your order combined)</p>` : ''}
+  ${bogo.eligible && allowance > 0 ? `<p class="bogo-allowance"><i class="fa-solid fa-gift"></i> <strong>Free Gift Allowance: ${fmtN(allowance)}</strong> (Complimentary bonus for your order)</p>` : ''}
   ${giftSelectorHtml}
   ${selectedGiftSummary}
   ${bogoCheckoutState.error ? `<p class="bogo-qualification-note bogo-error"><i class="fa-solid fa-triangle-exclamation"></i> ${escHtml(bogoCheckoutState.error)}</p>` : ''}`;
@@ -4666,7 +4666,7 @@ function ensureBogoGiftModal() {
      <div class="bogo-allowance-left">
       <i class="fa-solid fa-award"></i>
       <div class="bogo-allowance-text">
-       <div>Free Gift Allowance (10% order bonus):</div>
+       <div>Free Gift Allowance:</div>
        <div class="bogo-allowance-amount" id="bogo-modal-allowance">₦0</div>
       </div>
      </div>
