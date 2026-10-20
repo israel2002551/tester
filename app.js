@@ -5209,7 +5209,67 @@ async function startCheckout(options = {}) {
  // A temporary quote failure is shown in the checkout, and payment creation
  // still repeats this validation before a pending order is written.
  refreshBogoCheckout().catch(() => {});
+ setupCheckoutScrollAssist();
 }
+
+let checkoutScrollAssistInitialized = false;
+function setupCheckoutScrollAssist() {
+ const modal = document.getElementById('checkout-modal');
+ const coAddress = document.getElementById('co-address');
+ if (!modal || !coAddress || checkoutScrollAssistInitialized) return;
+ checkoutScrollAssistInitialized = true;
+
+ const autoResize = () => {
+  coAddress.style.height = 'auto';
+  const scrollH = coAddress.scrollHeight;
+  coAddress.style.height = Math.min(Math.max(scrollH, 84), 180) + 'px';
+  if (scrollH > 180 && document.activeElement === coAddress) {
+   coAddress.style.overflowY = 'auto';
+  } else {
+   coAddress.style.overflowY = 'hidden';
+  }
+ };
+
+ coAddress.addEventListener('input', autoResize);
+ coAddress.addEventListener('focus', autoResize);
+ coAddress.addEventListener('blur', () => {
+  if (coAddress.scrollHeight <= 180) {
+   coAddress.style.overflowY = 'hidden';
+  }
+ });
+
+ // Touch drag assist on textarea:
+ // On mobile browsers (especially Android Chrome), dragging over a native textarea traps
+ // vertical touch gestures without scrolling the parent modal container.
+ // This assist ensures dragging over the textarea smoothly scrolls #checkout-modal.
+ let startY = 0;
+ let startScrollTop = 0;
+ let isTouching = false;
+
+ coAddress.addEventListener('touchstart', (e) => {
+  if (e.touches.length !== 1) return;
+  startY = e.touches[0].clientY;
+  startScrollTop = modal.scrollTop;
+  isTouching = true;
+ }, { passive: true });
+
+ coAddress.addEventListener('touchmove', (e) => {
+  if (!isTouching || e.touches.length !== 1) return;
+  if (document.activeElement === coAddress && coAddress.scrollHeight > coAddress.clientHeight + 4) {
+   return;
+  }
+  const currentY = e.touches[0].clientY;
+  const deltaY = startY - currentY;
+  if (Math.abs(deltaY) > 5) {
+   modal.scrollTop = startScrollTop + deltaY;
+  }
+ }, { passive: true });
+
+ const endTouch = () => { isTouching = false; };
+ coAddress.addEventListener('touchend', endTouch, { passive: true });
+ coAddress.addEventListener('touchcancel', endTouch, { passive: true });
+}
+
 function goCheckoutStep(step) {
  document.querySelectorAll('.checkout-panel').forEach(p => p.classList.remove('active'));
  document.getElementById(`co-p${step}`).classList.add('active');
