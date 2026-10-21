@@ -45,7 +45,7 @@ export async function uploadWhatsAppMedia({ buffer, kind, mimeType, sourceId, in
   const cloudName = required('CLOUDINARY_CLOUD_NAME');
   const apiKey = required('CLOUDINARY_API_KEY');
   const apiSecret = required('CLOUDINARY_API_SECRET');
-  const maxBytes = Math.max(1_000_000, Number(process.env.MAX_MEDIA_BYTES || 26_214_400));
+  const maxBytes = Math.max(500_000, Number(process.env.MAX_MEDIA_BYTES || 2_097_152));
   if (!Buffer.isBuffer(buffer) || !buffer.length) throw new Error('WhatsApp media was empty.');
   if (buffer.length > maxBytes) throw new Error(`WhatsApp media exceeds the ${Math.floor(maxBytes / 1024 / 1024)}MB limit.`);
 
@@ -71,6 +71,9 @@ export async function uploadWhatsAppMedia({ buffer, kind, mimeType, sourceId, in
 
   const response = await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/${resourceType}/upload`, {
     method: 'POST',
+    headers: {
+      'Accept-Encoding': 'gzip, deflate, br',
+    },
     body: form,
   });
   const data = await response.json().catch(() => ({}));

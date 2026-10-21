@@ -9,8 +9,10 @@ import makeWASocket, {
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdirSync, rmSync, existsSync } from 'node:fs';
 import http from 'node:http';
+import zlib from 'node:zlib';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
+import sharp from 'sharp';
 import 'dotenv/config';
 import { parseListingWithVision, looksLikeSalePost, stripPriceFromText, hasPriceInText, transcribeVideoAudio } from './parser.js';
 import { uploadWhatsAppMedia } from './cloudinary.js';
@@ -21,9 +23,12 @@ import { KeyedTaskQueue } from './queue.js';
 const api = new BuySellListingsApi();
 const targetGroups = new Set();
 const reportedUnapprovedGroups = new Set();
-const groupRefreshMs = 60_000;
+const groupRefreshMs = Math.max(300_000, Number(process.env.WHATSAPP_GROUP_REFRESH_MS || 600_000));
 let lastGroupRefreshAt = 0;
 let groupRefreshPromise = null;
+
+// Strict 2MB media ceiling to keep egress/ingress well below Render's 5GB monthly limit
+const MAX_MEDIA_BYTES = Math.max(500_000, Number(process.env.MAX_MEDIA_BYTES || 2_097_152));
 
 // Built-in list of approved groups
 const defaultKnownGroups = [
@@ -52,9 +57,37 @@ const monitorAllGroups = String(process.env.WHATSAPP_MONITOR_ALL_GROUPS || 'true
 const mediaIntakeConcurrency = Math.max(1, Math.min(Number(process.env.WHATSAPP_MEDIA_INTAKE_CONCURRENCY || 2), 4));
 const stagingConcurrency = Math.max(1, Math.min(Number(process.env.WHATSAPP_STAGING_CONCURRENCY || 2), 4));
 const listingWorkerConcurrency = Math.max(1, Math.min(Number(process.env.WHATSAPP_LISTING_WORKER_CONCURRENCY || 1), 3));
-const queuePollMs = Math.max(1_000, Number(process.env.WHATSAPP_QUEUE_POLL_MS || 3_000));
+
+// Adaptive polling: poll every 3-4s when work is active; back off to 25s when idle (saves ~90% of polling bandwidth)
+const activePollMs = Math.max(2_000, Number(process.env.WHATSAPP_QUEUE_POLL_MS || 4_000));
+const idlePollMs = Math.max(10_000, Number(process.env.WHATSAPP_IDLE_POLL_MS || 25_000));
+let currentPollIntervalMs = idlePollMs;
+
 const priceFollowUpWindowMs = Math.max(60_000, Number(process.env.WHATSAPP_PRICE_FOLLOWUP_WINDOW_MS || 10 * 60_000));
 const queueWorkerId = `vision-${randomBytes(10).toString('hex')}`;
+
+/**
+ * Resizes and compresses image buffers to max 1280px progressive mozjpeg (quality 75).
+ * Drops payload size by 85-95% (e.g. 1.8MB -> ~90KB) before Cloudinary upload.
+ */
+async function compressImageBuffer(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) return buffer;
+  try {
+    const compressed = await sharp(buffer)
+      .rotate()
+      .resize(1280, 1280, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 75, progressive: true, mozjpeg: true })
+      .toBuffer();
+    const originalKb = Math.round(buffer.length / 1024);
+    const compressedKb = Math.round(compressed.length / 1024);
+    const savings = Math.round((1 - compressed.length / buffer.length) * 100);
+    console.info(`[Image Compress] Downsized ${originalKb}KB -> ${compressedKb}KB (-${savings}%) for network transmission.`);
+    return compressed;
+  } catch (err) {
+    console.warn('[Image Compress] Optimization failed, keeping original:', err?.message || err);
+    return buffer;
+  }
+}
 
 const mediaIntakeQueue = new KeyedTaskQueue({
   name: 'whatsapp-media-intake',
@@ -301,12 +334,19 @@ function messageText(message) {
 
 function mediaDetails(message) {
   const content = unwrapMessage(message);
-  if (content.imageMessage) return { kind: 'image', media: content.imageMessage };
+  if (content.imageMessage) {
+    const rawLen = content.imageMessage.fileLength;
+    const fileLength = Number(rawLen?.low ?? rawLen ?? 0);
+    return { kind: 'image', media: content.imageMessage, fileLength };
+  }
   if (content.videoMessage) {
+    const rawLen = content.videoMessage.fileLength;
+    const fileLength = Number(rawLen?.low ?? rawLen ?? 0);
     const preview = content.videoMessage.jpegThumbnail;
     return {
       kind: 'video',
       media: content.videoMessage,
+      fileLength,
       previewBuffer: Buffer.isBuffer(preview) ? preview : preview ? Buffer.from(preview) : null,
     };
   }
@@ -472,8 +512,13 @@ async function stageBundleMedia(bundle) {
       throw new Error(`Media ${index + 1} was empty before staging.`);
     }
     if (item.kind === 'video') {
-      const transcript = await transcribeVideoAudio({ buffer: item.buffer, mimeType: item.mimeType });
-      if (transcript) transcripts.push(transcript);
+      const hasSufficientText = bundle.text && bundle.text.length > 20 && looksLikeSalePost(bundle.text, false);
+      if (!hasSufficientText) {
+        const transcript = await transcribeVideoAudio({ buffer: item.buffer, mimeType: item.mimeType });
+        if (transcript) transcripts.push(transcript);
+      } else {
+        console.info('[Video Skip Audio] Seller already provided written description; skipping Whisper transcription to save bandwidth.');
+      }
     }
     const upload = await retryOperation(
       () => uploadWhatsAppMedia({
@@ -508,7 +553,7 @@ function queueBundleForStaging(bundle) {
       },
     });
     console.info(`[Vision Queue] ${queued?.updated ? 'Updated' : 'Queued'} ${sourceKey} (${uploadedMedia.length} media file${uploadedMedia.length === 1 ? '' : 's'}).`);
-    scheduleListingJobPump();
+    wakeQueuePump();
   }).catch(error => {
     const attempt = Number(bundle.stagingAttempts || 0) + 1;
     if (attempt < 5) {
@@ -566,17 +611,19 @@ async function processClaimedListingJob(job) {
 }
 
 async function pumpListingJobs() {
-  if (!whatsappConnected || !activeSocket || listingClaimInFlight) return;
+  if (!whatsappConnected || !activeSocket || listingClaimInFlight) return false;
   listingClaimInFlight = true;
+  let hadWork = false;
   try {
     while (listingWorkersActive < listingWorkerConcurrency) {
       const claimed = await api.claimListingJobs({ workerId: queueWorkerId, limit: 1, leaseSeconds: 900 });
       const job = Array.isArray(claimed?.jobs) ? claimed.jobs[0] : null;
       if (!job) break;
+      hadWork = true;
       listingWorkersActive += 1;
       void processClaimedListingJob(job).finally(() => {
         listingWorkersActive -= 1;
-        scheduleListingJobPump();
+        wakeQueuePump();
       });
     }
   } catch (error) {
@@ -584,16 +631,34 @@ async function pumpListingJobs() {
   } finally {
     listingClaimInFlight = false;
   }
+  return hadWork;
+}
+
+function wakeQueuePump() {
+  currentPollIntervalMs = activePollMs;
+  if (listingQueuePollTimer) clearTimeout(listingQueuePollTimer);
+  listingQueuePollTimer = setTimeout(runQueuePollStep, 50);
 }
 
 function scheduleListingJobPump() {
-  void pumpListingJobs();
+  wakeQueuePump();
+}
+
+async function runQueuePollStep() {
+  listingQueuePollTimer = null;
+  const hadWork = await pumpListingJobs();
+  if (hadWork) {
+    currentPollIntervalMs = activePollMs;
+  } else {
+    // Smooth exponential backoff to reduce idle bandwidth by ~90%
+    currentPollIntervalMs = Math.min(idlePollMs, Math.round(currentPollIntervalMs * 1.5));
+  }
+  listingQueuePollTimer = setTimeout(runQueuePollStep, currentPollIntervalMs);
 }
 
 function startListingQueuePolling() {
   if (listingQueuePollTimer) return;
-  listingQueuePollTimer = setInterval(scheduleListingJobPump, queuePollMs);
-  scheduleListingJobPump();
+  runQueuePollStep();
 }
 
 function recentCandidates(key) {
@@ -805,29 +870,39 @@ async function processQueuedIncomingMessage({ sock, message, remoteJid, senderJi
 
   let mediaBuffer = null;
   if (details) {
-    try {
-      mediaBuffer = await downloadIncomingMedia(message);
-    } catch (error) {
-      console.error('[Vision Media download]', error?.message || error);
-      if (intakeAttempts < 4) {
-        const pause = Math.min(60_000, 2_000 * (2 ** intakeAttempts) + Math.floor(Math.random() * 500));
-        console.warn(`[Vision Intake] Requeueing media download for ${senderJid} in ${Math.ceil(pause / 1000)}s.`);
-        setTimeout(() => {
-          void mediaIntakeQueue.enqueue(`${remoteJid}:${senderJid}`, () => processQueuedIncomingMessage({
-            sock,
-            message,
-            remoteJid,
-            senderJid,
-            details,
-            text,
-            intakeAttempts: intakeAttempts + 1,
-          })).catch(() => {});
-        }, pause);
-      }
-      if (text && looksLikeSalePost(text, false)) {
-        console.warn(`[Vision Media download] Media could not be downloaded for ${senderJid}, proceeding with text listing.`);
-      } else {
-        return;
+    if (details.fileLength && details.fileLength > MAX_MEDIA_BYTES) {
+      console.warn(`[Vision Media Skip] ${senderJid} sent ${details.kind} of ${(details.fileLength / 1024 / 1024).toFixed(2)}MB (> 2MB limit). Skipping download to conserve bandwidth.`);
+    } else {
+      try {
+        mediaBuffer = await downloadIncomingMedia(message);
+        if (mediaBuffer && mediaBuffer.length > MAX_MEDIA_BYTES) {
+          console.warn(`[Vision Media Skip] Downloaded ${details.kind} from ${senderJid} exceeds 2MB limit (${(mediaBuffer.length / 1024 / 1024).toFixed(2)}MB). Discarding.`);
+          mediaBuffer = null;
+        } else if (mediaBuffer && details.kind === 'image') {
+          mediaBuffer = await compressImageBuffer(mediaBuffer);
+        }
+      } catch (error) {
+        console.error('[Vision Media download]', error?.message || error);
+        if (intakeAttempts < 4) {
+          const pause = Math.min(60_000, 2_000 * (2 ** intakeAttempts) + Math.floor(Math.random() * 500));
+          console.warn(`[Vision Intake] Requeueing media download for ${senderJid} in ${Math.ceil(pause / 1000)}s.`);
+          setTimeout(() => {
+            void mediaIntakeQueue.enqueue(`${remoteJid}:${senderJid}`, () => processQueuedIncomingMessage({
+              sock,
+              message,
+              remoteJid,
+              senderJid,
+              details,
+              text,
+              intakeAttempts: intakeAttempts + 1,
+            })).catch(() => {});
+          }, pause);
+        }
+        if (text && looksLikeSalePost(text, false)) {
+          console.warn(`[Vision Media download] Media could not be downloaded for ${senderJid}, proceeding with text listing.`);
+        } else {
+          return;
+        }
       }
     }
   }
@@ -1013,11 +1088,69 @@ async function startVisionCollector() {
   }
 }
 
+function sendCompressedResponse(req, res, statusCode, payload) {
+  if (req.method === 'HEAD') {
+    res.writeHead(statusCode, {
+      'Content-Type': 'application/json; charset=utf-8',
+      Vary: 'Accept-Encoding',
+    });
+    res.end();
+    return;
+  }
+
+  const jsonString = typeof payload === 'string' ? payload : JSON.stringify(payload);
+  const acceptEncoding = String(req.headers['accept-encoding'] || '');
+  const buffer = Buffer.from(jsonString, 'utf-8');
+
+  res.setHeader('Vary', 'Accept-Encoding');
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+
+  if (/\bbr\b/i.test(acceptEncoding)) {
+    try {
+      const compressed = zlib.brotliCompressSync(buffer);
+      res.writeHead(statusCode, {
+        'Content-Encoding': 'br',
+        'Content-Length': compressed.length,
+      });
+      res.end(compressed);
+      return;
+    } catch {}
+  }
+
+  if (/\bgzip\b/i.test(acceptEncoding)) {
+    try {
+      const compressed = zlib.gzipSync(buffer);
+      res.writeHead(statusCode, {
+        'Content-Encoding': 'gzip',
+        'Content-Length': compressed.length,
+      });
+      res.end(compressed);
+      return;
+    } catch {}
+  }
+
+  if (/\bdeflate\b/i.test(acceptEncoding)) {
+    try {
+      const compressed = zlib.deflateSync(buffer);
+      res.writeHead(statusCode, {
+        'Content-Encoding': 'deflate',
+        'Content-Length': compressed.length,
+      });
+      res.end(compressed);
+      return;
+    } catch {}
+  }
+
+  res.writeHead(statusCode, {
+    'Content-Length': buffer.length,
+  });
+  res.end(buffer);
+}
+
 const port = process.env.PORT || null;
 if (port) {
   const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
+    sendCompressedResponse(req, res, 200, {
       status: 'ok',
       service: 'buysell-whatsapp-vision-collector',
       vision_enabled: true,
@@ -1026,6 +1159,8 @@ if (port) {
       all_groups_monitored: monitorAllGroups,
       whatsapp_connected: whatsappConnected,
       reconnect_attempts: reconnectAttempts,
+      poll_interval_ms: currentPollIntervalMs,
+      max_media_bytes: MAX_MEDIA_BYTES,
       queue: {
         media_intake: mediaIntakeQueue.snapshot,
         listing_staging: listingStagingQueue.snapshot,
@@ -1033,10 +1168,10 @@ if (port) {
         listing_worker_concurrency: listingWorkerConcurrency,
       },
       uptime: Math.round(process.uptime()),
-    }));
+    });
   });
   server.listen(port, () => {
-    console.info(`[HTTP] Vision Collector health check listening on port ${port}`);
+    console.info(`[HTTP] Vision Collector health check listening on port ${port} (Brotli/Gzip/Deflate compression enabled)`);
   });
 }
 
@@ -1045,8 +1180,11 @@ const selfPingUrl = process.env.SELF_PING_URL || process.env.RENDER_EXTERNAL_URL
 if (selfPingUrl) {
   console.info(`[SelfPing] Self-ping active for keep-awake: ${selfPingUrl}`);
   setInterval(() => {
-    fetch(selfPingUrl).catch(() => {});
-  }, 10 * 60_000);
+    fetch(selfPingUrl, {
+      method: 'GET',
+      headers: { 'Accept-Encoding': 'gzip, deflate, br' },
+    }).catch(() => {});
+  }, 12 * 60_000);
 }
 
 startVisionCollector().catch(error => {

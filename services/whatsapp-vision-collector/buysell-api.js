@@ -19,6 +19,7 @@ export class BuySellListingsApi {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept-Encoding': 'gzip, deflate, br',
         apikey: this.anonKey,
         Authorization: `Bearer ${this.anonKey}`,
         'x-whatsapp-ingest-secret': this.ingestSecret,

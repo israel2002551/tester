@@ -1,7 +1,12 @@
 import Groq, { toFile } from 'groq-sdk';
 import 'dotenv/config';
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || 'not_configured' });
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY || 'not_configured',
+  defaultHeaders: {
+    'Accept-Encoding': 'gzip, deflate, br',
+  },
+});
 
 const PRICE_WORDS = new Map([
   ['zero', 0], ['one', 1], ['two', 2], ['three', 3], ['four', 4], ['five', 5],
@@ -16,7 +21,7 @@ const PRICE_CONTEXT = '(?:price|cost|amount|rate|asking(?:\\s+price)?|last\\s+pr
 const NUMERIC_PRICE = '(?:\\d{1,3}(?:[ ,]\\d{3})+(?:\\.\\d+)?|\\d+(?:[.,]\\d+)?)';
 const SCALE = '(?:k|m|thousand|million)';
 const MAX_VISION_IMAGES_PER_REQUEST = 3;
-const MAX_INLINE_IMAGE_BYTES = 4_000_000;
+const MAX_INLINE_IMAGE_BYTES = 1_500_000;
 
 function normalisePriceText(value) {
   return String(value || '')
@@ -365,7 +370,7 @@ async function parseTextOnly(message) {
 /** Transcribes video audio before its binary leaves the collector process. */
 export async function transcribeVideoAudio({ buffer, mimeType = '' } = {}) {
   if (String(process.env.WHATSAPP_TRANSCRIBE_VIDEO_AUDIO || 'true').toLowerCase() === 'false') return '';
-  const maxBytes = Math.max(1_000_000, Number(process.env.MAX_AUDIO_TRANSCRIBE_BYTES || 24_000_000));
+  const maxBytes = Math.max(500_000, Number(process.env.MAX_AUDIO_TRANSCRIBE_BYTES || 2_097_152));
   if (!Buffer.isBuffer(buffer) || !buffer.length || buffer.length > maxBytes) return '';
   try {
     const file = await toFile(buffer, 'whatsapp-video.mp4', { type: mimeType || 'video/mp4' });

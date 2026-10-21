@@ -231,7 +231,18 @@ async function claimListingJobs(admin: ReturnType<typeof createClient>, req: Req
     p_lease_seconds: leaseSeconds,
   });
   if (error) throw new Error(error.message || "Could not claim WhatsApp queue jobs.");
-  return json({ jobs: Array.isArray(data) ? data : [] });
+  const jobs = (Array.isArray(data) ? data : []).map((j: Record<string, unknown>) => ({
+    id: j.id,
+    dedupe_key: j.dedupe_key,
+    group_jid: j.group_jid,
+    sender_jid: j.sender_jid,
+    message_ids: j.message_ids,
+    payload: j.payload,
+    lock_token: j.lock_token,
+    attempts: j.attempts,
+    max_attempts: j.max_attempts,
+  }));
+  return json({ jobs });
 }
 
 async function finishListingJob(admin: ReturnType<typeof createClient>, req: Request, body: Record<string, unknown>) {

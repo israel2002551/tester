@@ -73,3 +73,40 @@ test('looksLikeSalePost accepts all media posts, commercial text, and rejects pu
   assert.equal(looksLikeSalePost('Amen', false), false);
   assert.equal(looksLikeSalePost('Scam alert', false), false);
 });
+
+test('sharp compresses and resizes high-resolution image buffers to save bandwidth', async () => {
+  const sharp = (await import('sharp')).default;
+  // Create an uncompressed 2000x2000 raw image
+  const rawImage = await sharp({
+    create: {
+      width: 2000,
+      height: 2000,
+      channels: 3,
+      background: { r: 255, g: 100, b: 50 },
+    },
+  }).png().toBuffer();
+
+  const compressed = await sharp(rawImage)
+    .resize(1280, 1280, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 75, progressive: true, mozjpeg: true })
+    .toBuffer();
+
+  assert.ok(compressed.length < rawImage.length, 'Compressed image must be smaller than raw PNG');
+  assert.ok(compressed.length < 500_000, 'Compressed image must be well under 500KB');
+
+  const metadata = await sharp(compressed).metadata();
+  assert.ok(metadata.width <= 1280, 'Width must be <= 1280');
+  assert.ok(metadata.height <= 1280, 'Height must be <= 1280');
+});
+
+test('zlib compresses JSON payloads with Brotli and Gzip', async () => {
+  const zlib = (await import('node:zlib')).default;
+  const largeJson = JSON.stringify({ items: Array(100).fill({ name: 'iPhone 15 Pro', price: 950000, status: 'active' }) });
+  const rawBytes = Buffer.from(largeJson, 'utf-8');
+
+  const gzipped = zlib.gzipSync(rawBytes);
+  const brotlied = zlib.brotliCompressSync(rawBytes);
+
+  assert.ok(gzipped.length < rawBytes.length, 'Gzip must compress large JSON');
+  assert.ok(brotlied.length < rawBytes.length, 'Brotli must compress large JSON');
+});
