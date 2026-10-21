@@ -68,6 +68,24 @@ PUBLIC_SITE_URL=https://your-buysell-site.com
 3. Check the Render logs on first run to copy your 8-digit **WhatsApp Pairing Code** and link the device on WhatsApp.
 4. Add your Render service URL to **UptimeRobot** (5-minute interval) to keep it awake 24/7.
 
+### Required Render session storage
+
+The current `render.yaml` uses Render's Free plan. Free services have an ephemeral filesystem, so their WhatsApp login is lost whenever Render restarts or redeploys the service. A free service cannot keep a Baileys session permanently.
+
+For a reliable Bot 2 connection, move the service to a paid Render web-service plan, then in the Render Dashboard add a persistent disk mounted at `/var/data` and set this environment variable:
+
+```properties
+SESSION_DIR=/var/data/wa_vision_auth_session
+```
+
+After the disk is attached, deploy once and pair the device one final time. Do not put the session directory in Git or share its contents.
+
+### Pairing reliably
+
+Open `/pair` on the Bot 2 service, then immediately use the displayed code in WhatsApp: **Settings → Linked Devices → Link a device → Link with phone number instead**. Codes expire after 60 seconds.
+
+The pairing page now retries a failed initial code request and includes **Send pairing prompt / fresh code again**, which asks WhatsApp for another code without deleting the current pairing session. WhatsApp push notifications can be delayed or suppressed by the phone; the active code on `/pair` is the source of truth. Use **New Code** only if WhatsApp explicitly says it could not link, or if changing the target phone number.
+
 ## WhatsApp session safety
 
 The Baileys authentication directory contains Signal session credentials and must never be committed, logged, or shared. Set `SESSION_DIR` to a persistent disk location in production and run only one collector instance against that directory. If WhatsApp reports repeated `Bad MAC` or session errors, unlink the Bot 2 device in WhatsApp, remove only the collector's old authentication directory, then pair once again. The collector redacts Signal-library session dumps and protects against concurrent reconnects, but a compromised or out-of-sync credential store still needs a clean re-pair.

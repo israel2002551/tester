@@ -147,6 +147,68 @@ let latestPairingCode = null;
 let pairingCodeGeneratedAt = null;
 let pairingTargetPhone = null;
 let latestPairingError = null;
+let pairingCodeRequestTimer = null;
+let pairingCodeRequestSocket = null;
+let pairingCodeRequestAttempts = 0;
+
+function clearPairingCodeRequestTimer() {
+  if (pairingCodeRequestTimer) {
+    clearTimeout(pairingCodeRequestTimer);
+    pairingCodeRequestTimer = null;
+  }
+}
+
+function schedulePairingCodeRequest(sock, phoneNumber, delayMs = 0, reason = 'initial request') {
+  clearPairingCodeRequestTimer();
+  pairingCodeRequestTimer = setTimeout(() => {
+    pairingCodeRequestTimer = null;
+    void requestPairingCode(sock, phoneNumber, reason);
+  }, delayMs);
+}
+
+async function requestPairingCode(sock, phoneNumber, reason = 'manual request') {
+  if (!phoneNumber || sock !== activeSocket || whatsappConnected || pairingCodeRequestSocket === sock) return false;
+
+  pairingCodeRequestSocket = sock;
+  try {
+    const code = await sock.requestPairingCode(phoneNumber);
+    // A reset/reconnect can replace the socket while WhatsApp is processing the
+    // request. Never let that stale request replace the new session's code.
+    if (sock !== activeSocket || whatsappConnected) return false;
+    const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
+    latestPairingCode = formatted;
+    pairingCodeGeneratedAt = Date.now();
+    latestPairingError = null;
+    pairingTargetPhone = phoneNumber;
+    pairingCodeRequestAttempts = 0;
+
+    console.log('\n============================================================');
+    console.log(`[BOT 2 VISION] WHATSAPP PAIRING CODE FOR +${phoneNumber}: ${formatted}`);
+    console.log('============================================================');
+    console.log(`On your phone for Bot 2 (+${phoneNumber}):`);
+    console.log('1. Open WhatsApp -> Settings -> Linked Devices');
+    console.log('2. Ensure you have under 4 linked devices (remove old ones if needed)');
+    console.log('3. Tap "Link a device"');
+    console.log('4. Tap "Link with phone number instead" at the bottom');
+    console.log(`5. Enter code within 60s: ${formatted}\n`);
+    return true;
+  } catch (err) {
+    latestPairingError = err?.message || String(err);
+    console.error(`[Bot 2] Failed to request pairing code (${reason}):`, latestPairingError);
+
+    // Render and WhatsApp can take longer than the original fixed 3-second wait
+    // to open the pairing socket. Retry the request a few times on the same fresh
+    // session so the phone receives a pairing prompt without the user resetting it.
+    if (sock === activeSocket && !whatsappConnected && pairingCodeRequestAttempts < 3) {
+      const retryDelays = [5_000, 10_000, 20_000];
+      const retryDelay = retryDelays[pairingCodeRequestAttempts++];
+      schedulePairingCodeRequest(sock, phoneNumber, retryDelay, 'automatic retry');
+    }
+    return false;
+  } finally {
+    if (pairingCodeRequestSocket === sock) pairingCodeRequestSocket = null;
+  }
+}
 
 // libsignal writes complete session objects (including private key material) to
 // the process console when it recovers a stale session. Baileys' pino logger
@@ -990,6 +1052,7 @@ async function startVisionCollector() {
 
   try {
     if (activeSocket) {
+      clearPairingCodeRequestTimer();
       safeCloseSocket(activeSocket);
       activeSocket = null;
     }
@@ -1070,29 +1133,8 @@ async function startVisionCollector() {
     sock.ev.on('creds.update', saveCreds);
 
     if (phoneNumber && !state.creds.registered) {
-      setTimeout(async () => {
-        if (sock !== activeSocket) return;
-        try {
-          const code = await sock.requestPairingCode(phoneNumber);
-          const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
-          latestPairingCode = formatted;
-          pairingCodeGeneratedAt = Date.now();
-          latestPairingError = null;
-          pairingTargetPhone = phoneNumber;
-          console.log('\n============================================================');
-          console.log(`[BOT 2 VISION] WHATSAPP PAIRING CODE FOR +${phoneNumber}: ${formatted}`);
-          console.log('============================================================');
-          console.log(`On your phone for Bot 2 (+${phoneNumber}):`);
-          console.log('1. Open WhatsApp -> Settings -> Linked Devices');
-          console.log('2. Ensure you have under 4 linked devices (remove old ones if needed)');
-          console.log('3. Tap "Link a device"');
-          console.log('4. Tap "Link with phone number instead" at the bottom');
-          console.log(`5. Enter code within 60s: ${formatted}\n`);
-        } catch (err) {
-          latestPairingError = err?.message || String(err);
-          console.error('[Bot 2] Failed to request pairing code:', latestPairingError);
-        }
-      }, 3000);
+      pairingCodeRequestAttempts = 0;
+      schedulePairingCodeRequest(sock, phoneNumber, 3_000, 'initial request');
     }
 
     sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
@@ -1103,6 +1145,7 @@ async function startVisionCollector() {
       if (connection === 'open') {
         whatsappConnected = true;
         reconnectAttempts = 0;
+        clearPairingCodeRequestTimer();
         latestPairingCode = null;
         pairingCodeGeneratedAt = null;
         console.log(`BUYSELL WhatsApp Vision Collector (Bot 2) is active and connected as +${sock?.user?.id?.split(':')[0] || phoneNumber}.`);
@@ -1112,6 +1155,7 @@ async function startVisionCollector() {
       }
       if (connection === 'close') {
         whatsappConnected = false;
+        clearPairingCodeRequestTimer();
         stopKeepAlive();
         const code = lastDisconnect?.error?.output?.statusCode;
         const isLoggedOut = code === DisconnectReason.loggedOut;
@@ -1214,9 +1258,20 @@ function sendCompressedResponse(req, res, statusCode, payload) {
 
 const port = process.env.PORT || null;
 if (port) {
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const pathname = url.pathname;
+
+    // Ask WhatsApp to send the phone-link prompt again without discarding the
+    // active pairing handshake. This is safer and faster than resetting keys.
+    if (pathname === '/request-pairing-code') {
+      if (!whatsappConnected && activeSocket && pairingTargetPhone) {
+        await requestPairingCode(activeSocket, pairingTargetPhone, 'manual dashboard request');
+      }
+      res.writeHead(302, { Location: '/pair' });
+      res.end();
+      return;
+    }
 
     // Reset session endpoint to force clean cryptographic keys without redeploying
     if (pathname === '/reset-session') {
@@ -1235,6 +1290,8 @@ if (port) {
       }
       console.warn('[HTTP] Manual session reset requested. Wiping unlinked session files...');
       stopKeepAlive();
+      clearPairingCodeRequestTimer();
+      pairingCodeRequestAttempts = 0;
       if (activeSocket) {
         safeCloseSocket(activeSocket);
         activeSocket = null;
@@ -1251,6 +1308,18 @@ if (port) {
       return;
     }
 
+    if (pathname === '/pair/status') {
+      const codeAgeSeconds = pairingCodeGeneratedAt ? Math.round((Date.now() - pairingCodeGeneratedAt) / 1000) : null;
+      sendCompressedResponse(req, res, 200, {
+        connected: whatsappConnected,
+        code: latestPairingCode,
+        code_age_seconds: codeAgeSeconds,
+        code_expired: codeAgeSeconds !== null && codeAgeSeconds > 60,
+        error: latestPairingError,
+      });
+      return;
+    }
+
     // Interactive web pairing dashboard
     if (pathname === '/pair' || (pathname === '/' && req.headers.accept?.includes('text/html'))) {
       const isConnected = whatsappConnected;
@@ -1258,7 +1327,7 @@ if (port) {
       const code = latestPairingCode;
       const rawCode = code ? code.replace(/-/g, '') : '';
       const codeAge = pairingCodeGeneratedAt ? Math.round((Date.now() - pairingCodeGeneratedAt) / 1000) : null;
-      const codeExpired = codeAge && codeAge > 60;
+      const codeExpired = codeAge !== null && codeAge > 60;
       const remainingSec = codeAge ? Math.max(0, 60 - codeAge) : 60;
 
       const html = `<!DOCTYPE html>
@@ -1267,7 +1336,7 @@ if (port) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BUYSELL Bot 2 - WhatsApp Pairing</title>
-  <meta http-equiv="refresh" content="${isConnected ? '30' : '5'}">
+  <meta http-equiv="refresh" content="${isConnected ? '30' : '15'}">
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b1120; color: #f8fafc; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; }
@@ -1333,8 +1402,13 @@ if (port) {
         </ol>
       </div>
 
+      <form action="/request-pairing-code" method="GET" style="margin-top: 14px;">
+        <button type="submit" class="btn btn-secondary" style="width: 100%;">Send pairing prompt / fresh code again</button>
+      </form>
+      <p style="margin: 8px 0 0; color: #94a3b8; font-size: 12px; line-height: 1.45;">If the phone notification is delayed or hidden, stay on the WhatsApp code-entry screen and use the code shown above. This button asks WhatsApp to send the linking prompt again without deleting the current session.</p>
+
       <form action="/reset-session" method="GET" style="margin-top: 14px;">
-        <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 6px;">Need a new code or changing phone number?</label>
+        <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 6px;">Last resort only — changing the phone number or WhatsApp says it could not link?</label>
         <div style="display: flex; gap: 8px;">
           <input type="tel" name="phone" value="${targetPhone}" placeholder="09061484256" class="phone-input" />
           <button type="submit" class="btn">🔄 New Code</button>
@@ -1346,6 +1420,19 @@ if (port) {
       </div>
     `}
   </div>
+  ${isConnected ? '' : `<script>
+    const pairingSnapshot = ${JSON.stringify({ code, error: latestPairingError })};
+    setInterval(() => {
+      fetch('/pair/status', { cache: 'no-store' })
+        .then(response => response.ok ? response.json() : null)
+        .then(status => {
+          if (status && (status.connected || status.code !== pairingSnapshot.code || status.error !== pairingSnapshot.error)) {
+            window.location.reload();
+          }
+        })
+        .catch(() => {});
+    }, 2500);
+  </script>`}
 </body>
 </html>`;
 
