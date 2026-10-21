@@ -6,6 +6,7 @@ import {
   looksLikeSalePost,
   normalizeWhatsAppPhoneNumber,
   parseNairaAmount,
+  parseTextLocally,
   stripPriceFromText,
 } from '../parser.js';
 import { KeyedTaskQueue } from '../queue.js';
@@ -120,4 +121,22 @@ test('normalizeWhatsAppPhoneNumber converts domestic and formatted Nigerian phon
   assert.equal(normalizeWhatsAppPhoneNumber('9061484256'), '2349061484256');
   assert.equal(normalizeWhatsAppPhoneNumber(''), '');
   assert.equal(normalizeWhatsAppPhoneNumber(null), '');
+});
+
+test('parseTextLocally extracts product, price, category, and specs without external AI', () => {
+  const single = parseTextLocally('Samsung S21 ultra  128 gb  350k');
+  assert.ok(single);
+  assert.equal(single.is_commercial_listing, true);
+  assert.equal(single.items.length, 1);
+  assert.equal(single.items[0].title, 'Samsung S21 ultra 128 gb');
+  assert.equal(single.items[0].price, 350_000);
+  assert.equal(single.items[0].category, 'Phones & Tablets');
+  assert.equal(single.items[0].brand, 'Samsung');
+  assert.equal(single.items[0].specs, '128 gb');
+
+  const multi = parseTextLocally('iPhone 11 64gb - 210k\niPhone 12 128gb - 320k');
+  assert.ok(multi);
+  assert.equal(multi.items.length, 2);
+  assert.equal(multi.items[0].price, 210_000);
+  assert.equal(multi.items[1].price, 320_000);
 });

@@ -393,6 +393,154 @@ export async function transcribeVideoAudio({ buffer, mimeType = '' } = {}) {
   }
 }
 
+/**
+ * Robust local rule-based extractor for Nigerian WhatsApp sale posts.
+ * Extracts title, price, category, condition, brand, and specs without external AI APIs.
+ */
+export function parseTextLocally(text) {
+  const clean = String(text || '').trim();
+  if (!clean || clean.length < 5) return null;
+
+  if (!looksLikeSalePost(clean, true)) return null;
+
+  const lines = clean.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+  // Extract phone and location from full text
+  const phoneMatch = clean.match(/(?:call|whatsapp|wa\.me|dm|phone|contact)?\s*[:#-]?\s*(\+?234\d{10}|0[789]\d{9})/i);
+  const sellerPhone = phoneMatch ? normalizeWhatsAppPhoneNumber(phoneMatch[1]) : null;
+
+  const locationMatch = clean.match(/\b(?:location|loc|in|at)\s*[:#-]?\s*([a-zA-Z\s]{3,25}(?:lagos|abuja|ikeja|lekki|ibadan|ph|port harcourt|benin|asaba|enugu|kano|ilorin)?)\b/i);
+  const location = locationMatch ? locationMatch[1].trim() : null;
+
+  const detectMetadata = (str) => {
+    const lower = str.toLowerCase();
+    let category = 'Other';
+    if (/\b(?:iphone|samsung|pixel|redmi|tecno|infinix|xiaomi|oppo|vivo|oneplus|huawei|android|ios|ipad|tablet|galaxy)\b/i.test(lower)) {
+      category = 'Phones & Tablets';
+    } else if (/\b(?:macbook|laptop|hp|dell|lenovo|asus|acer|thinkpad|core\s*i[3579]|chromebook)\b/i.test(lower)) {
+      category = 'Computers & Laptops';
+    } else if (/\b(?:tv|television|playstation|ps[45]|xbox|soundbar|airpods|headphone|camera|generator|inverter|solar|speaker)\b/i.test(lower)) {
+      category = 'Electronics';
+    } else if (/\b(?:shoes?|sneakers?|crocs|slides|bag|bags|handbag|watch(?:es)?|rolex|perfumes?|cologne|wig|wigs|hair|dress|shirt|t-shirt|trouser|clothes|drip)\b/i.test(lower)) {
+      category = 'Fashion';
+    } else if (/\b(?:toyota|honda|lexus|mercedes|benz|bmw|car|suv|sedan|camry|corolla)\b/i.test(lower)) {
+      category = 'Vehicles';
+    } else if (/\b(?:bed|mattress|chair|sofa|dining|fridge|refrigerator|freezer|blender|microwave|cooker|furniture)\b/i.test(lower)) {
+      category = 'Home & Furniture';
+    } else if (/\b(?:cream|soap|lotion|skincare|supplement)\b/i.test(lower)) {
+      category = 'Beauty & Health';
+    }
+
+    let brand = null;
+    const brandList = ['Apple', 'Samsung', 'Google', 'HP', 'Dell', 'Lenovo', 'Asus', 'Acer', 'Sony', 'Tecno', 'Infinix', 'Xiaomi', 'Redmi', 'Nike', 'Adidas', 'Toyota', 'Honda', 'Lexus', 'Mercedes-Benz', 'Rolex', 'Gucci', 'Zara'];
+    for (const b of brandList) {
+      if (new RegExp(`\\b${b}\\b`, 'i').test(lower)) {
+        brand = b;
+        break;
+      }
+    }
+
+    let condition = 'unknown';
+    if (/\b(?:brand\s*new|sealed|new in box)\b/i.test(lower)) {
+      condition = 'brand_new';
+    } else if (/\b(?:uk\s*used|direct\s*belgium|foreign\s*used|tokunbo)\b/i.test(lower)) {
+      condition = 'foreign_used';
+    } else if (/\b(?:nigerian\s*used|naija\s*used|local\s*used)\b/i.test(lower)) {
+      condition = 'local_used';
+    } else if (/\b(?:refurbished|renewed)\b/i.test(lower)) {
+      condition = 'refurbished';
+    }
+
+    const specsMatch = str.match(/\b(?:\d+\s*(?:gb|tb|mb|ram|rom|mah)\b|\bsize\s*\d+\b|\bbattery\s*health\s*[:=]?\s*\d+%\b)/i);
+    const specs = specsMatch ? specsMatch[0] : null;
+
+    return { category, brand, condition, specs };
+  };
+
+  // Check if this is a multi-product price list (e.g. line-by-line items with individual prices)
+  const lineItems = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const prices = extractNairaPriceCandidates(line);
+    const cleanTitle = stripPriceFromText(line)
+      .replace(/(?:\+?234|0)[789]\d{9}/g, '')
+      .replace(/call\s*[:#-]?/gi, '')
+      .trim();
+    if (prices.length > 0 && cleanTitle.length >= 4 && /[a-zA-Z]{2,}/.test(cleanTitle)) {
+      lineItems.push({
+        title: cleanTitle.slice(0, 80),
+        price: prices[0].amount,
+        price_raw: prices[0].raw,
+        lineIndex: i,
+      });
+    }
+  }
+
+  // If 2 or more distinct line items with prices exist, treat as multi-product post
+  if (lineItems.length >= 2) {
+    const items = lineItems.map((li, idx) => {
+      const meta = detectMetadata(li.title);
+      return {
+        title: li.title,
+        description: li.title,
+        price: li.price,
+        price_raw: li.price_raw,
+        category: meta.category,
+        condition: meta.condition,
+        brand: meta.brand,
+        specs: meta.specs,
+        location,
+        image_index: idx,
+      };
+    });
+    return {
+      is_commercial_listing: true,
+      seller_phone: sellerPhone,
+      location,
+      items,
+    };
+  }
+
+  // Single product post:
+  const prices = extractNairaPriceCandidates(clean);
+  const primaryPrice = prices.length > 0 ? prices[0].amount : parseNairaAmount(clean);
+  const rawPrice = prices.length > 0 ? prices[0].raw : null;
+
+  let title = lines[0] || 'Marketplace Item';
+  title = stripPriceFromText(title)
+    .replace(/(?:\+?234|0)[789]\d{9}/g, '')
+    .replace(/call\s*[:#-]?/gi, '')
+    .trim();
+  if (title.length > 80) title = title.slice(0, 80).trim();
+  if (!title) title = clean.slice(0, 80).trim();
+
+  let description = stripPriceFromText(clean);
+  if (description.length > 1500) description = description.slice(0, 1500);
+  if (!description) description = title;
+
+  const meta = detectMetadata(clean);
+
+  return {
+    is_commercial_listing: true,
+    seller_phone: sellerPhone,
+    location,
+    items: [
+      {
+        title,
+        description,
+        price: primaryPrice || null,
+        price_raw: rawPrice || (primaryPrice ? String(primaryPrice) : null),
+        category: meta.category,
+        condition: meta.condition,
+        brand: meta.brand,
+        specs: meta.specs,
+        location,
+        image_index: 0,
+      },
+    ],
+  };
+}
+
 export async function parseListingWithVision({ text = '', media = [], audioTranscript = '' } = {}) {
   const cleanText = String(text || '').trim();
   const transcript = String(audioTranscript || '').trim();
@@ -402,26 +550,36 @@ export async function parseListingWithVision({ text = '', media = [], audioTrans
   const inputs = visualInputs(media);
   if (!message && inputs.length === 0) return { is_commercial_listing: false, items: [] };
 
-  // 1. FAST TEXT PARSING: When the seller has provided a written description,
-  // parse the product details directly using fast text models (Llama-3.3-70B / 3.1-8B).
-  // Do NOT send images to Vision AI when the product already has a clear description.
-  const hasDescription = cleanText.length >= 8 && /[a-zA-Z]{2,}/.test(cleanText);
+  // STRICT RULE: AI Vision is ONLY used when a product has NO written description!
+  // When a seller provides a written description (e.g. "Samsung S21 ultra 128 gb 350k"),
+  // parse the listing directly from the text and NEVER invoke Vision AI on the images.
+  const hasDescription = cleanText.length >= 5 && /[a-zA-Z]{2,}/.test(cleanText);
+
   if (hasDescription) {
+    console.info(`[Listing Parser] Product has written description ("${cleanText.slice(0, 60)}..."). Processing directly from text (Vision AI skipped).`);
+
+    // 1. Try AI text completion if configured
     const textParsed = await parseTextOnly(message);
     if (textParsed?.is_commercial_listing && textParsed.items?.length > 0) {
-      const hasPrices = textParsed.items.some(item => Number(item?.price) > 0);
-      if (hasPrices || inputs.length === 0) {
-        console.info(`[Listing Parser] Parsed ${textParsed.items.length} product(s) directly from written description without Vision AI.`);
-        return textParsed;
-      }
-      console.info('[Listing Parser] Written description lacked price. Checking visual inputs for visible price/flyer...');
+      console.info(`[Listing Parser] AI text model parsed ${textParsed.items.length} product(s) from description.`);
+      return textParsed;
     }
+
+    // 2. If AI model failed (e.g. invalid API key, network timeout, quota exceeded),
+    // extract product details, price, category, and specs with robust local text parser.
+    const localParsed = parseTextLocally(message);
+    if (localParsed?.is_commercial_listing && localParsed.items?.length > 0) {
+      console.info(`[Listing Parser] Local rule parser extracted product: "${localParsed.items[0].title}" - ₦${localParsed.items[0].price?.toLocaleString() || 'Unpriced'}`);
+      return localParsed;
+    }
+
+    console.warn('[Listing Parser] Written description did not contain commercial product intent.');
+    return { is_commercial_listing: false, items: [] };
   }
 
-  // 2. VISION AI: Only used when the post DOES NOT have a description,
-  // or when the description lacked a price and flyer OCR is needed.
+  // AI VISION: ONLY used for products that have NO written description (e.g. pure image/video flyer).
   if (inputs.length > 0) {
-    console.info(`[Vision AI] Post has no written description (or lacked price). Inspecting ${inputs.length} visual input(s)...`);
+    console.info(`[Vision AI] Product has NO written description. Inspecting ${inputs.length} visual input(s) with Vision AI...`);
     const parsedChunks = [];
     for (const visualChunk of chunk(inputs, MAX_VISION_IMAGES_PER_REQUEST)) {
       const parsed = await parseVisionChunk(message, visualChunk);
@@ -431,13 +589,7 @@ export async function parseListingWithVision({ text = '', media = [], audioTrans
     if (merged?.items.length) return merged;
   }
 
-  // 3. Fallback to text parsing if visual models failed or weren't used
-  if (message.length >= 3) {
-    const parsed = await parseTextOnly(message);
-    if (parsed) return parsed;
-  }
-
-  console.error('[Vision parser] All candidate models failed to parse listing.');
+  console.error('[Vision parser] Post has no written description and visual analysis could not extract product details.');
   return null;
 }
 
