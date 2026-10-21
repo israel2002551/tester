@@ -364,6 +364,18 @@ function rawPhone(senderJid) {
   return number || null;
 }
 
+function normalizeWhatsAppPhoneNumber(raw) {
+  let cleaned = String(raw || '').replace(/\D/g, '');
+  if (!cleaned) return '';
+  // Convert Nigerian domestic format (e.g. 09061484256) to international (2349061484256)
+  if (cleaned.startsWith('0') && cleaned.length === 11) {
+    cleaned = `234${cleaned.slice(1)}`;
+  } else if (cleaned.length === 10 && !cleaned.startsWith('234')) {
+    cleaned = `234${cleaned}`;
+  }
+  return cleaned;
+}
+
 async function processListing(bundle, sock) {
   const hasVisualMedia = Array.isArray(bundle?.media) && bundle.media.some(m => (m?.kind === 'image' || m?.kind === 'video' || m?.type === 'image' || m?.type === 'video') && (m?.buffer || m?.url || m?.vision_urls?.length));
   if (!bundle || (!bundle.text && !hasVisualMedia)) return { state: 'completed', message: 'Empty bundle skipped.', itemCount: 0 };
@@ -990,7 +1002,7 @@ async function startVisionCollector() {
     }
 
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
-    const phoneNumber = (process.env.WHATSAPP_PHONE_NUMBER || '').replace(/\D/g, '');
+    const phoneNumber = normalizeWhatsAppPhoneNumber(process.env.WHATSAPP_PHONE_NUMBER);
 
     const sock = makeWASocket({
       logger: pino({ level: 'silent' }),
@@ -1019,9 +1031,9 @@ async function startVisionCollector() {
           const code = await sock.requestPairingCode(phoneNumber);
           const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
           console.log('\n============================================================');
-          console.log(`[BOT 2 VISION] WHATSAPP PAIRING CODE: ${formatted}`);
+          console.log(`[BOT 2 VISION] WHATSAPP PAIRING CODE FOR +${phoneNumber}: ${formatted}`);
           console.log('============================================================');
-          console.log('On your phone for Bot 2:');
+          console.log(`On your phone for Bot 2 (+${phoneNumber}):`);
           console.log('1. Open WhatsApp -> Settings -> Linked Devices');
           console.log('2. Tap "Link a device"');
           console.log('3. Tap "Link with phone number instead" at the bottom');
