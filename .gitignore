@@ -27,20 +27,10 @@ node_modules/
 .npm-cache/
 dist/
 
-# Supabase project files stay local, except the production receipt notifier.
-supabase/*
+# Supabase project files
+supabase/.temp/
 !supabase/functions/
-supabase/functions/*
-!supabase/functions/telegram-payment-proof/
-!supabase/functions/telegram-payment-proof/index.ts
-!supabase/functions/manage-product/
-!supabase/functions/manage-product/index.ts
-!supabase/functions/whatsapp-listing-action/
-!supabase/functions/whatsapp-listing-action/index.ts
-!supabase/functions/bogo-promo/
-!supabase/functions/bogo-promo/index.ts
-!supabase/functions/_shared/
-!supabase/functions/_shared/bogo.ts
+!supabase/functions/**
 !supabase/migrations/
 !supabase/migrations/*.sql
 
