@@ -104,6 +104,8 @@ const messageRetryCounterCache = {
 
 let activeSocket = null;
 let reconnectTimer = null;
+let reconnectAttempts = 0;
+let keepAliveTimer = null;
 let collectorIsStarting = false;
 let warnedAboutSessionStorage = false;
 
@@ -140,15 +142,88 @@ function installSignalLogRedaction() {
   }
 }
 
-function scheduleReconnect() {
-  if (reconnectTimer) return;
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null;
-    startVisionCollector().catch(error => {
-      console.error('[Bot 2] WhatsApp Vision collector failed to reconnect:', error?.message || error);
-    });
-  }, 3_000);
+function safeCloseSocket(sock) {
+  if (!sock) return;
+  try {
+    sock.ev.removeAllListeners();
+  } catch {}
+  try {
+    if (sock.ws) {
+      sock.ws.removeAllListeners?.();
+      sock.ws.close();
+    }
+  } catch {}
 }
+
+function stopKeepAlive() {
+  if (keepAliveTimer) {
+    clearInterval(keepAliveTimer);
+    keepAliveTimer = null;
+  }
+}
+
+function startKeepAlive(sock) {
+  stopKeepAlive();
+  // WhatsApp drops idle WebSocket connections after ~10-20 min. Periodic presence pings keep it alive.
+  keepAliveTimer = setInterval(async () => {
+    if (activeSocket === sock && whatsappConnected) {
+      try {
+        await sock.sendPresenceUpdate('available');
+      } catch (err) {
+        console.warn('[Bot 2 KeepAlive] Periodic presence ping failed:', err?.message || err);
+      }
+    }
+  }, 30_000);
+}
+
+function scheduleReconnect(immediate = false) {
+  if (reconnectTimer) return;
+
+  // Delays with exponential backoff: 1s (immediate/515 restart), 3s, 5s, 10s, 20s, 30s, up to 60s
+  const delays = [3_000, 5_000, 10_000, 20_000, 30_000, 60_000];
+  const delay = immediate ? 1_000 : delays[Math.min(reconnectAttempts, delays.length - 1)];
+
+  console.info(`[Bot 2] WhatsApp reconnect scheduled in ${(delay / 1000).toFixed(0)}s (retry attempt #${reconnectAttempts + 1})...`);
+
+  reconnectTimer = setTimeout(async () => {
+    reconnectTimer = null;
+    try {
+      await startVisionCollector();
+    } catch (error) {
+      console.error('[Bot 2] WhatsApp Vision collector failed to reconnect:', error?.message || error);
+      reconnectAttempts++;
+      scheduleReconnect(false);
+    }
+  }, delay);
+}
+
+// Process-level crash guards to ensure Bot 2 never dies from unexpected network or socket exceptions
+process.on('uncaughtException', (err) => {
+  console.error('[Bot 2 CrashGuard] Uncaught Exception:', err?.message || err);
+  if (err?.stack) console.error(err.stack);
+  if (!whatsappConnected && !reconnectTimer) {
+    scheduleReconnect(false);
+  }
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Bot 2 CrashGuard] Unhandled Rejection:', reason?.message || reason);
+  if (reason?.stack) console.error(reason.stack);
+});
+
+process.on('SIGINT', () => {
+  console.info('[Bot 2] Received SIGINT. Shutting down gracefully...');
+  stopKeepAlive();
+  safeCloseSocket(activeSocket);
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.info('[Bot 2] Received SIGTERM. Shutting down gracefully...');
+  stopKeepAlive();
+  safeCloseSocket(activeSocket);
+  process.exit(0);
+});
 
 installSignalLogRedaction();
 
@@ -816,10 +891,16 @@ function onMessage(sock, message) {
 }
 
 async function startVisionCollector() {
-  if (collectorIsStarting || activeSocket) return;
+  if (collectorIsStarting) return;
+  if (activeSocket && whatsappConnected) return;
   collectorIsStarting = true;
 
   try {
+    if (activeSocket) {
+      safeCloseSocket(activeSocket);
+      activeSocket = null;
+    }
+
     try {
       await refreshTargetGroups(true);
     } catch (error) {
@@ -842,6 +923,10 @@ async function startVisionCollector() {
       browser: Browsers.ubuntu('Chrome'),
       markOnlineOnConnect: true,
       syncFullHistory: false,
+      connectTimeoutMs: 60_000,
+      defaultQueryTimeoutMs: 60_000,
+      keepAliveIntervalMs: 25_000,
+      retryRequestDelayMs: 5_000,
       msgRetryCounterCache: messageRetryCounterCache,
       shouldIgnoreJid: (jid) => jid.endsWith('@broadcast') || jid.endsWith('@newsletter'),
       getMessage: async (key) => {
@@ -879,23 +964,38 @@ async function startVisionCollector() {
       }
       if (connection === 'open') {
         whatsappConnected = true;
+        reconnectAttempts = 0;
         console.log('BUYSELL WhatsApp Vision Collector (Bot 2) is active and monitoring groups.');
         sock.sendPresenceUpdate('available').catch(() => {});
+        startKeepAlive(sock);
         startListingQueuePolling();
       }
       if (connection === 'close') {
-        if (sock !== activeSocket) return;
         whatsappConnected = false;
-        activeSocket = null;
+        stopKeepAlive();
         const code = lastDisconnect?.error?.output?.statusCode;
         const isLoggedOut = code === DisconnectReason.loggedOut;
-        console.warn(`[Bot 2] WhatsApp connection closed (${code || 'unknown'}). Reconnect: true`);
+        const isRestartRequired = code === DisconnectReason.restartRequired;
+
+        console.warn(`[Bot 2] WhatsApp connection closed (code: ${code ?? 'unknown'}, reason: ${lastDisconnect?.error?.message || 'unknown'}).`);
+
+        if (activeSocket === sock) {
+          activeSocket = null;
+        }
+        safeCloseSocket(sock);
+
         if (isLoggedOut) {
           console.warn('[Session] Session unlinked. Resetting session directory and requesting a fresh pairing.');
           try { rmSync(sessionDir, { recursive: true, force: true }); } catch {}
+          reconnectAttempts = 0;
+          scheduleReconnect(false);
+        } else if (isRestartRequired) {
+          console.info('[Bot 2] Restart required by WhatsApp. Reconnecting immediately...');
+          scheduleReconnect(true);
+        } else {
+          reconnectAttempts++;
+          scheduleReconnect(false);
         }
-        try { sock.ws?.close(); } catch {}
-        scheduleReconnect();
       }
     });
 
@@ -925,6 +1025,7 @@ if (port) {
       groups_monitored: targetGroups.size,
       all_groups_monitored: monitorAllGroups,
       whatsapp_connected: whatsappConnected,
+      reconnect_attempts: reconnectAttempts,
       queue: {
         media_intake: mediaIntakeQueue.snapshot,
         listing_staging: listingStagingQueue.snapshot,
@@ -939,7 +1040,16 @@ if (port) {
   });
 }
 
+// Keep-awake ping for cloud hosts like Render free tier
+const selfPingUrl = process.env.SELF_PING_URL || process.env.RENDER_EXTERNAL_URL || null;
+if (selfPingUrl) {
+  console.info(`[SelfPing] Self-ping active for keep-awake: ${selfPingUrl}`);
+  setInterval(() => {
+    fetch(selfPingUrl).catch(() => {});
+  }, 10 * 60_000);
+}
+
 startVisionCollector().catch(error => {
-  console.error('[Bot 2] WhatsApp Vision collector failed to start:', error?.message || error);
-  process.exitCode = 1;
+  console.error('[Bot 2] WhatsApp Vision collector initial start failed:', error?.message || error);
+  scheduleReconnect(false);
 });
