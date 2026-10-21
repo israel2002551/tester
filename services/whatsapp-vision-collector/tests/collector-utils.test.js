@@ -4,6 +4,7 @@ import {
   extractNairaPriceCandidates,
   hasPriceInText,
   looksLikeSalePost,
+  normalizeWhatsAppPhoneNumber,
   parseNairaAmount,
   stripPriceFromText,
 } from '../parser.js';
@@ -109,4 +110,14 @@ test('zlib compresses JSON payloads with Brotli and Gzip', async () => {
 
   assert.ok(gzipped.length < rawBytes.length, 'Gzip must compress large JSON');
   assert.ok(brotlied.length < rawBytes.length, 'Brotli must compress large JSON');
+});
+
+test('normalizeWhatsAppPhoneNumber converts domestic and formatted Nigerian phone numbers', () => {
+  assert.equal(normalizeWhatsAppPhoneNumber('09061484256'), '2349061484256');
+  assert.equal(normalizeWhatsAppPhoneNumber('08080302256'), '2348080302256');
+  assert.equal(normalizeWhatsAppPhoneNumber('+234 906 148 4256'), '2349061484256');
+  assert.equal(normalizeWhatsAppPhoneNumber('2349061484256'), '2349061484256');
+  assert.equal(normalizeWhatsAppPhoneNumber('9061484256'), '2349061484256');
+  assert.equal(normalizeWhatsAppPhoneNumber(''), '');
+  assert.equal(normalizeWhatsAppPhoneNumber(null), '');
 });

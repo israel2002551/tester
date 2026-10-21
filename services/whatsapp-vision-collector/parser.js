@@ -470,3 +470,15 @@ export function looksLikeSalePost(text = '', hasMedia = false) {
 
   return false;
 }
+
+export function normalizeWhatsAppPhoneNumber(raw) {
+  let cleaned = String(raw || '').replace(/\D/g, '');
+  if (!cleaned) return '';
+  // Convert Nigerian domestic format (e.g. 09061484256) to international (2349061484256)
+  if (cleaned.startsWith('0') && cleaned.length === 11) {
+    cleaned = `234${cleaned.slice(1)}`;
+  } else if (cleaned.length === 10 && !cleaned.startsWith('234')) {
+    cleaned = `234${cleaned}`;
+  }
+  return cleaned;
+}
