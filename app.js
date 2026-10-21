@@ -10937,7 +10937,7 @@ function escAttr(s) {
 function sanitizeUrl(url) {
  if (!url) return '';
  const rawUrl = String(url).trim();
- if (/^obzhlmzswthnorkiqemh\.supabase\.co\//i.test(rawUrl)) {
+ if (/^[a-z0-9]+\.supabase\.co\//i.test(rawUrl)) {
  return `https://${rawUrl}`;
  }
  const u = rawUrl.toLowerCase();
