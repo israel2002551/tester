@@ -11,6 +11,24 @@ const PRODUCT_COLUMNS = "id,seller_id,name,description,price,original_price,ship
 const NATIVE_CATEGORIES = new Set(["electronics", "fashion", "home", "phones", "beauty", "sports", "dropship", "other"]);
 const NATIVE_CONDITIONS = new Set(["new", "used-like-new", "used-good"]);
 const WHATSAPP_PRICE_MARKUP_PERCENT = 20;
+// These were the original Bot 2 allow-listed groups. Keep them valid while
+// their settings are being migrated to whatsapp_group_settings in this project.
+const LEGACY_LISTED_GROUPS = new Set([
+  "120363405967163832@g.us",
+  "2348115894343-1610476263@g.us",
+  "120363423548052642@g.us",
+  "120363420805394892@g.us",
+  "120363418168443320@g.us",
+  "120363426664187889@g.us",
+  "120363409064832008@g.us",
+  "120363405923643530@g.us",
+  "120363176089818281@g.us",
+  "120363272312108397@g.us",
+  "120363422514509383@g.us",
+  "120363304586013963@g.us",
+  "120363425601990856@g.us",
+  "120363408122221974@g.us",
+]);
 
 function stripPriceFromText(text: string): string {
   if (!text) return "";
@@ -147,6 +165,7 @@ function queueResult(input: unknown) {
 }
 
 async function collectorGroupIsApproved(admin: ReturnType<typeof createClient>, groupJid: string) {
+  if (LEGACY_LISTED_GROUPS.has(groupJid)) return true;
   const { data, error } = await admin
     .from("whatsapp_group_settings")
     .select("id")
@@ -388,14 +407,9 @@ async function ingest(admin: ReturnType<typeof createClient>, req: Request, body
   if (existing) return json({ created: false, product_id: existing.product_id });
 
   if (!validGroupJid(groupJid)) return json({ error: "The incoming WhatsApp group ID is invalid." }, 400);
-  const { data: approvedGroup, error: groupError } = await admin
-    .from("whatsapp_group_settings")
-    .select("id")
-    .eq("group_jid", groupJid)
-    .eq("is_active", true)
-    .maybeSingle();
-  if (groupError) throw new Error("Could not verify the WhatsApp group configuration.");
-  if (!approvedGroup) return json({ error: "This WhatsApp group is not approved for BUYSELL imports." }, 403);
+  if (!(await collectorGroupIsApproved(admin, groupJid))) {
+    return json({ error: "This WhatsApp group is not approved for BUYSELL imports." }, 403);
+  }
 
   const cloudName = value(Deno.env.get("CLOUDINARY_CLOUD_NAME"), 120) || "tlulgsk1";
   const rawMedia = Array.isArray(body.media) ? body.media : [];
