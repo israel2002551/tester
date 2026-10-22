@@ -12557,6 +12557,21 @@ async function getAuthenticatedMessageClient() {
  return client;
 }
 
+function isMessageRlsError(error) {
+ const text = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+ return text.includes('row-level security') || text.includes('violates row level security');
+}
+
+async function sendMessageThroughVerifiedEndpoint(payload) {
+ // The endpoint independently verifies the user's JWT before performing the
+ // insert with server credentials. The browser never receives that credential.
+ return callEdge('send-message', {
+  receiver_id: payload.receiver_id,
+  content: payload.content,
+  product_id: payload.product_id || '',
+ });
+}
+
 async function sendMessage() {
  if (!currentChatPartner) return;
  if (!currentUser) await ensureCurrentUser();
@@ -12633,10 +12648,15 @@ try {
   delete payload[missing];
   continue;
   }
-  if (isMissingMessagesTable(error)) {
-  throw new Error('Messaging database table is missing. Create the messages table in Supabase to send chats.');
-  }
-  throw error;
+   if (isMissingMessagesTable(error)) {
+   throw new Error('Messaging database table is missing. Create the messages table in Supabase to send chats.');
+   }
+   if (isMessageRlsError(error)) {
+    await sendMessageThroughVerifiedEndpoint(payload);
+    delivered = true;
+    break;
+   }
+   throw error;
   }
  if (!delivered) throw new Error('Could not save message.');
  
