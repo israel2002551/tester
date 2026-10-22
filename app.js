@@ -12533,8 +12533,33 @@ function handleMessageKey(event) {
  }
 }
 
+async function getAuthenticatedMessageClient() {
+ const client = window.BUYSELL_AUTH?.supabase || initSupabaseClient() || db;
+ if (!client?.auth || typeof client.from !== 'function') {
+  throw new Error('Messaging is unavailable because the database connection is not ready.');
+ }
+
+ const { data, error } = await client.auth.getSession();
+ const session = data?.session;
+ if (error || !session?.access_token || !session.user?.id) {
+  clearAuthenticatedSessionUi();
+  throw new Error('Your sign-in session has expired. Please sign in again, then send your message.');
+ }
+
+ // Always use the same authenticated client that supplied the current token.
+ // This prevents a stale legacy client from inserting as the anonymous role.
+ db = client;
+ supabase = client;
+ if (currentUser?.id !== session.user.id) {
+  await hydrateAuthenticatedUser(session.user, { force: true });
+ }
+ return client;
+}
+
 async function sendMessage() {
- if (!currentUser || !currentChatPartner) return;
+ if (!currentChatPartner) return;
+ if (!currentUser) await ensureCurrentUser();
+ if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
  const input = document.getElementById('msg-input');
  const text = input.value.trim();
  const imageFile = pendingMessageImage;
@@ -12544,7 +12569,11 @@ async function sendMessage() {
  if (sendBtn) sendBtn.disabled = true;
  
 try {
- let imageUrl = '';
+ const messageClient = await getAuthenticatedMessageClient();
+ if (currentUser.id === currentChatPartner) {
+  throw new Error('You cannot message yourself.');
+ }
+  let imageUrl = '';
  if (imageFile) {
  const ext = (imageFile.name || '').includes('.') ? imageFile.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') : 'jpg';
  const path = `chat/${currentUser.id}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext || 'jpg'}`;
@@ -12584,7 +12613,7 @@ try {
  
  let delivered = false;
   for (let attempt = 0; attempt < 8; attempt++) {
-  const { error } = await db.from('messages').insert(payload);
+   const { error } = await messageClient.from('messages').insert(payload);
  if (!error) {
  delivered = true;
  break;
