@@ -1462,12 +1462,13 @@ function toggleAuth(mode) {
  updateAuthPanelCopy(mode);
 }
 
-async function uploadToFirstAvailableBucket(buckets, path, file, options = {}) {
+async function uploadToFirstAvailableBucket(buckets, path, file, options = {}, client = db) {
+ if (!client?.storage?.from) throw new Error('Upload service is not ready. Please refresh and sign in again.');
  let lastError = null;
  for (const bucket of buckets) {
- const { data, error } = await db.storage.from(bucket).upload(path, file, options);
+ const { data, error } = await client.storage.from(bucket).upload(path, file, options);
  if (!error) {
- const { data: urlData } = db.storage.from(bucket).getPublicUrl(data.path);
+ const { data: urlData } = client.storage.from(bucket).getPublicUrl(data.path);
  return { bucket, path: data.path, publicUrl: sanitizeUrl(urlData?.publicUrl || '') };
  }
  lastError = error;
@@ -12578,9 +12579,9 @@ try {
  const ext = (imageFile.name || '').includes('.') ? imageFile.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') : 'jpg';
  const path = `chat/${currentUser.id}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext || 'jpg'}`;
  const uploaded = await uploadToFirstAvailableBucket(['chat', 'uploads', 'products'], path, imageFile, {
- contentType: imageFile.type || undefined,
- upsert: false,
- });
+  contentType: imageFile.type || undefined,
+  upsert: false,
+ }, messageClient);
  imageUrl = uploaded.publicUrl;
  }
 
