@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: buysell-telegram-ingestion-bot
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: INGESTION_API_URL
+        sync: false
+      - key: INGESTION_HMAC_SECRET
+        sync: false
+      - key: TELEGRAM_CATALOG_CHAT_ID
+        sync: false
+      - key: BOT3_RELAY_SECRET
+        sync: false
