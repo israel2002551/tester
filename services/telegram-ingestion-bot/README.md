@@ -5,9 +5,9 @@ seller sends product photos or a video and then a caption/message with a fixed
 Naira price. Albums are debounced for 1.5 seconds, so every attachment becomes
 one listing rather than one product per image.
 
-The bot has no Supabase service-role credential. It downloads Telegram media,
-then calls the shared ingestion API with an HMAC-signed request. The API owns
-media storage, Vision fallback, database writes, idempotency, and markup.
+The bot downloads Telegram media and calls the configured ingestion endpoint
+with an HMAC-signed request. That endpoint owns media storage, listing
+validation, idempotency, and publishing.
 
 It also exposes a protected `POST /internal/relay/whatsapp` endpoint. The
 shared API can call this to post a concise WhatsApp-ingestion notification in
