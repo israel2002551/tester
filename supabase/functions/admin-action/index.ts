@@ -100,9 +100,11 @@ serve(async (req) => {
     const adminEmailsEnv = Deno.env.get('ADMIN_EMAIL') || 'israelefe093@gmail.com'
     const allowedAdmins = adminEmailsEnv.split(',').map(email => email.trim().toLowerCase())
     
-    // Check if the caller's email is in the list AND their database role is 'admin'
-    const isAdmin = profile?.email && 
-                    allowedAdmins.includes(profile.email.toLowerCase()) && 
+    // Check the verified sign-in email (not the user-editable profile copy)
+    // is in the list AND their database role is 'admin'
+    const callerEmail = String(user.email || '').trim().toLowerCase()
+    const isAdmin = Boolean(callerEmail) &&
+                    allowedAdmins.includes(callerEmail) &&
                     profile?.role === 'admin'
 
     // Allow self-updates for commission payment (non-admin)
@@ -181,24 +183,32 @@ serve(async (req) => {
 
       // ── DEACTIVATE USER ──
       case 'deactivate_user': {
-        await adminClient.from('profiles')
+        const { error: profileError } = await adminClient.from('profiles')
           .update({ is_suspended: true, commission_paid: false })
           .eq('id', target_id)
-        await adminClient.from('products').update({ status: 'paused' }).eq('seller_id', target_id)
+        if (profileError) throw profileError
+        const { error: productsError } = await adminClient.from('products').update({ status: 'paused' }).eq('seller_id', target_id)
+        if (productsError) throw productsError
         await adminClient.from('service_gigs').update({ status: 'paused' }).eq('provider_id', target_id)
         break
       }
 
       // ── REACTIVATE USER ──
       case 'reactivate_user': {
-        await adminClient.from('profiles')
-          .update({ 
-            commission_paid: true, 
-            is_suspended: false, 
+        const { error: profileError } = await adminClient.from('profiles')
+          .update({
+            commission_paid: true,
+            is_suspended: false,
             trial_end: actionData?.trial_end || new Date(Date.now() + 30*86400000).toISOString()
           })
           .eq('id', target_id)
-        await adminClient.from('products').update({ status: 'active' }).eq('seller_id', target_id)
+        if (profileError) throw profileError
+        // Sold-out listings stay paused until the seller restocks them.
+        const { error: productsError } = await adminClient.from('products')
+          .update({ status: 'active' })
+          .eq('seller_id', target_id)
+          .neq('stock_quantity', 0)
+        if (productsError) throw productsError
         await adminClient.from('service_gigs').update({ status: 'active' }).eq('provider_id', target_id)
         break
       }

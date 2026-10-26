@@ -114,14 +114,17 @@ const PRODUCT_LIST_COLUMNS = [
  'stock_quantity','status','created_at','flash_price','flash_end','negotiable','low_stock_alert'
 ];
 const PRODUCT_MINIMAL_COLUMNS = ['id','seller_id','name','price','category','status','created_at','image_url'];
-const PRODUCT_PROFILE_HYDRATE_COLUMNS = ['id','name','email','role','accounts','store_name','store_description','whatsapp','bank_name','account_number','account_name','paystack_key','logo_url','store_address'];
+// Seller details shown next to products. Contact, bank, and key fields are
+// private (see 20261026060000_protect_profile_private_columns.sql).
+const PRODUCT_PROFILE_HYDRATE_COLUMNS = ['id','name','role','accounts','store_name','store_description','logo_url','store_address'];
+const PUBLIC_PROFILE_COLUMNS = ['id','name','role','accounts','store_name','store_description','logo_url','store_address','seller_verified','kyc_status','is_suspended','created_at'];
 const SELLER_PRODUCT_COLUMNS = 'id,name,price,shipping_fee,shipping_cost,image_url,has_video,stock_quantity,status,created_at';
 const ORDER_LIST_COLUMNS = ['id','status','total_amount','created_at','delivery_name','delivery_address','items','payment_method','proof_url','seller_id','buyer_id','is_bogo_order','bogo_primary_item_id','bogo_free_item_id','platform_promo_discount_amount','bogo_extra_customer_charge','shipping_discount_amount','is_free_shipping_applied','platform_shipping_subsidy'];
 const DISPUTE_LIST_COLUMNS = ['id','order_id','buyer_id','seller_id','dispute_type','reason','description','status','created_at'];
 const DROPSHIP_REQUEST_COLUMNS = ['id','status','total_amount','created_at','delivery_name','delivery_address','items','payment_method','seller_id','buyer_id','name','contact','destination','request','admin_note','tracking_update','updated_at'];
 const MESSAGE_LIST_COLUMNS = ['id','sender_id','receiver_id','content','message','body','order_id','is_read','created_at'];
 const SELLER_ADMIN_COLUMNS = ['id','name','email','role','accounts','store_name','whatsapp','created_at','is_suspended','commission_paid','trial_end','kyc_status','last_login_at','last_seen_at','login_count'];
-const PROFILE_COLUMNS = ['id','name','email','role','accounts','store_name','store_description','whatsapp','bank_name','account_number','account_name','paystack_key','commission_paid','trial_end','is_suspended','kyc_status','verification_status','seller_verified','logo_url','store_address','login_count','last_login_at','last_seen_at','created_at'];
+const PROFILE_COLUMNS = ['id','name','email','role','accounts','store_name','store_description','whatsapp','commission_paid','trial_end','is_suspended','kyc_status','verification_status','seller_verified','logo_url','store_address','login_count','last_login_at','last_seen_at','created_at'];
 const KYC_LIST_COLUMNS = ['id','user_id','status','document_type','document_number','full_name','front_url','back_url','selfie_url','created_at','reviewed_at','admin_note'];
 const appCache = new Map();
 let carouselIndex = 0, carouselTimer = null;
@@ -255,9 +258,34 @@ async function runSelectWithColumnFallback(table, columns, configure) {
  throw lastError || new Error(`Could not load ${table}`);
 }
 
-async function fetchProfileById(id, method = 'maybeSingle') {
- const result = await runSelectWithColumnFallback('profiles', PROFILE_COLUMNS, q => q.eq('id', id)[method]());
- return result.data || null;
+/**
+ * Loads a profile. Other users' profiles use public columns only; the signed-in
+ * user's own profile (includePrivate) also merges their payout details.
+ */
+async function fetchProfileById(id, method = 'maybeSingle', { includePrivate = false } = {}) {
+ const columns = includePrivate ? PROFILE_COLUMNS : PUBLIC_PROFILE_COLUMNS;
+ const result = await runSelectWithColumnFallback('profiles', columns, q => q.eq('id', id)[method]());
+ const profile = result.data || null;
+ if (profile && includePrivate) Object.assign(profile, await fetchOwnPrivateProfile(id));
+ return profile;
+}
+
+const OWN_PRIVATE_PROFILE_FIELDS = ['bank_name', 'account_number', 'account_name', 'paystack_key', 'notif_email'];
+
+/** The signed-in user's payout details. Only the owner can read these. */
+async function fetchOwnPrivateProfile(id) {
+ try {
+  const { data, error } = await db.rpc('get_my_private_profile');
+  if (!error) return data && typeof data === 'object' ? data : {};
+  // Before the privacy migration is applied the function does not exist yet,
+  // and the columns are still readable directly.
+  if (!/get_my_private_profile|PGRST202|function/i.test(`${error.code || ''} ${error.message || ''}`)) throw error;
+  const legacy = await runSelectWithColumnFallback('profiles', OWN_PRIVATE_PROFILE_FIELDS, q => q.eq('id', id).maybeSingle());
+  return legacy.data || {};
+ } catch (error) {
+  console.warn('Private profile details unavailable:', error?.message || error);
+  return {};
+ }
 }
 
 async function fetchProductRows(configure) {
@@ -1148,8 +1176,8 @@ function profileHasSellerAccess(profile = currentUser?.profile) {
 async function resolveSellerStaffPermission(email = currentUser?.email) {
  const normalizedEmail = String(email || '').trim().toLowerCase();
  if (!normalizedEmail) return null;
- const local = getLocalSellerPermissions().find(row => String(row.email || '').toLowerCase() === normalizedEmail && row.status !== 'revoked');
- if (local) return local;
+ // Access is granted only from the database. The local list is the inviting
+ // seller's own record and anyone can write to their browser storage.
  try {
   const { data, error } = await db.from('seller_staff_permissions')
   .select('id,seller_id,email,category,note,status,created_at')
@@ -1171,7 +1199,7 @@ async function ensureSellerProfileRole() {
 
  let profile = currentUser.profile || {};
  if (!profile.role && !profile.accounts) {
-  const data = await fetchProfileById(currentUser.id);
+  const data = await fetchProfileById(currentUser.id, 'maybeSingle', { includePrivate: true });
  if (data) {
  currentUser.profile = data;
  profile = data;
@@ -1204,7 +1232,7 @@ async function ensureSellerProfileRole() {
   .eq('id', currentUser.id)
   .select(PROFILE_COLUMNS.join(','))
   .maybeSingle();
-  currentUser.profile = data || { ...profile, ...legacyAccessPatch };
+  currentUser.profile = { ...profile, ...(data || legacyAccessPatch) };
   }
   return true;
  }
@@ -1217,7 +1245,7 @@ async function ensureSellerProfileRole() {
  .single();
 
  if (error) throw new Error(error.message || 'Could not confirm seller access');
- currentUser.profile = data || { ...profile, role: 'seller', accounts: profile.accounts || 'seller', ...legacyAccessPatch };
+ currentUser.profile = { ...profile, ...(data || { role: 'seller', accounts: profile.accounts || 'seller', ...legacyAccessPatch }) };
  currentRole = 'seller';
  return true;
 }
@@ -1474,6 +1502,64 @@ async function uploadToFirstAvailableBucket(buckets, path, file, options = {}, c
  lastError = error;
  }
  throw lastError || new Error('Upload failed');
+}
+
+const PAYMENT_PROOF_BUCKET = 'payment-proofs';
+
+/**
+ * Receipts contain bank details, so they go to a private bucket and are stored
+ * as a non-public object URL (still HTTPS for server validation). They are
+ * opened through short-lived signed URLs. Falls back to the legacy public
+ * bucket only if the private bucket has not been created yet.
+ */
+async function uploadPaymentProof(client, file, ext) {
+ const options = { contentType: file.type || undefined, upsert: false };
+ const privatePath = `${currentUser.id}/${Date.now()}.${ext}`;
+ const { data, error } = await client.storage.from(PAYMENT_PROOF_BUCKET).upload(privatePath, file, options);
+ if (!error) return `${String(window.SB_URL || '').replace(/\/+$/, '')}/storage/v1/object/${PAYMENT_PROOF_BUCKET}/${data.path}`;
+ if (!/bucket not found/i.test(error.message || '')) throw error;
+ console.warn('Private payment-proofs bucket missing; using the legacy public bucket.');
+ const legacy = await uploadToFirstAvailableBucket(['uploads', 'products'], `proofs/${currentUser.id}/${Date.now()}.${ext}`, file, options, client);
+ return legacy.publicUrl;
+}
+
+function privatePaymentProofPath(url) {
+ const match = String(url || '').match(new RegExp(`/storage/v1/object/${PAYMENT_PROOF_BUCKET}/(.+)$`));
+ return match ? decodeURIComponent(match[1].split('?')[0]) : '';
+}
+
+function safeHttpsUrl(url) {
+ try {
+ const parsed = new URL(String(url || ''));
+ return parsed.protocol === 'https:' ? parsed.toString() : '';
+ } catch (_) {
+ return '';
+ }
+}
+
+/** Opens a payment receipt; private receipts get a 5-minute signed URL. */
+async function openPaymentProof(url) {
+ // Open the tab synchronously so popup blockers allow it, then navigate.
+ const tab = window.open('', '_blank');
+ if (tab) tab.opener = null;
+ try {
+ const path = privatePaymentProofPath(url);
+ let target = '';
+ if (path) {
+ const client = await getAuthenticatedMessageClient();
+ const { data, error } = await client.storage.from(PAYMENT_PROOF_BUCKET).createSignedUrl(path, 300);
+ if (error) throw error;
+ target = data?.signedUrl || '';
+ } else {
+ target = safeHttpsUrl(url);
+ }
+ if (!target) throw new Error('This receipt link is not valid.');
+ if (tab) tab.location.href = target;
+ else window.location.href = target;
+ } catch (error) {
+ tab?.close();
+ toast('Receipt unavailable', error.message || 'Could not open this receipt.', 'error');
+ }
 }
 
 /** Upload product media directly to Cloudinary using a short-lived server signature. */
@@ -1857,7 +1943,7 @@ async function onAuthSuccess(user, options = {}) {
  let profile = null;
  let error = null;
  try {
-  profile = await fetchProfileById(user.id, 'single');
+  profile = await fetchProfileById(user.id, 'single', { includePrivate: true });
  } catch (profileError) {
   error = profileError;
  }
@@ -1865,7 +1951,7 @@ async function onAuthSuccess(user, options = {}) {
  if (error || !profile) {
   // Profile not yet created (trigger may still be running) - create it now
   await upsertProfile(user, { ...(user.user_metadata || {}), ...googleProfileHint });
-  const retryProfile = await fetchProfileById(user.id, 'single').catch(() => null);
+  const retryProfile = await fetchProfileById(user.id, 'single', { includePrivate: true }).catch(() => null);
  currentUser.profile = retryProfile || {
  role: googleProfileHint.role || user.user_metadata?.role || 'buyer',
  name: user.user_metadata?.name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
@@ -2387,7 +2473,7 @@ function renderSellerPermissions(rows = getLocalSellerPermissions()) {
  }
  list.innerHTML = visible.map(row => {
   const category = normalizeSellerAccessCategory(row.category);
-  return `<div class="seller-permission-row"><div><strong>${escHtml(row.email)}</strong><span>${escHtml(SELLER_ACCESS_CATEGORIES[category].label)}${row.note ? ` - ${escHtml(row.note)}` : ''}</span></div><button class="btn btn-outline btn-sm" onclick="revokeSellerPermission('${escAttr(row.id || row.email)}')"><i class="fa-solid fa-user-slash"></i> Revoke</button></div>`;
+  return `<div class="seller-permission-row"><div><strong>${escHtml(row.email)}</strong><span>${escHtml(SELLER_ACCESS_CATEGORIES[category].label)}${row.note ? ` - ${escHtml(row.note)}` : ''}</span></div><button class="btn btn-outline btn-sm" onclick="revokeSellerPermission(${jsArg(row.id || row.email)})"><i class="fa-solid fa-user-slash"></i> Revoke</button></div>`;
  }).join('');
 }
 
@@ -2788,7 +2874,7 @@ function updateHeroCarouselPromos() {
      </span>
      <h2>${escHtml(promo.title)}</h2>
      <p>${escHtml(promo.description)}</p>
-     <button type="button" class="${btnClass}" onclick="openPromoInfoModal('${escAttr(promo.type)}')">
+     <button type="button" class="${btnClass}" onclick="openPromoInfoModal(${jsArg(promo.type)})">
       ${escHtml(promo.ctaText)} <i class="fa-solid fa-arrow-right"></i>
      </button>
     </div>
@@ -2918,7 +3004,7 @@ function upcomingProductCard(row) {
  <span>${escHtml(launchText)}</span>
  <h3>${escHtml(row.title || 'Upcoming Product')}</h3>
  <p>${escHtml(row.description || 'A new official BUYSELL product preview is coming soon.')}</p>
-  <button class="btn btn-outline btn-sm" onclick="saveUpcomingProductInterest('${escAttr(row.id)}','${escAttr(row.title || 'Upcoming product')}')"><i class="fa-solid fa-bell"></i> Notify Me</button>
+  <button class="btn btn-outline btn-sm" onclick="saveUpcomingProductInterest(${jsArg(row.id)},${jsArg(row.title || 'Upcoming product')})"><i class="fa-solid fa-bell"></i> Notify Me</button>
   </div>
   </article>`;
 }
@@ -3092,7 +3178,7 @@ function renderOngoingPromoCard(promo) {
    <span class="native-promo-label"><i class="fa-solid ${escAttr(promo.badgeIcon)}"></i> ${escHtml(promo.label)}</span>
    <h3>${escHtml(promo.title)}</h3>
    <p>${escHtml(promo.description)}</p>
-   <button type="button" class="native-promo-cta" onclick="openPromoInfoModal('${escAttr(promo.type)}')">${escHtml(promo.ctaText)} <i class="fa-solid fa-arrow-right"></i></button>
+   <button type="button" class="native-promo-cta" onclick="openPromoInfoModal(${jsArg(promo.type)})">${escHtml(promo.ctaText)} <i class="fa-solid fa-arrow-right"></i></button>
   </div>
  </article>`;
 }
@@ -3141,7 +3227,7 @@ function renderOngoingPromosBanner() {
   prodsGrid.parentNode.insertBefore(banner, prodsGrid);
  }
  banner.innerHTML = promos.map(promo => `
-  <div class="promo-strip-card ${promo.isShipping ? 'promo-shipping' : ''}" onclick="openPromoInfoModal('${escAttr(promo.type)}')">
+  <div class="promo-strip-card ${promo.isShipping ? 'promo-shipping' : ''}" onclick="openPromoInfoModal(${jsArg(promo.type)})">
    <div class="promo-strip-icon"><i class="fa-solid ${escAttr(promo.badgeIcon)}"></i></div>
    <div class="promo-strip-text">
     <strong>${escHtml(promo.title)}</strong>
@@ -3318,7 +3404,7 @@ function renderSponsoredAdCard(ad) {
    <span class="native-ad-label"><i class="fa-solid fa-bullhorn"></i> Sponsored</span>
    <h3>${escHtml(title)}</h3>
    <p>${escHtml(description)}</p>
-   <a class="native-ad-cta" href="${escAttr(destination)}" onclick="openAdDestination('${escAttr(ad.id)}', event)">${escHtml(ad.cta_text || 'Explore offer')} <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+   <a class="native-ad-cta" href="${escAttr(destination)}" onclick="openAdDestination(${jsArg(ad.id)}, event)">${escHtml(ad.cta_text || 'Explore offer')} <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
   </div>
  </article>`;
 }
@@ -3423,7 +3509,7 @@ function compactProductButton(product) {
  const thumb = product.image_url || imageList[0] || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=300&h=240&fit=crop';
  const now = new Date();
  const displayPrice = product.flash_price && product.flash_end && new Date(product.flash_end) > now ? product.flash_price : product.price;
- return `<button class="recent-item" onclick="openProduct('${escAttr(product.id)}')"><img src="${escAttr(thumb)}" alt="${escAttr(product.name || 'Product')}" loading="lazy"><div><strong>${escHtml(product.name || 'Product')}</strong><span>${fmtN(displayPrice)}</span></div></button>`;
+ return `<button class="recent-item" onclick="openProduct(${jsArg(product.id)})"><img src="${escAttr(thumb)}" alt="${escAttr(product.name || 'Product')}" loading="lazy"><div><strong>${escHtml(product.name || 'Product')}</strong><span>${fmtN(displayPrice)}</span></div></button>`;
 }
 
 function prodCard(p) {
@@ -3484,7 +3570,7 @@ function prodCard(p) {
  .replace(/>/g, '&gt;');
 
  return `
- <div class="prod-card ${platformProduct ? 'platform-product' : ''}" onclick="openProduct('${p.id}')">
+ <div class="prod-card ${platformProduct ? 'platform-product' : ''}" onclick="openProduct(${jsArg(p.id)})">
  <div class="prod-img-wrap">
  <img src="${resolvedCardThumbnail}" alt="${escHtml(p.name)}" loading="lazy">
  ${badges ? `<div class="prod-flags">${badges}</div>` : ''}
@@ -3503,7 +3589,7 @@ function prodCard(p) {
  <div class="prod-trust-line"><span><i class="fa-solid fa-shield-halved"></i> BUYSELL tracking</span><span>${escHtml(stockLabel)}</span></div>
  <div class="prod-rating-row"><span class="stars sm">${stars}</span><span class="text-xs color-text3">${p.avg_rating ? p.avg_rating.toFixed(1) : '5.0'} (${p.review_count||0})</span></div>
  <div class="prod-location"><i class="fa-solid fa-map-marker-alt" style="font-size:.6rem"></i>${escHtml(p.location||'Nigeria')}</div>
- <a class="prod-store-link ${platformProduct ? 'platform-store-link' : ''}" onclick="event.stopPropagation();viewStorefront('${p.seller_id}')"><i class="fa-solid ${platformProduct ? 'fa-shield-halved' : 'fa-store'}" style="font-size:.6rem"></i>${escHtml(sellerLabel)}</a>
+ <a class="prod-store-link ${platformProduct ? 'platform-store-link' : ''}" onclick="event.stopPropagation();viewStorefront(${jsArg(p.seller_id)})"><i class="fa-solid ${platformProduct ? 'fa-shield-halved' : 'fa-store'}" style="font-size:.6rem"></i>${escHtml(sellerLabel)}</a>
  ${!isSoldOut ? `<button class="prod-mobile-add" onclick="event.stopPropagation();addToCart(${serializedCartData})"><i class="fa-solid fa-cart-plus"></i> Add to Cart</button>` : ''}
  </div>
  </div>`;
@@ -3917,7 +4003,7 @@ function renderActiveFilters() {
  if (activeFilters.freeDelivery) pills.push({key:'freeDelivery',label:'Free delivery'});
  if (activeFilters.video) pills.push({key:'video',label:'Video products'});
  if (activeFilters.inStock) pills.push({key:'inStock',label:'In stock'});
- container.innerHTML = pills.map(p => `<span class="active-filter-pill">${p.label}<button onclick="removeFilter('${p.key}')"><i class="fa-solid fa-times"></i></button></span>`).join('');
+ container.innerHTML = pills.map(p => `<span class="active-filter-pill">${p.label}<button onclick="removeFilter(${jsArg(p.key)})"><i class="fa-solid fa-times"></i></button></span>`).join('');
 }
 
 function removeFilter(key) {
@@ -4271,8 +4357,8 @@ async function loadProductReviews(productId) {
  const imgs = getReviewImageUrls(r);
  const isMine = isReviewOwnedByCurrentUser(r);
  const reviewId = escAttr(r.id);
- const actions = isMine && r.id ? `<div class="review-actions"><button class="btn btn-ghost btn-sm" onclick="openEditReviewModal('${reviewId}')" title="Edit review"><i class="fa-solid fa-pen"></i></button><button class="btn btn-ghost btn-sm text-red" onclick="deleteProductReview('${reviewId}')" title="Delete review"><i class="fa-solid fa-trash"></i></button></div>` : '';
- return `<div class="review-card"><div class="flex justify-between items-center"><div style="display:flex;align-items:center;gap:.4rem"><div style="width:26px;height:26px;border-radius:50%;background:var(--green-xlt);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:var(--green)">${escHtml((r.profiles?.name||'B')[0].toUpperCase())}</div><span class="reviewer-name">${escHtml(r.profiles?.name||'Verified Buyer')}</span></div><div style="display:flex;align-items:center;gap:.45rem"><div class="stars sm">${starIcons(r.rating)}</div>${actions}</div></div><p class="review-text">${escHtml(getReviewText(r))}</p>${imgs.length ? `<div class="review-images-gallery">${imgs.map(url => `<img src="${escAttr(url)}" alt="Review photo" onclick="openReviewImage('${escAttr(url)}')">`).join('')}</div>` : ''}<span class="text-xs color-text3"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i> ${r.verified_purchase === false ? 'Buyer Review' : 'Verified Purchase'} - ${fmtDate(r.created_at)}</span></div>`;
+ const actions = isMine && r.id ? `<div class="review-actions"><button class="btn btn-ghost btn-sm" onclick="openEditReviewModal(${jsArg(reviewId)})" title="Edit review"><i class="fa-solid fa-pen"></i></button><button class="btn btn-ghost btn-sm text-red" onclick="deleteProductReview(${jsArg(reviewId)})" title="Delete review"><i class="fa-solid fa-trash"></i></button></div>` : '';
+ return `<div class="review-card"><div class="flex justify-between items-center"><div style="display:flex;align-items:center;gap:.4rem"><div style="width:26px;height:26px;border-radius:50%;background:var(--green-xlt);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:var(--green)">${escHtml((r.profiles?.name||'B')[0].toUpperCase())}</div><span class="reviewer-name">${escHtml(r.profiles?.name||'Verified Buyer')}</span></div><div style="display:flex;align-items:center;gap:.45rem"><div class="stars sm">${starIcons(r.rating)}</div>${actions}</div></div><p class="review-text">${escHtml(getReviewText(r))}</p>${imgs.length ? `<div class="review-images-gallery">${imgs.map(url => `<img src="${escAttr(url)}" alt="Review photo" onclick="openReviewImage(${jsArg(url)})">`).join('')}</div>` : ''}<span class="text-xs color-text3"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i> ${r.verified_purchase === false ? 'Buyer Review' : 'Verified Purchase'} - ${fmtDate(r.created_at)}</span></div>`;
   }).join('');
 }
 
@@ -4761,7 +4847,7 @@ function renderBogoCategoryChips() {
  cats.forEach(cat => {
   const count = gifts.filter(g => (g.category || '').toLowerCase() === cat.toLowerCase()).length;
   const active = currentCat.toLowerCase() === cat.toLowerCase() ? 'active' : '';
-  html += `<button type="button" class="bogo-chip ${active}" onclick="setBogoCategory('${escAttr(cat)}')">${escHtml(cat)} (${count})</button>`;
+  html += `<button type="button" class="bogo-chip ${active}" onclick="setBogoCategory(${jsArg(cat)})">${escHtml(cat)} (${count})</button>`;
  });
 
  host.innerHTML = html;
@@ -4839,7 +4925,7 @@ function renderBogoModalGifts() {
   const displayPrice = bogoNumber(gift.customer_price ?? gift.display_price ?? gift.price, 0);
   const catTag = gift.category ? `<span class="bogo-card-category-tag">${escHtml(gift.category)}</span>` : '';
   return `
-   <div class="bogo-gift-card ${isSelected ? 'is-selected' : ''}" onclick="selectBogoFreeGiftAndClose('${escAttr(gift.id)}')">
+   <div class="bogo-gift-card ${isSelected ? 'is-selected' : ''}" onclick="selectBogoFreeGiftAndClose(${jsArg(gift.id)})">
     <div class="bogo-card-img-wrap">
      <img src="${escAttr(img)}" alt="${escAttr(gift.name)}" loading="lazy">
      <span class="bogo-card-free-tag"><i class="fa-solid fa-gift"></i> FREE</span>
@@ -5033,14 +5119,14 @@ function renderCartItems() {
  <div class="color-green font-bold">${fmtN(c.price)}</div>
    <div class="text-xs color-text3">BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} per store</div>
  <div class="flex items-center gap-2 mt-1">
- <button onclick="changeCartQty('${c.id}',-1)" class="btn btn-outline btn-sm" style="padding:.2rem .5rem">-</button>
+ <button onclick="changeCartQty(${jsArg(c.id)},-1)" class="btn btn-outline btn-sm" style="padding:.2rem .5rem">-</button>
  <span class="text-sm font-bold">${c.qty||1}</span>
- <button onclick="changeCartQty('${c.id}',1)" class="btn btn-outline btn-sm" style="padding:.2rem .5rem">+</button>
+ <button onclick="changeCartQty(${jsArg(c.id)},1)" class="btn btn-outline btn-sm" style="padding:.2rem .5rem">+</button>
  </div>
  </div>
  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.4rem">
  <span class="font-bold text-sm">${fmtN(c.price*(c.qty||1))}</span>
- <button onclick="removeFromCart('${c.id}')" class="btn btn-sm" style="background:#fee2e2;color:var(--danger);padding:.28rem .62rem"><i class="fa-solid fa-trash"></i></button>
+ <button onclick="removeFromCart(${jsArg(c.id)})" class="btn btn-sm" style="background:#fee2e2;color:var(--danger);padding:.28rem .62rem"><i class="fa-solid fa-trash"></i></button>
  </div>
  </div>`).join('');
  document.getElementById('cart-subtotal').textContent = fmtN(productTotal);
@@ -5664,14 +5750,15 @@ async function submitTransferOrder() {
  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting...';
  try {
  const file = fileInput.files[0];
- const path = `proofs/${currentUser.id}/${Date.now()}.${proofExt}`;
- let uploaded;
+ // Upload with the client that holds the current session so storage RLS sees
+ // auth.uid(); a stale client would insert as the anonymous role.
+ const uploadClient = await getAuthenticatedMessageClient();
+ let proofUrl;
  try {
- uploaded = await uploadToFirstAvailableBucket(['uploads', 'products'], path, file, { contentType: file.type || undefined, upsert: false });
+ proofUrl = await uploadPaymentProof(uploadClient, file, proofExt);
  } catch (uploadError) {
  throw new Error(`Receipt upload failed: ${uploadError.message || 'check Supabase storage policies'}`);
  }
- const proofUrl = uploaded.publicUrl;
  try {
  const transferRef = document.getElementById('co-transfer-ref')?.value.trim() || '';
  await saveOrderToDb(transferRef, 'buysell_bank_transfer', null, proofUrl);
@@ -6026,7 +6113,7 @@ async function __legacyDuplicate_loadBuyerOrders_3766() {
  </div>
  <div class="flex gap-1 flex-wrap mb-2">${(o.items||[]).map(i=>`<span class="text-xs badge badge-gray">${escHtml(i.name)} x${i.qty}</span>`).join('')}</div>
  <div class="flex gap-2 flex-wrap">
- ${o.status==='delivered'?`<button class="btn btn-outline btn-sm" onclick="openDisputeModal('${o.id}')"><i class="fa-solid fa-exclamation-triangle"></i> Dispute</button>`:''}
+ ${o.status==='delivered'?`<button class="btn btn-outline btn-sm" onclick="openDisputeModal(${jsArg(o.id)})"><i class="fa-solid fa-exclamation-triangle"></i> Dispute</button>`:''}
  <a href="https://wa.me/2348116833356?text=Order ${o.id}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Track</a>
  </div>
  </div>`).join('');
@@ -6078,11 +6165,11 @@ async function loadBuyerOrders() {
   <span><i class="fa-solid fa-location-dot"></i> ${escHtml(o.delivery_address || 'Delivery address not saved')}</span>
  </div>
  <div class="buyer-order-actions">
- ${o.seller_id ? `<button class="btn btn-outline btn-sm" onclick="openConversation('${escAttr(o.seller_id)}','Seller','${escAttr(productId)}')"><i class="fa-solid fa-message"></i> Message Seller</button>` : ''}
- ${o.status==='delivered' && productId ? `<button class="btn btn-primary btn-sm" onclick="openReviewModal('${escAttr(productId)}','Purchased item','${escAttr(o.seller_id || '')}')"><i class="fa-solid fa-star"></i> Review</button>` : ''}
- ${o.status==='delivered'?`<button class="btn btn-outline btn-sm" onclick="openDisputeModal('${escAttr(o.id)}')"><i class="fa-solid fa-exclamation-triangle"></i> Dispute</button>`:''}
- ${proofUrl ? `<a href="${escAttr(proofUrl)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm"><i class="fa-solid fa-receipt"></i> Proof</a>` : ''}
- <button class="btn btn-outline btn-sm" onclick="openOrderTracking('${escAttr(o.id)}')"><i class="fa-solid fa-truck"></i> Track</button>
+ ${o.seller_id ? `<button class="btn btn-outline btn-sm" onclick="openConversation(${jsArg(o.seller_id)},'Seller',${jsArg(productId)})"><i class="fa-solid fa-message"></i> Message Seller</button>` : ''}
+ ${o.status==='delivered' && productId ? `<button class="btn btn-primary btn-sm" onclick="openReviewModal(${jsArg(productId)},'Purchased item',${jsArg(o.seller_id || '')})"><i class="fa-solid fa-star"></i> Review</button>` : ''}
+ ${o.status==='delivered'?`<button class="btn btn-outline btn-sm" onclick="openDisputeModal(${jsArg(o.id)})"><i class="fa-solid fa-exclamation-triangle"></i> Dispute</button>`:''}
+ ${proofUrl ? `<button type="button" class="btn btn-outline btn-sm" onclick="openPaymentProof(${jsArg(proofUrl)})"><i class="fa-solid fa-receipt"></i> Proof</button>` : ''}
+ <button class="btn btn-outline btn-sm" onclick="openOrderTracking(${jsArg(o.id)})"><i class="fa-solid fa-truck"></i> Track</button>
  </div>
  </div>`;
  }).join('');
@@ -6355,9 +6442,9 @@ async function loadSellerProds() {
  </div>
  </div>
  <div class="prod-list-actions">
- <button onclick="editProduct('${p.id}')" class="btn btn-outline btn-sm"><i class="fa-solid fa-pen"></i></button>
- <button onclick="deleteProduct('${p.id}')" class="btn btn-danger btn-sm"><i class="fa-solid fa-trash"></i></button>
- <button onclick="toggleProductStatus('${p.id}','${p.status}')" class="btn btn-sm" style="background:${p.status==='active'?'#fef9c3':'var(--green-xlt)'};color:${p.status==='active'?'#a16207':'#15803d'}">
+ <button onclick="editProduct(${jsArg(p.id)})" class="btn btn-outline btn-sm"><i class="fa-solid fa-pen"></i></button>
+ <button onclick="deleteProduct(${jsArg(p.id)})" class="btn btn-danger btn-sm"><i class="fa-solid fa-trash"></i></button>
+ <button onclick="toggleProductStatus(${jsArg(p.id)},${jsArg(p.status)})" class="btn btn-sm" style="background:${p.status==='active'?'#fef9c3':'var(--green-xlt)'};color:${p.status==='active'?'#a16207':'#15803d'}">
  ${p.status==='active'?'Pause':'Activate'}
  </button>
  </div>
@@ -6492,7 +6579,8 @@ if (nameVal.length > 300) {
 
 async function deleteProduct(id) {
  if (!confirm('Delete this product?')) return;
- const card = document.querySelector(`[onclick="editProduct('${id}')"]`)?.closest('.prod-list-item');
+ // Matches the rendered handler text; JSON.stringify also yields a valid CSS string.
+ const card = document.querySelector(`[onclick=${JSON.stringify(`editProduct(${JSON.stringify(String(id ?? ''))})`)}]`)?.closest('.prod-list-item');
  if (card) card.style.opacity = '.45';
  try {
   await ensureSellerProfileRole();
@@ -6506,7 +6594,7 @@ async function deleteProduct(id) {
 
 async function toggleProductStatus(id, current) {
  const next = current === 'active' ? 'paused' : 'active';
- const card = document.querySelector(`[onclick="toggleProductStatus('${id}','${current}')"]`)?.closest('.prod-list-item');
+ const card = document.querySelector(`[onclick=${JSON.stringify(`toggleProductStatus(${JSON.stringify(String(id ?? ''))},${JSON.stringify(String(current ?? ''))})`)}]`)?.closest('.prod-list-item');
  const statusBadge = card?.querySelector('.prod-list-meta .badge');
  if (statusBadge) {
   statusBadge.className = `badge badge-${next === 'active' ? 'green' : 'gray'}`;
@@ -6705,9 +6793,9 @@ async function loadSellerOrders() {
  <div class="text-xs color-text3">${o.payment_method}</div>
  </div>
  </div>
- ${o.proof_url ? `<div class="mt-2"><a href="${o.proof_url}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-image"></i> View Proof</a></div>` : ''}
+ ${o.proof_url ? `<div class="mt-2"><button type="button" class="btn btn-outline btn-sm" onclick="openPaymentProof(${jsArg(o.proof_url)})"><i class="fa-solid fa-image"></i> View Proof</button></div>` : ''}
  <div class="flex gap-2 mt-3 flex-wrap">
- ${o.buyer_id ? `<button onclick="openConversation('${escAttr(o.buyer_id)}','Buyer','${escAttr(productId)}')" class="btn btn-outline btn-sm"><i class="fa-solid fa-message"></i> Message Buyer</button>` : ''}
+ ${o.buyer_id ? `<button onclick="openConversation(${jsArg(o.buyer_id)},'Buyer',${jsArg(productId)})" class="btn btn-outline btn-sm"><i class="fa-solid fa-message"></i> Message Buyer</button>` : ''}
   ${o.status==='pending'?`<span class="badge badge-gold"><i class="fa-solid fa-box"></i> Prepare for BUYSELL pickup</span>`:''}
   ${o.status==='confirmed'?`<span class="badge badge-blue"><i class="fa-solid fa-truck-fast"></i> Pickup scheduled by BUYSELL</span>`:''}
   ${['shipped','in_transit','picked_up'].includes(String(o.status))?`<span class="badge badge-purple"><i class="fa-solid fa-route"></i> With BUYSELL delivery</span>`:''}
@@ -7085,7 +7173,7 @@ async function loadWithdrawalData() {
  
  // Simultaneously pull profile configs, raw order vectors, standard bank payouts, and internal wallet purchases
  const [{ data: profile }, { data: withdrawals }, wallet] = await Promise.all([
- db.from('profiles').select('bank_name,account_number,account_name').eq('id', currentUser.id).maybeSingle(),
+ fetchOwnPrivateProfile(currentUser.id).then(data => ({ data })),
  db.from('withdrawals').select('amount,status,created_at,id').eq('seller_id', currentUser.id).order('created_at',{ascending:false}),
  getSellerAvailableRevenue(currentUser.id)
  ]);
@@ -7330,7 +7418,7 @@ async function __legacyDuplicate_renderDropshipCatalog_4866() {
  <div class="text-xs color-text3 mt-1">${escHtml(p.supplier)} - ${escHtml(p.delivery)}</div>
  <div class="dropship-price-row"><span>Cost ${fmtN(p.cost)}</span><strong>${fmtN(p.price)}</strong></div>
  <div class="hot-profit">Profit ${fmtN(profit)} - ${margin}% margin</div>
- <button class="btn btn-primary btn-full btn-sm mt-2" onclick="importDropshipById('${p.id}')"><i class="fa-solid fa-download"></i> Import Listing</button>
+ <button class="btn btn-primary btn-full btn-sm mt-2" onclick="importDropshipById(${jsArg(p.id)})"><i class="fa-solid fa-download"></i> Import Listing</button>
  </div>
  </div>`;
  }).join('');
@@ -7482,7 +7570,7 @@ async function __legacyDuplicate_loadDropshipData_5004() {
  <td class="font-bold color-green">${fmtN(p.price)}</td>
  <td>${p.stock_quantity ?? 'N/A'}</td>
  <td><span class="badge ${p.status === 'active' ? 'badge-green' : 'badge-gold'}">${escHtml(p.status || 'draft')}</span></td>
- <td><button class="btn btn-outline btn-sm" onclick="editProduct('${p.id}')"><i class="fa-solid fa-pen"></i> Edit</button></td>
+ <td><button class="btn btn-outline btn-sm" onclick="editProduct(${jsArg(p.id)})"><i class="fa-solid fa-pen"></i> Edit</button></td>
  </tr>`).join('');
 }
 
@@ -7587,7 +7675,7 @@ function renderDropshipSection() {
  </div>
 
  <div class="card card-pad mb-4">
- <div class="flex justify-between items-center mb-3 gap-2 wrap"><h3>1688 Access Links</h3><div class="flex gap-2 wrap" id="ds-1688-tabs">${['all','Fashion','Electronics','Home','Beauty','Factory','Industrial','Packaging'].map(cat => `<button class="btn ${cat === 'all' ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="set1688Category('${cat}')">${cat === 'all' ? 'All' : cat}</button>`).join('')}</div></div>
+ <div class="flex justify-between items-center mb-3 gap-2 wrap"><h3>1688 Access Links</h3><div class="flex gap-2 wrap" id="ds-1688-tabs">${['all','Fashion','Electronics','Home','Beauty','Factory','Industrial','Packaging'].map(cat => `<button class="btn ${cat === 'all' ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="set1688Category(${jsArg(cat)})">${cat === 'all' ? 'All' : cat}</button>`).join('')}</div></div>
  <div class="hot-items-grid ds-1688-catalog" id="dropship-catalog"></div>
  </div>
 
@@ -7640,7 +7728,7 @@ function renderDropshipCatalog() {
   btn.classList.toggle('btn-outline', !isActive);
  });
  const items = source1688Catalog.filter(item => active1688Category === 'all' || item.category === active1688Category);
- grid.innerHTML = items.map(p => `<div class="hot-item dropship-product-card ds-1688-card"><img src="${escAttr(p.image)}" alt="${escAttr(p.title)}" loading="lazy"><div class="hot-item-body"><span class="badge badge-green ds-1688-category">${escHtml(p.category)}</span><div class="font-600 text-sm ds-1688-title">${escHtml(p.title)}</div><div class="text-xs color-text3 mt-1">${escHtml(p.supplier)} - ${escHtml(p.moq)}</div><div class="dropship-price-row"><span>${escHtml(p.price)}</span><strong>1688</strong></div><div class="tag-row">${p.tags.map(tag => `<span class="badge badge-gray">${escHtml(tag)}</span>`).join('')}</div><div class="ds-1688-card-actions"><a class="btn btn-outline btn-sm" href="${escAttr(p.url)}" target="_blank" rel="noopener"><i class="fa-solid fa-up-right-from-square"></i> Open</a><button class="btn btn-primary btn-sm" onclick="prepare1688CatalogItem('${escAttr(p.id)}')"><i class="fa-solid fa-cart-plus"></i> Use</button></div></div></div>`).join('');
+ grid.innerHTML = items.map(p => `<div class="hot-item dropship-product-card ds-1688-card"><img src="${escAttr(p.image)}" alt="${escAttr(p.title)}" loading="lazy"><div class="hot-item-body"><span class="badge badge-green ds-1688-category">${escHtml(p.category)}</span><div class="font-600 text-sm ds-1688-title">${escHtml(p.title)}</div><div class="text-xs color-text3 mt-1">${escHtml(p.supplier)} - ${escHtml(p.moq)}</div><div class="dropship-price-row"><span>${escHtml(p.price)}</span><strong>1688</strong></div><div class="tag-row">${p.tags.map(tag => `<span class="badge badge-gray">${escHtml(tag)}</span>`).join('')}</div><div class="ds-1688-card-actions"><a class="btn btn-outline btn-sm" href="${escAttr(p.url)}" target="_blank" rel="noopener"><i class="fa-solid fa-up-right-from-square"></i> Open</a><button class="btn btn-primary btn-sm" onclick="prepare1688CatalogItem(${jsArg(p.id)})"><i class="fa-solid fa-cart-plus"></i> Use</button></div></div></div>`).join('');
 }
 
 function readMatch(text, pattern) {
@@ -8055,7 +8143,7 @@ async function loadDropshipData() {
   tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">No 1688 listings yet</td></tr>';
   return;
  }
- tbody.innerHTML = dropshipProducts.map(p => `<tr><td><div class="flex items-center gap-2"><img src="${escAttr(p.image_url || 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=120')}" alt="" style="width:42px;height:42px;border-radius:8px;object-fit:cover"><div><div class="font-600 text-sm">${escHtml(p.name)}</div><div class="text-xs color-text3">BUYSELL 1688 sourcing - ${fmtDate(p.created_at)}</div></div></div></td><td class="font-bold color-green">${fmtN(p.price)}</td><td>${p.stock_quantity ?? 'N/A'}</td><td><span class="badge ${p.status === 'active' ? 'badge-green' : 'badge-gold'}">${escHtml(p.status || 'draft')}</span></td><td><button class="btn btn-outline btn-sm" onclick="editProduct('${p.id}')"><i class="fa-solid fa-pen"></i> Edit</button></td></tr>`).join('');
+ tbody.innerHTML = dropshipProducts.map(p => `<tr><td><div class="flex items-center gap-2"><img src="${escAttr(p.image_url || 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=120')}" alt="" style="width:42px;height:42px;border-radius:8px;object-fit:cover"><div><div class="font-600 text-sm">${escHtml(p.name)}</div><div class="text-xs color-text3">BUYSELL 1688 sourcing - ${fmtDate(p.created_at)}</div></div></div></td><td class="font-bold color-green">${fmtN(p.price)}</td><td>${p.stock_quantity ?? 'N/A'}</td><td><span class="badge ${p.status === 'active' ? 'badge-green' : 'badge-gold'}">${escHtml(p.status || 'draft')}</span></td><td><button class="btn btn-outline btn-sm" onclick="editProduct(${jsArg(p.id)})"><i class="fa-solid fa-pen"></i> Edit</button></td></tr>`).join('');
 }
 
 function rowText(row = {}) {
@@ -8177,7 +8265,7 @@ async function loadSellerDropshipUpdates() {
   }
    el.innerHTML = updates.map(item => {
     const action = item.senderId
-     ? `<button class="btn btn-outline btn-sm" onclick="openConversation('${escAttr(item.senderId)}','BUYSELL Sourcing Team')"><i class="fa-solid fa-reply"></i> Reply</button>`
+     ? `<button class="btn btn-outline btn-sm" onclick="openConversation(${jsArg(item.senderId)},'BUYSELL Sourcing Team')"><i class="fa-solid fa-reply"></i> Reply</button>`
      : '<button class="btn btn-outline btn-sm" onclick="openDropshipSupportChat()"><i class="fa-solid fa-comments"></i> Ask a question</button>';
     return `<div class="ds-1688-update-card"><div><strong>${escHtml(item.title)}</strong><span>${escHtml(String(item.body || '').slice(0, 220))}</span></div><div class="ds-1688-update-foot"><div><span class="badge badge-green">${escHtml(item.status)}</span><small>${fmtDate(item.date)}</small></div>${action}</div></div>`;
    }).join('');
@@ -8222,8 +8310,8 @@ function renderAdminDropshipRequestCard(row = {}) {
  <input class="form-input" id="ds-admin-message-${id}" value="${escAttr(note)}" placeholder="Message/update for seller">
  </div>
  <div class="flex gap-2 wrap mt-2">
- <button class="btn btn-primary btn-sm" onclick="adminUpdateDropshipRequest('${id}')"><i class="fa-solid fa-paper-plane"></i> Save & Message</button>
- <button class="btn btn-outline btn-sm" onclick="adminMessageDropshipper('${id}')"><i class="fa-solid fa-message"></i> Message Only</button>
+ <button class="btn btn-primary btn-sm" onclick="adminUpdateDropshipRequest(${jsArg(id)})"><i class="fa-solid fa-paper-plane"></i> Save & Message</button>
+ <button class="btn btn-outline btn-sm" onclick="adminMessageDropshipper(${jsArg(id)})"><i class="fa-solid fa-message"></i> Message Only</button>
  </div>
  </article>`;
 }
@@ -9024,8 +9112,8 @@ function renderAdminWhatsAppGroups(groups) {
    <div class="whatsapp-admin-group-info"><strong>${escHtml(group.display_name || 'WhatsApp group')}</strong><code>${escHtml(group.group_jid)}</code><span>${group.is_active ? 'Collector active' : 'Collector paused'} · Added ${fmtDate(group.created_at)}</span></div>
    <div class="whatsapp-admin-group-actions">
     <span class="badge ${group.is_active ? 'badge-green' : 'badge-gray'}">${group.is_active ? 'Active' : 'Paused'}</span>
-    <button class="btn btn-outline btn-sm" onclick="adminSetWhatsAppGroupActive('${escAttr(group.id)}',${group.is_active ? 'false' : 'true'})">${group.is_active ? 'Pause' : 'Activate'}</button>
-    <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:#fecaca" onclick="adminDeleteWhatsAppGroup('${escAttr(group.id)}')" title="Remove group"><i class="fa-solid fa-trash"></i></button>
+    <button class="btn btn-outline btn-sm" onclick="adminSetWhatsAppGroupActive(${jsArg(group.id)},${group.is_active ? 'false' : 'true'})">${group.is_active ? 'Pause' : 'Activate'}</button>
+    <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:#fecaca" onclick="adminDeleteWhatsAppGroup(${jsArg(group.id)})" title="Remove group"><i class="fa-solid fa-trash"></i></button>
    </div>
   </article>`).join('');
  document.querySelectorAll('[data-whatsapp-group-list]').forEach(node => { node.innerHTML = markup; });
@@ -9050,9 +9138,9 @@ function renderAdminWhatsAppListings(listings) {
    <div class="whatsapp-admin-product-info"><strong>${escHtml(product.name || 'Imported product')}</strong><span>${escHtml(product.category || 'Other')} · ${escHtml(product.location || 'Location not set')} · ${fmtDate(listing.created_at)}</span><small>${pricingLine}</small></div>
    <div class="whatsapp-admin-product-state"><span class="badge ${stateClass}">${state}</span><a class="btn btn-outline btn-sm" href="/product?id=${encodeURIComponent(listing.product_id)}" target="_blank" rel="noopener">View</a></div>
    <div class="whatsapp-admin-product-actions">
-    ${canActivate ? `<button class="btn btn-primary btn-sm" onclick="adminUpdateWhatsAppListing('${escAttr(listing.product_id)}','activate')"><i class="fa-solid fa-check"></i> Activate</button>` : ''}
-    ${canPause ? `<button class="btn btn-outline btn-sm" onclick="adminUpdateWhatsAppListing('${escAttr(listing.product_id)}','pause')">Pause</button>` : ''}
-    ${!listing.deleted_at && !listing.sold_at ? `<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:#fecaca" onclick="adminUpdateWhatsAppListing('${escAttr(listing.product_id)}','remove')">Remove</button>` : ''}
+    ${canActivate ? `<button class="btn btn-primary btn-sm" onclick="adminUpdateWhatsAppListing(${jsArg(listing.product_id)},'activate')"><i class="fa-solid fa-check"></i> Activate</button>` : ''}
+    ${canPause ? `<button class="btn btn-outline btn-sm" onclick="adminUpdateWhatsAppListing(${jsArg(listing.product_id)},'pause')">Pause</button>` : ''}
+    ${!listing.deleted_at && !listing.sold_at ? `<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:#fecaca" onclick="adminUpdateWhatsAppListing(${jsArg(listing.product_id)},'remove')">Remove</button>` : ''}
    </div>
   </article>`;
  }).join('')}</div>`;
@@ -9258,8 +9346,8 @@ async function loadAdminUpcomingProducts() {
   </div>
   <div class="admin-upcoming-actions">
   <span class="badge ${row.status === 'active' ? 'badge-green' : 'badge-gray'}">${escHtml(row.status || 'active')}</span>
-  <button class="btn btn-outline btn-sm" onclick="toggleUpcomingProduct('${escAttr(row.id)}','${escAttr(row.status || 'active')}')">${row.status === 'active' ? 'Hide' : 'Show'}</button>
-  <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:#fecaca" onclick="deleteUpcomingProduct('${escAttr(row.id)}')"><i class="fa-solid fa-trash"></i></button>
+  <button class="btn btn-outline btn-sm" onclick="toggleUpcomingProduct(${jsArg(row.id)},${jsArg(row.status || 'active')})">${row.status === 'active' ? 'Hide' : 'Show'}</button>
+  <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:#fecaca" onclick="deleteUpcomingProduct(${jsArg(row.id)})"><i class="fa-solid fa-trash"></i></button>
   </div>
   </div>`;
   }).join('');
@@ -9535,10 +9623,10 @@ function _renderAdminSellerList(sellers) {
  const badge = s.is_suspended
  ? `<span class="badge badge-red">Admin Review</span>`
  : `<span class="badge badge-green">Free Access</span>`;
- const approveBtn = `<button onclick="adminToggleCommission('${s.id}',true)" class="btn btn-sm btn-primary"><i class="fa-solid fa-check"></i> Mark Free</button>`;
+ const approveBtn = `<button onclick="adminToggleCommission(${jsArg(s.id)},true)" class="btn btn-sm btn-primary"><i class="fa-solid fa-check"></i> Mark Free</button>`;
  const accessBtn = s.is_suspended
- ? `<button onclick="adminReactivateUser('${s.id}')" class="btn btn-primary btn-sm"><i class="fa-solid fa-rotate-left"></i> Reactivate</button>`
- : `<button onclick="adminDeactivateUser('${s.id}')" class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)"><i class="fa-solid fa-ban"></i> Deactivate</button>`;
+ ? `<button onclick="adminReactivateUser(${jsArg(s.id)})" class="btn btn-primary btn-sm"><i class="fa-solid fa-rotate-left"></i> Reactivate</button>`
+ : `<button onclick="adminDeactivateUser(${jsArg(s.id)})" class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)"><i class="fa-solid fa-ban"></i> Deactivate</button>`;
  const waBtn = s.whatsapp
  ? `<a href="https://wa.me/${s.whatsapp.replace(/\D/g,'')}" target="_blank" class="btn btn-sm" style="background:#dcfce7;color:#15803d"><i class="fa-brands fa-whatsapp"></i></a>`
  : '';
@@ -9559,8 +9647,8 @@ function _renderAdminSellerList(sellers) {
  ${approveBtn}
  ${accessBtn}
  ${waBtn}
- <button onclick="adminViewStorefront('${s.id}')" class="btn btn-outline btn-sm" title="View store"><i class="fa-solid fa-store"></i></button>
- <button onclick="adminDeleteSeller('${s.id}')" class="btn btn-danger btn-sm" title="Delete"><i class="fa-solid fa-trash"></i></button>
+ <button onclick="adminViewStorefront(${jsArg(s.id)})" class="btn btn-outline btn-sm" title="View store"><i class="fa-solid fa-store"></i></button>
+ <button onclick="adminDeleteSeller(${jsArg(s.id)})" class="btn btn-danger btn-sm" title="Delete"><i class="fa-solid fa-trash"></i></button>
  </div>
  </div>`;
  }).join('');
@@ -9624,12 +9712,12 @@ async function loadAdminOrders() {
  </div>
  <div class="text-xs color-text3 mb-2"><i class="fa-solid fa-user"></i> ${escHtml(o.delivery_name||' - ')} &nbsp;|&nbsp; <i class="fa-solid fa-map-marker-alt"></i> ${escHtml((o.delivery_address||'').substr(0,50))}</div>
  <div class="flex gap-2 flex-wrap">
-  ${o.status==='pending' && o.proof_url ? `<button onclick="adminUpdateOrder('${escAttr(o.id)}','confirmed')" class="btn btn-primary btn-sm"><i class="fa-solid fa-check"></i> Verify Payment & Schedule Pickup</button>` : ''}
+  ${o.status==='pending' && o.proof_url ? `<button onclick="adminUpdateOrder(${jsArg(o.id)},'confirmed')" class="btn btn-primary btn-sm"><i class="fa-solid fa-check"></i> Verify Payment & Schedule Pickup</button>` : ''}
   ${o.status==='pending' && !o.proof_url ? `<span class="text-xs color-text3">Awaiting payment receipt</span>` : ''}
-  ${o.status==='confirmed' ? `<button onclick="adminUpdateOrder('${escAttr(o.id)}','shipped')" class="btn btn-sm" style="background:#ede9fe;color:var(--purple)">Collected by BUYSELL</button>` : ''}
-  ${o.status==='shipped' ? `<button onclick="adminUpdateOrder('${escAttr(o.id)}','delivered')" class="btn btn-sm" style="background:#dcfce7;color:#15803d">Mark Delivered</button>` : ''}
- ${!['cancelled','refunded'].includes(o.status) ? `<button onclick="adminUpdateOrder('${escAttr(o.id)}','cancelled')" class="btn btn-outline btn-sm">Cancel</button>` : ''}
- ${o.proof_url ? `<a href="${escAttr(o.proof_url)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-image"></i> Proof</a>` : ''}
+  ${o.status==='confirmed' ? `<button onclick="adminUpdateOrder(${jsArg(o.id)},'shipped')" class="btn btn-sm" style="background:#ede9fe;color:var(--purple)">Collected by BUYSELL</button>` : ''}
+  ${o.status==='shipped' ? `<button onclick="adminUpdateOrder(${jsArg(o.id)},'delivered')" class="btn btn-sm" style="background:#dcfce7;color:#15803d">Mark Delivered</button>` : ''}
+ ${!['cancelled','refunded'].includes(o.status) ? `<button onclick="adminUpdateOrder(${jsArg(o.id)},'cancelled')" class="btn btn-outline btn-sm">Cancel</button>` : ''}
+ ${o.proof_url ? `<button type="button" class="btn btn-outline btn-sm" onclick="openPaymentProof(${jsArg(o.proof_url)})"><i class="fa-solid fa-image"></i> Proof</button>` : ''}
  </div>
  </div>`).join('');
  } catch(err) {
@@ -9672,8 +9760,8 @@ async function loadAdminDisputes() {
  </div>
  ${d.status==='open' ? `
  <div class="flex gap-2 flex-wrap">
- <button onclick="resolveDispute('${escAttr(d.id)}')" class="btn btn-primary btn-sm"><i class="fa-solid fa-check"></i> Resolve</button>
- <button onclick="refundDispute('${escAttr(d.id)}','${escAttr(d.order_id||d.id)}')" class="btn btn-danger btn-sm"><i class="fa-solid fa-undo"></i> Refund</button>
+ <button onclick="resolveDispute(${jsArg(d.id)})" class="btn btn-primary btn-sm"><i class="fa-solid fa-check"></i> Resolve</button>
+ <button onclick="refundDispute(${jsArg(d.id)},${jsArg(d.order_id||d.id)})" class="btn btn-danger btn-sm"><i class="fa-solid fa-undo"></i> Refund</button>
  <a href="https://wa.me/?text=Re%20dispute%20Order%20${escAttr(d.order_id||d.id)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i></a>
  </div>` : ''}
  </div>`).join('');
@@ -9725,8 +9813,8 @@ async function loadAdminWithdrawals() {
  <span class="badge ${badge}">${w.status}</span>
  ${w.status==='pending' ? `
  <div class="flex gap-2">
- <button onclick="adminPayWithdrawal('${w.id}')" class="btn btn-primary btn-sm"><i class="fa-solid fa-check"></i> Mark Paid</button>
- <button onclick="adminRejectWithdrawal('${w.id}')" class="btn btn-outline btn-sm">Reject</button>
+ <button onclick="adminPayWithdrawal(${jsArg(w.id)})" class="btn btn-primary btn-sm"><i class="fa-solid fa-check"></i> Mark Paid</button>
+ <button onclick="adminRejectWithdrawal(${jsArg(w.id)})" class="btn btn-outline btn-sm">Reject</button>
  </div>` :
  w.status==='paid' ? `<div class="text-xs color-green">Paid ${fmtDate(w.paid_at)}</div>` :
  `<div class="text-xs color-danger">${escHtml(w.reject_reason||'Rejected')}</div>`}
@@ -9870,7 +9958,7 @@ async function refreshBroadcastProductPreview() {
 function broadcastProductCard(product = {}) {
  const image = product.image_url || getProductThumbnail(product);
  const url = product.url || productPublicLink(product.id);
- return `<a class="broadcast-product-card" href="${escAttr(url)}" onclick="event.preventDefault();openProduct('${escAttr(product.id)}')">
+ return `<a class="broadcast-product-card" href="${escAttr(url)}" onclick="event.preventDefault();openProduct(${jsArg(product.id)})">
  <img src="${escAttr(image)}" alt="${escAttr(product.name || 'Product')}" loading="lazy">
  <div>
  <strong>${escHtml(product.name || 'Product')}</strong>
@@ -10052,7 +10140,7 @@ async function loadAdminReceipts() {
  const statusBadge = r.status === 'approved' ? 'badge-green'
  : r.status === 'rejected' ? 'badge-red' : 'badge-gold';
  const actions = r.status === 'pending'
- ? `<button class="btn btn-primary btn-sm" onclick="approveReceipt('${r.id}','${r.seller_id}')" style="margin-right:.3rem"><i class="fa-solid fa-check"></i></button><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="rejectReceipt('${r.id}')"><i class="fa-solid fa-times"></i></button>`
+ ? `<button class="btn btn-primary btn-sm" onclick="approveReceipt(${jsArg(r.id)},${jsArg(r.seller_id)})" style="margin-right:.3rem"><i class="fa-solid fa-check"></i></button><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="rejectReceipt(${jsArg(r.id)})"><i class="fa-solid fa-times"></i></button>`
  : `<span class="text-xs color-text3">${r.status}</span>`;
  return `<tr>
  <td style="font-weight:600;font-size:.82rem">${escHtml(sellerName)}</td>
@@ -10120,7 +10208,7 @@ async function loadCommissionActivations() {
  <td class="text-xs" style="font-family:monospace">${escHtml(r.transaction_ref)}</td>
  <td><a href="${r.receipt_url}" target="_blank" class="btn btn-ghost btn-sm" style="color:var(--blue)"><i class="fa-solid fa-image"></i> View</a></td>
  <td>
- <button class="btn btn-primary btn-sm" onclick="adminActivateSeller('${r.seller_id}', '${r.id}')"><i class="fa-solid fa-check"></i> Activate</button>
+ <button class="btn btn-primary btn-sm" onclick="adminActivateSeller(${jsArg(r.seller_id)}, ${jsArg(r.id)})"><i class="fa-solid fa-check"></i> Activate</button>
  </td>
  </tr>
  `).join('');
@@ -10156,8 +10244,8 @@ async function loadAdPayments() {
  <td class="text-xs" style="font-family:monospace">${escHtml(a.payment_reference || 'N/A')}</td>
  <td><a href="${a.media_url}" target="_blank" class="btn btn-ghost btn-sm" style="color:var(--blue)"><i class="fa-solid fa-image"></i> View</a></td>
  <td>
- <button class="btn btn-primary btn-sm" onclick="adminApproveAd('${a.id}')" style="margin-right:.3rem"><i class="fa-solid fa-check"></i></button>
- <button class="btn btn-outline btn-sm" onclick="adminRejectAd('${a.id}')" style="color:var(--red);border-color:var(--red)"><i class="fa-solid fa-times"></i></button>
+ <button class="btn btn-primary btn-sm" onclick="adminApproveAd(${jsArg(a.id)})" style="margin-right:.3rem"><i class="fa-solid fa-check"></i></button>
+ <button class="btn btn-outline btn-sm" onclick="adminRejectAd(${jsArg(a.id)})" style="color:var(--red);border-color:var(--red)"><i class="fa-solid fa-times"></i></button>
  </td>
  </tr>
  `).join('');
@@ -10205,9 +10293,9 @@ function _renderTrialExtensions(sellers) {
  ? '<span class="badge badge-red">Admin Review</span>'
  : '<span class="badge badge-green">Free Access</span>';
  const accessBtn = s.is_suspended
- ? `<button class="btn btn-primary btn-sm" onclick="adminReactivateUser('${s.id}')"><i class="fa-solid fa-rotate-left"></i> Reactivate</button>`
- : `<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="adminDeactivateUser('${s.id}')"><i class="fa-solid fa-ban"></i> Deactivate</button>`;
- const activateBtn = s.commission_paid ? '' : `<button class="btn btn-primary btn-sm" onclick="adminGrantCommission('${s.id}')"><i class="fa-solid fa-check"></i> Mark Free</button>`;
+ ? `<button class="btn btn-primary btn-sm" onclick="adminReactivateUser(${jsArg(s.id)})"><i class="fa-solid fa-rotate-left"></i> Reactivate</button>`
+ : `<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="adminDeactivateUser(${jsArg(s.id)})"><i class="fa-solid fa-ban"></i> Deactivate</button>`;
+ const activateBtn = s.commission_paid ? '' : `<button class="btn btn-primary btn-sm" onclick="adminGrantCommission(${jsArg(s.id)})"><i class="fa-solid fa-check"></i> Mark Free</button>`;
  
  return `
  <tr>
@@ -10271,45 +10359,29 @@ async function adminGrantCommission(sellerId) {
  }
 }
 
+// Suspension changes other users' accounts, so it runs only in the
+// admin-action Edge Function, which verifies the caller is an admin.
 async function adminDeactivateUser(userId) {
  if (!confirm('Deactivate this account and pause their listings?')) return;
- try {
- const { error: profileError } = await db.from('profiles').update({ is_suspended: true }).eq('id', userId);
- if (profileError) throw profileError;
- await db.from('products').update({ status: 'paused' }).eq('seller_id', userId);
- toast('Account Deactivated', 'Listings were paused.', 'warn');
- loadAdminAccounts();
- loadAdminSellers();
- } catch(directError) {
  try {
  await callEdge('admin-action', { action: 'deactivate_user', target_id: userId, data: { user_id: userId } });
  toast('Account Deactivated', 'Listings were paused.', 'warn');
  loadAdminAccounts();
  loadAdminSellers();
  } catch(e) {
- toast('Error', e.message || directError.message, 'error');
- }
+ toast('Error', e.message || 'Could not deactivate this account.', 'error');
  }
 }
 
 async function adminReactivateUser(userId) {
  if (!confirm('Reactivate this account and listings?')) return;
  try {
- const { error: profileError } = await db.from('profiles').update({ is_suspended: false }).eq('id', userId);
- if (profileError) throw profileError;
- await db.from('products').update({ status: 'active' }).eq('seller_id', userId).neq('stock_quantity', 0);
- toast('Account Reactivated', 'Listings were restored.', 'success');
- loadAdminAccounts();
- loadAdminSellers();
- } catch(directError) {
- try {
  await callEdge('admin-action', { action: 'reactivate_user', target_id: userId, data: { user_id: userId } });
  toast('Account Reactivated', 'Listings were restored.', 'success');
  loadAdminAccounts();
  loadAdminSellers();
  } catch(e) {
- toast('Error', e.message || directError.message, 'error');
- }
+ toast('Error', e.message || 'Could not reactivate this account.', 'error');
  }
 }
 async function checkBroadcastForUser() {
@@ -10935,6 +11007,13 @@ function escAttr(s) {
  // Safe for use inside HTML attributes
  return String(s||'').replace(/[^a-zA-Z0-9 _\-\.,:@]/g, c => '&#'+c.charCodeAt(0)+';');
 }
+// Use for every value passed as an argument in an inline on*="..." handler.
+// The browser decodes HTML entities before running the handler, so escAttr
+// alone cannot stop a quote in a name or URL from ending the JS string; the
+// value is first made a JSON string literal, then encoded for the attribute.
+function jsArg(value) {
+ return escAttr(JSON.stringify(String(value ?? '')));
+}
 function sanitizeUrl(url) {
  if (!url) return '';
  const rawUrl = String(url).trim();
@@ -11361,7 +11440,7 @@ function renderServiceCards(gigs) {
  </div>
  </div>
  <div style="display:flex;gap:.5rem">
- <button class="btn btn-outline btn-sm" style="flex:1" onclick="viewProviderProfile('${g.provider_id}')">
+ <button class="btn btn-outline btn-sm" style="flex:1" onclick="viewProviderProfile(${jsArg(g.provider_id)})">
  <i class="fa-solid fa-user"></i> View Profile
  </button>
  <a href="${waLink}" target="_blank" class="btn btn-primary btn-sm" style="flex:1;text-decoration:none">
@@ -11506,7 +11585,7 @@ async function loadMyGigs() {
  <span style="font-weight:800;color:var(--green);font-size:.95rem">${fmtN(g.starting_rate||0)}</span>
  ${imgCount > 0 ? `<span style="font-size:.7rem;color:var(--text3)"><i class="fa-solid fa-images"></i> ${imgCount} photo${imgCount>1?'s':''}</span>` : ''}
  </div>
- <button class="btn btn-ghost btn-sm" style="color:var(--red);font-size:.72rem" onclick="deleteGig('${g.id}')">
+ <button class="btn btn-ghost btn-sm" style="color:var(--red);font-size:.72rem" onclick="deleteGig(${jsArg(g.id)})">
  <i class="fa-solid fa-trash"></i> Delete
  </button>
  </div>
@@ -11648,7 +11727,7 @@ async function viewProviderProfile(providerId) {
  const allImages = allGigs.flatMap(g => g.portfolio_urls || []);
  const gallery = document.getElementById('sp-p-gallery');
  gallery.innerHTML = allImages.length
- ? allImages.map(url => `<img src="${url}" style="width:100%;aspect-ratio:1;object-fit:cover;cursor:pointer;border-radius:6px" onclick="window.open('${url}','_blank')">`).join('')
+ ? allImages.map(url => `<img src="${url}" style="width:100%;aspect-ratio:1;object-fit:cover;cursor:pointer;border-radius:6px" onclick="window.open(${jsArg(url)},'_blank')">`).join('')
  : '<p class="color-text3 text-sm" style="grid-column:1/-1;text-align:center;padding:1rem">No portfolio images yet.</p>';
 
   const serviceReviews = await loadServiceProviderReviews(providerId);
@@ -11759,8 +11838,8 @@ async function loadAdminKyc() {
   </div>
   ${k.admin_note ? `<div class="text-xs color-text3 mb-3"><b>Note:</b> ${escHtml(k.admin_note)}</div>` : ''}
   ${isPending ? `<div class="flex gap-2">
-  <button class="btn btn-primary btn-sm" onclick="adminApproveKyc('${k.id}','${k.user_id}')"><i class="fa-solid fa-check"></i> Approve</button>
-  <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="adminRejectKyc('${k.id}','${k.user_id}')"><i class="fa-solid fa-times"></i> Reject</button>
+  <button class="btn btn-primary btn-sm" onclick="adminApproveKyc(${jsArg(k.id)},${jsArg(k.user_id)})"><i class="fa-solid fa-check"></i> Approve</button>
+  <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="adminRejectKyc(${jsArg(k.id)},${jsArg(k.user_id)})"><i class="fa-solid fa-times"></i> Reject</button>
   </div>` : ''}
  </div>`;
  }).join('');
@@ -12147,10 +12226,10 @@ async function showWishlistModal() {
  </div>
  </div>
  <div style="display:flex; gap:5px">
- <button class="btn btn-outline btn-sm" onclick="addToCart(${JSON.stringify(cartItem).replace(/"/g,'&quot;')})">
+ <button class="btn btn-outline btn-sm" onclick="addToCart(${escAttr(JSON.stringify(cartItem))})">
  <i class="fa-solid fa-cart-plus"></i>
  </button>
- <button class="btn btn-ghost btn-sm" onclick="toggleWishlist('${p.id}')">
+ <button class="btn btn-ghost btn-sm" onclick="toggleWishlist(${jsArg(p.id)})">
  <i class="fa-solid fa-trash" style="color:var(--danger)"></i>
  </button>
  </div>
@@ -12233,7 +12312,7 @@ function renderMessageBubble(message) {
  const imageUrl = extractMessageImageUrl(message);
  const text = messageTextWithoutImageUrl(message);
  const imageHtml = imageUrl
- ? `<img src="${escAttr(imageUrl)}" alt="Chat image" class="msg-image" loading="lazy" onclick="window.open('${escAttr(imageUrl)}','_blank')">`
+ ? `<img src="${escAttr(imageUrl)}" alt="Chat image" class="msg-image" loading="lazy" onclick="window.open(${jsArg(imageUrl)},'_blank')">`
  : '';
  const textHtml = text ? escHtml(text) : '';
  return `<div class="msg-bubble ${isMine ? 'mine' : 'theirs'}${imageUrl ? ' has-image' : ''}">${imageHtml}${textHtml}<div class="msg-time">${formatMsgTime(message.created_at)}${isMine ? ` <span>${message.is_read ? 'Read' : 'Sent'}</span>` : ''}</div></div>`;
@@ -12425,7 +12504,7 @@ async function showInbox() {
  if (m.receiver_id === currentUser.id && !m.is_read) partners[pid].unread += 1;
  });
  container.innerHTML = Object.values(partners).map(p => `
- <div class="inbox-thread ${p.unread ? 'unread' : ''}" onclick="openConversation('${escAttr(p.id)}','${escAttr(p.name)}','${escAttr(p.productId)}')">
+ <div class="inbox-thread ${p.unread ? 'unread' : ''}" onclick="openConversation(${jsArg(p.id)},${jsArg(p.name)},${jsArg(p.productId)})">
  <div class="inbox-avatar">${escHtml((p.name || 'U')[0].toUpperCase())}</div>
  <div style="min-width:0">
  <div class="inbox-thread-title">${escHtml(p.name)}</div>
@@ -12495,7 +12574,7 @@ async function renderMessageProductCard(productId) {
  try {
  const { data: product } = await db.from('products').select('id,name,price').eq('id', productId).maybeSingle();
  if (!product) return;
- card.innerHTML = `<div style="min-width:0"><strong>${escHtml(product.name || 'Product')}</strong><span>${fmtN(product.price || 0)}</span></div><button class="btn btn-outline btn-sm" onclick="openProduct('${escAttr(product.id)}')">View</button>`;
+ card.innerHTML = `<div style="min-width:0"><strong>${escHtml(product.name || 'Product')}</strong><span>${fmtN(product.price || 0)}</span></div><button class="btn btn-outline btn-sm" onclick="openProduct(${jsArg(product.id)})">View</button>`;
  card.classList.remove('hidden');
  } catch (_) {}
 }
@@ -12762,7 +12841,7 @@ async function loadSellerCoupons() {
  <div><span class="font-bold">${escHtml(c.code)}</span> - ${discount} off${min}</div>
  <div class="text-xs color-text3">${usage} - ${expiry}</div>
  </div>
- <button class="btn btn-ghost btn-sm" onclick="deleteCoupon('${escAttr(c.id)}')" style="color:var(--red)" title="Delete coupon"><i class="fa-solid fa-trash"></i></button>
+ <button class="btn btn-ghost btn-sm" onclick="deleteCoupon(${jsArg(c.id)})" style="color:var(--red)" title="Delete coupon"><i class="fa-solid fa-trash"></i></button>
  </div>`;
  }).join('');
  } catch(e) {

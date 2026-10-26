@@ -42,6 +42,14 @@ def _relay_text(item: dict[str, Any]) -> str:
 def create_relay_app(bot: Bot, settings: Settings) -> web.Application:
     app = web.Application(client_max_size=1_000_000)
 
+    async def root(_request: web.Request) -> web.Response:
+        return web.json_response({
+            "status": "ok",
+            "service": "buysell-telegram-ingestion-bot",
+            "health": "/health",
+            "relay_endpoint": "/internal/relay/whatsapp",
+        })
+
     async def health(_request: web.Request) -> web.Response:
         return web.json_response({"status": "ok", "service": "buysell-telegram-ingestion-bot"})
 
@@ -63,6 +71,7 @@ def create_relay_app(bot: Bot, settings: Settings) -> web.Application:
             return web.json_response({"received": True, "relayed": False, "error": str(error)}, status=502)
         return web.json_response({"received": True, "relayed": True})
 
+    app.router.add_get("/", root)
     app.router.add_get("/health", health)
     app.router.add_post("/internal/relay/whatsapp", receive_whatsapp)
     return app

@@ -41,3 +41,4 @@ update_app_groq.py
 upgrade_*.py
 features_dump.txt
 refactor.py
+old-production-secrets.env

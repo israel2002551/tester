@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { sendTelegramToAdmins } from "../_shared/telegram.ts";
 import webPush from "npm:web-push@3.6.7";
 
 const corsHeaders = {
@@ -40,8 +41,6 @@ const siteUrl = Deno.env.get("SITE_URL") ?? "https://buysell-markerplace.com";
 const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") ?? "BEL_hMw0i1uDcH_jt52ReK7GbXtLW4IvVK_7pW5fGSl-2f7inbRJgednd3R8YRXas-xNles0ezQfXMkopIhuKok";
 const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
 const vapidSubject = Deno.env.get("VAPID_SUBJECT") ?? "mailto:info@buysell-markerplace.com";
-const telegramBotToken = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
-const telegramAdminChatId = Deno.env.get("TELEGRAM_ADMIN_CHAT_ID") ?? "";
 
 function parsePushSubscription(token: unknown) {
   if (!token) return null;
@@ -123,10 +122,6 @@ function htmlEscape(value: unknown) {
 }
 
 async function sendTelegramAdminAlert(order: any, sellerProfile: any, buyerProfile?: any) {
-  if (!telegramBotToken || !telegramAdminChatId) {
-    return { skipped: true, reason: "Telegram env vars are not configured." };
-  }
-
   const orderUrl = `${siteUrl}/?dashboard=admin&tab=orders&order=${encodeURIComponent(String(order.id))}`;
   const message = [
     "🛒 <b>New BUYSELL Order</b>",
@@ -141,23 +136,14 @@ async function sendTelegramAdminAlert(order: any, sellerProfile: any, buyerProfi
     `<a href="${htmlEscape(orderUrl)}">Open admin order</a>`,
   ].join("\n");
 
-  const response = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: telegramAdminChatId,
-      text: message,
-      parse_mode: "HTML",
-      disable_web_page_preview: true,
-    }),
+  const result = await sendTelegramToAdmins("sendMessage", {
+    text: message,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
   });
-
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok || body?.ok === false) {
-    throw new Error(body?.description || `Telegram alert failed with ${response.status}`);
-  }
-
-  return { sent: true, message_id: body?.result?.message_id };
+  if (!result.sent && !result.failed) return { skipped: true, reason: result.reason };
+  if (!result.sent) throw new Error(result.errors?.[0] || "Telegram alert failed.");
+  return { sent: true, chats: result.sent };
 }
 
 serve(async (req) => {

@@ -1,0 +1,794 @@
+/* ====================================================
+   BUYSELL REFRESH (2026)
+   One coherent layer loaded after styles.css. It keeps the BUYSELL green
+   identity, settles the competing legacy rules for the most visible
+   surfaces, and adds motion for page-to-page flow.
+==================================================== */
+
+:root {
+  --bs-ink: #0e1f17;
+  --bs-ink-soft: #3c5146;
+  --bs-muted: #6b7d72;
+  --bs-forest: #0f3d2a;
+  --bs-emerald: #15803d;
+  --bs-emerald-bright: #1f9d55;
+  --bs-mint: #e9f6ee;
+  --bs-canvas: #f6f5f0;
+  --bs-surface: #ffffff;
+  --bs-line: rgba(14, 31, 23, 0.08);
+  --bs-line-strong: rgba(14, 31, 23, 0.14);
+  --bs-saffron: #f5a524;
+  --bs-coral: #e5533d;
+
+  --bs-radius-lg: 22px;
+  --bs-radius: 16px;
+  --bs-radius-sm: 12px;
+  --bs-pill: 999px;
+
+  --bs-shadow-sm: 0 1px 2px rgba(14, 31, 23, 0.05), 0 2px 8px -2px rgba(14, 31, 23, 0.06);
+  --bs-shadow: 0 2px 4px rgba(14, 31, 23, 0.04), 0 12px 32px -12px rgba(14, 31, 23, 0.18);
+  --bs-shadow-lift: 0 4px 10px rgba(14, 31, 23, 0.05), 0 24px 48px -18px rgba(14, 31, 23, 0.28);
+
+  --bs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --bs-fast: 180ms;
+  --bs-med: 320ms;
+  --bs-gutter: clamp(12px, 3vw, 32px);
+
+  /* Feed the legacy tokens so older components follow the new palette. */
+  --green: var(--bs-emerald);
+  --forest: var(--bs-forest);
+  --green-xlt: var(--bs-mint);
+  --text-main: var(--bs-ink);
+  --text-muted: var(--bs-muted);
+  --radius: var(--bs-radius);
+  --shadow: var(--bs-shadow-sm);
+  --shadow-hover: var(--bs-shadow-lift);
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  scroll-padding-top: 88px;
+}
+
+body {
+  background: var(--bs-canvas);
+  color: var(--bs-ink);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(31, 157, 85, 0.22);
+}
+
+:focus-visible {
+  outline: 3px solid rgba(31, 157, 85, 0.45);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  border-radius: var(--bs-pill);
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  transition: transform var(--bs-fast) var(--bs-ease), box-shadow var(--bs-fast) var(--bs-ease),
+    background-color var(--bs-fast) var(--bs-ease), color var(--bs-fast) var(--bs-ease), border-color var(--bs-fast) var(--bs-ease);
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.btn-primary {
+  background: linear-gradient(180deg, var(--bs-emerald-bright), var(--bs-forest));
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 10px 22px -12px rgba(15, 61, 42, 0.75);
+}
+
+.btn-primary:hover:not(:disabled) {
+  box-shadow: 0 14px 28px -12px rgba(15, 61, 42, 0.85);
+  transform: translateY(-1px);
+}
+
+.btn-outline {
+  background: var(--bs-surface);
+  border-color: var(--bs-line-strong);
+  color: var(--bs-ink);
+}
+
+.btn-outline:hover:not(:disabled) {
+  border-color: var(--bs-emerald);
+  color: var(--bs-forest);
+  background: var(--bs-mint);
+}
+
+/* ---------- Header ---------- */
+#main-nav .nav-inner {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: saturate(1.6) blur(14px);
+  -webkit-backdrop-filter: saturate(1.6) blur(14px);
+  border-bottom: 1px solid var(--bs-line);
+}
+
+.nav-search input {
+  border-radius: var(--bs-pill);
+  transition: box-shadow var(--bs-fast) var(--bs-ease), border-color var(--bs-fast) var(--bs-ease);
+}
+
+.nav-search input:focus {
+  box-shadow: 0 0 0 4px rgba(31, 157, 85, 0.14);
+}
+
+.commerce-page-header {
+  backdrop-filter: saturate(1.6) blur(14px);
+  -webkit-backdrop-filter: saturate(1.6) blur(14px);
+  box-shadow: var(--bs-shadow-sm);
+}
+
+/* ---------- Page rhythm ---------- */
+#buyer-view .buyer-inner {
+  padding-inline: var(--bs-gutter);
+  margin-inline: auto;
+}
+
+#buyer-view .hero-carousel {
+  border-radius: var(--bs-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--bs-shadow);
+}
+
+@media (min-width: 721px) {
+  /* Keep slide text clear of the previous/next arrows. */
+  #buyer-view .hero-carousel .slide-content {
+    padding-inline: 5.5rem;
+  }
+}
+
+/* Section heads: the "View All" ghost button was white on a light surface. */
+.mini-section-head {
+  align-items: center;
+}
+
+.mini-section-head h3,
+.section-title {
+  font-family: 'Syne', sans-serif;
+  letter-spacing: -0.02em;
+  color: var(--bs-ink);
+}
+
+.mini-section-head .btn-ghost {
+  color: var(--bs-forest);
+  background: var(--bs-mint);
+  border: 1px solid transparent;
+}
+
+.mini-section-head .btn-ghost:hover {
+  border-color: rgba(21, 128, 61, 0.25);
+}
+
+/* ---------- Category chips ---------- */
+.cats-strip {
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+
+.cats-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.cat-chip {
+  scroll-snap-align: start;
+  border-radius: var(--bs-pill);
+  border: 1px solid var(--bs-line-strong);
+  background: var(--bs-surface);
+  color: var(--bs-ink-soft);
+  font-weight: 700;
+  transition: background-color var(--bs-fast) var(--bs-ease), color var(--bs-fast) var(--bs-ease),
+    border-color var(--bs-fast) var(--bs-ease), transform var(--bs-fast) var(--bs-ease);
+}
+
+/* Legacy markup paints Dropship/Trending with inline colours; keep one chip style. */
+.cat-chip[style] {
+  background: var(--bs-surface) !important;
+  color: var(--bs-ink-soft) !important;
+  border-color: var(--bs-line-strong) !important;
+}
+
+.cat-chip i {
+  color: var(--bs-emerald);
+}
+
+.cat-chip:hover {
+  border-color: var(--bs-emerald);
+  color: var(--bs-forest);
+  transform: translateY(-1px);
+}
+
+.cat-chip.active,
+.cat-chip.active[style] {
+  background: var(--bs-forest) !important;
+  border-color: var(--bs-forest) !important;
+  color: #fff !important;
+}
+
+.cat-chip.active i {
+  color: #a7f3c8;
+}
+
+.category-nav a {
+  border-radius: var(--bs-pill);
+  transition: background-color var(--bs-fast) var(--bs-ease), color var(--bs-fast) var(--bs-ease);
+}
+
+.category-nav a.active {
+  background: var(--bs-forest);
+  border-color: var(--bs-forest);
+  color: #fff;
+}
+
+/* ---------- Trust bars ---------- */
+.buyer-trust-bar > div {
+  border-radius: var(--bs-radius);
+  border: 1px solid var(--bs-line);
+  box-shadow: none;
+  background: var(--bs-surface);
+}
+
+@media (min-width: 721px) {
+  /* Title above subtitle so neither gets cut off. */
+  .buyer-trust-bar > div {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 12px;
+    row-gap: 1px;
+  }
+
+  .buyer-trust-bar > div i {
+    grid-row: span 2;
+  }
+
+  .buyer-trust-bar > div strong,
+  .buyer-trust-bar > div span {
+    min-width: 0;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    text-align: left;
+  }
+
+  .buyer-trust-bar > div span {
+    font-size: 0.76rem;
+    color: var(--bs-muted);
+  }
+}
+
+@media (max-width: 720px) {
+  /* A swipeable row of compact pills instead of tall, truncated cards. */
+  .buyer-trust-bar,
+  .buyer-assurance-strip,
+  .category-trust-bar {
+    display: flex;
+    flex-wrap: nowrap;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    padding: 0 0 2px;
+    gap: 8px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .buyer-trust-bar::-webkit-scrollbar,
+  .buyer-assurance-strip::-webkit-scrollbar,
+  .category-trust-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .buyer-trust-bar > div,
+  .buyer-assurance-strip > div,
+  .category-trust-bar > * {
+    flex: 0 0 auto;
+    width: auto;
+    margin: 0;
+    border: 1px solid var(--bs-line);
+    background: var(--bs-surface);
+    font-size: 0.8rem;
+    white-space: nowrap;
+    scroll-snap-align: start;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 0;
+    padding: 9px 14px;
+    border-radius: var(--bs-pill);
+  }
+
+  .buyer-trust-bar > div span {
+    display: none;
+  }
+
+  .buyer-trust-bar > div strong {
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  .buyer-trust-bar > div i {
+    width: auto;
+    height: auto;
+    padding: 0;
+    background: none;
+    font-size: 0.85rem;
+  }
+}
+
+/* ---------- Product grids ---------- */
+.products-grid,
+.category-products-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, clamp(150px, 42vw, 220px)), 1fr));
+  /* Fills the hole a two-column promo card used to leave in its row. */
+  grid-auto-flow: dense;
+  gap: clamp(10px, 1.6vw, 18px);
+}
+
+@media (max-width: 380px) {
+  .products-grid,
+  .category-products-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.prod-card,
+.cat-product-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 7px;
+  border-radius: var(--bs-radius-lg);
+  border: 1px solid var(--bs-line);
+  background: var(--bs-surface);
+  box-shadow: var(--bs-shadow-sm);
+  color: inherit;
+  text-decoration: none;
+  transition: transform var(--bs-med) var(--bs-ease), box-shadow var(--bs-med) var(--bs-ease),
+    border-color var(--bs-med) var(--bs-ease);
+}
+
+@media (hover: hover) {
+  .prod-card:hover,
+  .cat-product-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--bs-shadow-lift);
+    border-color: rgba(21, 128, 61, 0.18);
+  }
+}
+
+.prod-card:active,
+.cat-product-card:active {
+  transform: scale(0.985);
+}
+
+.prod-img-wrap,
+.cat-product-media {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: calc(var(--bs-radius-lg) - 7px);
+  background: linear-gradient(135deg, #eef3ee, #f7f6f1);
+}
+
+.prod-img-wrap img,
+.cat-product-media img,
+.cat-product-media video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 600ms var(--bs-ease);
+}
+
+@media (hover: hover) {
+  .prod-card:hover .prod-img-wrap img,
+  .cat-product-card:hover .cat-product-media img {
+    transform: scale(1.06);
+  }
+}
+
+.prod-body,
+.cat-product-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 6px 6px;
+}
+
+.prod-name,
+.cat-product-body h2 {
+  margin: 0;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--bs-ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.6em;
+}
+
+.prod-price-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.prod-price,
+.cat-product-price {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.015em;
+  color: var(--bs-forest);
+}
+
+.prod-orig {
+  font-size: 0.75rem;
+  color: var(--bs-muted);
+  text-decoration: line-through;
+}
+
+/* The flat delivery fee and tracking note repeat on every card; the trust bar
+   above the grid and the product page already state them. */
+.prod-card .prod-shipping,
+.prod-card .prod-trust-line {
+  display: none;
+}
+
+.prod-rating-row,
+.cat-product-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  color: var(--bs-muted);
+}
+
+.prod-rating-row .stars {
+  color: var(--bs-saffron);
+}
+
+.cat-product-meta i {
+  color: var(--bs-saffron);
+}
+
+.prod-location,
+.prod-store-link,
+.cat-product-body p {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--bs-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prod-store-link {
+  color: var(--bs-emerald);
+  font-weight: 600;
+}
+
+/* Badges sit on the photo as small glass pills. */
+.prod-badge,
+.cat-product-badges span {
+  border-radius: var(--bs-pill);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.prod-badge-discount {
+  background: var(--bs-coral);
+  color: #fff;
+}
+
+.prod-quick-add {
+  border-radius: 50%;
+  background: var(--bs-surface);
+  color: var(--bs-forest);
+  box-shadow: var(--bs-shadow);
+  transition: transform var(--bs-fast) var(--bs-ease), background-color var(--bs-fast) var(--bs-ease),
+    color var(--bs-fast) var(--bs-ease), opacity var(--bs-fast) var(--bs-ease);
+}
+
+.prod-quick-add:hover {
+  background: var(--bs-forest);
+  color: #fff;
+  transform: scale(1.08);
+}
+
+@media (hover: hover) and (min-width: 721px) {
+  .prod-quick-add {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  .prod-card:hover .prod-quick-add,
+  .prod-quick-add:focus-visible {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Two-column promo cards stay full width on phones. */
+@media (max-width: 720px) {
+  .products-grid > .native-promo-card {
+    grid-column: 1 / -1;
+  }
+
+  .prod-name,
+  .cat-product-body h2 {
+    font-size: 0.84rem;
+  }
+
+  .prod-location {
+    display: none;
+  }
+
+  .prod-badge,
+  .cat-product-badges span {
+    font-size: 0.62rem;
+    padding: 3px 7px;
+  }
+}
+
+/* ---------- Category page ---------- */
+.category-hero {
+  border-radius: var(--bs-radius-lg);
+  overflow: hidden;
+}
+
+.category-toolbar {
+  border-radius: var(--bs-radius);
+  border: 1px solid var(--bs-line);
+  box-shadow: var(--bs-shadow-sm);
+}
+
+.bs-page-btn {
+  border-radius: var(--bs-pill);
+  transition: background-color var(--bs-fast) var(--bs-ease), color var(--bs-fast) var(--bs-ease),
+    transform var(--bs-fast) var(--bs-ease);
+}
+
+.bs-page-btn:active {
+  transform: scale(0.95);
+}
+
+/* ---------- Product page ---------- */
+.product-detail-gallery,
+.product-gallery-container {
+  border-radius: var(--bs-radius-lg);
+  overflow: hidden;
+}
+
+.product-gallery-slide img {
+  border-radius: var(--bs-radius-lg);
+}
+
+.product-detail-price {
+  font-family: 'Syne', sans-serif;
+  letter-spacing: -0.03em;
+  color: var(--bs-forest);
+}
+
+/* ---------- Landing hero on phones ---------- */
+@media (max-width: 720px) {
+  .bs-lux-hero h1,
+  .bs-market-hero h1 {
+    font-size: clamp(1.95rem, 9vw, 2.6rem);
+    line-height: 0.98;
+    letter-spacing: -0.045em;
+    overflow-wrap: anywhere;
+  }
+
+  .bs-lux-nav-links,
+  .bs-lux-nav nav {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);
+    mask-image: linear-gradient(90deg, #000 85%, transparent);
+  }
+}
+
+/* ---------- Cookie notice ---------- */
+@media (max-width: 720px) {
+  .cookie-consent {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 12px 14px;
+    border-radius: var(--bs-radius);
+    font-size: 0.8rem;
+  }
+
+  .cookie-copy strong {
+    font-size: 0.9rem;
+  }
+
+  .cookie-copy span {
+    display: block;
+    font-size: 0.76rem;
+    line-height: 1.4;
+  }
+
+  .cookie-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .cookie-actions .cookie-link {
+    margin-right: auto;
+    font-size: 0.8rem;
+  }
+
+  .cookie-consent .btn {
+    min-height: 36px;
+    padding: 0 14px;
+    font-size: 0.8rem;
+  }
+}
+
+.cookie-consent .btn-ghost {
+  color: var(--bs-forest);
+  background: var(--bs-mint);
+  border: 1px solid transparent;
+}
+
+/* ---------- Mobile bottom navigation ---------- */
+.mob-bottom-nav {
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: saturate(1.6) blur(16px);
+  -webkit-backdrop-filter: saturate(1.6) blur(16px);
+  border-top: 1px solid var(--bs-line);
+}
+
+/* ---------- Surfaces ---------- */
+.card,
+.modal-content,
+.modal-box {
+  border-radius: var(--bs-radius-lg);
+}
+
+.toast-item {
+  border-radius: var(--bs-radius);
+  box-shadow: var(--bs-shadow-lift);
+  animation: bs-toast-in var(--bs-med) var(--bs-ease) backwards;
+}
+
+.skeleton {
+  background: linear-gradient(100deg, #eef1ec 30%, #f8f8f4 50%, #eef1ec 70%);
+  background-size: 300% 100%;
+  animation: bs-shimmer 1.4s linear infinite;
+  border-radius: var(--bs-radius);
+}
+
+/* ---------- Motion ---------- */
+@keyframes bs-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes bs-shimmer {
+  to {
+    background-position: -150% 0;
+  }
+}
+
+@keyframes bs-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+
+@keyframes bs-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes bs-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+/* Cards rise in as a grid renders, staggered across the first rows. */
+.prod-card,
+.cat-product-card {
+  animation: bs-rise 520ms var(--bs-ease) backwards;
+}
+
+.products-grid > :nth-child(2),
+.category-products-grid > :nth-child(2) { animation-delay: 40ms; }
+.products-grid > :nth-child(3),
+.category-products-grid > :nth-child(3) { animation-delay: 80ms; }
+.products-grid > :nth-child(4),
+.category-products-grid > :nth-child(4) { animation-delay: 120ms; }
+.products-grid > :nth-child(5),
+.category-products-grid > :nth-child(5) { animation-delay: 160ms; }
+.products-grid > :nth-child(6),
+.category-products-grid > :nth-child(6) { animation-delay: 200ms; }
+.products-grid > :nth-child(7),
+.category-products-grid > :nth-child(7) { animation-delay: 240ms; }
+.products-grid > :nth-child(8),
+.category-products-grid > :nth-child(8) { animation-delay: 280ms; }
+.products-grid > :nth-child(n + 9),
+.category-products-grid > :nth-child(n + 9) { animation-delay: 320ms; }
+
+/* Page-to-page flow. Same-document route changes use
+   document.startViewTransition (src/lib/viewTransitions.js); full page loads
+   between BUYSELL pages opt in here. Unsupported browsers navigate normally. */
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root) {
+  animation: bs-fade-out 160ms ease-in both;
+}
+
+::view-transition-new(root) {
+  animation: bs-slide-in 300ms var(--bs-ease) both;
+}
+
+/* The tapped product photo grows into the product page's main image. */
+::view-transition-group(bs-product-media) {
+  animation-duration: 380ms;
+  animation-timing-function: var(--bs-ease);
+}
+
+.product-gallery-slide:first-child img {
+  view-transition-name: bs-product-media;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}

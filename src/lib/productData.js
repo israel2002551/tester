@@ -1,4 +1,4 @@
-export const productColumns = 'id,seller_id,name,description,price,original_price,shipping_fee,shipping_cost,category,condition,location,images,videos,image_url,video_url,has_video,stock_quantity,status,created_at,avg_rating,review_count,negotiable,profiles(id,name,email,role,accounts,store_name,store_description,whatsapp,logo_url,store_address,seller_verified,kyc_status)';
+export const productColumns = 'id,seller_id,name,description,price,original_price,shipping_fee,shipping_cost,category,condition,location,images,videos,image_url,video_url,has_video,stock_quantity,status,created_at,avg_rating,review_count,negotiable,profiles(id,name,role,accounts,store_name,store_description,logo_url,store_address,seller_verified,kyc_status)';
 
 export function productMedia(product = {}) {
   const images = Array.isArray(product.images) ? product.images.filter(Boolean) : [];

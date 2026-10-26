@@ -3,6 +3,7 @@ import { marketplaceHtml } from '../legacy/marketplaceHtml.js';
 import { prepareMarketplaceDom } from '../legacy/marketplaceDomFixes.js';
 import { ensureRuntimeConfig, loadClassicScript } from '../lib/browserConfig.js';
 import { authReady, getSession, isProtectedMarketplaceRoute, requireAuth } from '../lib/auth.js';
+import { enhanceLegacyTabs } from '../lib/viewTransitions.js';
 
 let runtimePromise;
 
@@ -72,7 +73,7 @@ export function loadMarketplaceRuntime() {
   if (!runtimePromise) {
     // Version the classic runtime explicitly so an application deploy also
     // refreshes service-worker and notification-route safeguards immediately.
-    const appScriptUrl = import.meta.env.DEV ? `/app.js?t=${Date.now()}` : '/app.js?v=10.46';
+    const appScriptUrl = import.meta.env.DEV ? `/app.js?t=${Date.now()}` : '/app.js?v=10.48';
     runtimePromise = authReady
       .then(() => ensureRuntimeConfig())
       .then(() => loadClassicScript(appScriptUrl))
@@ -81,7 +82,8 @@ export function loadMarketplaceRuntime() {
         // its profile hydration prevents seller/dashboard flash on reload.
         await window.ensureCurrentUser?.();
       })
-      .then(() => window.applyPlatformBrandAssets?.());
+      .then(() => window.applyPlatformBrandAssets?.())
+      .then(() => enhanceLegacyTabs());
   } else {
     // If runtime was already loaded and MarketplacePage is remounted, restore the active marketplace view
     setTimeout(() => {

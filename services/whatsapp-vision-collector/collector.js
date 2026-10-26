@@ -5,10 +5,9 @@ import makeWASocket, {
   extractMessageContent,
   fetchLatestWaWebVersion,
   normalizeMessageContent,
-  useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import zlib from 'node:zlib';
 import pino from 'pino';
@@ -20,6 +19,7 @@ import { uploadWhatsAppMedia } from './cloudinary.js';
 import { BuySellListingsApi } from './buysell-api.js';
 import { sendSellerCommandResult, sendSellerConfirmation, sendSellerBatchConfirmation } from './notifier.js';
 import { KeyedTaskQueue } from './queue.js';
+import { authStoreMode, openAuthState } from './auth-store.js';
 
 const api = new BuySellListingsApi();
 const targetGroups = new Set();
@@ -142,6 +142,7 @@ let reconnectAttempts = 0;
 let keepAliveTimer = null;
 let collectorIsStarting = false;
 let warnedAboutSessionStorage = false;
+let activeAuth = null;
 
 // Live pairing state for web dashboard /pair and session recovery
 let latestPairingCode = null;
@@ -1098,9 +1099,9 @@ async function startVisionCollector() {
 
     const sessionDir = process.env.SESSION_DIR || './wa_vision_auth_session';
     if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });
-    if (!process.env.SESSION_DIR && !warnedAboutSessionStorage) {
+    if (!process.env.SESSION_DIR && authStoreMode() === 'file' && !warnedAboutSessionStorage) {
       warnedAboutSessionStorage = true;
-      console.warn('[Session] SESSION_DIR is unset. Use a persistent disk path in production so WhatsApp does not need to be re-paired after a restart.');
+      console.warn('[Session] SESSION_DIR is unset. Use a persistent disk path or WHATSAPP_AUTH_STORE=supabase in production so WhatsApp does not need to be re-paired after a restart.');
     }
 
     let rawConfigPhone = (process.env.WHATSAPP_PHONE_NUMBER || '').trim();
@@ -1115,7 +1116,9 @@ async function startVisionCollector() {
     pairingTargetPhone = phoneNumber;
     const pairingTargetFile = `${sessionDir}/pairing_target.txt`;
 
-    let auth = await useMultiFileAuthState(sessionDir);
+    let auth = await openAuthState({ api, sessionDir });
+    activeAuth = auth;
+    console.info(`[Session] WhatsApp session stored in ${auth.description}.`);
     let state = auth.state;
     let saveCreds = auth.saveCreds;
 
@@ -1138,9 +1141,9 @@ async function startVisionCollector() {
 
       if (phoneMismatch || (hasOldPairingState && !resumeActivePairing)) {
         console.warn(`[Session] Resetting un-registered session files for +${phoneNumber} to guarantee clean pairing keys...`);
-        try { rmSync(sessionDir, { recursive: true, force: true }); } catch {}
-        mkdirSync(sessionDir, { recursive: true });
-        auth = await useMultiFileAuthState(sessionDir);
+        await auth.clear();
+        auth = await openAuthState({ api, sessionDir });
+        activeAuth = auth;
         state = auth.state;
         saveCreds = auth.saveCreds;
       } else if (resumeActivePairing) {
@@ -1231,8 +1234,8 @@ async function startVisionCollector() {
         safeCloseSocket(sock);
 
         if (isLoggedOut) {
-          console.warn('[Session] Session unlinked. Resetting session directory and requesting a fresh pairing.');
-          try { rmSync(sessionDir, { recursive: true, force: true }); } catch {}
+          console.warn('[Session] Session unlinked. Resetting stored session and requesting a fresh pairing.');
+          try { await auth.clear(); } catch (error) { console.error('[Session] Could not clear the stored session:', error?.message || error); }
           reconnectAttempts = 0;
           scheduleReconnect(false);
         } else if (isRestartRequired) {
@@ -1350,6 +1353,13 @@ if (port) {
           console.info(`[HTTP] Target phone updated to +${pairingTargetPhone}`);
         }
       }
+      // This page is unauthenticated. Never let it wipe a linked session (now
+      // durable in Supabase) just because the socket is briefly reconnecting.
+      if (activeAuth?.state?.creds?.registered) {
+        res.writeHead(409, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end('<h3>Bot 2 already has a linked WhatsApp session and is reconnecting.</h3><p>To re-pair, unlink the device from your phone first; the bot then resets itself.</p><p><a href="/pair">Go back</a></p>');
+        return;
+      }
       console.warn('[HTTP] Manual session reset requested. Wiping unlinked session files...');
       stopKeepAlive();
       clearPairingCodeRequestTimer();
@@ -1358,8 +1368,12 @@ if (port) {
         safeCloseSocket(activeSocket);
         activeSocket = null;
       }
-      const sessionDir = process.env.SESSION_DIR || './wa_vision_auth_session';
-      try { rmSync(sessionDir, { recursive: true, force: true }); } catch {}
+      try {
+        const auth = activeAuth || await openAuthState({ api, sessionDir: process.env.SESSION_DIR || './wa_vision_auth_session' });
+        await auth.clear();
+      } catch (error) {
+        console.error('[HTTP] Could not clear the stored session:', error?.message || error);
+      }
       latestPairingCode = null;
       pairingCodeGeneratedAt = null;
       activePairingCodeRaw = null;

@@ -15,9 +15,9 @@ const productColumnFallbacks = [
 ];
 
 const profileColumnFallbacks = [
-  'id,name,email,role,accounts,store_name,store_description,whatsapp,logo_url,store_address,seller_verified,kyc_status',
-  'id,name,email,role,store_name,store_description,whatsapp,logo_url,store_address,seller_verified',
-  'id,name,email,role,store_name',
+  'id,name,role,accounts,store_name,store_description,logo_url,store_address,seller_verified,kyc_status',
+  'id,name,role,store_name,store_description,logo_url,store_address,seller_verified',
+  'id,name,role,store_name',
 ];
 
 function cartCount() {

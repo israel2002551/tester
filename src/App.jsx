@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { flushSync } from 'react-dom';
+import { runViewTransition } from './lib/viewTransitions.js';
 import MarketplacePage from './pages/MarketplacePage.jsx';
 import CategoryPage from './pages/CategoryPage.jsx';
 import ProductPage from './pages/ProductPage.jsx';
@@ -89,10 +91,10 @@ export default function App() {
 
   useEffect(() => {
     const syncLocation = () => {
-      setCurrentLocation({
-        pathname: window.location.pathname,
-        search: window.location.search,
-      });
+      const next = { pathname: window.location.pathname, search: window.location.search };
+      // flushSync renders the new page inside the transition callback, so the
+      // browser can animate from the old page snapshot to the new one.
+      runViewTransition(() => flushSync(() => setCurrentLocation(next)));
     };
     window.addEventListener('popstate', syncLocation);
     window.addEventListener('bs:navigate', syncLocation);

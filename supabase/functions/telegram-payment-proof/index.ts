@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { sendTelegramToAdmins } from "../_shared/telegram.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,9 +23,7 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
-    const chatId = Deno.env.get("TELEGRAM_CHAT_ID") ?? "";
-    if (!supabaseUrl || !anonKey || !serviceKey || !botToken || !chatId) {
+    if (!supabaseUrl || !anonKey || !serviceKey) {
       throw new Error("Telegram payment notifications are not configured.");
     }
 
@@ -62,12 +61,21 @@ serve(async (req) => {
       "Review the receipt in the BUYSELL admin Orders screen before confirming the order.",
     ].join("\n").slice(0, 1024);
 
-    const response = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, photo: order.proof_url, caption }),
-    });
-    if (!response.ok) throw new Error("Telegram could not accept the receipt notification.");
+    // Receipts in the private bucket need a signed URL for Telegram to fetch them.
+    let photo = order.proof_url;
+    const privatePath = String(order.proof_url).match(/\/storage\/v1\/object\/payment-proofs\/([^?]+)$/)?.[1];
+    if (privatePath) {
+      const { data: signed, error: signError } = await adminClient.storage
+        .from("payment-proofs")
+        .createSignedUrl(decodeURIComponent(privatePath), 3600);
+      if (signError || !signed?.signedUrl) throw new Error("Could not prepare the receipt for Telegram.");
+      photo = signed.signedUrl;
+    }
+
+    const result = await sendTelegramToAdmins("sendPhoto", { photo, caption });
+    if (!result.sent) {
+      throw new Error(result.reason || result.errors?.[0] || "Telegram could not accept the receipt notification.");
+    }
 
     return json({ success: true });
   } catch (error) {

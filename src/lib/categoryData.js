@@ -74,7 +74,7 @@ export const categoryLinks = [
   ['Upcoming', '/upcoming', 'upcoming'],
 ];
 
-export const categoryProductColumns = 'id,seller_id,name,description,price,original_price,category,condition,location,images,videos,image_url,video_url,has_video,stock_quantity,status,created_at,avg_rating,review_count,profiles(name,store_name,role,email)';
+export const categoryProductColumns = 'id,seller_id,name,description,price,original_price,category,condition,location,images,videos,image_url,video_url,has_video,stock_quantity,status,created_at,avg_rating,review_count,profiles(name,store_name,role)';
 export const upcomingColumns = 'id,title,description,image_url,video_url,images,videos,launch_date,priority,status,created_at';
 
 export function productImage(product = {}) {

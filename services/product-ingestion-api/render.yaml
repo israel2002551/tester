@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: buysell-product-ingestion-api
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: INGESTION_HMAC_SECRET
+        sync: false
+      - key: WHATSAPP_LISTINGS_SELLER_ID
+        sync: false
+      - key: TELEGRAM_LISTINGS_SELLER_ID
+        sync: false
+      - key: VISION_API_KEY
+        sync: false
+      - key: BOT3_RELAY_URL
+        sync: false
+      - key: BOT3_RELAY_SECRET
+        sync: false

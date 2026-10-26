@@ -171,6 +171,24 @@ node scripts/migrate-product-media-to-cloudinary.mjs --apply
 Alternatively, copy the ignored `.env.cloudinary-migration` template in the
 project root, fill in the same values, and run the two Node commands above.
 
+### Hybrid WhatsApp and Telegram ingestion
+
+The cross-platform ingestion services live outside the browser application:
+
+- `services/product-ingestion-api` is the HMAC-protected FastAPI write path.
+- `services/whatsapp-vision-collector` (Bot 2) can forward its completed,
+  durable WhatsApp bundles to that endpoint when `INGESTION_API_URL` is set.
+- `services/telegram-ingestion-bot` (Bot 3) accepts direct private-chat
+  submissions and relays accepted WhatsApp listings into an optional catalog
+  chat.
+
+Apply `supabase/migrations/20261022000000_hybrid_product_ingestion.sql` before
+deploying the services. Deploy the shared API first, give Bot 2 and Bot 3 the
+same `INGESTION_HMAC_SECRET`, and set Bot 2's full endpoint as
+`INGESTION_API_URL`. Bot 3 needs only its Telegram token plus that API URL and
+secret; it does not receive a Supabase service-role key. The service-level
+READMEs contain the full environment and relay configuration.
+
 ## GitHub Launch Checklist
 
 - Keep `config.js` out of Git.

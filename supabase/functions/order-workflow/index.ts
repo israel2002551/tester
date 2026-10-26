@@ -1,3 +1,5 @@
+import { sendTelegramToAdmins } from "../_shared/telegram.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -81,22 +83,14 @@ function formatTelegramOrder(order: Record<string, string>) {
 }
 
 async function sendTelegram(text: string) {
-  const token = Deno.env.get("TELEGRAM_BOT_TOKEN");
-  const chatId = Deno.env.get("TELEGRAM_CHAT_ID");
-  if (!token || !chatId) return "not_configured";
-
-  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      disable_web_page_preview: false,
-    }),
-  });
-
-  if (!response.ok) return "failed";
-  return "sent";
+  try {
+    const result = await sendTelegramToAdmins("sendMessage", { text, disable_web_page_preview: false });
+    if (result.sent) return "sent";
+    return result.failed ? "failed" : "not_configured";
+  } catch (error) {
+    console.error("order-workflow Telegram error:", error instanceof Error ? error.message : error);
+    return "failed";
+  }
 }
 
 Deno.serve(async (request) => {

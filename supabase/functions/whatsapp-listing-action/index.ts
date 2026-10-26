@@ -299,6 +299,81 @@ async function finishListingJob(admin: ReturnType<typeof createClient>, req: Req
   return json({ job: data });
 }
 
+// Bot 2's WhatsApp session (Baileys auth state). Values arrive already
+// encrypted by the collector; this function only stores opaque ciphertext.
+function authSessionId(input: unknown) {
+  const id = value(input, 64);
+  return /^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : "";
+}
+
+function authKey(input: unknown) {
+  const key = typeof input === "string" ? input : "";
+  return key.length >= 1 && key.length <= 400 && !/[\u0000-\u001f]/.test(key) ? key : "";
+}
+
+async function authStateAction(admin: ReturnType<typeof createClient>, req: Request, body: Record<string, unknown>, action: string) {
+  if (!requireCollectorSecret(req)) return json({ error: "Unauthorized session store request." }, 401);
+  const sessionId = authSessionId(body.session_id);
+  if (!sessionId) return json({ error: "A valid session_id is required." }, 400);
+
+  if (action === "auth_state_get") {
+    const rawKeys = Array.isArray(body.keys) ? body.keys : [];
+    const keys = [...new Set(rawKeys.map(authKey).filter(Boolean))];
+    if (keys.length === 0 || keys.length > 200 || keys.length !== rawKeys.length) {
+      return json({ error: "Between 1 and 200 valid keys are required." }, 400);
+    }
+    const { data, error } = await admin
+      .from("whatsapp_auth_state")
+      .select("key,value")
+      .eq("session_id", sessionId)
+      .in("key", keys);
+    if (error) throw new Error("Could not load the WhatsApp session.");
+    return json({ values: Object.fromEntries((data || []).map((row) => [row.key, row.value])) });
+  }
+
+  if (action === "auth_state_set") {
+    const rawEntries = Array.isArray(body.entries) ? body.entries : [];
+    if (rawEntries.length === 0 || rawEntries.length > 100) return json({ error: "Between 1 and 100 entries are required." }, 400);
+    const upserts = new Map<string, string>();
+    const deletes = new Set<string>();
+    for (const item of rawEntries) {
+      const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
+      const key = authKey(row.key);
+      if (!key) return json({ error: "Every entry needs a valid key." }, 400);
+      if (row.value === null) {
+        upserts.delete(key);
+        deletes.add(key);
+      } else if (typeof row.value === "string" && row.value.length > 0 && row.value.length <= 1_048_576) {
+        deletes.delete(key);
+        upserts.set(key, row.value);
+      } else {
+        return json({ error: "Entry values must be encrypted strings or null." }, 400);
+      }
+    }
+    if (upserts.size) {
+      const now = new Date().toISOString();
+      const { error } = await admin.from("whatsapp_auth_state").upsert(
+        [...upserts].map(([key, stored]) => ({ session_id: sessionId, key, value: stored, updated_at: now })),
+        { onConflict: "session_id,key" },
+      );
+      if (error) throw new Error("Could not save the WhatsApp session.");
+    }
+    if (deletes.size) {
+      const { error } = await admin
+        .from("whatsapp_auth_state")
+        .delete()
+        .eq("session_id", sessionId)
+        .in("key", [...deletes]);
+      if (error) throw new Error("Could not update the WhatsApp session.");
+    }
+    return json({ saved: upserts.size, removed: deletes.size });
+  }
+
+  const { error } = await admin.from("whatsapp_auth_state").delete().eq("session_id", sessionId);
+  if (error) throw new Error("Could not clear the WhatsApp session.");
+  return json({ cleared: true });
+}
+
 function nativeCategory(input: unknown) {
   const raw = value(input, 80).toLowerCase();
   const aliases: Record<string, string> = {
@@ -830,6 +905,9 @@ serve(async (req) => {
     if (action === "collector_groups") return await approvedGroupsForCollector(admin, req);
     if (action === "order_whatsapp_sales") return await orderWhatsAppSales(admin, req, body);
     if (action === "admin") return await adminDashboardAction(admin, req, body);
+    if (action === "auth_state_get" || action === "auth_state_set" || action === "auth_state_clear") {
+      return await authStateAction(admin, req, body, action);
+    }
     if (action === "manage_get") {
       const listing = await managedListing(admin, body);
       return listing ? json(productResponse(listing.product, listing.meta)) : json({ error: "This management link is invalid or has expired." }, 404);

@@ -1,9 +1,13 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import '../styles.css';
+import './styles/refresh.css';
 import App from './App.jsx';
 import PwaInstallPrompt from './components/PwaInstallPrompt.jsx';
 import { isProtectedMarketplaceRoute } from './lib/auth.js';
+import { installProductMediaHandoff } from './lib/viewTransitions.js';
+
+installProductMediaHandoff();
 
 // `index.html` starts hidden so a direct seller/dashboard/order route cannot
 // paint private UI while the persisted Supabase session is being restored.

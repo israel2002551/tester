@@ -44,7 +44,9 @@ export async function ensureAdmin(admin: any, user: any) {
     .eq("id", user.id)
     .single()
 
-  if (error || profile?.role !== "admin" || profile?.email !== adminEmail) {
+  // Compare the verified sign-in email; profiles.email is written by the browser.
+  const callerEmail = String(user?.email || "").trim().toLowerCase()
+  if (error || profile?.role !== "admin" || callerEmail !== adminEmail.trim().toLowerCase()) {
     throw new Error("Forbidden: Admin access required")
   }
 }
