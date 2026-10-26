@@ -12,7 +12,7 @@ async function main() {
   const sock = makeWASocket({
     logger: pino({ level: 'silent' }),
     auth: state,
-    browser: Browsers.ubuntu('Chrome'),
+    browser: Browsers.macOS('Chrome'),
   });
 
   sock.ev.on('connection.update', async ({ connection }) => {
