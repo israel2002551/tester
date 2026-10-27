@@ -20,6 +20,8 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from partner_api import PartnerError, PartnerGateway, partner_error_response, router as partner_router
+
 
 EXPLICIT_PRICE = re.compile(r"(?:\u20a6|\bngn\b|\bnaira\b|\bprice\b|\bcost\b|\bfor\b|\bat\b|\bN(?=\s*\d)|#)\s*(\d+(?:[,.]\d+)?)\s*([km])?\b", re.I)
 SCALED_PRICE = re.compile(r"\b(\d+(?:[,.]\d+)?)\s*([km])\b", re.I)
@@ -378,6 +380,8 @@ def product_url(settings: Settings, product_id: str) -> str:
 
 
 app = FastAPI(title="BUYSELL Product Ingestion API", docs_url=None, redoc_url=None)
+app.include_router(partner_router)
+app.add_exception_handler(PartnerError, partner_error_response)
 
 
 @app.on_event("startup")
@@ -386,12 +390,14 @@ async def startup() -> None:
     app.state.settings = settings
     app.state.store = SupabaseGateway(settings)
     app.state.http = httpx.AsyncClient(timeout=httpx.Timeout(90.0, connect=15.0))
+    app.state.partner = PartnerGateway(settings.supabase_url, settings.service_role_key, settings.public_site_url)
 
 
 @app.on_event("shutdown")
 async def shutdown() -> None:
     await app.state.http.aclose()
     await app.state.store.close()
+    await app.state.partner.close()
 
 
 @app.api_route("/health", methods=["GET", "HEAD"])
@@ -406,6 +412,7 @@ async def root() -> dict[str, Any]:
         "service": "buysell-product-ingestion-api",
         "health": "/health",
         "ingestion_endpoint": "/api/v1/ingest/product",
+        "partner_feed_endpoint": "/api/v1/partner/feed",
     }
 
 

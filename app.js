@@ -153,6 +153,7 @@ let bogoCheckoutState = {
  loading: false,
  settings: null,
  quote: null,
+ quoteMode: null,
  primaryItemId: null,
  freeItemId: null,
  gifts: [],
@@ -3585,7 +3586,7 @@ function prodCard(p) {
  <span class="prod-price">${fmtN(displayPrice)}</span>
  ${p.original_price > displayPrice ? `<span class="prod-orig">${fmtN(p.original_price)}</span>` : ''}
  </div>
-  <div class="prod-shipping text-xs color-text3" style="margin-top:.15rem"><i class="fa-solid fa-truck-fast"></i> BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} per store</div>
+  <div class="prod-shipping text-xs color-text3" style="margin-top:.15rem"><i class="fa-solid fa-truck-fast"></i> BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} flat fee per order</div>
  <div class="prod-trust-line"><span><i class="fa-solid fa-shield-halved"></i> BUYSELL tracking</span><span>${escHtml(stockLabel)}</span></div>
  <div class="prod-rating-row"><span class="stars sm">${stars}</span><span class="text-xs color-text3">${p.avg_rating ? p.avg_rating.toFixed(1) : '5.0'} (${p.review_count||0})</span></div>
  <div class="prod-location"><i class="fa-solid fa-map-marker-alt" style="font-size:.6rem"></i>${escHtml(p.location||'Nigeria')}</div>
@@ -4467,35 +4468,25 @@ function itemShippingFee(item = {}) {
  return currentMode === 'pickup' ? 0 : BUYSELL_DELIVERY_FEE;
 }
 
-function cartSellerKey(item = {}) {
- return String(item.seller_id || item.sellerId || item.profiles?.id || item.store_id || item.storeId || item.id || 'unknown');
-}
-
 function cartProductTotal() {
  return cart.reduce((sum, item) => sum + (Number(item.price || 0) * (item.qty || 1)), 0);
 }
 
-function cartSellerShippingGroups() {
- const groups = new Map();
- cart.forEach(item => {
- const sellerKey = cartSellerKey(item);
- const existing = groups.get(sellerKey) || { sellerKey, sellerName: item.profiles?.name || 'Seller', fee: itemShippingFee(item), count: 0 };
- existing.count += item.qty || 1;
- groups.set(sellerKey, existing);
- });
- return [...groups.values()];
+// BUYSELL charges one flat delivery fee per order, however many stores supply it.
+function cartShippingGroups() {
+ if (!cart.length) return [];
+ const count = cart.reduce((sum, item) => sum + (item.qty || 1), 0);
+ return [{ sellerKey: 'buysell', sellerName: 'BUYSELL delivery', fee: itemShippingFee(), count }];
 }
 
 function cartShippingTotal() {
- return cartSellerShippingGroups().reduce((sum, group) => sum + group.fee, 0);
+ return cartShippingGroups().reduce((sum, group) => sum + group.fee, 0);
 }
 
 function checkoutCartItems(includeDetails = false) {
- const feeApplied = new Set();
- return cart.map(item => {
- const sellerKey = cartSellerKey(item);
- const chargedShipping = feeApplied.has(sellerKey) ? 0 : itemShippingFee(item);
- feeApplied.add(sellerKey);
+ return cart.map((item, index) => {
+ // The flat order fee is carried by the first line only.
+ const chargedShipping = index === 0 ? itemShippingFee(item) : 0;
  const base = {
  id: item.id,
  seller_id: item.seller_id || item.sellerId || item.profiles?.id || item.store_id || item.storeId || null,
@@ -4517,12 +4508,16 @@ function cartPayableSubtotal() {
  return cartProductTotal() + cartShippingTotal();
 }
 
+function checkoutDeliveryMode() {
+ return currentMode === 'pickup' ? 'pickup' : 'delivery';
+}
+
 function checkoutBogoPayload() {
  return {
   cart: checkoutCartItems(),
   bogo_primary_item_id: bogoCheckoutState.primaryItemId || (cart[0]?.id ? String(cart[0].id) : null),
   bogo_free_item_id: bogoCheckoutState.freeItemId || null,
-  delivery_mode: currentMode === 'pickup' ? 'pickup' : 'delivery',
+  delivery_mode: checkoutDeliveryMode(),
  };
 }
 
@@ -4536,6 +4531,7 @@ function resetBogoCheckoutState() {
   loading: false,
   settings: null,
   quote: null,
+  quoteMode: null,
   primaryItemId: null,
   freeItemId: null,
   gifts: [],
@@ -4545,6 +4541,8 @@ function resetBogoCheckoutState() {
 }
 
 function bogoQuoteTotal() {
+ // A quote priced for the other delivery option must never be displayed.
+ if (bogoCheckoutState.quoteMode && bogoCheckoutState.quoteMode !== checkoutDeliveryMode()) return null;
  const total = bogoNumber(bogoCheckoutState.quote?.total_amount, NaN);
  return Number.isFinite(total) && total > 0 ? total : null;
 }
@@ -4573,7 +4571,7 @@ function renderCheckoutQuotedItems(quote) {
   const lineTotal = bogoNumber(item.total, bogoNumber(item.price, 0) * quantity);
   const isGift = item.is_bogo_gift === true;
   const detail = isGift
-   ? (lineTotal > 0 ? 'BOGO gift — top-up shown' : 'BOGO gift — fully covered')
+   ? (lineTotal > 0 ? 'BOGO gift — top-up shown, no delivery fee' : 'BOGO gift — fully covered, no delivery fee')
    : `Qty: ${quantity}`;
   const image = sanitizeUrl(item.image_url || '') || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=100';
   return `<div class="order-item${isGift ? ' bogo-order-gift' : ''}"><img src="${escAttr(image)}" alt="" loading="lazy"><div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(item.name || 'Marketplace item')}</div><div class="color-text3 text-xs">${escHtml(detail)}</div></div><div class="font-bold text-sm">${isGift && lineTotal === 0 ? 'FREE' : fmtN(lineTotal)}</div></div>`;
@@ -4646,7 +4644,7 @@ function renderCheckoutBogoPromo() {
  const extra = bogoNumber(bogo.extra_customer_charge, 0);
  const qualificationMessage = bogo.qualification_reason || 'Add items to your cart to qualify for a free gift.';
  const selectedGiftSummary = bogo.is_bogo_order
-  ? `<div class="bogo-price-summary"><span><i class="fa-solid fa-circle-check"></i> Platform gift contribution</span><strong>-${fmtN(contribution)}</strong></div>${extra > 0 ? `<div class="bogo-price-summary"><span>Extra for selected gift</span><strong>+${fmtN(extra)}</strong></div>` : '<p class="bogo-free-note"><i class="fa-solid fa-gift"></i> Your selected gift is fully covered!</p>'}`
+  ? `<div class="bogo-price-summary"><span><i class="fa-solid fa-circle-check"></i> Platform gift contribution</span><strong>-${fmtN(contribution)}</strong></div>${extra > 0 ? `<div class="bogo-price-summary"><span>Extra for selected gift</span><strong>+${fmtN(extra)}</strong></div>` : '<p class="bogo-free-note"><i class="fa-solid fa-gift"></i> Your selected gift is fully covered, with no delivery fee!</p>'}`
   : '';
 
  const selectedGiftId = String(bogoCheckoutState.freeItemId || bogo.free_item_id || '');
@@ -4968,12 +4966,15 @@ async function refreshBogoCheckout({ loadGifts = false } = {}) {
  bogoCheckoutState.loading = true;
  bogoCheckoutState.error = '';
  renderCheckoutBogoPromo();
+ updateCheckoutTotals();
  try {
-  const result = await callEdge('bogo-promo', { action: 'quote', ...checkoutBogoPayload() });
+  const payload = checkoutBogoPayload();
+  const result = await callEdge('bogo-promo', { action: 'quote', ...payload });
   if (requestId !== bogoCheckoutState.requestId) return bogoCheckoutState.quote;
   const quote = result?.quote || result || {};
   bogoCheckoutState.settings = result?.settings || quote.settings || bogoSettingsFromQuote(quote);
   bogoCheckoutState.quote = quote;
+  bogoCheckoutState.quoteMode = payload.delivery_mode;
   renderCheckoutQuotedItems(quote);
 
   const shouldLoadGifts = bogoCheckoutState.settings?.bogo_promo_enabled === true
@@ -5014,12 +5015,38 @@ function isCustomProductCategoryValue(value) {
  return ['__custom__', 'custom', 'custom-category', 'custom_category'].includes(String(value || '').trim().toLowerCase());
 }
 
+function checkoutDeliveryNote(quoted) {
+ if (checkoutDeliveryMode() === 'pickup') return 'Safe Pickup: no delivery fee';
+ const quote = bogoCheckoutState.quote || {};
+ const charge = quoted ? bogoNumber(quote.customer_shipping_charge ?? quote.shipping_total, 0) : cartShippingTotal();
+ return charge > 0 ? `Includes ${fmtN(charge)} delivery` : 'Free delivery';
+}
+
 function updateCheckoutTotals() {
- const total = bogoQuoteTotal() ?? cartPayableSubtotal();
+ const quoted = bogoQuoteTotal();
+ // While the server re-prices a changed delivery option, show no amount
+ // rather than one the buyer might transfer by mistake.
+ const calculating = quoted === null && bogoCheckoutState.loading;
+ const text = calculating ? 'Calculating...' : fmtN(quoted ?? cartPayableSubtotal());
  const totalEl = document.getElementById('co-total');
  const payAmountEl = document.getElementById('co-pay-amount');
- if (totalEl) totalEl.textContent = fmtN(total);
- if (payAmountEl) payAmountEl.textContent = fmtN(total);
+ if (totalEl) totalEl.textContent = text;
+ if (payAmountEl) payAmountEl.textContent = text;
+
+ // Lives inside the "Total" label: the checkout panel is a grid, so a new
+ // row there would shift the layout.
+ const label = totalEl?.previousElementSibling;
+ if (label) {
+  let note = document.getElementById('co-delivery-note');
+  if (!note) {
+   note = document.createElement('small');
+   note.id = 'co-delivery-note';
+   note.className = 'text-xs color-text3';
+   note.style.cssText = 'display:block;font-weight:500';
+   label.appendChild(note);
+  }
+  note.textContent = calculating ? '' : checkoutDeliveryNote(quoted !== null);
+ }
 }
 
 function addToCart(prod) {
@@ -5117,7 +5144,7 @@ function renderCartItems() {
  <div style="flex:1;min-width:0">
  <div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px">${escHtml(c.name)}</div>
  <div class="color-green font-bold">${fmtN(c.price)}</div>
-   <div class="text-xs color-text3">BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} per store</div>
+   <div class="text-xs color-text3">BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} flat fee per order</div>
  <div class="flex items-center gap-2 mt-1">
  <button onclick="changeCartQty(${jsArg(c.id)},-1)" class="btn btn-outline btn-sm" style="padding:.2rem .5rem">-</button>
  <span class="text-sm font-bold">${c.qty||1}</span>
@@ -5200,7 +5227,9 @@ async function startCheckout(options = {}) {
  const authM = document.getElementById('auth-modal');
  if (authM) authM.classList.remove('open');
  if (!cart.length) { toast('Cart is empty','','warn'); return; }
- currentMode = 'home';
+ // Keep the delivery option the buyer can see. Resetting only the variable
+ // left "Safe Pickup" highlighted while orders were priced for home delivery.
+ syncDeliveryModeUi();
  resetBogoCheckoutState();
 
  let availableBalance = Number(currentUser?.profile?.wallet_balance || 0);
@@ -5286,7 +5315,7 @@ async function startCheckout(options = {}) {
  coItemsEl.innerHTML = cart.map(c=>`
  <div class="order-item">
  <img src="${c.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=100'}" alt="" loading="lazy">
-   <div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(c.name)}</div><div class="color-text3 text-xs">Qty: ${c.qty||1} - BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} per store</div></div>
+   <div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(c.name)}</div><div class="color-text3 text-xs">Qty: ${c.qty||1} - BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} flat fee per order</div></div>
  <div class="font-bold text-sm">${fmtN(c.price*(c.qty||1))}</div>
  </div>`).join('');
  }
@@ -5662,7 +5691,7 @@ async function payWithWalletRevenue() {
  const checkoutPayload = {
  cart: checkoutCartItems(),
  shipping_total: cartShippingTotal(),
- shipping_groups: cartSellerShippingGroups(),
+ shipping_groups: cartShippingGroups(),
  delivery_name: document.getElementById('co-name').value.trim(),
  delivery_phone: document.getElementById('co-phone').value.trim(),
  delivery_address: document.getElementById('co-address').value.trim(),
@@ -11045,27 +11074,36 @@ let pickupMap = null;
 let currentMode = 'home';
 let currentMarkers = []; // Keeps track of active pins so we can delete them when the state changes
 
+// Shows currentMode in the checkout controls without touching what the buyer typed.
+function syncDeliveryModeUi() {
+ const isPickup = currentMode === 'pickup';
+ document.getElementById('pickup-container')?.classList.toggle('hidden', !isPickup);
+ const pickupBtn = document.getElementById('btn-pickup');
+ const homeBtn = document.getElementById('btn-home');
+ if (pickupBtn) pickupBtn.className = isPickup ? 'btn btn-primary btn-sm flex-1' : 'btn btn-outline btn-sm flex-1';
+ if (homeBtn) homeBtn.className = !isPickup ? 'btn btn-primary btn-sm flex-1' : 'btn btn-outline btn-sm flex-1';
+ const addrLabel = document.getElementById('addr-label');
+ const addrInput = document.getElementById('co-address');
+ if (addrLabel) addrLabel.textContent = isPickup ? "Pickup Instructions" : "Delivery Address";
+ if (addrInput) addrInput.placeholder = isPickup ? "e.g. I will be there by 4pm" : "Street, area, city, state";
+}
+
 function setDeliveryMode(mode) {
  currentMode = mode;
  const isPickup = mode === 'pickup';
- 
- // Toggle UI
- document.getElementById('pickup-container').classList.toggle('hidden', !isPickup);
- document.getElementById('btn-pickup').className = isPickup ? 'btn btn-primary btn-sm flex-1' : 'btn btn-outline btn-sm flex-1';
- document.getElementById('btn-home').className = !isPickup ? 'btn btn-primary btn-sm flex-1' : 'btn btn-outline btn-sm flex-1';
- 
+ syncDeliveryModeUi();
+
  // Clear inputs if switching back to home delivery
  if (!isPickup) {
  document.getElementById('selected-hub-input').value = '';
  document.getElementById('co-address').value = '';
  }
- 
- document.getElementById('addr-label').textContent = isPickup ? "Pickup Instructions" : "Delivery Address";
- document.getElementById('co-address').placeholder = isPickup ? "e.g. I will be there by 4pm" : "Street, area, city, state";
 
  if (isPickup) {
  initLeaflet();
  }
+ // Delivery and pickup are priced on the server, so the total must be re-quoted.
+ refreshBogoCheckout().catch(() => {});
  updateCheckoutTotals();
 }
 

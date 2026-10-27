@@ -9,7 +9,7 @@
 // otherwise anyone who messages the bot would receive buyer details.
 // An explicit TELEGRAM_CHAT_ID / TELEGRAM_ADMIN_CHAT_ID still takes precedence.
 
-type TelegramResult = { sent: number; failed: number; reason?: string; errors?: string[] };
+export type TelegramResult = { sent: number; failed: number; reason?: string; errors?: string[] };
 
 function env(name: string) {
   return (Deno.env.get(name) ?? "").trim();
@@ -44,12 +44,11 @@ async function restRequest(path: string, init: RequestInit = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-async function telegram(token: string, method: string, payload: Record<string, unknown>) {
-  const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+async function telegram(token: string, method: string, payload: Record<string, unknown> | FormData) {
+  // FormData uploads a file; fetch sets the multipart boundary header itself.
+  const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, payload instanceof FormData
+    ? { method: "POST", body: payload }
+    : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   const body = await response.json().catch(() => ({}));
   if (!response.ok || body?.ok === false) {
     throw new Error(body?.description || `Telegram ${method} failed with ${response.status}`);
@@ -114,17 +113,40 @@ async function adminChatIds(token: string): Promise<{ chatIds: string[]; reason?
   return { chatIds: [], reason: "No admin has sent /start to the bot yet." };
 }
 
-/** Sends a Bot API message (sendMessage, sendPhoto, ...) to every linked admin chat. */
-export async function sendTelegramToAdmins(method: string, payload: Record<string, unknown>): Promise<TelegramResult> {
+async function deliver(method: string, payloadFor: (chatId: string) => Record<string, unknown> | FormData): Promise<TelegramResult> {
   const token = botToken();
   if (!token) return { sent: 0, failed: 0, reason: "TELEGRAM_BOT_TOKEN is not configured." };
 
   const { chatIds, reason } = await adminChatIds(token);
   if (!chatIds.length) return { sent: 0, failed: 0, reason };
 
-  const results = await Promise.allSettled(chatIds.map((chatId) => telegram(token, method, { ...payload, chat_id: chatId })));
+  const results = await Promise.allSettled(chatIds.map((chatId) => telegram(token, method, payloadFor(chatId))));
   const errors = results
     .filter((result): result is PromiseRejectedResult => result.status === "rejected")
     .map((result) => result.reason instanceof Error ? result.reason.message : String(result.reason));
   return { sent: results.length - errors.length, failed: errors.length, ...(errors.length ? { errors } : {}) };
+}
+
+/** Sends a Bot API message (sendMessage, sendPhoto, ...) to every linked admin chat. */
+export function sendTelegramToAdmins(method: string, payload: Record<string, unknown>): Promise<TelegramResult> {
+  return deliver(method, (chatId) => ({ ...payload, chat_id: chatId }));
+}
+
+/**
+ * Uploads a file with sendPhoto or sendDocument to every linked admin chat.
+ * Use this for private files: Telegram cannot download a URL that needs auth.
+ */
+export function sendTelegramFileToAdmins(
+  method: "sendPhoto" | "sendDocument",
+  file: Blob,
+  filename: string,
+  fields: Record<string, string> = {},
+): Promise<TelegramResult> {
+  return deliver(method, (chatId) => {
+    const form = new FormData();
+    form.set("chat_id", chatId);
+    for (const [key, value] of Object.entries(fields)) form.set(key, value);
+    form.set(method === "sendPhoto" ? "photo" : "document", file, filename);
+    return form;
+  });
 }

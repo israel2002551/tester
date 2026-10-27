@@ -38,3 +38,53 @@ the originally created product instead of creating a duplicate.
 
 The service is deliberately not a browser-facing endpoint. Do not expose the
 HMAC secret in Vite configuration or any client bundle.
+
+## Partner API (BUYSELL operations)
+
+`partner_api.py` serves external partner sites. Partner-facing documentation is
+in `PARTNER_API.md`; send partners that file, never this section.
+
+Setup: apply `supabase/migrations/20261027000000_partner_api.sql`, then redeploy
+this service. No new environment variables are needed.
+
+All of the following run in the Supabase SQL editor.
+
+Add a partner (commission is the percentage of BUYSELL's price the partner keeps):
+
+```sql
+insert into public.partners (partner_name, commission_rate, allowed_origins, contact_email)
+values ('Shop A', 10, array['https://shop-a.com'], 'tech@shop-a.com')
+returning id;
+```
+
+Issue a key. The plaintext key is shown only once, so send it to the partner
+securely. Use `array['feed']` for a key that will be used in browser code:
+
+```sql
+select * from public.issue_partner_api_key('<partner id>', array['feed', 'orders'], 'production');
+```
+
+Revoke a key, or suspend a partner:
+
+```sql
+select public.revoke_partner_api_key('<key id>');
+update public.partners set status = 'suspended' where id = '<partner id>';
+```
+
+Changes take effect within about a minute, because the API caches key lookups.
+
+Balances and orders that need attention:
+
+```sql
+select * from public.partner_ledger_balances;
+select partner_order_id, payment_status, amount_due, review_notes
+from public.partner_orders where needs_review order by created_at desc;
+```
+
+After a partner pays, mark their paid orders up to that point as settled:
+
+```sql
+select public.settle_partner_orders('<partner id>', now(), 'TRF-2026-11-01');
+```
+
+Run the tests with `python -m unittest discover -s tests` (requires `requirements.txt`).

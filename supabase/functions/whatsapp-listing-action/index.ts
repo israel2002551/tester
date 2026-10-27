@@ -316,6 +316,25 @@ async function authStateAction(admin: ReturnType<typeof createClient>, req: Requ
   const sessionId = authSessionId(body.session_id);
   if (!sessionId) return json({ error: "A valid session_id is required." }, 400);
 
+  if (action === "auth_state_list") {
+    // Whole-session load at collector startup, paged by key order.
+    const after = typeof body.after === "string" ? body.after : "";
+    let query = admin
+      .from("whatsapp_auth_state")
+      .select("key,value")
+      .eq("session_id", sessionId)
+      .order("key", { ascending: true })
+      .limit(500);
+    if (after) query = query.gt("key", after);
+    const { data, error } = await query;
+    if (error) throw new Error("Could not load the WhatsApp session.");
+    const rows = data || [];
+    return json({
+      values: Object.fromEntries(rows.map((row) => [row.key, row.value])),
+      next: rows.length === 500 ? rows[rows.length - 1].key : null,
+    });
+  }
+
   if (action === "auth_state_get") {
     const rawKeys = Array.isArray(body.keys) ? body.keys : [];
     const keys = [...new Set(rawKeys.map(authKey).filter(Boolean))];
@@ -905,7 +924,7 @@ serve(async (req) => {
     if (action === "collector_groups") return await approvedGroupsForCollector(admin, req);
     if (action === "order_whatsapp_sales") return await orderWhatsAppSales(admin, req, body);
     if (action === "admin") return await adminDashboardAction(admin, req, body);
-    if (action === "auth_state_get" || action === "auth_state_set" || action === "auth_state_clear") {
+    if (action === "auth_state_list" || action === "auth_state_get" || action === "auth_state_set" || action === "auth_state_clear") {
       return await authStateAction(admin, req, body, action);
     }
     if (action === "manage_get") {

@@ -517,10 +517,10 @@ async function loadPricedProducts(admin: ReturnType<typeof createClient>, ids: s
   return result;
 }
 
+// BUYSELL charges one flat delivery fee per order, however many stores supply it.
 function shippingGroupsFor(items: PricedProduct[], deliveryMode: "delivery" | "pickup") {
-  if (deliveryMode === "pickup") return [];
-  const sellerKeys = new Set(items.map((item) => item.seller_id || `product:${item.id}`));
-  return Array.from(sellerKeys, () => ({ seller_name: "Seller", fee: BUYSELL_DELIVERY_FEE }));
+  if (deliveryMode === "pickup" || !items.length) return [];
+  return [{ seller_name: "BUYSELL delivery", fee: BUYSELL_DELIVERY_FEE }];
 }
 
 async function buildCheckoutQuote(admin: ReturnType<typeof createClient>, body: Record<string, unknown>): Promise<CheckoutQuote> {
@@ -548,7 +548,8 @@ async function buildCheckoutQuote(admin: ReturnType<typeof createClient>, body: 
   if (freeGiftId && !gift) throw new RequestError("The selected free gift is no longer available.", 409);
 
   const deliveryMode = deliveryModeFor(body);
-  const shippingGroups = shippingGroupsFor([...paidItems, ...(gift ? [{ ...gift, qty: 1 }] : [])], deliveryMode);
+  // Free gifts never add delivery: the fee is based on the paid items only.
+  const shippingGroups = shippingGroupsFor(paidItems, deliveryMode);
   const pricing = calculateBogoPricing({
     paid_items: paidItems,
     primary_item_id: primaryItemId,

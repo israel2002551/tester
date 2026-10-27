@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { sendTelegramToAdmins } from "../_shared/telegram.ts";
+import { sendTelegramFileToAdmins, sendTelegramToAdmins, type TelegramResult } from "../_shared/telegram.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -61,18 +61,39 @@ serve(async (req) => {
       "Review the receipt in the BUYSELL admin Orders screen before confirming the order.",
     ].join("\n").slice(0, 1024);
 
-    // Receipts in the private bucket need a signed URL for Telegram to fetch them.
-    let photo = order.proof_url;
+    // Receipts in the private bucket are uploaded to Telegram, which cannot
+    // download them by URL. Legacy public receipts are still sent by URL.
+    let receipt: { file: Blob; name: string } | null = null;
     const privatePath = String(order.proof_url).match(/\/storage\/v1\/object\/payment-proofs\/([^?]+)$/)?.[1];
     if (privatePath) {
-      const { data: signed, error: signError } = await adminClient.storage
-        .from("payment-proofs")
-        .createSignedUrl(decodeURIComponent(privatePath), 3600);
-      if (signError || !signed?.signedUrl) throw new Error("Could not prepare the receipt for Telegram.");
-      photo = signed.signedUrl;
+      const path = decodeURIComponent(privatePath);
+      const { data: file, error: downloadError } = await adminClient.storage.from("payment-proofs").download(path);
+      if (downloadError || !file) console.error("telegram-payment-proof: receipt download failed:", downloadError?.message);
+      else receipt = { file, name: path.split("/").pop() || "receipt.jpg" };
     }
 
-    const result = await sendTelegramToAdmins("sendPhoto", { photo, caption });
+    // An unusual image (HEIC, very large) can be refused as a photo, so retry it
+    // as a file, and finally as text: the admin must always hear about the order.
+    const attempts: Array<() => Promise<TelegramResult>> = [];
+    if (receipt) {
+      const { file, name } = receipt;
+      attempts.push(() => sendTelegramFileToAdmins("sendPhoto", file, name, { caption }));
+      attempts.push(() => sendTelegramFileToAdmins("sendDocument", file, name, { caption }));
+    } else if (!privatePath) {
+      attempts.push(() => sendTelegramToAdmins("sendPhoto", { photo: order.proof_url, caption }));
+      attempts.push(() => sendTelegramToAdmins("sendDocument", { document: order.proof_url, caption }));
+    }
+    attempts.push(() => sendTelegramToAdmins("sendMessage", {
+      text: `${caption}\n\n(The receipt image could not be attached. Open it from the admin Orders screen.)`,
+    }));
+
+    let result: TelegramResult = { sent: 0, failed: 0 };
+    for (const attempt of attempts) {
+      result = await attempt();
+      // A reason means the bot or chat is not configured; retrying cannot help.
+      if (result.sent || result.reason) break;
+      console.error("telegram-payment-proof: delivery attempt failed:", result.errors?.[0]);
+    }
     if (!result.sent) {
       throw new Error(result.reason || result.errors?.[0] || "Telegram could not accept the receipt notification.");
     }
