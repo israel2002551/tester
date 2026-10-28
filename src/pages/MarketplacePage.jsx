@@ -39,13 +39,10 @@ async function revealMarketplaceRoute(root) {
     // not finished defining the legacy view helper yet.
     const buyerView = root?.querySelector('#buyer-view');
     const mainNav = root?.querySelector('#main-nav');
-    const landing = root?.querySelector('#landing');
     buyerView?.classList.remove('hidden', 'page-enter');
     buyerView?.style.removeProperty('display');
     mainNav?.classList.remove('hidden');
     mainNav?.style.removeProperty('display');
-    landing?.classList.add('hidden');
-    landing?.style.setProperty('display', 'none', 'important');
   }
 
   if (params.get('view') === 'shop') {
@@ -73,7 +70,7 @@ export function loadMarketplaceRuntime() {
   if (!runtimePromise) {
     // Version the classic runtime explicitly so an application deploy also
     // refreshes service-worker and notification-route safeguards immediately.
-    const appScriptUrl = import.meta.env.DEV ? `/app.js?t=${Date.now()}` : '/app.js?v=10.49';
+    const appScriptUrl = import.meta.env.DEV ? `/app.js?t=${Date.now()}` : '/app.js?v=10.50';
     runtimePromise = authReady
       .then(() => ensureRuntimeConfig())
       .then(() => loadClassicScript(appScriptUrl))

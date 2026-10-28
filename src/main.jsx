@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import '../styles.css';
 import './styles/refresh.css';
+import './styles/experience.css';
 import App from './App.jsx';
 import PwaInstallPrompt from './components/PwaInstallPrompt.jsx';
 import { isProtectedMarketplaceRoute } from './lib/auth.js';

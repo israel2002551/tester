@@ -118,7 +118,7 @@ const PRODUCT_MINIMAL_COLUMNS = ['id','seller_id','name','price','category','sta
 // private (see 20261026060000_protect_profile_private_columns.sql).
 const PRODUCT_PROFILE_HYDRATE_COLUMNS = ['id','name','role','accounts','store_name','store_description','logo_url','store_address'];
 const PUBLIC_PROFILE_COLUMNS = ['id','name','role','accounts','store_name','store_description','logo_url','store_address','seller_verified','kyc_status','is_suspended','created_at'];
-const SELLER_PRODUCT_COLUMNS = 'id,name,price,shipping_fee,shipping_cost,image_url,has_video,stock_quantity,status,created_at';
+const SELLER_PRODUCT_COLUMNS = 'id,name,price,shipping_fee,shipping_cost,image_url,images,video_url,videos,has_video,stock_quantity,status,created_at';
 const ORDER_LIST_COLUMNS = ['id','status','total_amount','created_at','delivery_name','delivery_address','items','payment_method','proof_url','seller_id','buyer_id','is_bogo_order','bogo_primary_item_id','bogo_free_item_id','platform_promo_discount_amount','bogo_extra_customer_charge','shipping_discount_amount','is_free_shipping_applied','platform_shipping_subsidy'];
 const DISPUTE_LIST_COLUMNS = ['id','order_id','buyer_id','seller_id','dispute_type','reason','description','status','created_at'];
 const DROPSHIP_REQUEST_COLUMNS = ['id','status','total_amount','created_at','delivery_name','delivery_address','items','payment_method','seller_id','buyer_id','name','contact','destination','request','admin_note','tracking_update','updated_at'];
@@ -319,124 +319,6 @@ function revealView(el, display = 'block') {
  el.style.setProperty('display', display, 'important');
  void el.offsetWidth;
  el.classList.add('page-enter');
-}
-
-function showMarketLandingPage() {
- window.bsAppViewActive = false;
- const marketing = document.getElementById('marketing-placeholder');
- const landing = document.getElementById('landing');
- const mainNav = document.getElementById('main-nav');
- const buyerView = document.getElementById('buyer-view');
- const sellerDash = document.getElementById('seller-dashboard');
- const storefront = document.getElementById('storefront-view');
- const accountView = document.getElementById('account-view');
- const hasMarketingLanding = !!marketing?.children.length;
-
- if (marketing) {
- marketing.classList.toggle('hidden', !hasMarketingLanding);
- marketing.style.setProperty('display', hasMarketingLanding ? 'block' : 'none', 'important');
- }
- if (landing) {
- landing.classList.toggle('hidden', hasMarketingLanding);
- landing.style.setProperty('display', hasMarketingLanding ? 'none' : 'flex', 'important');
- }
- if (mainNav) mainNav.classList.add('hidden');
- if (buyerView) {
- buyerView.classList.add('hidden');
- buyerView.style.setProperty('display', 'none', 'important');
- }
- if (sellerDash) {
- sellerDash.classList.add('hidden');
- sellerDash.style.setProperty('display', 'none', 'important');
- }
- if (storefront) {
- storefront.classList.add('hidden');
- storefront.style.setProperty('display', 'none', 'important');
- }
- if (accountView) {
- accountView.classList.add('hidden');
- accountView.style.setProperty('display', 'none', 'important');
- }
- document.body.classList.remove('in-seller', 'platform-seller-mode');
-}
-
-function landingMediaElement(row) {
- const mediaUrl = sanitizeUrl(row?.media_url || '');
- const posterUrl = sanitizeUrl(row?.poster_url || '');
- const title = escAttr(row?.title || 'BUYSELL Nigeria video');
- const isVideo = String(row?.media_type || '').toLowerCase() === 'video' || /\.(mp4|webm|ogg|mov)(\?|$)/i.test(mediaUrl);
- if (!mediaUrl) return '';
- if (isVideo) {
- return `<video playsinline preload="metadata" ${posterUrl ? `poster="${escAttr(posterUrl)}"` : ''}><source src="${escAttr(mediaUrl)}" type="video/mp4"></video>`;
- }
- return `<img src="${escAttr(mediaUrl)}" alt="${title}" loading="lazy">`;
-}
-
-function bindLandingVideoPlayer(target) {
- const video = target?.querySelector('video');
- const overlay = target?.querySelector('.bs-video-player__overlay, .bs-video-testimonial__overlay');
- const playButton = target?.querySelector('.bs-video-play-btn');
- if (!video || !overlay || !playButton || target.dataset.videoBound === 'true') return;
-
- target.dataset.videoBound = 'true';
- playButton.addEventListener('click', event => {
- event.preventDefault();
- event.stopPropagation();
- video.play().catch(error => {
- console.warn('Landing video playback failed:', error);
- });
- });
-
- video.addEventListener('play', () => target.classList.add('is-playing'));
- video.addEventListener('pause', () => target.classList.remove('is-playing'));
- video.addEventListener('ended', () => target.classList.remove('is-playing'));
-}
-
-function applyLandingMediaRow(row) {
- const slot = String(row?.slot || '').trim();
- const target = slot
- ? [...document.querySelectorAll('[data-landing-media-slot]')].find(el => el.dataset.landingMediaSlot === slot)
- : null;
- const mediaUrl = sanitizeUrl(row?.media_url || '');
- if (!target || !mediaUrl) return;
-
- const isVideo = String(row?.media_type || '').toLowerCase() === 'video' || /\.(mp4|webm|ogg|mov)(\?|$)/i.test(mediaUrl);
- const posterUrl = sanitizeUrl(row?.poster_url || '');
-
- if (slot === 'hero_video' && target.tagName === 'VIDEO') {
- target.poster = posterUrl || target.poster || '';
- target.innerHTML = `<source src="${escAttr(mediaUrl)}" type="video/mp4">`;
- target.load();
- target.play?.().catch(() => {});
- return;
- }
-
- const overlay = target.querySelector('.bs-video-player__overlay, .bs-video-testimonial__overlay');
- const mediaHtml = landingMediaElement(row);
- if (!mediaHtml) return;
- target.innerHTML = mediaHtml + (overlay ? overlay.outerHTML : '');
- const video = target.querySelector('video');
- if (video && target.classList.contains('bs-video-testimonial')) {
- video.muted = true;
- video.loop = true;
- }
- bindLandingVideoPlayer(target);
- if (video && isVideo) video.load();
-}
-
-async function loadLandingMedia() {
- if (!document.getElementById('marketing-placeholder') || !db) return;
- try {
- const { data, error } = await db
- .from('landing_media')
- .select('slot,media_type,media_url,poster_url,title,is_active,sort_order')
- .eq('is_active', true)
- .order('sort_order', { ascending: true });
- if (error) throw error;
- (data || []).forEach(applyLandingMediaRow);
- } catch (err) {
- console.warn('Landing media loading skipped:', err.message || err);
- }
 }
 
 async function postAiRequest(body, endpoints = []) {
@@ -1087,12 +969,10 @@ function showAccountPage() {
  const sellerDash = document.getElementById('seller-dashboard');
  const storefrontView = document.getElementById('storefront-view');
  const adminPortal = document.getElementById('admin-portal-view');
- const landing = document.getElementById('landing');
- const marketing = document.getElementById('marketing-placeholder');
  const mainNav = document.getElementById('main-nav');
 
  if (mainNav) mainNav.style.setProperty('display', 'block', 'important');
- [buyerView, sellerDash, storefrontView, adminPortal, landing, marketing].forEach(el => {
+ [buyerView, sellerDash, storefrontView, adminPortal].forEach(el => {
  if (!el) return;
  el.classList.add('hidden');
  el.style.setProperty('display', 'none', 'important');
@@ -2163,49 +2043,6 @@ async function generateDescription() {
 
 function showProfile() { showAccountPage(); }
 
-// ====================================================
-// SITE NAVIGATION
-// ====================================================
-function handleLandingAuthClick() {
- if (currentUser) {
- enterSite(currentUser.profile?.role || 'buyer');
- } else {
- openEntryAuth('buyer', 'login');
- }
-}
-
-function enterSite(mode) {
- const entryRole = setPendingEntryRole(mode);
- console.log(" Manual selection pass triggered for role:", mode);
- 
- appStorage.setItem('bs_manual_navigation_pass', 'true');
-
- if (!currentUser) {
-  if (entryRole === 'buyer') {
-   appStorage.removeItem('bs_manual_navigation_pass');
-   clearPendingEntryRole();
-   cleanAuthUrlParams();
-   showBuyerView();
-   return;
-  }
-  cleanAuthUrlParams();
-  showBuyerView();
-  openEntryAuth(entryRole, 'login');
-  return;
- }
-
- if (document.getElementById('marketing-placeholder')) document.getElementById('marketing-placeholder').style.setProperty('display', 'none', 'important');
- if (document.getElementById('landing')) document.getElementById('landing').style.setProperty('display', 'none', 'important');
-
- if (entryRole === 'seller' || entryRole === 'both') {
-  if (typeof showSellerDashboard === 'function') showSellerDashboard();
- } else {
-  if (typeof showBuyerView === 'function') showBuyerView();
- }
-}
-window.enterSite = enterSite;
-
-
 // ==========================================
 // 1. Paste the Helper Function (Top Level or near your other UI functions)
 // ==========================================
@@ -2222,8 +2059,6 @@ function showBuyerView() {
  const storefrontView = document.getElementById('storefront-view');
  const mainNav = document.getElementById('main-nav');
  const adminPortal = document.getElementById('admin-portal-view');
- const landingPortal = document.getElementById('landing');
- const marketingPlaceholder = document.getElementById('marketing-placeholder');
  const accountView = document.getElementById('account-view');
 
  // Direct Inline Override: Force reveal using style properties to bypass stylesheet conflicts
@@ -2237,8 +2072,6 @@ function showBuyerView() {
  if (sellerDash) { sellerDash.classList.add('hidden'); sellerDash.style.setProperty('display', 'none', 'important'); }
  if (storefrontView) { storefrontView.classList.add('hidden'); storefrontView.style.setProperty('display', 'none', 'important'); }
  if (adminPortal) { adminPortal.classList.add('hidden'); adminPortal.style.setProperty('display', 'none', 'important'); }
- if (landingPortal) { landingPortal.classList.add('hidden'); landingPortal.style.setProperty('display', 'none', 'important'); }
- if (marketingPlaceholder) { marketingPlaceholder.classList.add('hidden'); marketingPlaceholder.style.setProperty('display', 'none', 'important'); }
  if (accountView) { accountView.classList.add('hidden'); accountView.style.setProperty('display', 'none', 'important'); }
 
  const toggleIcon = document.getElementById('toggle-view-icon');
@@ -2286,8 +2119,6 @@ async function showSellerDashboard() {
  const storefrontView = document.getElementById('storefront-view');
  const mainNav = document.getElementById('main-nav');
  const adminPortal = document.getElementById('admin-portal-view');
- const landingPortal = document.getElementById('landing');
- const marketingPlaceholder = document.getElementById('marketing-placeholder');
  const accountView = document.getElementById('account-view');
 
  // Direct Inline Override: Force layout display block for the merchant workspace panel
@@ -2307,8 +2138,6 @@ async function showSellerDashboard() {
  if (buyerView) { buyerView.classList.add('hidden'); buyerView.style.setProperty('display', 'none', 'important'); }
  if (storefrontView) { storefrontView.classList.add('hidden'); storefrontView.style.setProperty('display', 'none', 'important'); }
  if (adminPortal) { adminPortal.classList.add('hidden'); adminPortal.style.setProperty('display', 'none', 'important'); }
- if (landingPortal) { landingPortal.classList.add('hidden'); landingPortal.style.setProperty('display', 'none', 'important'); }
- if (marketingPlaceholder) { marketingPlaceholder.classList.add('hidden'); marketingPlaceholder.style.setProperty('display', 'none', 'important'); }
  if (accountView) { accountView.classList.add('hidden'); accountView.style.setProperty('display', 'none', 'important'); }
 
  const toggleIcon = document.getElementById('toggle-view-icon');
@@ -3243,7 +3072,7 @@ function updateAnnouncementPromos() {
  const promos = getActiveOngoingPromos();
  if (!promos.length) return;
  const promoItems = promos.map(p => `<span><i class="fa-solid ${escAttr(p.badgeIcon)}" style="color:${p.isShipping ? '#38bdf8' : 'var(--gold)'}"></i> <strong>${escHtml(p.title)}:</strong> ${escHtml(p.description)}</span>`).join('');
- document.querySelectorAll('.nav-announcement, .landing-announcement').forEach(bar => {
+ document.querySelectorAll('.nav-announcement').forEach(bar => {
   if (!bar.dataset.originalAnnouncement) bar.dataset.originalAnnouncement = bar.innerHTML;
   bar.innerHTML = `${promoItems}${bar.dataset.originalAnnouncement}`;
  });
@@ -3505,9 +3334,26 @@ function renderBuyerDealShelf() {
  grid.innerHTML = deals.map(product => compactProductButton(product)).join('');
 }
 
+const PRODUCT_PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=400&fit=crop';
+
+/**
+ * Best still picture for a product. Many WhatsApp imports have a video but no
+ * photo, so Cloudinary renders a frame from the video (so_auto picks one)
+ * instead of showing a stock picture.
+ */
+function productThumbnail(product = {}, size = 600) {
+ const images = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
+ const photo = product.image_url || images[0];
+ if (photo) return photo;
+ const videos = Array.isArray(product.videos) ? product.videos.filter(Boolean) : [];
+ const video = String(product.video_url || videos[0] || '');
+ if (!video.includes('res.cloudinary.com/') || !video.includes('/video/upload/')) return '';
+ const still = video.replace('/video/upload/', `/video/upload/so_auto,c_fill,w_${size},h_${size},q_auto/`).split('?')[0];
+ return /\.(mp4|mov|webm|m4v|avi|mkv)$/i.test(still) ? still.replace(/\.[a-z0-9]+$/i, '.jpg') : `${still}.jpg`;
+}
+
 function compactProductButton(product) {
- const imageList = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
- const thumb = product.image_url || imageList[0] || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=300&h=240&fit=crop';
+ const thumb = productThumbnail(product, 300) || PRODUCT_PLACEHOLDER_IMAGE;
  const now = new Date();
  const displayPrice = product.flash_price && product.flash_end && new Date(product.flash_end) > now ? product.flash_price : product.price;
  return `<button class="recent-item" onclick="openProduct(${jsArg(product.id)})"><img src="${escAttr(thumb)}" alt="${escAttr(product.name || 'Product')}" loading="lazy"><div><strong>${escHtml(product.name || 'Product')}</strong><span>${fmtN(displayPrice)}</span></div></button>`;
@@ -3524,12 +3370,9 @@ function prodCard(p) {
  ? Math.round((1 - displayPrice / p.original_price) * 100) 
  : 0;
 
- // Safely look for images array
  const imageList = Array.isArray(p.images) ? p.images.filter(Boolean) : [];
-
- // --- FIXED IMAGE RESOLUTION ---
- // Prioritize the primary database column string, then look inside scraped arrays, then fallback to unsplash
- const resolvedCardThumbnail = p.image_url || imageList[0] || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=400&fit=crop';
+ // Photo first, then a still from the product's video, then a placeholder.
+ const resolvedCardThumbnail = productThumbnail(p) || PRODUCT_PLACEHOLDER_IMAGE;
 
  const cartItem = {
  id: p.id,
@@ -3561,7 +3404,11 @@ function prodCard(p) {
  p.seller_verified ? `<span class="prod-badge prod-badge-verified"><i class="fa-solid fa-check"></i> Verified</span>` : ''
  ].filter(Boolean).join('');
 
- const stars = starIcons(p.avg_rating || 5);
+ // Stars only for real reviews; a product with none says so instead of showing 5.0.
+ const reviewCount = Number(p.review_count || 0);
+ const ratingHtml = reviewCount > 0
+  ? `<span class="stars sm">${starIcons(Number(p.avg_rating) || 0)}</span><span class="text-xs color-text3">${(Number(p.avg_rating) || 0).toFixed(1)} (${reviewCount})</span>`
+  : '<span class="prod-new-listing"><i class="fa-solid fa-seedling"></i> New listing</span>';
 
  const serializedCartData = JSON.stringify(cartItem)
  .replace(/&/g, '&amp;')
@@ -3586,9 +3433,7 @@ function prodCard(p) {
  <span class="prod-price">${fmtN(displayPrice)}</span>
  ${p.original_price > displayPrice ? `<span class="prod-orig">${fmtN(p.original_price)}</span>` : ''}
  </div>
-  <div class="prod-shipping text-xs color-text3" style="margin-top:.15rem"><i class="fa-solid fa-truck-fast"></i> BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} flat fee per order</div>
- <div class="prod-trust-line"><span><i class="fa-solid fa-shield-halved"></i> BUYSELL tracking</span><span>${escHtml(stockLabel)}</span></div>
- <div class="prod-rating-row"><span class="stars sm">${stars}</span><span class="text-xs color-text3">${p.avg_rating ? p.avg_rating.toFixed(1) : '5.0'} (${p.review_count||0})</span></div>
+ <div class="prod-rating-row">${ratingHtml}<span class="prod-stock-label">${escHtml(stockLabel)}</span></div>
  <div class="prod-location"><i class="fa-solid fa-map-marker-alt" style="font-size:.6rem"></i>${escHtml(p.location||'Nigeria')}</div>
  <a class="prod-store-link ${platformProduct ? 'platform-store-link' : ''}" onclick="event.stopPropagation();viewStorefront(${jsArg(p.seller_id)})"><i class="fa-solid ${platformProduct ? 'fa-shield-halved' : 'fa-store'}" style="font-size:.6rem"></i>${escHtml(sellerLabel)}</a>
  ${!isSoldOut ? `<button class="prod-mobile-add" onclick="event.stopPropagation();addToCart(${serializedCartData})"><i class="fa-solid fa-cart-plus"></i> Add to Cart</button>` : ''}
@@ -4573,7 +4418,8 @@ function renderCheckoutQuotedItems(quote) {
   const detail = isGift
    ? (lineTotal > 0 ? 'BOGO gift — top-up shown, no delivery fee' : 'BOGO gift — fully covered, no delivery fee')
    : `Qty: ${quantity}`;
-  const image = sanitizeUrl(item.image_url || '') || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=100';
+  const cartImage = cart.find(c => String(c.id) === String(item.id || item.product_id))?.image_url;
+  const image = sanitizeUrl(item.image_url || cartImage || '') || PRODUCT_PLACEHOLDER_IMAGE;
   return `<div class="order-item${isGift ? ' bogo-order-gift' : ''}"><img src="${escAttr(image)}" alt="" loading="lazy"><div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(item.name || 'Marketplace item')}</div><div class="color-text3 text-xs">${escHtml(detail)}</div></div><div class="font-bold text-sm">${isGift && lineTotal === 0 ? 'FREE' : fmtN(lineTotal)}</div></div>`;
  }).join('');
 }
@@ -6458,7 +6304,7 @@ async function loadSellerProds() {
  list?.classList.remove('hidden');
  list.innerHTML = prods.map(p => `
  <div class="prod-list-item">
- <img class="prod-list-img" src="${p.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=200'}" alt="" loading="lazy">
+ <img class="prod-list-img" src="${productThumbnail(p, 200) || PRODUCT_PLACEHOLDER_IMAGE}" alt="" loading="lazy">
  <div class="prod-list-info">
  <div class="prod-list-name">${escHtml(p.name)}</div>
   <div class="prod-list-price">Buyer price: ${fmtN(p.price)}</div>
@@ -8795,7 +8641,6 @@ function setPlatformIcon(target) {
 
 function applyPlatformBrandAssets() {
  setPlatformWordmark(document.querySelector('#main-nav .nav-brand-sm'), 'transparent');
- setPlatformWordmark(document.querySelector('#landing .brand-logo'), 'dark');
  setPlatformWordmark(document.querySelector('#seller-dashboard .dash-sidebar-head .brand-text'), 'dark');
  setPlatformWordmark(document.querySelector('#service-provider-view .dash-sidebar-head .brand-text'), 'dark');
  setPlatformWordmark(document.querySelector('#auth-modal .auth-logo'), 'transparent');
@@ -9918,8 +9763,7 @@ async function adminRejectWithdrawal(id) {
 
 /* -- BROADCAST -- */
 function getProductThumbnail(product = {}) {
- const imageList = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
- return product.image_url || imageList[0] || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=320&fit=crop';
+ return productThumbnail(product) || PRODUCT_PLACEHOLDER_IMAGE;
 }
 
 function productPublicLink(productId) {
@@ -10872,8 +10716,6 @@ async function viewStorefront(sellerId) {
  const sellerDash = document.getElementById('seller-dashboard');
  const adminPortal = document.getElementById('admin-portal-view');
  const accountView = document.getElementById('account-view');
- const landing = document.getElementById('landing');
- const marketing = document.getElementById('marketing-placeholder');
 
  // Profiles have evolved over time, so use the application's existing column
  // fallback instead of making a storefront depend on every optional field.
@@ -10890,7 +10732,7 @@ async function viewStorefront(sellerId) {
  // Storefront links are used from product cards, direct URLs, adverts, and
  // the Admin "View store" control.  Hide every competing top-level surface
  // so the admin/seller workspace cannot remain layered over the store page.
- [buyerView, sellerDash, adminPortal, accountView, landing, marketing].forEach(view => {
+ [buyerView, sellerDash, adminPortal, accountView].forEach(view => {
   if (!view) return;
   view.classList.add('hidden');
   view.style.setProperty('display', 'none', 'important');
@@ -12247,7 +12089,7 @@ async function showWishlistModal() {
  id: p.id,
  name: p.name,
  price: displayPrice,
- image_url: p.image_url,
+ image_url: productThumbnail(p),
  seller_id: p.seller_id,
  profiles: p.profiles,
  is_flash: isFlashActive
@@ -12255,7 +12097,7 @@ async function showWishlistModal() {
 
  return `
  <div class="wishlist-item" style="display:flex; gap:12px; align-items:center; padding:10px; border-bottom:1px solid var(--border)">
- <img src="${p.image_url || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=100'}" style="width:60px; height:60px; border-radius:8px; object-fit:cover">
+ <img src="${productThumbnail(p, 200) || PRODUCT_PLACEHOLDER_IMAGE}" style="width:60px; height:60px; border-radius:8px; object-fit:cover">
  <div style="flex:1">
  <div class="font-600 text-sm">${escHtml(p.name)}</div>
  <div class="color-green font-bold text-sm">

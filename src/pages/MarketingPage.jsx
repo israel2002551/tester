@@ -1,270 +1,413 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import BrandLogo from '../components/BrandLogo.jsx';
+import { landingCategories, naira, useLandingCatalog } from '../lib/landingData.js';
+import '../styles/landing.css';
 
-const categories = [
-  {
-    name: 'Fashion',
-    description: 'Clothes, shoes, and everyday style.',
-    icon: 'fa-shirt',
-    theme: 'clay',
-    href: '/category/fashion',
-  },
-  {
-    name: 'Phones & gadgets',
-    description: 'Devices, accessories, and upgrades.',
-    icon: 'fa-mobile-screen-button',
-    theme: 'mint',
-    href: '/category/phones',
-  },
-  {
-    name: 'Home & living',
-    description: 'Useful pieces for every space.',
-    icon: 'fa-couch',
-    theme: 'cream',
-    href: '/category/home',
-  },
-  {
-    name: 'Beauty',
-    description: 'Skincare, fragrance, and self-care.',
-    icon: 'fa-wand-magic-sparkles',
-    theme: 'rose',
-    href: '/category/beauty',
-  },
-  {
-    name: '1688 sourcing',
-    description: 'Bulk-order tools for growing stores.',
-    icon: 'fa-boxes-stacked',
-    theme: 'gold',
-    href: '/category/dropship',
-  },
+const rotatingWords = ['fashion', 'phones', 'home finds', 'beauty', 'gadgets'];
+
+const quickLinks = [
+  ['Fashion', '/category/fashion'],
+  ['Phones', '/category/phones'],
+  ['Home', '/category/home'],
+  ['Beauty', '/category/beauty'],
+  ['Electronics', '/category/electronics'],
+  ['1688 sourcing', '/category/dropship'],
 ];
 
-const journeys = [
-  {
-    eyebrow: 'For buyers',
-    title: 'Find what you need, then check out with clarity.',
-    text: 'Browse real categories, talk to a seller in context, and keep delivery or pickup updates connected to the order.',
-    icon: 'fa-bag-shopping',
-    href: '/?view=shop',
-    action: 'Shop the marketplace',
-    theme: 'shop',
-  },
-  {
-    eyebrow: 'For sellers',
-    title: 'Run your store from one focused workspace.',
-    text: 'Manage products, orders, conversations, team roles, and payouts without mixing buyer tools into your dashboard.',
-    icon: 'fa-store',
-    href: '/?view=shop&entry=seller&mode=signup',
-    action: 'Open a seller store',
-    theme: 'sell',
-  },
-  {
-    eyebrow: 'For sourcing',
-    title: 'Turn 1688 requests into supplier-ready batches.',
-    text: 'Collect requests, keep procurement chats in one thread, and export organised CSV or XLS files when you are ready.',
-    icon: 'fa-arrow-right-arrow-left',
-    href: '/category/dropship',
-    action: 'Explore 1688 sourcing',
-    theme: 'source',
-  },
-];
-
-const trustItems = [
-  ['fa-truck-fast', 'Clear delivery updates', 'Pickup, handoff checks, and order status stay in one flow.'],
-  ['fa-shield-halved', 'Verified checkout', 'Payment proof and order review are handled inside BUYSELL.'],
-  ['fa-comments', 'Order-linked chat', 'Conversations stay with the product or sourcing request they relate to.'],
-  ['fa-store', 'Focused seller tools', 'Buyer pages and seller workspaces remain purposefully separate.'],
+const tickerItems = [
+  ['fa-gift', 'Free gifts on qualifying orders'],
+  ['fa-truck-fast', '₦2,500 flat doorstep delivery'],
+  ['fa-location-dot', 'Free pickup at verified Safe Hubs'],
+  ['fa-shield-halved', 'Every payment checked by BUYSELL'],
+  ['fa-boxes-stacked', '1688 sourcing for growing stores'],
+  ['fa-comments', 'Chat with sellers before you buy'],
 ];
 
 const steps = [
-  ['01', 'Choose a route', 'Start in the marketplace, open a store, or create a 1688 sourcing request.'],
-  ['02', 'Keep it in context', 'Products, payments, messages, and delivery updates stay tied to the same order.'],
-  ['03', 'Move with confidence', 'Use the next page that fits your role instead of being bounced through an auth modal.'],
+  ['fa-magnifying-glass', 'Find it', 'Search hundreds of live listings or browse by category.'],
+  ['fa-building-columns', 'Pay BUYSELL', 'Transfer to BUYSELL’s account and upload your receipt.'],
+  ['fa-shield-halved', 'We verify', 'An admin confirms your payment before the order moves.'],
+  ['fa-box-open', 'Receive it', 'Doorstep delivery, or collect free from a Safe Hub.'],
 ];
 
+const reducedMotion = () => typeof window !== 'undefined'
+  && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+function useRotatingWord(words, interval = 2200) {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    if (reducedMotion()) return undefined;
+    const timer = setInterval(() => setIndex(current => (current + 1) % words.length), interval);
+    return () => clearInterval(timer);
+  }, [words, interval]);
+  return [words[index], index];
+}
+
+/** Adds `is-in` to `.bh-reveal` elements as they scroll into view. */
+function useReveal(rootRef, deps) {
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return undefined;
+    const targets = root.querySelectorAll('.bh-reveal:not(.is-in)');
+    if (!('IntersectionObserver' in window) || reducedMotion()) {
+      targets.forEach(node => node.classList.add('is-in'));
+      return undefined;
+    }
+    root.classList.add('bh-animate');
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add('is-in');
+        observer.unobserve(entry.target);
+      });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+    targets.forEach(node => observer.observe(node));
+    return () => observer.disconnect();
+  }, deps); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+function useCountUp(target, duration = 1200) {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    if (!target) return undefined;
+    if (reducedMotion()) { setValue(target); return undefined; }
+    let frame;
+    const start = performance.now();
+    const tick = now => {
+      const progress = Math.min(1, (now - start) / duration);
+      setValue(Math.round(target * (1 - (1 - progress) ** 3)));
+      if (progress < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [target, duration]);
+  return value;
+}
+
+function SearchForm({ id, large = false }) {
+  const submit = event => {
+    event.preventDefault();
+    const query = new FormData(event.currentTarget).get('q')?.toString().trim() || '';
+    window.location.href = query ? `/?view=shop&q=${encodeURIComponent(query)}` : '/?view=shop';
+  };
+  return (
+    <form className={`bh-search${large ? ' bh-search--large' : ''}`} role="search" onSubmit={submit}>
+      <label htmlFor={id} className="bh-sr-only">Search BUYSELL</label>
+      <i className="fa-solid fa-magnifying-glass" aria-hidden="true" />
+      <input id={id} name="q" type="search" autoComplete="off" placeholder="Search sneakers, iPhones, blenders…" />
+      <button type="submit">Search</button>
+    </form>
+  );
+}
+
+function ProductCard({ product, className = '' }) {
+  const discount = Number(product.original_price) > Number(product.price)
+    ? Math.round((1 - Number(product.price) / Number(product.original_price)) * 100)
+    : 0;
+  const isNew = Date.now() - new Date(product.created_at).getTime() < 3 * 86400000;
+  return (
+    <a className={`bh-card ${className}`.trim()} href={`/product?id=${encodeURIComponent(product.id)}`}>
+      <span className="bh-card-media">
+        <img src={product.image} alt="" loading="lazy" decoding="async" />
+        {discount >= 5 ? <em className="bh-card-badge bh-card-badge--deal">-{discount}%</em>
+          : isNew ? <em className="bh-card-badge">New</em> : null}
+      </span>
+      <span className="bh-card-body">
+        <span className="bh-card-name">{product.name}</span>
+        <span className="bh-card-price">
+          <strong>{naira(product.price)}</strong>
+          {discount >= 5 ? <s>{naira(product.original_price)}</s> : null}
+        </span>
+      </span>
+    </a>
+  );
+}
+
+function SkeletonCard({ className = '' }) {
+  return (
+    <span className={`bh-card bh-card--skeleton ${className}`.trim()} aria-hidden="true">
+      <span className="bh-card-media" />
+      <span className="bh-card-body"><span className="bh-skel-line" /><span className="bh-skel-line bh-skel-line--short" /></span>
+    </span>
+  );
+}
+
+function HeroShowcase({ status, products }) {
+  // One product per category where possible, so the stack shows variety.
+  const picks = [];
+  const seen = new Set();
+  for (const product of products) {
+    if (picks.length === 3) break;
+    if (!seen.has(product.category)) { picks.push(product); seen.add(product.category); }
+  }
+  for (const product of products) {
+    if (picks.length === 3) break;
+    if (!picks.includes(product)) picks.push(product);
+  }
+
+  if (status === 'error' || (status === 'ready' && picks.length < 3)) {
+    return (
+      <div className="bh-showcase bh-showcase--photo">
+        <img src="/images/marketing/buysell-marketplace-real-v1.jpg" alt="Nigerian market seller at her stall" />
+        <span className="bh-chip bh-chip--gift"><i className="fa-solid fa-gift" /> Free gifts on qualifying orders</span>
+        <span className="bh-chip bh-chip--delivery"><i className="fa-solid fa-truck-fast" /> ₦2,500 flat delivery</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bh-showcase" aria-label="Products on BUYSELL right now">
+      <span className="bh-showcase-glow" aria-hidden="true" />
+      {status === 'loading'
+        ? [1, 2, 3].map(n => <SkeletonCard key={n} className={`bh-float bh-float--${n}`} />)
+        : picks.map((product, index) => (
+          <ProductCard key={product.id} product={product} className={`bh-float bh-float--${index + 1}`} />
+        ))}
+      <span className="bh-chip bh-chip--gift"><i className="fa-solid fa-gift" /> Free gift unlocked</span>
+      <span className="bh-chip bh-chip--verified"><i className="fa-solid fa-circle-check" /> Payment verified</span>
+      <span className="bh-chip bh-chip--delivery"><i className="fa-solid fa-truck-fast" /> ₦2,500 flat delivery</span>
+    </div>
+  );
+}
+
+function ProductRail({ status, products }) {
+  const railRef = useRef(null);
+  const scroll = direction => {
+    const rail = railRef.current;
+    if (rail) rail.scrollBy({ left: direction * rail.clientWidth * 0.85, behavior: reducedMotion() ? 'auto' : 'smooth' });
+  };
+  if (status === 'error' || (status === 'ready' && !products.length)) return null;
+  return (
+    <section className="bh-section bh-fresh" aria-labelledby="bh-fresh-title">
+      <div className="bh-head bh-reveal">
+        <div>
+          <span className="bh-kicker"><i className="fa-solid fa-bolt" /> Just landed</span>
+          <h2 id="bh-fresh-title">Fresh on BUYSELL</h2>
+        </div>
+        <div className="bh-head-actions">
+          <button type="button" className="bh-arrow" onClick={() => scroll(-1)} aria-label="Scroll back"><i className="fa-solid fa-arrow-left" /></button>
+          <button type="button" className="bh-arrow" onClick={() => scroll(1)} aria-label="Scroll forward"><i className="fa-solid fa-arrow-right" /></button>
+          <a className="bh-link" href="/?view=shop">See everything <i className="fa-solid fa-arrow-right" /></a>
+        </div>
+      </div>
+      <div className="bh-rail" ref={railRef}>
+        {status === 'loading'
+          ? Array.from({ length: 6 }, (_, n) => <SkeletonCard key={n} />)
+          : products.slice(0, 16).map(product => <ProductCard key={product.id} product={product} />)}
+      </div>
+    </section>
+  );
+}
+
+function CategoryGrid({ categories }) {
+  return (
+    <section className="bh-section" aria-labelledby="bh-cat-title">
+      <div className="bh-head bh-reveal">
+        <div>
+          <span className="bh-kicker"><i className="fa-solid fa-shapes" /> Shop by category</span>
+          <h2 id="bh-cat-title">Where do you want to start?</h2>
+        </div>
+        <a className="bh-link" href="/products">All categories <i className="fa-solid fa-arrow-right" /></a>
+      </div>
+      <div className="bh-cats">
+        {landingCategories.map((category, index) => {
+          const info = categories[category.key] || {};
+          return (
+            <a key={category.key} href={category.href}
+              className={`bh-cat bh-reveal${index === 0 ? ' bh-cat--hero' : ''}${info.cover ? '' : ' bh-cat--plain'}`}
+              style={{ '--bh-delay': `${index * 70}ms` }}>
+              {info.cover ? <img src={info.cover} alt="" loading="lazy" decoding="async" /> : null}
+              <span className="bh-cat-icon"><i className={`fa-solid ${category.icon}`} aria-hidden="true" /></span>
+              <span className="bh-cat-copy">
+                <strong>{category.name}</strong>
+                <span>{info.count ? `${info.count.toLocaleString('en-NG')} items` : 'Browse now'} <i className="fa-solid fa-arrow-right" /></span>
+              </span>
+            </a>
+          );
+        })}
+        <a href="/category/dropship" className="bh-cat bh-cat--source bh-reveal" style={{ '--bh-delay': '350ms' }}>
+          <span className="bh-cat-icon"><i className="fa-solid fa-boxes-stacked" aria-hidden="true" /></span>
+          <span className="bh-cat-copy">
+            <strong>1688 sourcing</strong>
+            <span>Bulk orders for your store <i className="fa-solid fa-arrow-right" /></span>
+          </span>
+        </a>
+      </div>
+    </section>
+  );
+}
+
 export default function MarketingPage() {
+  const rootRef = useRef(null);
+  const catalog = useLandingCatalog();
+  const [word, wordIndex] = useRotatingWord(rotatingWords);
+  const liveCount = useCountUp(catalog.total || 0);
+  useReveal(rootRef, [catalog.status]);
+
   useEffect(() => {
     document.body.className = '';
-    document.title = 'BUYSELL Nigeria | Buy, sell, and source with confidence';
+    document.title = 'BUYSELL Nigeria | Shop fashion, phones, home and beauty the safe way';
   }, []);
 
   return (
-    <main className="bs-landing bs-lux">
-      <header className="bs-lux-nav" aria-label="BUYSELL landing navigation">
-        <a className="bs-lux-brand" href="/" aria-label="BUYSELL Nigeria home">
-          <BrandLogo variant="light" decorative />
+    <main className="bh" ref={rootRef}>
+      <section className="bh-hero" aria-labelledby="bh-hero-title">
+        <header className="bh-nav" aria-label="BUYSELL navigation">
+          <a className="bh-brand" href="/" aria-label="BUYSELL Nigeria home">
+            <BrandLogo variant="transparent" decorative />
+          </a>
+          <nav aria-label="Primary navigation">
+            <a href="/?view=shop">Marketplace</a>
+            <a href="/products">Categories</a>
+            <a href="/category/dropship">1688 Sourcing</a>
+            <a href="/?view=shop&entry=seller&mode=signup">Sell</a>
+          </nav>
+          <div className="bh-nav-actions">
+            <a className="bh-nav-signin" href="/?view=shop&entry=buyer&mode=login">Sign in</a>
+            <a className="bh-btn bh-btn--dark" href="/?view=shop">Shop now</a>
+          </div>
+        </header>
+
+        <div className="bh-hero-grid">
+          <div className="bh-hero-copy">
+            <span className="bh-live">
+              <span className="bh-live-dot" aria-hidden="true" />
+              {catalog.total ? <><strong>{liveCount.toLocaleString('en-NG')}</strong>&nbsp;products live now</> : 'Nigeria’s connected marketplace'}
+            </span>
+            <h1 id="bh-hero-title">
+              <span className="bh-sr-only">Shop fashion, phones, home finds and beauty the safe way.</span>
+              <span aria-hidden="true">
+                Shop
+                <span className="bh-rotator"><span key={wordIndex} className="bh-rotator-word">{word}</span></span>
+                the safe way.
+              </span>
+            </h1>
+            <p className="bh-hero-lede">
+              Pay BUYSELL, not a stranger. We check every payment before your order moves, then deliver to your
+              door for a flat ₦2,500, or you collect it free from a verified Safe Hub.
+            </p>
+            <SearchForm id="bh-hero-search" large />
+            <div className="bh-quick" aria-label="Popular categories">
+              {quickLinks.map(([label, href]) => <a key={href} href={href}>{label}</a>)}
+            </div>
+          </div>
+          <HeroShowcase status={catalog.status} products={catalog.products} />
+        </div>
+      </section>
+
+      <div className="bh-ticker" aria-label="BUYSELL offers">
+        <div className="bh-ticker-track">
+          {[0, 1].map(copy => (
+            <ul key={copy} aria-hidden={copy === 1 || undefined}>
+              {tickerItems.map(([icon, text]) => <li key={text}><i className={`fa-solid ${icon}`} /> {text}</li>)}
+            </ul>
+          ))}
+        </div>
+      </div>
+
+      <ProductRail status={catalog.status} products={catalog.products} />
+
+      <section className="bh-section" aria-labelledby="bh-perks-title">
+        <div className="bh-head bh-reveal">
+          <div>
+            <span className="bh-kicker"><i className="fa-solid fa-star" /> Why shop here</span>
+            <h2 id="bh-perks-title">Better deals, fewer worries</h2>
+          </div>
+        </div>
+        <div className="bh-perks">
+          <article className="bh-perk bh-perk--gift bh-reveal">
+            <span className="bh-perk-icon"><i className="fa-solid fa-gift" /></span>
+            <h3>A free gift with your order</h3>
+            <p>Qualifying orders unlock a free gift from the BUYSELL catalogue. Pick it at checkout. The gift ships with your order at no extra delivery cost.</p>
+            <a className="bh-btn bh-btn--dark" href="/?view=shop">Start shopping <i className="fa-solid fa-arrow-right" /></a>
+            <span className="bh-perk-ribbon" aria-hidden="true"><i className="fa-solid fa-gift" /></span>
+          </article>
+          <article className="bh-perk bh-perk--delivery bh-reveal" style={{ '--bh-delay': '80ms' }}>
+            <span className="bh-perk-icon"><i className="fa-solid fa-truck-fast" /></span>
+            <span className="bh-perk-figure">₦2,500</span>
+            <h3>Flat doorstep delivery</h3>
+            <p>One fee per order, even when your items come from different stores.</p>
+          </article>
+          <article className="bh-perk bh-perk--pickup bh-reveal" style={{ '--bh-delay': '160ms' }}>
+            <span className="bh-perk-icon"><i className="fa-solid fa-location-dot" /></span>
+            <span className="bh-perk-figure">Free</span>
+            <h3>Safe Hub pickup</h3>
+            <p>Collect from a verified pickup hub near you and pay nothing for delivery.</p>
+          </article>
+          <article className="bh-perk bh-perk--trust bh-reveal" style={{ '--bh-delay': '240ms' }}>
+            <span className="bh-perk-icon"><i className="fa-solid fa-shield-halved" /></span>
+            <div>
+              <h3>Your money is checked first</h3>
+              <p>You pay into BUYSELL’s account and upload the receipt. An admin verifies it before any seller is involved, and you can chat with the seller in the app.</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <CategoryGrid categories={catalog.categories} />
+
+      <section className="bh-steps-wrap" aria-labelledby="bh-steps-title">
+        <div className="bh-section">
+          <div className="bh-head bh-head--center bh-reveal">
+            <span className="bh-kicker bh-kicker--light"><i className="fa-solid fa-route" /> How it works</span>
+            <h2 id="bh-steps-title">From “I want this” to “it’s here” in four steps</h2>
+          </div>
+          <ol className="bh-steps">
+            {steps.map(([icon, title, text], index) => (
+              <li key={title} className="bh-step bh-reveal" style={{ '--bh-delay': `${index * 110}ms` }}>
+                <span className="bh-step-num">{index + 1}</span>
+                <span className="bh-step-icon"><i className={`fa-solid ${icon}`} aria-hidden="true" /></span>
+                <h3>{title}</h3>
+                <p>{text}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      <section className="bh-section bh-split" aria-label="Sell and source with BUYSELL">
+        <a className="bh-split-card bh-split-card--sell bh-reveal" href="/?view=shop&entry=seller&mode=signup">
+          <img src="/images/marketing/buysell-marketplace-real-v1.jpg" alt="" loading="lazy" />
+          <span className="bh-split-copy">
+            <span className="bh-kicker bh-kicker--light">For sellers</span>
+            <strong>Open your store in minutes</strong>
+            <span>List products, take orders, chat with buyers and track payouts from one dashboard.</span>
+            <em>Start selling <i className="fa-solid fa-arrow-right" /></em>
+          </span>
         </a>
-        <nav aria-label="Primary navigation">
+        <a className="bh-split-card bh-split-card--source bh-reveal" href="/category/dropship" style={{ '--bh-delay': '100ms' }}>
+          <img src="/images/marketing/buysell-sourcing-real-v1.jpg" alt="" loading="lazy" />
+          <span className="bh-split-copy">
+            <span className="bh-kicker bh-kicker--light">For growing stores</span>
+            <strong>Source in bulk from 1688</strong>
+            <span>Collect product requests and export supplier-ready batches when you are ready to order.</span>
+            <em>Explore sourcing <i className="fa-solid fa-arrow-right" /></em>
+          </span>
+        </a>
+      </section>
+
+      <section className="bh-final" aria-labelledby="bh-final-title">
+        <div className="bh-final-inner bh-reveal">
+          <h2 id="bh-final-title">Your next favourite thing is one search away.</h2>
+          <SearchForm id="bh-final-search" />
+          <div className="bh-final-actions">
+            <a className="bh-btn bh-btn--gold" href="/?view=shop">Browse the marketplace <i className="fa-solid fa-arrow-right" /></a>
+            <a className="bh-btn bh-btn--outline" href="/?view=shop&entry=seller&mode=signup">Open a store</a>
+          </div>
+        </div>
+      </section>
+
+      <footer className="bh-footer">
+        <div>
+          <BrandLogo variant="transparent" className="bh-footer-logo" />
+          <p>Shop, sell and source across Nigeria with every payment checked by BUYSELL.</p>
+        </div>
+        <nav aria-label="Footer navigation">
           <a href="/?view=shop">Marketplace</a>
           <a href="/products">Categories</a>
           <a href="/category/dropship">1688 Sourcing</a>
-          <a href="/terms">How trust works</a>
-        </nav>
-        <div className="bs-lux-nav-actions">
-          <a className="bs-lux-icon-btn" href="/?view=shop" aria-label="Search marketplace">
-            <i className="fa-solid fa-magnifying-glass" />
-          </a>
-          <a className="bs-lux-text-btn" href="/?view=shop&entry=seller&mode=signup">Open Store</a>
-        </div>
-      </header>
-
-      <section className="bs-lux-hero bs-market-hero" aria-labelledby="market-hero-title">
-        <div className="bs-lux-hero-copy">
-          <span className="bs-lux-kicker">Nigeria&apos;s connected marketplace</span>
-          <h1 id="market-hero-title">Buy with ease. Sell with structure. Source without the chaos.</h1>
-          <p>
-            BUYSELL brings shopping, secure order steps, seller workspaces, delivery updates,
-            and 1688 sourcing together—while keeping each journey on its own clear page.
-          </p>
-          <div className="bs-lux-hero-actions">
-            <a className="bs-btn bs-btn--primary" href="/?view=shop">
-              <span>Shop Marketplace</span>
-              <i className="fa-solid fa-arrow-right" />
-            </a>
-            <a className="bs-btn bs-btn--ghost" href="/?view=shop&entry=seller&mode=signup">
-              Start Selling
-            </a>
-          </div>
-          <ul className="bs-lux-proof-row" aria-label="BUYSELL benefits">
-            <li><i className="fa-solid fa-lock" /> Protected order flow</li>
-            <li><i className="fa-solid fa-message" /> Contextual chat</li>
-            <li><i className="fa-solid fa-file-export" /> Supplier-ready exports</li>
-          </ul>
-        </div>
-
-        <div className="bs-lux-hero-media" aria-label="Nigerian market seller">
-          <picture>
-            <source media="(max-width: 640px)" srcSet="/images/marketing/buysell-marketplace-real-v1.jpg" />
-            <img
-              src="/images/marketing/buysell-marketplace-real-v1.jpg"
-              alt="Nigerian market seller at her fresh produce stall"
-            />
-          </picture>
-          <article className="bs-lux-floating-card bs-lux-floating-card--stats">
-            <i className="fa-solid fa-shield-heart" aria-hidden="true" />
-            <strong>One clear order flow</strong>
-            <span>Shop, chat, pay, and follow delivery without losing context.</span>
-          </article>
-          <article className="bs-lux-floating-card bs-lux-floating-card--product">
-            <span className="bs-lux-mini-package" aria-hidden="true"><i className="fa-solid fa-box" /></span>
-            <div>
-              <strong>Built for everyday trade</strong>
-              <span>Fashion, phones, home, beauty, and bulk sourcing.</span>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section className="bs-lux-trust" aria-label="BUYSELL value propositions">
-        {trustItems.map(([icon, title, text]) => (
-          <article key={title}>
-            <i className={`fa-solid ${icon}`} aria-hidden="true" />
-            <div>
-              <h2>{title}</h2>
-              <p>{text}</p>
-            </div>
-          </article>
-        ))}
-      </section>
-
-      <section className="bs-lux-journeys" aria-labelledby="journeys-title">
-        <div className="bs-lux-section-head">
-          <div>
-            <span className="bs-lux-kicker">Choose your journey</span>
-            <h2 id="journeys-title">A home page that leads to the right next page</h2>
-          </div>
-          <p>Each route has its own purpose, so buyer tools, seller work, and sourcing activity never compete for the same space.</p>
-        </div>
-        <div className="bs-lux-journey-grid">
-          {journeys.map(journey => (
-            <a className={`bs-lux-journey bs-lux-journey--${journey.theme}`} href={journey.href} key={journey.title}>
-              <span className="bs-lux-journey-icon"><i className={`fa-solid ${journey.icon}`} /></span>
-              <span className="bs-lux-journey-eyebrow">{journey.eyebrow}</span>
-              <h3>{journey.title}</h3>
-              <p>{journey.text}</p>
-              <span className="bs-lux-journey-link">{journey.action} <i className="fa-solid fa-arrow-right" /></span>
-            </a>
-          ))}
-        </div>
-      </section>
-
-      <section className="bs-lux-categories" aria-labelledby="category-title">
-        <div className="bs-lux-section-head">
-          <div>
-            <span className="bs-lux-kicker">Shop by category</span>
-            <h2 id="category-title">Find a product family before you start browsing</h2>
-          </div>
-          <a href="/products">View all categories <i className="fa-solid fa-arrow-right" /></a>
-        </div>
-        <div className="bs-lux-category-row">
-          {categories.map(category => (
-            <a className={`bs-lux-category bs-lux-category--${category.theme}`} href={category.href} key={category.name}>
-              <span className="bs-lux-category-icon" aria-hidden="true"><i className={`fa-solid ${category.icon}`} /></span>
-              <strong>{category.name}</strong>
-              <span>{category.description}</span>
-              <em>Browse <i className="fa-solid fa-arrow-right" /></em>
-            </a>
-          ))}
-        </div>
-      </section>
-
-      <section className="bs-lux-promo" aria-labelledby="seller-tools-title">
-        <div className="bs-lux-promo-copy">
-          <span className="bs-lux-kicker">Seller and sourcing tools</span>
-          <h2 id="seller-tools-title">From a product link to a supplier-ready batch, keep the work organised.</h2>
-          <p>
-            Build a seller workspace that stays separate from your buyer view, then collect 1688 and dropshipping requests into supplier-ready CSV or XLS files.
-          </p>
-          <ul className="bs-lux-promo-list">
-            <li><i className="fa-solid fa-check" /> Role-aware seller dashboard</li>
-            <li><i className="fa-solid fa-check" /> Dedicated sourcing chats and updates</li>
-            <li><i className="fa-solid fa-check" /> Exportable supplier batches</li>
-          </ul>
-          <a className="bs-btn bs-btn--primary" href="/?view=shop&entry=seller&mode=signup">Open Seller Account</a>
-        </div>
-        <div className="bs-lux-promo-art">
-          <img src="/images/marketing/buysell-sourcing-real-v1.jpg" alt="Nigerian craft seller working in a shoe workshop" loading="lazy" />
-        </div>
-      </section>
-
-      <section className="bs-lux-steps" aria-labelledby="steps-title">
-        <div className="bs-lux-section-head bs-lux-section-head--center">
-          <span className="bs-lux-kicker">How BUYSELL works</span>
-          <h2 id="steps-title">Every action has a destination, not a dead end.</h2>
-        </div>
-        <div className="bs-lux-step-grid">
-          {steps.map(([number, title, text]) => (
-            <article key={title}>
-              <span>{number}</span>
-              <h3>{title}</h3>
-              <p>{text}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="bs-lux-final-cta" aria-labelledby="final-cta-title">
-        <div>
-          <span className="bs-lux-kicker">Ready when you are</span>
-          <h2 id="final-cta-title">Start with the side of BUYSELL that fits what you need today.</h2>
-          <p>Shop now, open a store, or explore 1688 sourcing without crossing into the wrong workspace.</p>
-        </div>
-        <div className="bs-lux-final-cta-actions">
-          <a className="bs-btn bs-btn--primary" href="/?view=shop">Shop now <i className="fa-solid fa-arrow-right" /></a>
-          <a className="bs-btn bs-btn--ghost" href="/category/dropship">Explore sourcing</a>
-        </div>
-      </section>
-
-      <footer className="bs-lux-footer">
-        <div>
-          <strong>BUYSELL Nigeria</strong>
-          <p>Buy, sell, source, check out, chat, and deliver with a clearer journey from first click to final order.</p>
-        </div>
-        <nav aria-label="Footer navigation">
           <a href="/terms">Terms</a>
           <a href="/privacy">Privacy</a>
-          <a href="/?view=shop">Marketplace</a>
-          <a href="/products">Categories</a>
         </nav>
       </footer>
     </main>

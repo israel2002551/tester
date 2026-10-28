@@ -21,7 +21,7 @@ export function cloudinaryImage(url, width, { square = false } = {}) {
   if (source.includes('/video/upload/')) {
     const crop = square ? `c_fill,w_${width},h_${width}` : `c_limit,w_${width}`;
     return source
-      .replace('/video/upload/', `/video/upload/so_0,q_auto,${crop}/`)
+      .replace('/video/upload/', `/video/upload/so_auto,q_auto,${crop}/`)
       .replace(/\.(mp4|mov|webm|m4v|avi|mkv)(\?.*)?$/i, '.jpg');
   }
   const crop = square ? `c_fill,g_auto,w_${width},h_${width}` : `c_limit,w_${width}`;

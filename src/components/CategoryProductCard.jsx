@@ -1,15 +1,19 @@
 import { money, dateLabel } from '../lib/format.js';
-import { productImage, upcomingMedia } from '../lib/categoryData.js';
-import { cloudinaryImage } from '../lib/productData.js';
+import { cardImage, upcomingMedia } from '../lib/categoryData.js';
 import { readJson, writeJson } from '../lib/storage.js';
 
 export function CategoryProductCard({ product }) {
   const videos = Array.isArray(product.videos) ? product.videos.filter(Boolean) : [];
   const hasVideo = videos.length || product.video_url || product.has_video;
-  const images = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
-  const posterVideo = !product.image_url && !images.length ? product.video_url || videos[0] : '';
-  const image = cloudinaryImage(posterVideo || productImage(product), 480, { square: true });
-  const rating = Number(product.avg_rating || 5).toFixed(1);
+  const image = cardImage(product, 480);
+  const price = Number(product.price || 0);
+  const original = Number(product.original_price || 0);
+  const discount = original > price && price > 0 ? Math.round((1 - price / original) * 100) : 0;
+  // Show a rating only once a product has reviews.
+  const reviewCount = Number(product.review_count || 0);
+  const rating = reviewCount > 0 ? Number(product.avg_rating || 0).toFixed(1) : '';
+  const stock = product.stock_quantity;
+  const stockLabel = stock === 0 ? 'Sold out' : Number(stock) > 0 && Number(stock) <= 5 ? `Only ${stock} left` : '';
   const seller = product.profiles?.store_name || product.profiles?.name || 'Seller';
   const productHref = product.id ? `/product.html?id=${encodeURIComponent(product.id)}` : '/products';
 
@@ -18,18 +22,28 @@ export function CategoryProductCard({ product }) {
       <div className="cat-product-media">
         <img src={image} alt={product.name || 'Product'} loading="lazy" decoding="async" />
         <div className="cat-product-badges">
+          {discount >= 5 ? <span className="is-deal">-{discount}%</span> : null}
           {hasVideo ? <span><i className="fa-solid fa-video" /> Video</span> : null}
           {product.category === 'dropship' ? <span>Dropship</span> : null}
         </div>
+        <span className="cat-product-view" aria-hidden="true"><i className="fa-solid fa-arrow-right" /></span>
       </div>
       <div className="cat-product-body">
         <h2>{product.name || 'Product'}</h2>
-        <div className="cat-product-price">{money(product.price)}</div>
-        <div className="cat-product-meta">
-          <span><i className="fa-solid fa-star" /> {rating}</span>
-          <span>{product.location || 'Nigeria'}</span>
+        <div className="cat-product-price">
+          {money(product.price)}
+          {discount >= 5 ? <s>{money(original)}</s> : null}
         </div>
-        <p>{seller}</p>
+        <div className="cat-product-meta">
+          {rating
+            ? <span className="cat-product-rating"><i className="fa-solid fa-star" /> {rating} ({reviewCount})</span>
+            : <span className="cat-product-new"><i className="fa-solid fa-seedling" /> New listing</span>}
+          {stockLabel ? <span className="cat-product-stock">{stockLabel}</span> : null}
+        </div>
+        <p className="cat-product-seller">
+          <i className="fa-solid fa-store" /> <span>{seller}</span>
+          <em><i className="fa-solid fa-location-dot" /> {product.location || 'Nigeria'}</em>
+        </p>
       </div>
     </a>
   );

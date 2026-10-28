@@ -590,25 +590,6 @@ body {
   color: var(--bs-forest);
 }
 
-/* ---------- Landing hero on phones ---------- */
-@media (max-width: 720px) {
-  .bs-lux-hero h1,
-  .bs-market-hero h1 {
-    font-size: clamp(1.95rem, 9vw, 2.6rem);
-    line-height: 0.98;
-    letter-spacing: -0.045em;
-    overflow-wrap: anywhere;
-  }
-
-  .bs-lux-nav-links,
-  .bs-lux-nav nav {
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);
-    mask-image: linear-gradient(90deg, #000 85%, transparent);
-  }
-}
-
 /* ---------- Cookie notice ---------- */
 @media (max-width: 720px) {
   .cookie-consent {

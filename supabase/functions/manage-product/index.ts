@@ -268,7 +268,7 @@ async function productsForSeller(
 ) {
   const { data: products, error: productsError } = await admin
     .from("products")
-    .select("id,name,price,shipping_fee,shipping_cost,image_url,has_video,stock_quantity,status,created_at")
+    .select("id,name,price,shipping_fee,shipping_cost,image_url,images,video_url,videos,has_video,stock_quantity,status,created_at")
     .eq("seller_id", sellerId)
     .order("created_at", { ascending: false })
     .limit(200);

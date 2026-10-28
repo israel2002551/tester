@@ -389,7 +389,15 @@ function publicImage(product: Record<string, unknown>) {
   const image = cleanString(product.image_url, 1_500);
   if (image) return image;
   const images = Array.isArray(product.images) ? product.images : [];
-  return cleanString(images[0], 1_500) || null;
+  const photo = cleanString(images[0], 1_500);
+  if (photo) return photo;
+  // Video-only products (common for WhatsApp imports): a still from the
+  // Cloudinary video, so gifts and checkout lines show the actual product.
+  const videos = Array.isArray(product.videos) ? product.videos : [];
+  const video = cleanString(product.video_url, 1_500) || cleanString(videos[0], 1_500);
+  if (!video.includes("res.cloudinary.com/") || !video.includes("/video/upload/")) return null;
+  const still = video.replace("/video/upload/", "/video/upload/so_auto,c_fill,w_600,h_600,q_auto/").split("?")[0];
+  return /\.(mp4|mov|webm|m4v|avi|mkv)$/i.test(still) ? still.replace(/\.[a-z0-9]+$/i, ".jpg") : `${still}.jpg`;
 }
 
 function publicProduct(product: PricedProduct) {
@@ -458,7 +466,7 @@ async function loadPricedProducts(admin: ReturnType<typeof createClient>, ids: s
 
   const { data: products, error: productError } = await admin
     .from("products")
-    .select("id,seller_id,name,image_url,images,price,status,stock_quantity,category")
+    .select("id,seller_id,name,image_url,images,video_url,videos,price,status,stock_quantity,category")
     .in("id", uniqueIds);
   if (productError) throw new Error("Could not verify the products in your cart.");
 
@@ -696,7 +704,7 @@ async function eligibleGifts(admin: ReturnType<typeof createClient>, body: Recor
   // Query active products strictly capped by the accumulated 10% allowance
   let query = admin
     .from("products")
-    .select("id,seller_id,name,image_url,images,price,category,status,stock_quantity,created_at")
+    .select("id,seller_id,name,image_url,images,video_url,videos,price,category,status,stock_quantity,created_at")
     .eq("status", "active")
     .gt("stock_quantity", 0)
     .gt("price", 0)
