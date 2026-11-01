@@ -1857,6 +1857,7 @@ async function onAuthSuccess(user, options = {}) {
  updateInboxCount();
  setupMessageRealtime();
  setupNotificationCenter();
+ refreshDevicePushSubscription();
  if (typeof closeModal === 'function') closeModal('auth-modal');
 }
 
@@ -13190,6 +13191,15 @@ async function syncUserNotificationToken() {
  return notificationSyncPromise;
 }
 
+// Keeps this device's alert sign-up current on every visit: browsers expire
+// them, and a new server key needs a fresh one. Only where alerts are allowed.
+function refreshDevicePushSubscription() {
+ if (!currentUser || !('Notification' in window) || Notification.permission !== 'granted') return;
+ syncUserNotificationToken().catch(error => {
+  console.warn('[PUSH ENGINE] Could not refresh this device\'s alert sign-up:', error?.message || error);
+ });
+}
+
 async function syncUserNotificationTokenInner() {
  if (!currentUser) throw new Error('Sign in before enabling notifications.');
  if (!window.isSecureContext) throw new Error('Open the live HTTPS site before enabling notifications.');
@@ -13204,7 +13214,8 @@ async function syncUserNotificationTokenInner() {
 
  const registration = await ensurePushServiceWorkerRegistration();
  let subscription = await registration.pushManager.getSubscription();
- const VAPID_PUBLIC_KEY = "BEL_hMw0i1uDcH_jt52ReK7GbXtLW4IvVK_7pW5fGSl-2f7inbRJgednd3R8YRXas-xNles0ezQfXMkopIhuKok";
+ // Must match the VAPID_PUBLIC_KEY Supabase secret (its private half signs the alerts).
+ const VAPID_PUBLIC_KEY = "BIeTiMqQjXEO-bqeFPeVha5KSHG0tL_1HUNG8L80mrX7gO3BKRWZD2it97tEXmA6IOxwjII_wZVExSNGvmv2Cng";
  const vapidKeyBytes = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
  const storedVapidKey = appStorage.getItem('bs_vapid_public_key') || '';
 
