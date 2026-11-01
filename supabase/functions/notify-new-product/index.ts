@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import webPush from "npm:web-push@3.6.7";
-import { usersWithAlertsOff } from "../_shared/notifications.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -102,6 +101,15 @@ async function sendPushNotification(subscription: any, payload: Record<string, u
   return await webPush.sendNotification(subscription, JSON.stringify(payload));
 }
 
+// Users who turned off new-product alerts in their notification settings.
+// Before the notification center migration runs there is no settings table,
+// so nobody has. Kept in this file so the function deploys from the dashboard.
+async function usersWithProductAlertsOff(admin: { from: (table: string) => any }) {
+  const { data, error } = await admin.from("notification_settings").select("user_id").eq("products", false);
+  if (error) return new Set<string>();
+  return new Set<string>((data || []).map((row: { user_id: unknown }) => String(row.user_id)));
+}
+
 serve(async (req) => {
   const options = handleOptions(req);
   if (options) return options;
@@ -131,7 +139,7 @@ serve(async (req) => {
     if (profileError) throw profileError;
 
     // Skip anyone who turned off new-product alerts in their notification settings.
-    const productAlertsOff = await usersWithAlertsOff(admin, "products");
+    const productAlertsOff = await usersWithProductAlertsOff(admin);
     const buyers = (profiles || []).filter((profile) => {
       const role = String(profile.role || "buyer");
       const accounts = String(profile.accounts || "");
