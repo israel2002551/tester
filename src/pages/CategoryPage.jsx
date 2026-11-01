@@ -9,6 +9,7 @@ import { CategoryProductCard, UpcomingProductCard } from '../components/Category
 import { createSupabaseClient } from '../lib/browserConfig.js';
 import { cardImage, categoryConfig, categoryImages, categoryLinks, categoryProductColumns, upcomingColumns } from '../lib/categoryData.js';
 import { money } from '../lib/format.js';
+import { prepareSearch, searchProducts } from '../lib/productSearch.js';
 import '../styles/category.css';
 
 const categoryColumnFallbacks = [
@@ -129,8 +130,10 @@ export default function CategoryPage({ category = 'all' }) {
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get('q') || '');
   const [sort, setSort] = useState(() => {
-    const savedSort = new URLSearchParams(window.location.search).get('sort');
-    return ['newest', 'price-asc', 'price-desc', 'rating'].includes(savedSort) ? savedSort : 'newest';
+    const params = new URLSearchParams(window.location.search);
+    const savedSort = params.get('sort');
+    if (['newest', 'price-asc', 'price-desc', 'rating', 'relevance'].includes(savedSort)) return savedSort;
+    return params.get('q') ? 'relevance' : 'newest';
   });
   const [page, setPage] = useState(() => {
     const p = parseInt(new URLSearchParams(window.location.search).get('page') || '1', 10);
@@ -208,15 +211,27 @@ export default function CategoryPage({ category = 'all' }) {
     window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
   }, [search, sort, page]);
 
-  const visibleItems = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    const filtered = term
-      ? items.filter(item => [item.name, item.title, item.description, item.location, item.category, item.profiles?.store_name, item.profiles?.name]
-          .filter(Boolean)
-          .some(value => String(value).toLowerCase().includes(term)))
-      : items;
-    return sortItems(filtered, sort, isUpcoming);
-  }, [items, search, sort, isUpcoming]);
+  useEffect(() => {
+    prepareSearch(items);
+  }, [items]);
+
+  // "Best match" is offered while searching and chosen when a search starts.
+  const isSearching = Boolean(search.trim());
+  const activeSort = sort === 'relevance' && !isSearching ? 'newest' : sort;
+  const updateSearch = value => {
+    if (value.trim() && !isSearching && sort === 'newest') setSort('relevance');
+    if (!value.trim() && sort === 'relevance') setSort('newest');
+    setSearch(value);
+  };
+
+  const searchResult = useMemo(() => searchProducts(items, search), [items, search]);
+  const visibleItems = useMemo(
+    () => (activeSort === 'relevance' ? searchResult.items : sortItems(searchResult.items, activeSort, isUpcoming)),
+    [searchResult, activeSort, isUpcoming],
+  );
+  const searchedFor = search.trim().split(/\s+/)
+    .map(word => searchResult.fixes.find(fix => fix.from === word.toLowerCase())?.to || word)
+    .join(' ');
 
   const totalPages = Math.ceil(visibleItems.length / ITEMS_PER_PAGE) || 1;
   const currentPage = Math.min(Math.max(1, page), totalPages);
@@ -258,6 +273,7 @@ export default function CategoryPage({ category = 'all' }) {
   }, [items, isUpcoming]);
 
   const sortOptions = [
+    ...(isSearching ? [['relevance', 'Best match']] : []),
     ['newest', 'Newest'],
     ...(!isUpcoming ? [['price-asc', 'Price: low to high'], ['price-desc', 'Price: high to low']] : []),
     ['rating', isUpcoming ? 'Priority' : 'Top rated'],
@@ -317,14 +333,14 @@ export default function CategoryPage({ category = 'all' }) {
               type="search"
               placeholder={config.searchPlaceholder}
               value={search}
-              onChange={event => setSearch(event.target.value)}
+              onChange={event => updateSearch(event.target.value)}
               aria-controls="category-products"
             />
-            {search ? <button type="button" onClick={() => setSearch('')} aria-label="Clear search"><i className="fa-solid fa-xmark" /></button> : null}
+            {search ? <button type="button" onClick={() => updateSearch('')} aria-label="Clear search"><i className="fa-solid fa-xmark" /></button> : null}
           </label>
           <div className="cx-sort" role="group" aria-label="Sort products">
             {sortOptions.map(([value, label]) => (
-              <button key={value} type="button" className={sort === value ? 'active' : ''} aria-pressed={sort === value} onClick={() => setSort(value)}>
+              <button key={value} type="button" className={activeSort === value ? 'active' : ''} aria-pressed={activeSort === value} onClick={() => setSort(value)}>
                 {label}
               </button>
             ))}
@@ -335,7 +351,9 @@ export default function CategoryPage({ category = 'all' }) {
           {status === 'loading' ? 'Loading products…' : status === 'error' ? '' : visibleItems.length > 0 ? (
             <>
               Showing <strong>{startIndex + 1}–{endIndex}</strong> of <strong>{visibleItems.length.toLocaleString('en-NG')}</strong> {visibleItems.length === 1 ? 'item' : 'items'}
-              {search ? <> for <strong>“{search.trim()}”</strong></> : null}
+              {isSearching ? <> for <strong>“{searchedFor}”</strong></> : null}
+              {searchResult.fixes.length ? <> (you typed “{search.trim()}”)</> : null}
+              {searchResult.partial ? <>. No exact match, so these are the closest</> : null}
             </>
           ) : (
             <><strong>0</strong> items{search ? <> for <strong>“{search.trim()}”</strong></> : null}</>
@@ -366,7 +384,7 @@ export default function CategoryPage({ category = 'all' }) {
             <h2>No matches found</h2>
             <p>{search ? 'Try a shorter search term, another spelling, or clear the search to browse this category.' : 'No products here yet. Check back soon for new listings.'}</p>
             {search
-              ? <button className="btn btn-outline btn-sm" type="button" onClick={() => setSearch('')}>Clear search</button>
+              ? <button className="btn btn-outline btn-sm" type="button" onClick={() => updateSearch('')}>Clear search</button>
               : <a className="btn btn-outline btn-sm" href="/products">Browse all products</a>}
           </div>
         ) : null}

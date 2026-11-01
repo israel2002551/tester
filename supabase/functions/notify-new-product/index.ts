@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import webPush from "npm:web-push@3.6.7";
+import { usersWithAlertsOff } from "../_shared/notifications.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -129,10 +130,13 @@ serve(async (req) => {
 
     if (profileError) throw profileError;
 
+    // Skip anyone who turned off new-product alerts in their notification settings.
+    const productAlertsOff = await usersWithAlertsOff(admin, "products");
     const buyers = (profiles || []).filter((profile) => {
       const role = String(profile.role || "buyer");
       const accounts = String(profile.accounts || "");
-      return role === "buyer" || role === "both" || accounts === "buyer" || accounts === "both";
+      const isBuyer = role === "buyer" || role === "both" || accounts === "buyer" || accounts === "both";
+      return isBuyer && !productAlertsOff.has(String(profile.id));
     });
 
     if (buyers.length === 0) {

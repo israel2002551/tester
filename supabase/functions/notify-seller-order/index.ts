@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { sendTelegramToAdmins } from "../_shared/telegram.ts";
 import webPush from "npm:web-push@3.6.7";
+import { notificationCenterIsLive } from "../_shared/notifications.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -201,6 +202,17 @@ serve(async (req) => {
         error: telegramError instanceof Error ? telegramError.message : String(telegramError),
       };
       console.error("Telegram admin alert failed:", telegramResult.error);
+    }
+
+    // Once the notification center is live it alerts the seller itself (and
+    // respects their settings); sending here too would alert them twice.
+    if (await notificationCenterIsLive(admin)) {
+      return json({
+        success: Boolean((telegramResult as any)?.sent),
+        message: "Seller alert is sent by the notification center.",
+        seller_id,
+        telegram: telegramResult,
+      });
     }
 
     const targets = await getPushTargetsForUser(admin, seller_id, sellerProfile.push_subscription_token);

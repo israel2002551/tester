@@ -118,7 +118,7 @@ const PRODUCT_MINIMAL_COLUMNS = ['id','seller_id','name','price','category','sta
 // private (see 20261026060000_protect_profile_private_columns.sql).
 const PRODUCT_PROFILE_HYDRATE_COLUMNS = ['id','name','role','accounts','store_name','store_description','logo_url','store_address'];
 const PUBLIC_PROFILE_COLUMNS = ['id','name','role','accounts','store_name','store_description','logo_url','store_address','seller_verified','kyc_status','is_suspended','created_at'];
-const SELLER_PRODUCT_COLUMNS = 'id,name,price,shipping_fee,shipping_cost,image_url,images,video_url,videos,has_video,stock_quantity,status,created_at';
+const SELLER_PRODUCT_COLUMNS = 'id,name,category,price,shipping_fee,shipping_cost,image_url,images,video_url,videos,has_video,stock_quantity,status,created_at';
 const ORDER_LIST_COLUMNS = ['id','status','total_amount','created_at','delivery_name','delivery_address','items','payment_method','proof_url','seller_id','buyer_id','is_bogo_order','bogo_primary_item_id','bogo_free_item_id','platform_promo_discount_amount','bogo_extra_customer_charge','shipping_discount_amount','is_free_shipping_applied','platform_shipping_subsidy'];
 const DISPUTE_LIST_COLUMNS = ['id','order_id','buyer_id','seller_id','dispute_type','reason','description','status','created_at'];
 const DROPSHIP_REQUEST_COLUMNS = ['id','status','total_amount','created_at','delivery_name','delivery_address','items','payment_method','seller_id','buyer_id','name','contact','destination','request','admin_note','tracking_update','updated_at'];
@@ -138,6 +138,8 @@ const BUYSELL_BANK_ACCOUNT_NUMBER = '9061484256';
 const BUYSELL_BANK_NAME = 'Moniepoint';
 const BUYSELL_BANK_ACCOUNT_NAME = 'Israel Efe';
 let deferredInstallPrompt = null, salesChart = null;
+// Notification center state (see NOTIFICATION CENTER).
+const notificationCenter = { available: null, loaded: false, items: [], unread: 0, filter: 'all', view: 'list', settings: { orders: true, messages: true, products: true }, channel: null, userId: null };
 let sellerAnalyticsChart = null;
 let carouselStartX = 0;
 let notificationSyncPromise = null;
@@ -553,6 +555,7 @@ function syncAuthenticationNavigation() {
 window.syncAuthenticationNavigation = syncAuthenticationNavigation;
 
 function clearAuthenticatedSessionUi() {
+ teardownNotificationCenter();
  if (messageChannel && db?.removeChannel) {
   db.removeChannel(messageChannel);
   messageChannel = null;
@@ -1853,6 +1856,7 @@ async function onAuthSuccess(user, options = {}) {
  updateNavForUser();
  updateInboxCount();
  setupMessageRealtime();
+ setupNotificationCenter();
  if (typeof closeModal === 'function') closeModal('auth-modal');
 }
 
@@ -2394,6 +2398,80 @@ function setupProductCategoryField() {
  };
  select.onchange = sync;
  sync();
+ setupProductCategorySuggestion(select);
+}
+
+// The category is picked from the product name as the seller types, until they
+// choose one. New products are placed by the same rules in the database
+// (public.buysell_category_from_text), so a choice the name contradicts is
+// pointed out before publishing.
+let productCategoryChosen = false;
+let productCategorySuggestTimer;
+let productCategorySuggestRun = 0;
+
+function setupProductCategorySuggestion(select) {
+ const nameInput = document.getElementById('p-name');
+ if (!nameInput || nameInput.dataset.categorySuggest === 'true') return;
+ nameInput.dataset.categorySuggest = 'true';
+ nameInput.addEventListener('input', () => {
+  window.clearTimeout(productCategorySuggestTimer);
+  productCategorySuggestTimer = window.setTimeout(suggestProductCategory, 350);
+ });
+ select.addEventListener('change', () => {
+  productCategoryChosen = true;
+  suggestProductCategory();
+ });
+ document.getElementById('add-prod-form')?.addEventListener('reset', () => {
+  productCategoryChosen = false;
+  showProductCategoryHint('');
+ });
+}
+
+function showProductCategoryHint(text) {
+ const select = document.getElementById('p-category');
+ let hint = document.getElementById('p-category-hint');
+ if (!hint && select && text) {
+  hint = document.createElement('p');
+  hint.id = 'p-category-hint';
+  hint.className = 'text-xs color-text3';
+  hint.style.margin = '.4rem .2rem 0';
+  hint.setAttribute('aria-live', 'polite');
+  select.insertAdjacentElement('afterend', hint);
+ }
+ if (!hint) return;
+ hint.textContent = text;
+ hint.classList.toggle('hidden', !text);
+}
+
+async function suggestProductCategory() {
+ const select = document.getElementById('p-category');
+ const name = document.getElementById('p-name')?.value.trim() || '';
+ // Edits keep the seller's category; custom categories are theirs to name.
+ if (!select || editingProductId || isCustomProductCategoryValue(select.value) || name.length < 3) {
+  showProductCategoryHint('');
+  return;
+ }
+ const run = ++productCategorySuggestRun;
+ let suggested = null;
+ try {
+  const { data, error } = await db.rpc('buysell_category_from_text', { p_text: name });
+  if (error) return;
+  suggested = data;
+ } catch (_) {
+  return;
+ }
+ if (run !== productCategorySuggestRun) return;
+ const label = suggested ? select.querySelector(`option[value="${suggested}"]`)?.textContent : '';
+ if (!label) {
+  showProductCategoryHint('');
+ } else if (!productCategoryChosen) {
+  select.value = suggested;
+  showProductCategoryHint(`Category picked from the name: ${label}. Change it if that's wrong.`);
+ } else if (select.value !== suggested && select.value !== 'dropship') {
+  showProductCategoryHint(`From its name this is ${label}, so it will be listed there. You can change it after publishing.`);
+ } else {
+  showProductCategoryHint('');
+ }
 }
 
 function enhanceSellerSidebar() {
@@ -2429,6 +2507,30 @@ function enhanceSellerSidebar() {
   });
  });
  nav.insertAdjacentElement('beforebegin', shortcuts);
+
+ // Sellers in the dashboard reach the notification center from here.
+ const ordersItem = nav.querySelector('[data-dash-section="orders"]');
+ if (ordersItem) {
+  const item = document.createElement('a');
+  item.className = 'dash-nav-item hidden';
+  item.dataset.notifyNav = 'true';
+  item.setAttribute('role', 'button');
+  item.tabIndex = 0;
+  item.innerHTML = '<i class="fa-solid fa-bell"></i> Notifications <span class="nav-badge hidden" id="notify-nav-badge">0</span>';
+  const open = () => {
+   closeMobSidebar();
+   openNotificationPanel();
+  };
+  item.addEventListener('click', open);
+  item.addEventListener('keydown', event => {
+   if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    open();
+   }
+  });
+  ordersItem.insertAdjacentElement('afterend', item);
+  renderNotificationBadge();
+ }
 }
 
 function showDash(section) {
@@ -2775,6 +2877,7 @@ async function loadProducts(options = {}) {
   products = setCachedData(key, await hydrateProductProfiles(allActive));
   filteredProducts = [...products];
   applyCurrentFilters();
+  window.BuysellSearch?.prepareSearch(products);
  } catch(e) {
   skeleton?.classList.add('hidden');
   errorEl?.classList.remove('hidden');
@@ -3595,87 +3698,43 @@ function openCategoryPage(cat) {
 }
 
 let searchTimeout;
+// Typo fixes and ranking from the latest search, for the status line and the "Best match" sort.
+let marketplaceSearchResult = { fixes: [], partial: false };
+let marketplaceSearchRank = new Map();
 
 // Marketplace search is intentionally local and deterministic: results are
 // instant, work on weak connections, and are easy to share through `?q=`.
-const MARKETPLACE_SEARCH_ALIASES = {
- phone: ['mobile', 'smartphone', 'iphone', 'android', 'tablet'],
- phones: ['phone', 'mobile', 'smartphone', 'iphone', 'android', 'tablet'],
- laptop: ['computer', 'notebook', 'macbook'],
- laptops: ['laptop', 'computer', 'notebook', 'macbook'],
- tv: ['television', 'smart tv'],
- television: ['tv', 'smart tv'],
- shoe: ['shoes', 'sneaker', 'sneakers', 'footwear'],
- shoes: ['shoe', 'sneaker', 'sneakers', 'footwear'],
- bag: ['bags', 'handbag', 'backpack'],
- bags: ['bag', 'handbag', 'backpack'],
- beauty: ['skincare', 'cosmetics', 'perfume', 'fragrance'],
- fashion: ['clothing', 'apparel', 'shoe', 'bag', 'watch'],
- furniture: ['sofa', 'chair', 'table', 'home'],
- home: ['furniture', 'kitchen', 'decor', 'appliance'],
- dropship: ['dropshipping', '1688', 'sourcing'],
- sourcing: ['dropship', '1688', 'wholesale'],
-};
-
+// The matching lives in src/lib/productSearch.js (window.BuysellSearch), which
+// the category pages share.
 function normalizeMarketplaceSearch(query = '') {
  return String(query || '').trim().replace(/\s+/g, ' ').slice(0, 100);
 }
 
-function marketplaceSearchDocument(product = {}) {
- return [
-  product.name,
-  product.description,
-  product.category,
-  product.location,
-  product.profiles?.store_name,
-  product.profiles?.name,
- ].filter(Boolean).join(' ').toLowerCase();
-}
-
 function marketplaceSearchProducts(rows, query) {
- const normalizedQuery = normalizeMarketplaceSearch(query).toLowerCase();
- if (!normalizedQuery) return [...rows];
- const tokens = normalizedQuery.split(' ').filter(Boolean);
- const direct = rows.filter(product => {
-  const text = marketplaceSearchDocument(product);
-  return tokens.every(token => [token, ...(MARKETPLACE_SEARCH_ALIASES[token] || [])]
-   .some(candidate => text.includes(candidate)));
- });
- const fuse = new Fuse(rows, {
-  keys: [
-   { name: 'name', weight: 0.55 },
-   { name: 'description', weight: 0.2 },
-   { name: 'category', weight: 0.12 },
-   { name: 'profiles.store_name', weight: 0.08 },
-   { name: 'location', weight: 0.05 },
-  ],
-  threshold: 0.34,
-  distance: 120,
-  ignoreLocation: true,
- });
- const fuzzy = fuse.search(normalizedQuery).map(result => result.item);
- const seen = new Set();
- return [...direct, ...fuzzy].filter(product => {
-  if (!product?.id || seen.has(product.id)) return false;
-  seen.add(product.id);
-  return true;
- });
+ if (!window.BuysellSearch) {
+  const term = normalizeMarketplaceSearch(query).toLowerCase();
+  return rows.filter(product => [product.name, product.description, product.category].join(' ').toLowerCase().includes(term));
+ }
+ marketplaceSearchResult = window.BuysellSearch.searchProducts(rows, query);
+ return marketplaceSearchResult.items;
 }
 
 function marketplaceSearchSuggestions(query) {
- const normalizedQuery = normalizeMarketplaceSearch(query).toLowerCase();
- if (!normalizedQuery || !products.length) return [];
- const tokens = normalizedQuery.split(' ').filter(Boolean);
- const options = [
-  ...Object.keys(MARKETPLACE_SEARCH_ALIASES),
-  ...products.map(product => String(product.category || '').trim()),
-  ...products.map(product => String(product.name || '').trim()),
- ].filter(Boolean);
- const unique = [...new Set(options.map(value => String(value).trim()))];
- return unique
-  .filter(value => value.toLowerCase() !== normalizedQuery)
-  .filter(value => tokens.some(token => value.toLowerCase().includes(token) || (MARKETPLACE_SEARCH_ALIASES[token] || []).some(alias => value.toLowerCase().includes(alias))))
-  .slice(0, 3);
+ return window.BuysellSearch?.searchSuggestions(products, query) || [];
+}
+
+// "Best match" is offered while searching and chosen when a search starts.
+function syncMarketplaceSearchSort(hasQuery, startedSearch) {
+ const select = document.getElementById('sort-select');
+ if (!select) return;
+ let option = select.querySelector('option[value="relevance"]');
+ if (!option) {
+  option = new Option('Best match', 'relevance');
+  select.insertBefore(option, select.firstChild);
+ }
+ option.hidden = !hasQuery;
+ if (startedSearch && select.value === 'newest') select.value = 'relevance';
+ if (!hasQuery && select.value === 'relevance') select.value = 'newest';
 }
 
 function syncMarketplaceSearchUrl(query) {
@@ -3718,9 +3777,14 @@ function renderMarketplaceSearchStatus() {
  if (!query) return;
  const summary = document.createElement('span');
  summary.className = 'market-search-status__summary';
- summary.textContent = filteredProducts.length
-  ? `${filteredProducts.length} ${filteredProducts.length === 1 ? 'result' : 'results'} for “${query}”`
-  : `No exact matches for “${query}”`;
+ const count = filteredProducts.length;
+ const results = `${count} ${count === 1 ? 'result' : 'results'}`;
+ const { fixes, partial } = marketplaceSearchResult;
+ const corrected = query.split(' ').map(word => fixes.find(fix => fix.from === word.toLowerCase())?.to || word).join(' ');
+ if (!count) summary.textContent = `No matches for “${query}”`;
+ else if (partial) summary.textContent = `No exact match for “${query}”. Showing ${count} close ${count === 1 ? 'match' : 'matches'}`;
+ else if (fixes.length) summary.textContent = `Showing ${results} for “${corrected}”`;
+ else summary.textContent = `${results} for “${query}”`;
  panel.appendChild(summary);
  const suggestions = marketplaceSearchSuggestions(query);
  if (!suggestions.length || filteredProducts.length > 2) return;
@@ -3745,6 +3809,7 @@ function runMarketplaceSearch(query, options = {}) {
  const input = document.getElementById('search-input');
  const normalizedQuery = normalizeMarketplaceSearch(query);
  if (input && input.value !== normalizedQuery) input.value = normalizedQuery;
+ syncMarketplaceSearchSort(Boolean(normalizedQuery), Boolean(normalizedQuery) && !activeFilters.search);
  if (normalizedQuery) activeFilters.search = normalizedQuery.toLowerCase();
  else delete activeFilters.search;
  applyCurrentFilters();
@@ -3868,6 +3933,7 @@ function clearFilters() {
  const searchInput = document.getElementById('search-input');
  if (searchInput) searchInput.value = '';
  syncMarketplaceSearchUrl('');
+ syncMarketplaceSearchSort(false, false);
  document.querySelectorAll('.cat-chip').forEach(c => c.classList.toggle('active', c.dataset.cat === 'all'));
  syncQuickFilterChips();
  updateFilterCount();
@@ -3879,9 +3945,10 @@ function clearFilters() {
 function applyCurrentFilters() {
  let result = [...products];
 
- // 1. SMART FUZZY SEARCH
+ // 1. SEARCH, best match first
  if (activeFilters.search) {
-  result = marketplaceSearchProducts(result, activeFilters.search);
+  result = marketplaceSearchProducts(products, activeFilters.search);
+  marketplaceSearchRank = new Map(result.map((product, index) => [product.id, index]));
  }
 
  // 2. CATEGORY FILTER
@@ -3909,6 +3976,7 @@ function sortProds() {
  else if (v==='price-desc') filteredProducts.sort((a,b)=>b.price-a.price);
  else if (v==='rating') filteredProducts.sort((a,b)=>(b.avg_rating||5)-(a.avg_rating||5));
  else if (v==='delivery') filteredProducts.sort((a,b)=>itemShippingFee(a)-itemShippingFee(b));
+ else if (v==='relevance' && activeFilters.search) filteredProducts.sort((a,b)=>(marketplaceSearchRank.get(a.id) ?? 0)-(marketplaceSearchRank.get(b.id) ?? 0));
  else filteredProducts.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
  renderProducts(filteredProducts);
 }
@@ -6258,16 +6326,142 @@ function sellerProductMatchesFilter(product, filter) {
  return true;
 }
 
+// The seller's own listings, kept so search and "Show more" work without refetching.
+const SELLER_PRODUCTS_PAGE = 60;
+let sellerProductRows = [];
+let sellerProductRowsOwner = null;
+let sellerProductsShown = SELLER_PRODUCTS_PAGE;
+let sellerProductSearchTimeout;
+
+function ensureSellerProductSearch() {
+ const select = document.getElementById('prod-filter');
+ if (!select || document.getElementById('sp-search')) return;
+ const field = document.createElement('label');
+ field.className = 'seller-product-search';
+ field.innerHTML = '<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>'
+  + '<span class="sr-only">Search your products</span>'
+  + '<input type="search" id="sp-search" autocomplete="off" placeholder="Search your products by name, category or price">'
+  + '<button type="button" class="seller-product-search__clear hidden" aria-label="Clear product search"><i class="fa-solid fa-xmark"></i></button>';
+ select.insertAdjacentElement('beforebegin', field);
+ const input = field.querySelector('input');
+ input.addEventListener('input', () => {
+  window.clearTimeout(sellerProductSearchTimeout);
+  sellerProductSearchTimeout = window.setTimeout(() => {
+   sellerProductsShown = SELLER_PRODUCTS_PAGE;
+   renderSellerProds();
+  }, 150);
+ });
+ input.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && input.value) {
+   event.preventDefault();
+   clearSellerProductSearch();
+  }
+ });
+ field.querySelector('button').addEventListener('click', clearSellerProductSearch);
+ select.addEventListener('change', () => { sellerProductsShown = SELLER_PRODUCTS_PAGE; });
+}
+
+function clearSellerProductSearch() {
+ const input = document.getElementById('sp-search');
+ if (!input) return;
+ input.value = '';
+ sellerProductsShown = SELLER_PRODUCTS_PAGE;
+ renderSellerProds();
+ input.focus();
+}
+
+function showMoreSellerProds() {
+ sellerProductsShown += SELLER_PRODUCTS_PAGE;
+ renderSellerProds();
+}
+
+// "7800" or "₦7,800" finds listings at that buyer or seller price.
+function sellerProductsAtPrice(query) {
+ if (!/^(₦|n|ngn)?\s*\d[\d,]*(\.\d+)?$/i.test(query)) return [];
+ const amount = Math.round(Number(query.replace(/[^\d.]/g, '')));
+ return sellerProductRows.filter(product => [product.price, product.seller_price].some(value => Math.round(Number(value)) === amount));
+}
+
+function sellerProductRow(p) {
+ return `
+ <div class="prod-list-item">
+ <img class="prod-list-img" src="${productThumbnail(p, 200) || PRODUCT_PLACEHOLDER_IMAGE}" alt="" loading="lazy">
+ <div class="prod-list-info">
+ <div class="prod-list-name">${escHtml(p.name)}</div>
+  <div class="prod-list-price">Buyer price: ${fmtN(p.price)}</div>
+  ${Number(p.seller_price) > 0 ? `<div class="text-xs color-text3">Your price: ${fmtN(p.seller_price)} <span aria-hidden="true">•</span> +20% BUYSELL commission</div>` : '<div class="text-xs color-text3">Buyer price includes BUYSELL commission</div>'}
+ <div class="text-xs color-text3">BUYSELL delivery fee: ${fmtN(itemShippingFee(p))}</div>
+ <div class="prod-list-meta">
+ <span class="badge badge-${p.status==='active'?'green':'gray'}">${p.status}</span>
+ <span class="stock-pill ${p.stock_quantity===0?'stock-out':p.stock_quantity<=5?'stock-low':'stock-high'}">Stock: ${p.stock_quantity??'N/A'}</span>
+ ${p.has_video?'<span class="badge badge-purple"> Video</span>':''}
+ </div>
+ </div>
+ <div class="prod-list-actions">
+ <button onclick="editProduct(${jsArg(p.id)})" class="btn btn-outline btn-sm"><i class="fa-solid fa-pen"></i></button>
+ <button onclick="deleteProduct(${jsArg(p.id)})" class="btn btn-danger btn-sm"><i class="fa-solid fa-trash"></i></button>
+ <button onclick="toggleProductStatus(${jsArg(p.id)},${jsArg(p.status)})" class="btn btn-sm" style="background:${p.status==='active'?'#fef9c3':'var(--green-xlt)'};color:${p.status==='active'?'#a16207':'#15803d'}">
+ ${p.status==='active'?'Pause':'Activate'}
+ </button>
+ </div>
+ </div>`;
+}
+
+function renderSellerProds() {
+ const list = document.getElementById('sp-list');
+ const empty = document.getElementById('sp-empty');
+ if (!list || !empty) return;
+ const filter = document.getElementById('prod-filter')?.value || 'all';
+ const input = document.getElementById('sp-search');
+ const query = String(input?.value || '').trim().replace(/\s+/g, ' ').slice(0, 100);
+ document.querySelector('.seller-product-search__clear')?.classList.toggle('hidden', !query);
+ if (!sellerProductRows.length) {
+  list.classList.add('hidden');
+  empty.classList.remove('hidden');
+  return;
+ }
+ let matches = sellerProductRows;
+ let fixes = [];
+ if (query) {
+  const result = window.BuysellSearch
+   ? window.BuysellSearch.searchProducts(sellerProductRows, query)
+   : { items: sellerProductRows.filter(p => String(p.name || '').toLowerCase().includes(query.toLowerCase())), fixes: [] };
+  matches = [...new Set([...sellerProductsAtPrice(query), ...result.items])];
+  fixes = result.fixes;
+ }
+ const prods = matches.filter(product => sellerProductMatchesFilter(product, filter));
+ empty.classList.add('hidden');
+ list.classList.remove('hidden');
+ if (!prods.length) {
+  list.innerHTML = `<div class="seller-product-search__empty"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><p>${query ? `No products match “${escHtml(query)}”.` : 'No products match this filter.'}</p>${query ? '<button type="button" class="btn btn-outline btn-sm" onclick="clearSellerProductSearch()">Clear search</button>' : ''}</div>`;
+  return;
+ }
+ const shown = prods.slice(0, sellerProductsShown);
+ const count = prods.length.toLocaleString('en-NG');
+ const searchedFor = query.split(' ').map(word => fixes.find(fix => fix.from === word.toLowerCase())?.to || word).join(' ');
+ const summary = query
+  ? `<strong>${count}</strong> ${prods.length === 1 ? 'product matches' : 'products match'} “${escHtml(searchedFor)}”${fixes.length ? ` <span>(you typed “${escHtml(query)}”)</span>` : ''}`
+  : `<strong>${count}</strong> ${prods.length === 1 ? 'product' : 'products'}`;
+ const more = prods.length - shown.length;
+ list.innerHTML = `<p class="seller-product-search__count" aria-live="polite">${summary}${more > 0 ? ` <span>· showing ${shown.length.toLocaleString('en-NG')}</span>` : ''}</p>`
+  + shown.map(sellerProductRow).join('')
+  + (more > 0 ? `<button type="button" class="btn btn-outline btn-sm seller-products-more" onclick="showMoreSellerProds()">Show ${Math.min(more, SELLER_PRODUCTS_PAGE)} more</button>` : '');
+}
+
 async function loadSellerProds() {
  if (!currentUser) return;
  ensureSellerProductFilterOptions();
- const filter = document.getElementById('prod-filter')?.value || 'all';
+ ensureSellerProductSearch();
  const skeleton = document.getElementById('sp-skeleton');
  const list = document.getElementById('sp-list');
  const empty = document.getElementById('sp-empty');
- skeleton?.classList.remove('hidden');
- list?.classList.add('hidden');
- empty?.classList.add('hidden');
+ // After a pause or delete, keep the seller's list (and place in it) on screen while it refreshes.
+ const refreshing = sellerProductRowsOwner === currentUser.id && sellerProductRows.length > 0;
+ if (!refreshing) {
+  skeleton?.classList.remove('hidden');
+  list?.classList.add('hidden');
+  empty?.classList.add('hidden');
+ }
  let data;
  let error = null;
  try {
@@ -6298,32 +6492,10 @@ async function loadSellerProds() {
  }
  skeleton?.classList.add('hidden');
  if (error) { toast('Products unavailable', error.message, 'error'); return; }
- const prods = (data || []).filter(product => sellerProductMatchesFilter(product, filter));
- if (!prods.length) { empty?.classList.remove('hidden'); return; }
- empty?.classList.add('hidden');
- list?.classList.remove('hidden');
- list.innerHTML = prods.map(p => `
- <div class="prod-list-item">
- <img class="prod-list-img" src="${productThumbnail(p, 200) || PRODUCT_PLACEHOLDER_IMAGE}" alt="" loading="lazy">
- <div class="prod-list-info">
- <div class="prod-list-name">${escHtml(p.name)}</div>
-  <div class="prod-list-price">Buyer price: ${fmtN(p.price)}</div>
-  ${Number(p.seller_price) > 0 ? `<div class="text-xs color-text3">Your price: ${fmtN(p.seller_price)} <span aria-hidden="true">•</span> +20% BUYSELL commission</div>` : '<div class="text-xs color-text3">Buyer price includes BUYSELL commission</div>'}
- <div class="text-xs color-text3">BUYSELL delivery fee: ${fmtN(itemShippingFee(p))}</div>
- <div class="prod-list-meta">
- <span class="badge badge-${p.status==='active'?'green':'gray'}">${p.status}</span>
- <span class="stock-pill ${p.stock_quantity===0?'stock-out':p.stock_quantity<=5?'stock-low':'stock-high'}">Stock: ${p.stock_quantity??'N/A'}</span>
- ${p.has_video?'<span class="badge badge-purple"> Video</span>':''}
- </div>
- </div>
- <div class="prod-list-actions">
- <button onclick="editProduct(${jsArg(p.id)})" class="btn btn-outline btn-sm"><i class="fa-solid fa-pen"></i></button>
- <button onclick="deleteProduct(${jsArg(p.id)})" class="btn btn-danger btn-sm"><i class="fa-solid fa-trash"></i></button>
- <button onclick="toggleProductStatus(${jsArg(p.id)},${jsArg(p.status)})" class="btn btn-sm" style="background:${p.status==='active'?'#fef9c3':'var(--green-xlt)'};color:${p.status==='active'?'#a16207':'#15803d'}">
- ${p.status==='active'?'Pause':'Activate'}
- </button>
- </div>
- </div>`).join('');
+ sellerProductRows = data || [];
+ sellerProductRowsOwner = currentUser.id;
+ renderSellerProds();
+ window.BuysellSearch?.prepareSearch(sellerProductRows);
 }
 
 async function submitProduct(e) {
@@ -6713,6 +6885,7 @@ function orderStatusLabel(status) {
 
 async function openOrderTracking(orderId) {
  if (!currentUser) { showModal('auth-modal'); return; }
+ markOrderNotificationsRead(orderId);
  activeTrackingOrderId = orderId;
  document.getElementById('tracking-order-id').textContent = orderId;
  document.getElementById('tracking-timeline').innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
@@ -12408,6 +12581,7 @@ function openInbox() {
 
 async function openConversation(partnerId, partnerName, productId = null) {
  if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
+ markConversationNotificationsRead(partnerId);
  currentChatPartner = partnerId;
  currentChatProductId = productId || null;
  closeModal('inbox-modal');
@@ -13451,6 +13625,17 @@ function updateNotificationButtonState() {
  const icon = document.getElementById('nav-notify-icon');
  if (!btn || !icon) return;
 
+ if (notificationCenter.available) {
+  const unread = notificationCenter.unread;
+  btn.classList.remove('enabled', 'blocked');
+  icon.className = unread ? 'fa-solid fa-bell' : 'fa-regular fa-bell';
+  btn.title = 'Notifications';
+  btn.setAttribute('aria-label', unread ? `Notifications, ${unread} unread` : 'Notifications');
+  btn.setAttribute('aria-expanded', String(isNotificationPanelOpen()));
+  btn.setAttribute('aria-controls', 'notify-panel');
+  return;
+ }
+
  btn.classList.remove('enabled', 'blocked');
  if (!('Notification' in window) || !('PushManager' in window) || !('serviceWorker' in navigator)) {
  btn.title = 'Notifications are not supported on this device';
@@ -13477,6 +13662,11 @@ function updateNotificationButtonState() {
 }
 
 async function handleNotificationBellClick() {
+ if (currentUser && notificationCenter.available) {
+  if (isNotificationPanelOpen()) closeNotificationPanel();
+  else openNotificationPanel();
+  return;
+ }
  if (!('Notification' in window)) { toast('Not Supported', "Your browser doesn't support notifications", 'warn'); return; }
  if (!currentUser) { toast('Sign In Required', 'Please sign in before enabling notifications.', 'warn'); return; }
  if (Notification.permission === 'granted') {
@@ -13601,6 +13791,437 @@ function friendlyNotificationError(error) {
   return 'The browser page is not ready for background notifications yet. Refresh once and try again.';
  }
  return error?.message || 'Could not show a test notification.';
+}
+
+// ====================================================
+// NOTIFICATION CENTER
+// ====================================================
+// The bell lists each person's order updates and messages from
+// public.notifications (supabase/migrations/20261102000000_notification_center.sql),
+// updated live, with their alert settings. Until that migration runs, the bell
+// keeps its older job of turning on phone alerts.
+const NOTIFICATION_LIST_LIMIT = 50;
+const NOTIFICATION_COLUMNS = 'id,kind,title,body,data,item_count,read_at,created_at';
+
+function setupNotificationCenter() {
+ if (!currentUser || notificationCenter.userId === currentUser.id) return;
+ teardownNotificationCenter();
+ notificationCenter.userId = currentUser.id;
+ const userId = currentUser.id;
+ loadNotifications().then(() => {
+  if (!notificationCenter.available || notificationCenter.userId !== userId) return;
+  openNotificationFromUrl();
+  if (db && typeof db.channel === 'function') {
+   notificationCenter.channel = db.channel(`notifications-${userId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, handleNotificationChange)
+    .subscribe();
+  }
+ });
+}
+
+function teardownNotificationCenter() {
+ if (notificationCenter.channel && db?.removeChannel) db.removeChannel(notificationCenter.channel);
+ closeNotificationPanel();
+ Object.assign(notificationCenter, { available: null, items: [], unread: 0, filter: 'all', view: 'list', channel: null, userId: null, loaded: false });
+ renderNotificationBadge();
+}
+
+async function loadNotifications() {
+ if (!currentUser || !db) return;
+ const userId = currentUser.id;
+ const [list, unread, settings] = await Promise.all([
+  db.from('notifications').select(NOTIFICATION_COLUMNS).order('created_at', { ascending: false }).limit(NOTIFICATION_LIST_LIMIT),
+  db.from('notifications').select('id', { count: 'exact', head: true }).is('read_at', null),
+  db.from('notification_settings').select('orders,messages,products').maybeSingle(),
+ ]).catch(error => [{ error }, {}, {}]);
+ if (notificationCenter.userId && notificationCenter.userId !== userId) return;
+ if (list.error) {
+  // The notification center is not set up in this database yet.
+  notificationCenter.available = false;
+  renderNotificationBadge();
+  return;
+ }
+ notificationCenter.available = true;
+ notificationCenter.loaded = true;
+ notificationCenter.items = list.data || [];
+ notificationCenter.unread = Number.isFinite(unread.count) ? unread.count : notificationCenter.items.filter(item => !item.read_at).length;
+ if (settings.data) notificationCenter.settings = { ...notificationCenter.settings, ...settings.data };
+ renderNotificationBadge();
+ renderNotificationPanel();
+}
+
+async function refreshUnreadNotificationCount() {
+ const { count, error } = await db.from('notifications').select('id', { count: 'exact', head: true }).is('read_at', null);
+ if (!error && Number.isFinite(count)) notificationCenter.unread = count;
+ renderNotificationBadge();
+}
+
+function handleNotificationChange(payload) {
+ const row = payload.new;
+ if (!row?.id || row.user_id !== currentUser?.id) return;
+ const previous = notificationCenter.items.find(item => item.id === row.id);
+ const isNew = payload.eventType === 'INSERT' || Boolean(previous && row.created_at !== previous.created_at);
+ notificationCenter.items = [row, ...notificationCenter.items.filter(item => item.id !== row.id)]
+  .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  .slice(0, NOTIFICATION_LIST_LIMIT);
+ refreshUnreadNotificationCount();
+ renderNotificationPanel();
+ // New messages already show a toast (setupMessageRealtime).
+ if (isNew && row.kind === 'order' && !row.read_at && !isNotificationPanelOpen()) {
+  toast(row.title, row.body, 'info', 6500);
+ }
+}
+
+function renderNotificationBadge() {
+ const count = notificationCenter.available ? notificationCenter.unread : 0;
+ const label = count > 99 ? '99+' : String(count);
+ const bell = document.getElementById('nav-notify-btn');
+ if (bell) {
+  let badge = document.getElementById('notify-count');
+  if (!badge) {
+   badge = document.createElement('span');
+   badge.id = 'notify-count';
+   badge.className = 'cart-badge hidden';
+   badge.setAttribute('aria-hidden', 'true');
+   bell.appendChild(badge);
+  }
+  badge.textContent = label;
+  badge.classList.toggle('hidden', !count);
+ }
+ // On phones the bell joins the header once the notification center is live.
+ document.body.classList.toggle('has-notify-center', Boolean(notificationCenter.available));
+ const drawerItem = document.querySelector('.buyer-sidebar-item[onclick*="handleNotificationBellClick"]');
+ if (drawerItem && !drawerItem.querySelector('.notify-count-pill')) {
+  drawerItem.insertAdjacentHTML('beforeend', '<span class="notify-count-pill hidden" aria-hidden="true"></span>');
+ }
+ const drawerBadge = drawerItem?.querySelector('.notify-count-pill');
+ if (drawerBadge) {
+  drawerBadge.textContent = label;
+  drawerBadge.classList.toggle('hidden', !count);
+ }
+ const navItem = document.querySelector('[data-notify-nav]');
+ navItem?.classList.toggle('hidden', !notificationCenter.available);
+ const navBadge = document.getElementById('notify-nav-badge');
+ if (navBadge) {
+  navBadge.textContent = label;
+  navBadge.classList.toggle('hidden', !count);
+ }
+ updateNotificationButtonState();
+}
+
+function ensureNotificationPanel() {
+ let panel = document.getElementById('notify-panel');
+ if (panel) return panel;
+ const backdrop = document.createElement('div');
+ backdrop.id = 'notify-backdrop';
+ backdrop.className = 'notify-backdrop hidden';
+ backdrop.addEventListener('click', () => closeNotificationPanel());
+ panel = document.createElement('section');
+ panel.id = 'notify-panel';
+ panel.className = 'notify-panel hidden';
+ panel.setAttribute('role', 'dialog');
+ panel.setAttribute('aria-labelledby', 'notify-panel-title');
+ panel.innerHTML = `
+  <div class="notify-panel__head">
+   <h2 id="notify-panel-title">Notifications</h2>
+   <div class="notify-panel__tools">
+    <button type="button" class="notify-icon-btn" data-notify-action="settings" aria-label="Notification settings"><i class="fa-solid fa-gear"></i></button>
+    <button type="button" class="notify-icon-btn" data-notify-action="close" aria-label="Close notifications"><i class="fa-solid fa-xmark"></i></button>
+   </div>
+  </div>
+  <div class="notify-panel__body"></div>`;
+ panel.addEventListener('click', handleNotificationPanelClick);
+ panel.addEventListener('change', handleNotificationSettingChange);
+ document.body.append(backdrop, panel);
+ return panel;
+}
+
+function isNotificationPanelOpen() {
+ return document.getElementById('notify-panel')?.classList.contains('hidden') === false;
+}
+
+function openNotificationPanel() {
+ if (!currentUser) { showModal('auth-modal'); toggleAuth?.('login'); return; }
+ const panel = ensureNotificationPanel();
+ notificationCenter.view = 'list';
+ renderNotificationPanel();
+ panel.classList.remove('hidden');
+ document.getElementById('notify-backdrop')?.classList.remove('hidden');
+ document.addEventListener('keydown', handleNotificationPanelKeydown);
+ document.addEventListener('pointerdown', handleNotificationPanelOutside, true);
+ panel.querySelector('.notify-filters button, .notify-icon-btn')?.focus({ preventScroll: true });
+ updateNotificationButtonState();
+ loadNotifications();
+}
+
+function closeNotificationPanel({ restoreFocus = false } = {}) {
+ const panel = document.getElementById('notify-panel');
+ if (!panel || panel.classList.contains('hidden')) return;
+ panel.classList.add('hidden');
+ document.getElementById('notify-backdrop')?.classList.add('hidden');
+ document.removeEventListener('keydown', handleNotificationPanelKeydown);
+ document.removeEventListener('pointerdown', handleNotificationPanelOutside, true);
+ updateNotificationButtonState();
+ if (restoreFocus) document.getElementById('nav-notify-btn')?.focus({ preventScroll: true });
+}
+
+function handleNotificationPanelKeydown(event) {
+ if (event.key === 'Escape') closeNotificationPanel({ restoreFocus: true });
+}
+
+function handleNotificationPanelOutside(event) {
+ const target = event.target;
+ if (target.closest?.('#notify-panel, #nav-notify-btn, [data-notify-nav]')) return;
+ closeNotificationPanel();
+}
+
+function notificationIcon(item) {
+ const data = item.data || {};
+ if (item.kind === 'message') return ['fa-comment-dots', 'blue'];
+ if (item.kind === 'product') return ['fa-tag', 'gold'];
+ if (item.kind !== 'order') return ['fa-bell', 'green'];
+ if (data.audience === 'seller' && data.status === 'confirmed') return ['fa-sack-dollar', 'gold'];
+ return {
+  pending: ['fa-hourglass-half', 'gold'],
+  confirmed: ['fa-circle-check', 'green'],
+  picked_up: ['fa-box', 'green'],
+  shipped: ['fa-box', 'green'],
+  in_transit: ['fa-truck-fast', 'green'],
+  out_for_delivery: ['fa-truck', 'green'],
+  delivered: ['fa-house-circle-check', 'green'],
+  cancelled: ['fa-circle-xmark', 'red'],
+  refunded: ['fa-rotate-left', 'gold'],
+ }[data.status] || ['fa-receipt', 'green'];
+}
+
+function notificationTitle(item) {
+ const partner = item.data?.partner_name;
+ return item.kind === 'message' && item.item_count > 1 && partner
+  ? `${item.item_count} new messages from ${partner}`
+  : item.title;
+}
+
+function notificationTime(value) {
+ const seconds = Math.max(0, (Date.now() - new Date(value).getTime()) / 1000);
+ if (seconds < 60) return 'Just now';
+ if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+ if (seconds < 86400) return `${Math.floor(seconds / 3600)} h ago`;
+ if (seconds < 172800) return 'Yesterday';
+ return new Date(value).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' });
+}
+
+// Whether this device can show alerts, and what to offer if not.
+function notificationDeviceStatus() {
+ const isApple = /iphone|ipad|ipod/i.test(navigator.userAgent);
+ const installed = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
+ if (!('Notification' in window) || !('PushManager' in window) || !('serviceWorker' in navigator)) {
+  return isApple && !installed
+   ? { state: 'install', text: 'On iPhone, tap Share, then Add to Home Screen. Open BUYSELL from there to turn on alerts.' }
+   : { state: 'unsupported', text: 'This browser cannot show alerts. Open BUYSELL in Chrome to get them.' };
+ }
+ if (Notification.permission === 'granted') return { state: 'on', text: 'Alerts are on for this device.' };
+ if (Notification.permission === 'denied') return { state: 'blocked', text: 'Alerts are blocked. Allow notifications for this site in your browser settings.' };
+ return { state: 'off', text: 'Get alerts on this device even when BUYSELL is closed.' };
+}
+
+function renderNotificationPanel() {
+ const panel = document.getElementById('notify-panel');
+ const body = panel?.querySelector('.notify-panel__body');
+ if (!body) return;
+ panel.classList.toggle('is-settings', notificationCenter.view === 'settings');
+ panel.querySelector('#notify-panel-title').textContent = notificationCenter.view === 'settings' ? 'Notification settings' : 'Notifications';
+ if (notificationCenter.view === 'settings') {
+  body.innerHTML = renderNotificationSettings();
+  return;
+ }
+ const filters = [['all', 'All'], ['order', 'Orders'], ['message', 'Messages']];
+ const items = notificationCenter.items.filter(item => notificationCenter.filter === 'all' || item.kind === notificationCenter.filter);
+ const device = notificationDeviceStatus();
+ const deviceBanner = device.state === 'on' ? '' : `
+  <div class="notify-push${device.state === 'off' ? '' : ' notify-push--muted'}">
+   <i class="fa-solid ${device.state === 'off' ? 'fa-bell' : 'fa-circle-info'}" aria-hidden="true"></i>
+   <p>${escHtml(device.text)}</p>
+   ${device.state === 'off' ? '<button type="button" data-notify-action="enable-push">Turn on</button>' : ''}
+  </div>`;
+ const empty = {
+  all: ['You are all caught up', 'Order updates and messages will show up here.'],
+  order: ['No order updates yet', 'Payment, pickup and delivery updates will show up here.'],
+  message: ['No new messages', 'Messages from buyers and sellers will show up here.'],
+ }[notificationCenter.filter];
+ const list = !notificationCenter.loaded
+  ? '<div class="notify-empty"><span class="spinner"></span></div>'
+  : items.length
+   ? `<ul class="notify-list">${items.map(item => {
+    const [icon, tone] = notificationIcon(item);
+    const unread = !item.read_at;
+    return `<li><button type="button" class="notify-item${unread ? ' unread' : ''}" data-notify-id="${escAttr(item.id)}">
+     <span class="notify-item__icon notify-item__icon--${tone}" aria-hidden="true"><i class="fa-solid ${icon}"></i></span>
+     <span class="notify-item__text">
+      <span class="notify-item__title">${escHtml(notificationTitle(item))}</span>
+      ${item.body ? `<span class="notify-item__body">${escHtml(item.body)}</span>` : ''}
+      <span class="notify-item__meta">${escHtml(notificationTime(item.created_at))}</span>
+     </span>
+     ${unread ? '<span class="notify-item__dot"><span class="sr-only">Unread</span></span>' : ''}
+    </button></li>`;
+   }).join('')}</ul>`
+   : `<div class="notify-empty"><i class="fa-solid fa-bell" aria-hidden="true"></i><strong>${empty[0]}</strong><span>${empty[1]}</span></div>`;
+ body.innerHTML = `
+  <div class="notify-toolbar">
+   <div class="notify-filters" role="group" aria-label="Show">
+    ${filters.map(([value, label]) => `<button type="button" data-notify-filter="${value}" class="${notificationCenter.filter === value ? 'active' : ''}" aria-pressed="${notificationCenter.filter === value}">${label}</button>`).join('')}
+   </div>
+   <button type="button" class="notify-link" data-notify-action="read-all"${notificationCenter.unread ? '' : ' disabled'}>Mark all read</button>
+  </div>
+  ${deviceBanner}
+  ${list}`;
+}
+
+function renderNotificationSettings() {
+ const device = notificationDeviceStatus();
+ const deviceAction = device.state === 'on'
+  ? '<button type="button" class="notify-small-btn" data-notify-action="test-push">Send a test alert</button>'
+  : device.state === 'off' ? '<button type="button" class="notify-small-btn" data-notify-action="enable-push">Turn on</button>' : '';
+ const toggles = [
+  ['orders', 'Order updates', 'Payment, pickup and delivery of your orders, and new orders for your store'],
+  ['messages', 'Messages', 'When a buyer, seller or BUYSELL sends you a message'],
+  ['products', 'New products and deals', 'New listings and offers on BUYSELL'],
+ ];
+ return `
+  <div class="notify-settings">
+   <button type="button" class="notify-back" data-notify-action="list"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back</button>
+   <h3>This device</h3>
+   <div class="notify-device notify-device--${device.state}">
+    <i class="fa-solid ${device.state === 'on' ? 'fa-circle-check' : 'fa-mobile-screen'}" aria-hidden="true"></i>
+    <p>${escHtml(device.text)}</p>
+    ${deviceAction}
+   </div>
+   <h3>Send me alerts for</h3>
+   ${toggles.map(([key, label, hint]) => `
+    <label class="notify-toggle">
+     <span><strong>${label}</strong><small>${hint}</small></span>
+     <input type="checkbox" role="switch" data-notify-setting="${key}"${notificationCenter.settings[key] !== false ? ' checked' : ''}>
+    </label>`).join('')}
+   <p class="notify-note">These choices apply to all your devices. Everything still shows in this list.</p>
+  </div>`;
+}
+
+async function handleNotificationPanelClick(event) {
+ const filter = event.target.closest('[data-notify-filter]');
+ if (filter) {
+  notificationCenter.filter = filter.dataset.notifyFilter;
+  renderNotificationPanel();
+  return;
+ }
+ const item = event.target.closest('[data-notify-id]');
+ if (item) {
+  openNotification(item.dataset.notifyId);
+  return;
+ }
+ const action = event.target.closest('[data-notify-action]')?.dataset.notifyAction;
+ if (action === 'close') closeNotificationPanel({ restoreFocus: true });
+ else if (action === 'settings' || action === 'list') {
+  notificationCenter.view = action;
+  renderNotificationPanel();
+  document.querySelector('#notify-panel .notify-panel__body button')?.focus({ preventScroll: true });
+ } else if (action === 'read-all') markNotificationsRead(query => query.is('read_at', null), () => true);
+ else if (action === 'enable-push') {
+  await requestNotificationPermission();
+  renderNotificationPanel();
+ } else if (action === 'test-push') testNotification();
+}
+
+async function handleNotificationSettingChange(event) {
+ const input = event.target.closest('[data-notify-setting]');
+ if (!input || !currentUser) return;
+ const key = input.dataset.notifySetting;
+ const previous = notificationCenter.settings[key] !== false;
+ notificationCenter.settings[key] = input.checked;
+ const { error } = await db.from('notification_settings').upsert({
+  user_id: currentUser.id,
+  ...notificationCenter.settings,
+  updated_at: new Date().toISOString(),
+ }, { onConflict: 'user_id' });
+ if (error) {
+  notificationCenter.settings[key] = previous;
+  input.checked = previous;
+  toast('Not saved', 'Your notification settings could not be saved. Please try again.', 'error');
+ }
+}
+
+// Marks notifications read here and in the database. `narrow` adds filters to
+// the database update; `matches` picks the same rows from the loaded list.
+async function markNotificationsRead(narrow, matches) {
+ if (!currentUser || !notificationCenter.available) return;
+ const readAt = new Date().toISOString();
+ let changed = 0;
+ notificationCenter.items.forEach(item => {
+  if (!item.read_at && matches(item)) {
+   item.read_at = readAt;
+   changed += 1;
+  }
+ });
+ if (changed) {
+  notificationCenter.unread = Math.max(0, notificationCenter.unread - changed);
+  renderNotificationBadge();
+  renderNotificationPanel();
+ }
+ const { error } = await narrow(db.from('notifications').update({ read_at: readAt }).is('read_at', null));
+ if (error) console.warn('[NOTIFICATIONS] Could not mark notifications read:', error.message || error);
+ refreshUnreadNotificationCount();
+}
+
+function markConversationNotificationsRead(partnerId) {
+ if (!partnerId) return;
+ markNotificationsRead(
+  query => query.eq('kind', 'message').eq('data->>partner_id', String(partnerId)),
+  item => item.kind === 'message' && item.data?.partner_id === String(partnerId),
+ );
+}
+
+function markOrderNotificationsRead(orderId) {
+ if (!orderId) return;
+ markNotificationsRead(
+  query => query.eq('kind', 'order').eq('data->>order_id', String(orderId)),
+  item => item.kind === 'order' && item.data?.order_id === String(orderId),
+ );
+}
+
+// Opens what a notification is about: the chat, the buyer's order tracking, or
+// the seller's orders.
+async function openNotification(id) {
+ let item = notificationCenter.items.find(entry => entry.id === id);
+ if (!item) {
+  const { data } = await db.from('notifications').select(NOTIFICATION_COLUMNS).eq('id', id).maybeSingle();
+  item = data;
+ }
+ if (!item) return;
+ closeNotificationPanel();
+ markNotificationsRead(query => query.eq('id', item.id), entry => entry.id === item.id);
+ const data = item.data || {};
+ if (item.kind === 'message' && data.partner_id) {
+  openConversation(data.partner_id, data.partner_name || 'Chat');
+  return;
+ }
+ if (item.kind === 'order') {
+  if (data.audience === 'seller') {
+   await showSellerDashboard();
+   showDash('orders');
+   return;
+  }
+  showBuyerView?.();
+  switchBuyerTab?.('orders');
+  if (data.order_id) openOrderTracking(data.order_id);
+ }
+}
+
+// Phone alerts open /?view=shop&notification=<id>.
+function openNotificationFromUrl() {
+ const url = new URL(window.location.href);
+ const id = url.searchParams.get('notification');
+ if (!id) return;
+ url.searchParams.delete('notification');
+ window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+ openNotification(id);
 }
 
 // ====================================================

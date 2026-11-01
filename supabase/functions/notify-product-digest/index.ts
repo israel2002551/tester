@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import webPush from "npm:web-push@3.6.7";
+import { usersWithAlertsOff } from "../_shared/notifications.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -143,7 +144,9 @@ serve(async (req) => {
       tag: "product-digest",
     };
 
-    const targets = await getPushTargets(admin);
+    // Skip anyone who turned off new-product alerts in their notification settings.
+    const productAlertsOff = await usersWithAlertsOff(admin, "products");
+    const targets = (await getPushTargets(admin)).filter((target) => !productAlertsOff.has(String(target.user_id)));
     if (targets.length === 0) return json({ message: "No push subscriptions found to notify." });
 
     const results: any[] = [];

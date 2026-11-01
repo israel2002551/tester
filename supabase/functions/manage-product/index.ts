@@ -266,24 +266,37 @@ async function productsForSeller(
   admin: ReturnType<typeof createClient>,
   sellerId: string,
 ) {
-  const { data: products, error: productsError } = await admin
-    .from("products")
-    .select("id,name,price,shipping_fee,shipping_cost,image_url,images,video_url,videos,has_video,stock_quantity,status,created_at")
-    .eq("seller_id", sellerId)
-    .order("created_at", { ascending: false })
-    .limit(200);
-  if (productsError) throw productsError;
+  // Every listing, not just the newest few hundred, so the seller's product
+  // search can find any of them.
+  const products: Record<string, unknown>[] = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error: productsError } = await admin
+      .from("products")
+      .select("id,name,category,price,shipping_fee,shipping_cost,image_url,images,video_url,videos,has_video,stock_quantity,status,created_at")
+      .eq("seller_id", sellerId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (productsError) throw productsError;
+    products.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
 
-  const productIds = (products || []).map((product: Record<string, unknown>) => String(product.id));
+  const productIds = products.map((product) => String(product.id));
   if (!productIds.length) return [];
-  const { data: prices, error: pricesError } = await admin
-    .from("product_seller_pricing")
-    .select("product_id,seller_price")
-    .in("product_id", productIds);
-  if (pricesError) throw pricesError;
-  const sellerPriceById = new Map(
-    (prices || []).map((price: Record<string, unknown>) => [String(price.product_id), wholeNaira(price.seller_price)]),
-  );
+  // Look prices up in batches so the request URL stays short.
+  const sellerPriceById = new Map<string, number>();
+  for (let start = 0; start < productIds.length; start += 200) {
+    const { data: prices, error: pricesError } = await admin
+      .from("product_seller_pricing")
+      .select("product_id,seller_price")
+      .in("product_id", productIds.slice(start, start + 200));
+    if (pricesError) throw pricesError;
+    (prices || []).forEach((price: Record<string, unknown>) => {
+      sellerPriceById.set(String(price.product_id), wholeNaira(price.seller_price));
+    });
+  }
 
   return products.map((product: Record<string, unknown>) => ({
     ...product,
