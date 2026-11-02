@@ -82,6 +82,42 @@ function formatTelegramOrder(order: Record<string, string>) {
   ].join("\n");
 }
 
+// The signed-in user behind the request (JWT verification is on for this function).
+async function requestUserId(request: Request) {
+  const authorization = request.headers.get("Authorization") ?? "";
+  if (!authorization.startsWith("Bearer ")) return "";
+  const response = await fetch(`${requireEnv("SUPABASE_URL")}/auth/v1/user`, {
+    headers: { apikey: requireEnv("SUPABASE_SERVICE_ROLE_KEY"), Authorization: authorization },
+  });
+  if (!response.ok) return "";
+  const user = await response.json().catch(() => null);
+  return typeof user?.id === "string" ? user.id : "";
+}
+
+type SourcingItem = { title?: string; url?: string; quantity?: number; variant?: string };
+
+function formatSourcingTelegram(row: Record<string, any>, sellerName: string) {
+  const items: SourcingItem[] = Array.isArray(row.items) ? row.items : [];
+  const total = Number(row.estimate?.total_ngn || 0);
+  return [
+    "New 1688 sourcing request",
+    `Request: ${String(row.id).slice(0, 6).toUpperCase()}`,
+    `Seller: ${sellerName}`,
+    `WhatsApp: ${row.contact || "-"}`,
+    `Deliver to: ${row.destination || "-"}`,
+    `Links: ${items.length}`,
+    total ? `Seller's service estimate: NGN ${total.toLocaleString("en-NG")}` : "",
+    "",
+    ...items.slice(0, 20).map((item, index) =>
+      `${index + 1}. ${item.title || "Product"} x${item.quantity || 1}${item.variant ? ` (${item.variant})` : ""}\n${item.url || ""}`
+    ),
+    items.length > 20 ? `...and ${items.length - 20} more` : "",
+    row.note ? `\nNote: ${row.note}` : "",
+    "",
+    "Quote it in the admin panel: 1688 Requests.",
+  ].filter(Boolean).join("\n");
+}
+
 async function sendTelegram(text: string) {
   try {
     const result = await sendTelegramToAdmins("sendMessage", { text, disable_web_page_preview: false });
@@ -127,6 +163,23 @@ Deno.serve(async (request) => {
       });
 
       return jsonResponse({ order: updated });
+    }
+
+    // Telegram alert for a new row in public.sourcing_requests, sent by its seller
+    // right after saving it (20261103000000_sourcing_requests.sql).
+    if (action === "sourcing_alert") {
+      const userId = await requestUserId(request);
+      if (!userId) return jsonResponse({ error: "Sign in to send a sourcing request." }, 401);
+      if (typeof body.id !== "string" || !/^[0-9a-f-]{36}$/i.test(body.id)) {
+        return jsonResponse({ error: "A request id is required." }, 400);
+      }
+      const [row] = await supabaseRest(`sourcing_requests?id=eq.${body.id}&seller_id=eq.${userId}&select=*`, { method: "GET" });
+      if (!row) return jsonResponse({ error: "Request not found" }, 404);
+      // Only for new requests, so a page reload cannot repeat the alert later.
+      if (Date.now() - new Date(row.created_at).getTime() > 10 * 60 * 1000) return jsonResponse({ telegram: "skipped" });
+      const [profile] = await supabaseRest(`profiles?id=eq.${userId}&select=name,store_name`, { method: "GET" });
+      const telegram = await sendTelegram(formatSourcingTelegram(row, profile?.store_name || profile?.name || "A seller"));
+      return jsonResponse({ telegram });
     }
 
     if (action === "list_orders") {

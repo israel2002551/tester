@@ -149,6 +149,8 @@ let previousAppView = 'buyer';
 let currentChatPartner = null;
 let currentChatProductId = null;
 let messageChannel = null;
+// Chat lists, the open conversation and its live extras (see CHAT).
+const chatState = { profiles: {}, threads: [], threadsLoaded: false, messages: [], hasOlder: false, loadingOlder: false, filter: 'all', query: '', partnerName: '', metaNote: '', partnerTypingUntil: 0, quickMode: 'general', typingChannel: null, typingTimer: null, lastTypingSent: 0, refreshTimer: null, presenceTimer: null, stick: true, uiReady: false };
 // BOGO state only represents a server quote. Product prices and the promotion
 // allowance are never calculated from this browser state.
 let bogoCheckoutState = {
@@ -556,6 +558,7 @@ window.syncAuthenticationNavigation = syncAuthenticationNavigation;
 
 function clearAuthenticatedSessionUi() {
  teardownNotificationCenter();
+ resetChatState();
  if (messageChannel && db?.removeChannel) {
   db.removeChannel(messageChannel);
   messageChannel = null;
@@ -912,6 +915,7 @@ function cleanAuthUrlParams() {
 
 function closeModal(id) {
  const m = document.getElementById(id);
+ if (id === 'message-modal') leaveTypingChannel();
  if(m){
   const wasPageSurface = m.classList.contains('app-page-surface');
   m.classList.remove('open', 'app-page-surface', 'cart-page-surface', 'checkout-page-surface', 'messages-page-surface', 'conversation-page-surface');
@@ -7575,6 +7579,7 @@ function updateDropshipCalculator() {
  if (breakdownEl) {
   breakdownEl.innerHTML = `<div><span>Link handling</span><strong>${linkChargeYuan} yuan (${fmtN(linkChargeNgn)})</strong></div><div><span>International shipping</span><strong>${kg}kg x $${usdPerKg}/kg = ${fmtN(internationalShipping)}</strong></div><div><span>Repacking</span><strong>${fmtN(repack)}</strong></div><div><span>Total estimated cost</span><strong>${fmtN(totalCost)}</strong></div>`;
  }
+ renderSourcingEstimate();
 }
 
 function get1688LinkChargeYuan(linkCount = 1) {
@@ -7644,113 +7649,301 @@ let extracted1688Product = null;
 let source1688Cart = readStoredJson(DS_1688_CART_KEY, []);
 let bulk1688Rows = readStoredJson(DS_1688_BULK_QUEUE_KEY, []);
 
+// The 1688 page: send a sourcing request, follow it, find products, work out
+// costs, and manage 1688 listings. Requests live in public.sourcing_requests
+// (supabase/migrations/20261103000000_sourcing_requests.sql).
+const SOURCING_STEPS = [
+ ['submitted', 'Sent'],
+ ['reviewing', 'Reviewing'],
+ ['quoted', 'Quote ready'],
+ ['paid', 'Paid'],
+ ['ordered', 'Ordered'],
+ ['at_warehouse', 'China warehouse'],
+ ['in_transit', 'On the way'],
+ ['delivered', 'Delivered'],
+];
+const SOURCING_STATUS_LABELS = Object.fromEntries([...SOURCING_STEPS, ['cancelled', 'Cancelled']]);
+let sourcingRequests = [];
+let activeSourcingTab = 'request';
+
 function renderDropshipSection() {
  const section = document.getElementById('ds-dropshipping');
- if (!section || section.dataset.enhanced === '1688') return;
- section.dataset.enhanced = '1688';
+ if (!section || section.dataset.enhanced === 'sourcing') return;
+ section.dataset.enhanced = 'sourcing';
+ const profile = currentUser?.profile || {};
  section.innerHTML = `
- <h1 class="dash-page-title">1688 Sourcing Desk</h1>
- <p class="dash-page-sub">BUYSELL helps sellers source from 1688, confirm products, coordinate payment, and handle delivery tracking.</p>
-
- <div class="dropship-hero ds-1688-hero mb-4">
- <div><h2>Find products on 1688. Send us the link. We help you order and deliver.</h2><p>Sellers browse 1688, submit product links, publish dropship listings, and send sourcing requests to the BUYSELL team.</p></div>
- <div class="ds-1688-hero-actions"><button class="btn btn-primary" onclick="document.getElementById('ds-1688-url')?.focus()"><i class="fa-solid fa-link"></i> Submit 1688 Link</button><button class="btn btn-ghost" onclick="openDropshipSupportChat()"><i class="fa-solid fa-comments"></i> Chat with Sourcing</button><a class="btn btn-ghost" href="https://www.1688.com/" target="_blank" rel="noopener"><i class="fa-solid fa-up-right-from-square"></i> Open 1688</a></div>
- </div>
-
- <div class="dropship-stats mb-4">
- <div class="stat-card"><div class="stat-value color-green" id="ds-imported">0</div><div class="stat-label">1688 Listings</div></div>
- <div class="stat-card"><div class="stat-value" id="ds-cart-count">0</div><div class="stat-label">Sourcing Cart</div></div>
- <div class="stat-card"><div class="stat-value color-gold" id="ds-sales">₦0</div><div class="stat-label">Delivered Sales</div></div>
- <div class="stat-card"><div class="stat-value color-text3" id="ds-pending">0</div><div class="stat-label">Admin Delivery Orders</div></div>
- </div>
-
-  <div class="card card-pad mb-4">
-  <form class="ds-1688-search" onsubmit="open1688Search(event)">
- <select id="ds-1688-search-mode" class="form-select" aria-label="1688 search type"><option>1688 Search</option><option>Factories</option><option>Industrial</option></select>
- <input id="ds-1688-search" class="form-input" type="search" placeholder="Search 1688: shoes, bags, electronics, packaging...">
- <button class="btn btn-primary" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Open 1688</button>
-  </form>
+ <div class="src-hero">
+  <div class="src-hero__copy">
+   <span class="src-eyebrow"><i class="fa-solid fa-earth-asia"></i> 1688 Sourcing</span>
+   <h1 class="dash-page-title">Buy straight from China's factories</h1>
+   <p>Paste product links from 1688. BUYSELL checks the supplier, sends you a quote, buys, ships, and delivers to you in Nigeria.</p>
+   <div class="src-hero__actions">
+    <button type="button" class="src-btn src-btn--gold" onclick="switchSourcingTab('request');document.getElementById('src-links')?.focus()"><i class="fa-solid fa-plus"></i> New request</button>
+    <button type="button" class="src-btn src-btn--ghost" onclick="openDropshipSupportChat()"><i class="fa-solid fa-comments"></i> Chat with sourcing</button>
+   </div>
   </div>
+  <dl class="src-hero__stats">
+   <div><dt>Open requests</dt><dd id="src-open-count">0</dd></div>
+   <div><dt>Quotes waiting</dt><dd id="src-quoted-count">0</dd></div>
+   <div><dt>1688 listings</dt><dd id="ds-imported">0</dd></div>
+  </dl>
+ </div>
 
-  <div class="card card-pad mb-4">
-  <div class="flex justify-between items-start gap-3 wrap mb-3">
-  <div><h3 class="mb-1">Bulk 1688 Links</h3><p class="text-xs color-text3">Upload a CSV of product links, review the queue, add everything to cart, then export CSV or Excel for supplier ordering.</p></div>
-  <button class="btn btn-outline btn-sm" onclick="download1688BulkTemplate()"><i class="fa-solid fa-download"></i> Template</button>
+ <nav class="src-tabs" role="tablist" aria-label="1688 sourcing">
+  ${[['request', 'fa-paper-plane', 'New request'], ['requests', 'fa-list-check', 'My requests'], ['find', 'fa-magnifying-glass', 'Find products'], ['calculator', 'fa-calculator', 'Costs & profit'], ['listings', 'fa-store', 'My 1688 listings']]
+   .map(([tab, icon, label]) => `<button type="button" role="tab" data-src-tab="${tab}" aria-selected="${tab === activeSourcingTab}" class="${tab === activeSourcingTab ? 'active' : ''}"><i class="fa-solid ${icon}"></i> ${label}${tab === 'requests' ? ' <span class="src-tab-count hidden" id="src-requests-count">0</span>' : ''}</button>`).join('')}
+ </nav>
+
+ <section class="src-panel" data-src-panel="request">
+  <div class="src-steps-row">
+   <div class="src-card src-card--main">
+    <div class="src-card__head"><span class="src-step">1</span><div><h3>Add the products</h3><p>Paste 1688 product links, one per line. Add a quantity after a comma if you like: <code>link, 10</code>.</p></div></div>
+    <textarea id="src-links" class="form-textarea src-links" rows="4" placeholder="https://detail.1688.com/offer/1051231740308.html&#10;https://detail.1688.com/offer/7262948351.html, 20"></textarea>
+    <div class="src-row">
+     <button type="button" class="src-btn src-btn--dark" onclick="addSourcingLinks()"><i class="fa-solid fa-plus"></i> Add to request</button>
+     <label class="src-btn src-btn--light"><i class="fa-solid fa-file-csv"></i> Upload CSV<input id="ds-1688-bulk-file" type="file" accept=".csv,text/csv" onchange="handle1688BulkCsv(this)" hidden></label>
+     <button type="button" class="src-link-btn" onclick="download1688BulkTemplate()">CSV template</button>
+    </div>
+    <div id="ds-1688-cart" class="src-items"></div>
+    <div class="src-card__head src-card__head--spaced"><span class="src-step">2</span><div><h3>Where should it go?</h3><p>BUYSELL uses these to reach you with the quote and to deliver.</p></div></div>
+    <div class="form-grid form-grid-2">
+     <div class="form-group"><label class="form-label" for="ds-1688-contact">WhatsApp number</label><input id="ds-1688-contact" class="form-input" maxlength="120" inputmode="tel" placeholder="e.g. 0801 234 5678" value="${escAttr(profile.whatsapp || '')}"></div>
+     <div class="form-group"><label class="form-label" for="ds-1688-destination">Deliver to (city)</label><input id="ds-1688-destination" class="form-input" maxlength="120" placeholder="e.g. Benin City" value="${escAttr(profile.location || profile.city || '')}"></div>
+    </div>
+    <div class="form-group"><label class="form-label" for="ds-1688-request-note">Notes for BUYSELL (optional)</label><textarea id="ds-1688-request-note" class="form-textarea" rows="2" maxlength="2000" placeholder="Colours, sizes, budget, the date you need it by..."></textarea></div>
+   </div>
+   <aside class="src-card src-card--side">
+    <h3>Estimate</h3>
+    <p class="src-muted">A guide only. BUYSELL confirms the final quote before you pay anything.</p>
+    <div id="src-estimate" class="src-estimate"></div>
+    <div class="form-group"><label class="form-label" for="ds-calc-kg">Estimated weight (kg)</label><input type="number" id="ds-calc-kg" class="form-input" min="1" step="0.1" value="1" inputmode="decimal" oninput="updateDropshipCalculator()"><small class="form-hint">Shipping is charged from 1 kg.</small></div>
+    <button type="button" class="src-btn src-btn--gold src-btn--wide" id="src-submit" onclick="submit1688SourcingRequest(event)"><i class="fa-solid fa-paper-plane"></i> Send to BUYSELL</button>
+    <div class="src-row src-row--center">
+     <button type="button" class="src-link-btn" onclick="export1688Cart('csv')"><i class="fa-solid fa-file-csv"></i> CSV</button>
+     <button type="button" class="src-link-btn" onclick="export1688Cart('xls')"><i class="fa-solid fa-file-excel"></i> Excel</button>
+     <button type="button" class="src-link-btn" onclick="clear1688Cart()"><i class="fa-solid fa-trash"></i> Clear</button>
+    </div>
+    <ol class="src-how">
+     <li><strong>You send links.</strong> Add quantity, colour and size.</li>
+     <li><strong>BUYSELL quotes.</strong> We check the supplier, price and shipping.</li>
+     <li><strong>We buy and deliver.</strong> Follow every step in My requests.</li>
+    </ol>
+   </aside>
   </div>
-  <div class="form-grid form-grid-2">
-  <div class="form-group"><label class="form-label">CSV File</label><input id="ds-1688-bulk-file" class="form-input" type="file" accept=".csv,text/csv" onchange="handle1688BulkCsv(this)"></div>
-  <div class="form-group"><label class="form-label">Paste Links</label><textarea id="ds-1688-bulk-paste" class="form-textarea" rows="3" placeholder="One 1688 link per line, or title,link,qty"></textarea></div>
+ </section>
+
+ <section class="src-panel hidden" data-src-panel="requests">
+  <div class="src-panel__head"><h3>My requests</h3><button type="button" class="src-link-btn" onclick="loadSellerDropshipUpdates()"><i class="fa-solid fa-rotate"></i> Refresh</button></div>
+  <div id="src-local-unsent"></div>
+  <div id="ds-1688-updates" class="src-requests"></div>
+ </section>
+
+ <section class="src-panel hidden" data-src-panel="find">
+  <div class="src-card">
+   <form class="src-search" onsubmit="open1688Search(event)">
+    <select id="ds-1688-search-mode" class="form-select" aria-label="Search type"><option>1688 Search</option><option>Factories</option><option>Industrial</option></select>
+    <input id="ds-1688-search" class="form-input" type="search" placeholder="Search 1688: shoes, bags, phone cases, packaging...">
+    <button class="src-btn src-btn--dark" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Search 1688</button>
+   </form>
+   <p class="src-muted">Opens 1688 in a new tab. Copy the link of any product you like and paste it into New request.</p>
   </div>
-  <div class="flex gap-2 wrap"><button class="btn btn-primary btn-sm" onclick="addPasted1688Links()"><i class="fa-solid fa-list-check"></i> Add Pasted Links</button><button class="btn btn-outline btn-sm" onclick="add1688BulkQueueToCart()"><i class="fa-solid fa-cart-plus"></i> Add Queue to Cart</button><button class="btn btn-outline btn-sm" onclick="export1688Cart('csv')"><i class="fa-solid fa-file-csv"></i> Export CSV</button><button class="btn btn-outline btn-sm" onclick="export1688Cart('xls')"><i class="fa-solid fa-file-excel"></i> Export Excel</button></div>
-  <div id="ds-1688-bulk-preview" class="ds-1688-bulk-preview mt-3"></div>
+  <div class="src-panel__head"><h3>Shortcuts</h3><div class="src-chips" id="ds-1688-tabs">${['all', 'Fashion', 'Electronics', 'Home', 'Beauty', 'Factory', 'Industrial', 'Packaging'].map(cat => `<button type="button" class="btn ${cat === 'all' ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="set1688Category(${jsArg(cat)})">${cat === 'all' ? 'All' : cat}</button>`).join('')}</div></div>
+  <div class="hot-items-grid ds-1688-catalog" id="dropship-catalog"></div>
+ </section>
+
+ <section class="src-panel hidden" data-src-panel="calculator">
+  <div class="src-two">
+   <div class="src-card">
+    <h3>Profit on a listing</h3>
+    <div class="form-grid form-grid-2"><div class="form-group"><label class="form-label">1688 cost (₦)</label><input type="number" id="ds-calc-cost" class="form-input" value="12000" inputmode="numeric" oninput="updateDropshipCalculator()"></div><div class="form-group"><label class="form-label">Your selling price (₦)</label><input type="number" id="ds-calc-price" class="form-input" value="35000" inputmode="numeric" oninput="updateDropshipCalculator()"></div></div>
+    <div class="form-grid form-grid-2"><div class="form-group"><label class="form-label">Local delivery (₦)</label><input type="number" id="ds-calc-ship" class="form-input" value="2500" inputmode="numeric" oninput="updateDropshipCalculator()"></div><div class="form-group"><label class="form-label">Marketplace fee (%)</label><input type="number" id="ds-calc-fee" class="form-input" value="3" inputmode="numeric" oninput="updateDropshipCalculator()"></div></div>
+    <div class="profit-result"><span>Net profit</span><strong id="ds-calc-profit">₦0</strong><small id="ds-calc-margin">0% margin</small></div>
+   </div>
+   <div class="src-card">
+    <h3>Sourcing charges</h3>
+    <div class="ds-fee-tier-grid"><div><strong>1-10 links</strong><span>35 yuan</span></div><div><strong>11-20 links</strong><span>60 yuan</span></div><div><strong>21-40 links</strong><span>90 yuan</span></div></div>
+    <div class="form-grid form-grid-2"><div class="form-group"><label class="form-label">Number of links</label><input type="number" id="ds-calc-links" class="form-input" min="1" value="1" inputmode="numeric" oninput="updateDropshipCalculator()"></div><div class="form-group"><label class="form-label">Yuan to ₦ rate</label><input type="number" id="ds-calc-yuan-rate" class="form-input" value="220" inputmode="numeric" oninput="updateDropshipCalculator()"></div></div>
+    <div class="form-grid form-grid-2"><div class="form-group"><label class="form-label">Shipping per kg (USD)</label><input type="number" id="ds-calc-usd-per-kg" class="form-input" step="0.1" value="12" inputmode="decimal" oninput="updateDropshipCalculator()"></div><div class="form-group"><label class="form-label">USD to ₦ rate</label><input type="number" id="ds-calc-usd-rate" class="form-input" value="1600" inputmode="numeric" oninput="updateDropshipCalculator()"></div></div>
+    <div class="form-group"><label class="form-label">Repacking (₦)</label><input type="number" id="ds-calc-repack" class="form-input" value="0" inputmode="numeric" oninput="updateDropshipCalculator()"></div>
+    <div class="ds-cost-breakdown" id="ds-cost-breakdown"></div>
+   </div>
   </div>
+ </section>
 
-  <div class="dash-two-col mb-4 ds-1688-grid">
- <div class="card card-pad">
- <h3 class="mb-2">Smart 1688 Extractor</h3>
- <p class="text-xs color-text3 mb-3">Paste a 1688 product URL or copied product-page code. BUYSELL will use it to prepare your listing and sourcing request.</p>
- <textarea id="ds-1688-url" class="form-textarea" rows="5" placeholder="Paste https://detail.1688.com/offer/... or copied 1688 page code"></textarea>
- <div class="form-grid form-grid-2 mt-2">
- <div class="form-group"><label class="form-label">Your seller price (₦)</label><input id="ds-1688-sell-price" class="form-input" type="number" inputmode="numeric" placeholder="e.g. 35000" oninput="updateDropshipCalculator()"><p class="text-xs color-text3 mt-1">BUYSELL adds 20% to create the buyer-facing price.</p></div>
- <div class="form-group"><label class="form-label">Quantity</label><input id="ds-1688-qty" class="form-input" type="number" min="1" value="1" inputmode="numeric"></div>
- </div>
- <div class="flex gap-2 wrap mt-2"><button class="btn btn-primary" onclick="extract1688Product(event)"><i class="fa-solid fa-wand-magic-sparkles"></i> Extract Details</button><button class="btn btn-outline" onclick="addExtracted1688ToCart()"><i class="fa-solid fa-cart-plus"></i> Add to Cart</button></div>
- <div id="ds-1688-preview" class="ds-1688-preview mt-3"></div>
- </div>
-
- <div class="card card-pad">
- <h3 class="mb-3">BUYSELL Price Helper</h3>
- <div class="form-grid form-grid-2"><div class="form-group"><label class="form-label">Estimated 1688 cost (₦)</label><input type="number" id="ds-calc-cost" class="form-input" value="12000" inputmode="numeric" oninput="updateDropshipCalculator()"></div><div class="form-group"><label class="form-label">Your selling price (₦)</label><input type="number" id="ds-calc-price" class="form-input" value="35000" inputmode="numeric" oninput="updateDropshipCalculator()"></div></div>
- <div class="form-grid form-grid-2"><div class="form-group"><label class="form-label">BUYSELL sourcing/delivery estimate (₦)</label><input type="number" id="ds-calc-ship" class="form-input" value="5000" inputmode="numeric" oninput="updateDropshipCalculator()"></div><div class="form-group"><label class="form-label">Marketplace fee (%)</label><input type="number" id="ds-calc-fee" class="form-input" value="3" inputmode="numeric" oninput="updateDropshipCalculator()"></div></div>
- <div class="profit-result"><span>Net Profit</span><strong id="ds-calc-profit">₦0</strong><small id="ds-calc-margin">0% margin</small></div>
- <div class="ds-1688-note mt-3"><i class="fa-solid fa-truck-fast"></i><span>BUYSELL sourcing and delivery team handles collection, shipping updates, and tracking for 1688 orders.</span></div>
- </div>
- </div>
-
- <div class="card card-pad mb-4">
- <div class="flex justify-between items-start gap-3 wrap mb-3">
- <div><h3 class="mb-1">1688 Service Charges</h3><p class="text-xs color-text3">Structured estimate for link handling, shipping weight, and repacking before BUYSELL confirms the final quote.</p></div>
- <span class="badge badge-green">Minimum 1kg shipping</span>
- </div>
- <div class="ds-fee-tier-grid mb-3">
- <div><strong>1-10 links</strong><span>35 yuan</span></div>
- <div><strong>11-20 links</strong><span>60 yuan</span></div>
- <div><strong>21-40 links</strong><span>90 yuan</span></div>
- </div>
- <div class="form-grid form-grid-2"><div class="form-group"><label class="form-label">Number of 1688 links</label><input type="number" id="ds-calc-links" class="form-input" min="1" value="1" inputmode="numeric" oninput="updateDropshipCalculator()"></div><div class="form-group"><label class="form-label">Yuan to NGN rate</label><input type="number" id="ds-calc-yuan-rate" class="form-input" value="220" inputmode="numeric" oninput="updateDropshipCalculator()"></div></div>
- <div class="form-grid form-grid-2"><div class="form-group"><label class="form-label">Shipping weight (kg)</label><input type="number" id="ds-calc-kg" class="form-input" min="1" step="0.1" value="1" inputmode="decimal" oninput="updateDropshipCalculator()"><small class="form-hint">Shipping is charged from 1kg minimum.</small></div><div class="form-group"><label class="form-label">Shipping cost per kg (USD)</label><input type="number" id="ds-calc-usd-per-kg" class="form-input" step="0.1" value="12" inputmode="decimal" oninput="updateDropshipCalculator()"><small class="form-hint">Tommy base: $9.4/kg. BUYSELL estimate can be $12/kg or lower after confirmation.</small></div></div>
- <div class="form-grid form-grid-2"><div class="form-group"><label class="form-label">USD to NGN rate</label><input type="number" id="ds-calc-usd-rate" class="form-input" value="1600" inputmode="numeric" oninput="updateDropshipCalculator()"></div><div class="form-group"><label class="form-label">Repacking fee (NGN)</label><input type="number" id="ds-calc-repack" class="form-input" value="0" inputmode="numeric" oninput="updateDropshipCalculator()"></div></div>
- <div class="ds-cost-breakdown" id="ds-cost-breakdown"></div>
- </div>
-
- <div class="card card-pad mb-4">
- <div class="flex justify-between items-center mb-3 gap-2 wrap"><h3>1688 Access Links</h3><div class="flex gap-2 wrap" id="ds-1688-tabs">${['all','Fashion','Electronics','Home','Beauty','Factory','Industrial','Packaging'].map(cat => `<button class="btn ${cat === 'all' ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="set1688Category(${jsArg(cat)})">${cat === 'all' ? 'All' : cat}</button>`).join('')}</div></div>
- <div class="hot-items-grid ds-1688-catalog" id="dropship-catalog"></div>
- </div>
-
- <div class="dash-two-col mb-4 ds-1688-grid">
- <div class="card card-pad">
-  <div class="flex justify-between items-center mb-3 gap-2 wrap"><h3>1688 Sourcing Cart</h3><div class="flex gap-2 wrap"><button class="btn btn-outline btn-sm" onclick="export1688Cart('csv')"><i class="fa-solid fa-file-csv"></i> CSV</button><button class="btn btn-outline btn-sm" onclick="export1688Cart('xls')"><i class="fa-solid fa-file-excel"></i> Excel</button><button class="btn btn-outline btn-sm" onclick="clear1688Cart()"><i class="fa-solid fa-trash"></i> Clear</button></div></div>
- <div id="ds-1688-cart" class="ds-1688-cart"></div>
- <div class="form-grid form-grid-2 mt-3"><input id="ds-1688-contact" class="form-input" placeholder="Seller phone/WhatsApp"><input id="ds-1688-destination" class="form-input" placeholder="Delivery city/country"></div>
- <textarea id="ds-1688-request-note" class="form-textarea mt-2" rows="3" placeholder="Extra sourcing notes: color, size, model, budget, buyer deadline..."></textarea>
-  <button class="btn btn-primary btn-full mt-2" onclick="submit1688SourcingRequest(event)"><i class="fa-solid fa-paper-plane"></i> Send to BUYSELL Sourcing Team</button>
-  <button class="btn btn-outline btn-full mt-2" onclick="openDropshipSupportChat()"><i class="fa-solid fa-comments"></i> Ask the Sourcing Team</button>
- </div>
-  <div class="card card-pad">
-  <h3 class="mb-2">How BUYSELL Handles 1688 Orders</h3>
-  <div class="ds-1688-steps"><div><strong>1. Seller submits link</strong><span>Paste URL, variant, quantity, and desired selling price.</span></div><div><strong>2. Admin confirms source</strong><span>BUYSELL checks supplier, cost, MOQ, shipping, and availability.</span></div><div><strong>3. BUYSELL handles delivery</strong><span>We coordinate collection, shipping, updates, and order tracking.</span></div></div>
-  <button class="btn btn-outline btn-full mt-3" onclick="showDash('orders')"><i class="fa-solid fa-truck-fast"></i> View Order Tracking</button>
-  <div class="divider mt-3 mb-3"></div>
-   <div class="ds-1688-chat-card"><div><h4>BUYSELL Sourcing Chat</h4><p>Ask about supplier confirmation, a quote, payment, or delivery. Your conversation stays in BUYSELL messages.</p></div><button class="btn btn-primary btn-sm" onclick="openDropshipSupportChat()"><i class="fa-solid fa-comment-dots"></i> Open Chat</button></div>
-   <h4 class="mb-2">Request Updates</h4>
-  <div id="ds-1688-updates" class="ds-1688-updates"><p class="text-xs color-text3">No admin updates yet.</p></div>
+ <section class="src-panel hidden" data-src-panel="listings">
+  <div class="src-two">
+   <div class="src-card">
+    <h3>Sell a 1688 product on BUYSELL</h3>
+    <p class="src-muted">Paste a 1688 link or the page's copied code. BUYSELL fills in the details for a listing; buyers' orders are sourced and delivered by BUYSELL.</p>
+    <textarea id="ds-1688-url" class="form-textarea" rows="3" placeholder="https://detail.1688.com/offer/..."></textarea>
+    <div class="form-grid form-grid-2">
+     <div class="form-group"><label class="form-label">Your seller price (₦)</label><input id="ds-1688-sell-price" class="form-input" type="number" inputmode="numeric" placeholder="e.g. 35000" oninput="updateDropshipCalculator()"><small class="form-hint">Buyers see this plus BUYSELL's 20%.</small></div>
+     <div class="form-group"><label class="form-label">Quantity</label><input id="ds-1688-qty" class="form-input" type="number" min="1" value="1" inputmode="numeric"></div>
+    </div>
+    <div class="src-row">
+     <button type="button" class="src-btn src-btn--light" onclick="extract1688Product(event)"><i class="fa-solid fa-wand-magic-sparkles"></i> Get details</button>
+     <button type="button" class="src-btn src-btn--dark" onclick="publish1688Product(event)"><i class="fa-solid fa-store"></i> Publish listing</button>
+     <button type="button" class="src-link-btn" onclick="addExtracted1688ToCart()">Add to request instead</button>
+    </div>
+    <div id="ds-1688-preview" class="ds-1688-preview"></div>
+   </div>
+   <div class="src-card">
+    <h3>Sales</h3>
+    <dl class="src-mini-stats"><div><dt>Delivered sales</dt><dd id="ds-sales">₦0</dd></div><div><dt>Orders in progress</dt><dd id="ds-pending">0</dd></div><div><dt>Products in request</dt><dd id="ds-cart-count">0</dd></div></dl>
+   </div>
   </div>
-  </div>
-
- <div class="card overflow-hidden"><div class="card-pad flex justify-between items-center gap-2 wrap" style="border-bottom:1px solid var(--border)"><h3>BUYSELL 1688 Listings</h3><button class="btn btn-outline btn-sm" onclick="loadDropshipData()"><i class="fa-solid fa-rotate"></i> Reload</button></div><div class="overflow-x"><table class="data-table"><thead><tr><th>Product</th><th>Price</th><th>Stock</th><th>Status</th><th>Action</th></tr></thead><tbody id="ds-imported-table"><tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">No 1688 listings yet</td></tr></tbody></table></div></div>`;
+  <div class="src-card src-card--flush"><div class="src-panel__head src-panel__head--padded"><h3>My 1688 listings</h3><button type="button" class="src-link-btn" onclick="loadDropshipData()"><i class="fa-solid fa-rotate"></i> Refresh</button></div><div class="overflow-x"><table class="data-table"><thead><tr><th>Product</th><th>Price</th><th>Stock</th><th>Status</th><th></th></tr></thead><tbody id="ds-imported-table"><tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">No 1688 listings yet</td></tr></tbody></table></div></div>
+ </section>`;
+ section.querySelector('.src-tabs').addEventListener('click', event => {
+  const tab = event.target.closest('[data-src-tab]');
+  if (tab) switchSourcingTab(tab.dataset.srcTab);
+ });
+ section.addEventListener('change', handleSourcingItemEdit);
 }
 
+function switchSourcingTab(tab = 'request') {
+ activeSourcingTab = tab;
+ const section = document.getElementById('ds-dropshipping');
+ if (!section) return;
+ section.querySelectorAll('[data-src-tab]').forEach(button => {
+  const active = button.dataset.srcTab === tab;
+  button.classList.toggle('active', active);
+  button.setAttribute('aria-selected', String(active));
+ });
+ section.querySelectorAll('[data-src-panel]').forEach(panel => panel.classList.toggle('hidden', panel.dataset.srcPanel !== tab));
+ if (tab === 'requests') loadSellerDropshipUpdates();
+ if (tab === 'find') renderDropshipCatalog();
+}
+
+// Adds parsed rows to the request list, skipping links already in it.
+function addSourcingRows(rows = []) {
+ const known = new Set(source1688Cart.map(item => (item.url || item.title || '').toLowerCase()));
+ const fresh = rows.filter(row => {
+  const key = (row.url || row.title || '').toLowerCase();
+  if (!key || known.has(key)) return false;
+  known.add(key);
+  return true;
+ });
+ source1688Cart = [...source1688Cart, ...fresh].slice(0, 60);
+ appStorage.setItem(DS_1688_CART_KEY, JSON.stringify(source1688Cart));
+ render1688Cart();
+ fresh.slice(0, 6).forEach(enrichSourcingItem);
+ return fresh.length;
+}
+
+function addSourcingLinks() {
+ const input = document.getElementById('src-links');
+ const rows = String(input?.value || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).map((line, index) => {
+  const url = line.match(/https?:\/\/[^\s,]+/)?.[0];
+  if (!url) return null;
+  const qty = Number(line.slice(line.indexOf(url) + url.length).match(/\d+/)?.[0] || 1);
+  return normalize1688BulkRow({ url, quantity: qty }, source1688Cart.length + index);
+ }).filter(Boolean);
+ if (!rows.length) { toast('No links found', 'Paste at least one 1688 product link.', 'warn'); return; }
+ const added = addSourcingRows(rows);
+ if (input) input.value = '';
+ toast(added ? 'Added to your request' : 'Already in your request', added ? `${added} product${added === 1 ? '' : 's'} added.` : 'Those links are already listed.', added ? 'success' : 'info');
+}
+
+// Fills in the title and picture from 1688 when the extractor can reach it.
+async function enrichSourcingItem(item) {
+ if (!item?.url || item.enriched || !/1688\.com/i.test(item.url)) return;
+ item.enriched = true;
+ try {
+  const result = await callEdge('extract-1688-product', { url: item.url });
+  const product = result?.product || {};
+  const target = source1688Cart.find(entry => entry.url === item.url);
+  if (!target) return;
+  if (product.title && /^1688 product/.test(target.title || '')) target.title = target.name = product.title;
+  if (product.image && !target.imageFromSeller) target.image = product.image;
+  if (product.price) target.price = product.price;
+  if (product.moq) target.moq = product.moq;
+  if (product.supplier) target.supplier = product.supplier;
+  appStorage.setItem(DS_1688_CART_KEY, JSON.stringify(source1688Cart));
+  render1688Cart();
+ } catch (_) {}
+}
+
+function handleSourcingItemEdit(event) {
+ const field = event.target.closest('[data-src-item]');
+ if (!field) return;
+ const item = source1688Cart[Number(field.dataset.srcItem)];
+ if (!item) return;
+ const key = field.dataset.srcField;
+ item[key] = key === 'quantity' ? Math.max(1, Math.min(100000, Number(field.value) || 1)) : field.value.trim().slice(0, 300);
+ if (key === 'title') item.name = item.title;
+ appStorage.setItem(DS_1688_CART_KEY, JSON.stringify(source1688Cart));
+ render1688Cart();
+}
+
+function render1688Cart() {
+ const list = document.getElementById('ds-1688-cart');
+ const count = document.getElementById('ds-cart-count');
+ if (count) count.textContent = source1688Cart.reduce((sum, item) => sum + Number(item.quantity || 1), 0);
+ const linkInput = document.getElementById('ds-calc-links');
+ if (linkInput) linkInput.value = Math.max(1, source1688Cart.length);
+ updateDropshipCalculator();
+ if (!list) return;
+ if (!source1688Cart.length) {
+  list.innerHTML = '<div class="src-empty"><i class="fa-solid fa-box-open"></i><span>No products yet. Paste 1688 links above.</span></div>';
+  return;
+ }
+ const placeholder = 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=200&q=60';
+ list.innerHTML = `<div class="src-items__head"><strong>${source1688Cart.length} product${source1688Cart.length === 1 ? '' : 's'} in this request</strong></div>`
+  + source1688Cart.map((item, index) => `<div class="src-item">
+   <img src="${escAttr(item.image || placeholder)}" alt="" loading="lazy">
+   <div class="src-item__body">
+    <input class="src-item__title" data-src-item="${index}" data-src-field="title" value="${escAttr(item.title || '')}" aria-label="Product name">
+    <a href="${escAttr(sanitizeUrl(item.url || '#'))}" target="_blank" rel="noopener" class="src-item__link">${escHtml((item.url || '').replace(/^https?:\/\//, '').slice(0, 60) || 'No link')}</a>
+    <div class="src-item__fields">
+     <label>Qty <input type="number" min="1" data-src-item="${index}" data-src-field="quantity" value="${Number(item.quantity || 1)}"></label>
+     <label class="src-item__variant">Colour / size <input data-src-item="${index}" data-src-field="variant" value="${escAttr(item.variant || '')}" placeholder="e.g. Black, 42"></label>
+    </div>
+    ${item.price && !/to confirm|on request/i.test(item.price) ? `<span class="src-item__price">1688 price: ${escHtml(item.price)}</span>` : ''}
+   </div>
+   <button type="button" class="src-item__remove" onclick="remove1688CartItem(${index})" aria-label="Remove ${escAttr(item.title || 'product')}"><i class="fa-solid fa-xmark"></i></button>
+  </div>`).join('');
+}
+
+function handle1688BulkCsv(input) {
+ const file = input?.files?.[0];
+ if (!file) return;
+ const reader = new FileReader();
+ reader.onload = () => {
+  const added = addSourcingRows(parse1688BulkText(reader.result || ''));
+  toast('CSV added', `${added} product${added === 1 ? '' : 's'} added to your request.`, added ? 'success' : 'info');
+  input.value = '';
+ };
+ reader.onerror = () => toast('CSV error', 'Could not read that file.', 'error');
+ reader.readAsText(file);
+}
+
+function sourcingEstimate() {
+ const value = id => parseFloat(document.getElementById(id)?.value) || 0;
+ const links = Math.max(1, source1688Cart.length);
+ const linkChargeYuan = get1688LinkChargeYuan(links);
+ const linkCharge = linkChargeYuan * value('ds-calc-yuan-rate');
+ const kg = Math.max(1, value('ds-calc-kg') || 1);
+ const shipping = kg * value('ds-calc-usd-per-kg') * value('ds-calc-usd-rate');
+ const repacking = value('ds-calc-repack');
+ return {
+  links, link_charge_yuan: linkChargeYuan, link_charge_ngn: Math.round(linkCharge), shipping_kg: kg,
+  usd_per_kg: value('ds-calc-usd-per-kg'), usd_rate: value('ds-calc-usd-rate'), yuan_rate: value('ds-calc-yuan-rate'),
+  shipping_ngn: Math.round(shipping), repacking_ngn: Math.round(repacking), total_ngn: Math.round(linkCharge + shipping + repacking),
+ };
+}
+
+function renderSourcingEstimate() {
+ const box = document.getElementById('src-estimate');
+ if (!box) return;
+ const estimate = sourcingEstimate();
+ box.innerHTML = `
+  <div><span>Sourcing charge (${estimate.links} link${estimate.links === 1 ? '' : 's'})</span><strong>${fmtN(estimate.link_charge_ngn)}</strong></div>
+  <div><span>Shipping, ${estimate.shipping_kg} kg</span><strong>${fmtN(estimate.shipping_ngn)}</strong></div>
+  ${estimate.repacking_ngn ? `<div><span>Repacking</span><strong>${fmtN(estimate.repacking_ngn)}</strong></div>` : ''}
+  <div class="src-estimate__total"><span>Estimated service cost</span><strong>${fmtN(estimate.total_ngn)}</strong></div>
+  <small>Plus the products' own 1688 prices, confirmed in your quote.</small>`;
+}
 function build1688SearchUrl(query, mode = '1688 Search') {
  const term = String(query || '').trim() || 'wholesale';
  if (mode === 'Factories') return 'https://mind.1688.com/1688pc/pc-home/r3Dc8JjQaK4BfAz5xyw7/index.html?wh_pha=true&wh_pid=3650667';
@@ -7865,19 +8058,6 @@ function addExtracted1688ToCart() {
  toast('Added to Sourcing Cart', 'BUYSELL can now review this 1688 item.', 'success');
 }
 
-function render1688Cart() {
- const el = document.getElementById('ds-1688-cart');
- const countEl = document.getElementById('ds-cart-count');
- const cartLinks = source1688Cart.length;
- if (countEl) countEl.textContent = source1688Cart.reduce((sum, item) => sum + Number(item.quantity || 1), 0);
- const linkInput = document.getElementById('ds-calc-links');
- if (linkInput && (!linkInput.value || Number(linkInput.value) < cartLinks)) linkInput.value = cartLinks || 1;
- updateDropshipCalculator();
- if (!el) return;
- if (!source1688Cart.length) { el.innerHTML = '<div class="empty-state compact"><i class="fa-solid fa-cart-shopping"></i><p>No 1688 products added yet.</p></div>'; return; }
- el.innerHTML = source1688Cart.map((item, index) => `<div class="ds-1688-cart-item"><img src="${escAttr(item.image)}" alt="${escAttr(item.title)}"><div><strong>${escHtml(item.title)}</strong><span>${escHtml(item.price)} - Qty ${Number(item.quantity || 1)}</span>${item.desired_price ? `<span>Sell at ${fmtN(item.desired_price)}</span>` : ''}<div class="flex gap-2 mt-1"><a href="${escAttr(item.url)}" target="_blank" rel="noopener">Open 1688</a><button onclick="remove1688CartItem(${index})">Remove</button></div></div></div>`).join('');
-}
-
 function remove1688CartItem(index) {
  source1688Cart.splice(index, 1);
  appStorage.setItem(DS_1688_CART_KEY, JSON.stringify(source1688Cart));
@@ -7962,19 +8142,6 @@ function render1688BulkPreview() {
  }
  el.innerHTML = `<div class="ds-1688-bulk-head"><strong>${bulk1688Rows.length} queued link${bulk1688Rows.length === 1 ? '' : 's'}</strong><button class="btn btn-ghost btn-sm" onclick="save1688BulkQueue([])">Clear Queue</button></div>
  <div class="ds-1688-bulk-list">${bulk1688Rows.slice(0, 8).map(item => `<div><strong>${escHtml(item.title)}</strong><span>Qty ${Number(item.quantity || 1)} - ${escHtml(item.url || 'No URL')}</span></div>`).join('')}${bulk1688Rows.length > 8 ? `<p class="text-xs color-text3 mt-2">+${bulk1688Rows.length - 8} more rows</p>` : ''}</div>`;
-}
-
-function handle1688BulkCsv(input) {
- const file = input?.files?.[0];
- if (!file) return;
- const reader = new FileReader();
- reader.onload = () => {
-  const rows = parse1688BulkText(reader.result || '');
-  save1688BulkQueue([...rows, ...bulk1688Rows]);
-  toast('Bulk Links Loaded', `${rows.length} 1688 link${rows.length === 1 ? '' : 's'} added to the queue.`, 'success');
- };
- reader.onerror = () => toast('CSV Error', 'Could not read the selected CSV file.', 'error');
- reader.readAsText(file);
 }
 
 function addPasted1688Links() {
@@ -8086,63 +8253,287 @@ async function publish1688Product(event) {
  }
 }
 
+function sourcingRef(id) {
+ return String(id || '').slice(0, 6).toUpperCase();
+}
+
+function sourcingRequestItems(items = []) {
+ return items.slice(0, 60).map(item => ({
+  title: String(item.title || item.name || '1688 product').slice(0, 300),
+  url: String(item.url || '').slice(0, 600),
+  quantity: Math.max(1, Math.min(100000, Number(item.quantity || 1))),
+  variant: String(item.variant || '').slice(0, 300),
+  price: String(item.price || '').slice(0, 120),
+  desired_price: Number(item.desired_price || 0) || null,
+  image: String(item.image || '').slice(0, 600),
+  supplier: String(item.supplier || '').slice(0, 200),
+  moq: String(item.moq || '').slice(0, 120),
+  note: String(item.note || '').slice(0, 500),
+ }));
+}
+
+async function saveSourcingRequest({ items, contact, destination, note, estimate }) {
+ const { data, error } = await db.from('sourcing_requests').insert({
+  seller_id: currentUser.id,
+  contact: String(contact || '').slice(0, 120),
+  destination: String(destination || '').slice(0, 120),
+  note: String(note || '').slice(0, 2000),
+  items: sourcingRequestItems(items),
+  link_count: items.length,
+  estimate: estimate || {},
+ }).select('id,created_at').single();
+ if (error) throw error;
+ // Telegram alert for the BUYSELL team; the notification center alerts them too.
+ callEdge('order-workflow', { action: 'sourcing_alert', id: data.id }).catch(() => {});
+ return data;
+}
+
 async function submit1688SourcingRequest(event) {
  if (!currentUser) { showModal('auth-modal'); return; }
- if (!source1688Cart.length) { toast('Cart Empty', 'Add at least one 1688 product before sending.', 'warn'); return; }
- const contact = document.getElementById('ds-1688-contact')?.value.trim() || currentUser.profile?.whatsapp || currentUser.email || '';
- const destination = document.getElementById('ds-1688-destination')?.value.trim() || 'Nigeria';
- const note = document.getElementById('ds-1688-request-note')?.value.trim() || '';
- const linkCount = Math.max(1, Number(document.getElementById('ds-calc-links')?.value || source1688Cart.length || 1));
- const linkCharge = get1688LinkChargeYuan(linkCount);
- const shippingKg = Math.max(1, Number(document.getElementById('ds-calc-kg')?.value || 1));
- const shippingUsdRate = Number(document.getElementById('ds-calc-usd-per-kg')?.value || 12);
- const repackingFee = Number(document.getElementById('ds-calc-repack')?.value || 0);
- const lines = source1688Cart.map(item => `Qty ${item.quantity || 1}: ${item.title} | ${item.price} | Sell: ${item.desired_price ? fmtN(item.desired_price) : 'to confirm'} | ${item.url}`).join('\n');
- const supplierCsv = [
-  'Product Title,1688 URL,Quantity,Variant,1688 Price,Desired Selling Price,Supplier,MOQ,Notes',
-  ...build1688ExportRows().map(row => [row.title,row.url,row.quantity,row.variant,row.price,row.desired_price,row.supplier,row.moq,row.note].map(csvCell).join(','))
- ].join('\n');
- const sellerName = currentUser.profile?.name || currentUser.email || 'BUYSELL seller';
- const requestText = `BUYSELL 1688 sourcing request
-Seller ID: ${currentUser.id}
-Seller Email: ${currentUser.email || ''}
-Seller Name: ${sellerName}
-Links submitted: ${linkCount}
-BUYSELL link handling charge: ${linkCharge} yuan
-International shipping estimate: ${shippingKg}kg minimum x $${shippingUsdRate}/kg
-Repacking fee estimate: ${fmtN(repackingFee)}
-
-${lines}
-
-Supplier CSV:
-${supplierCsv}
-
-${note}`;
- const payload = {
-  name: sellerName,
-  contact,
-  destination,
-  seller_id: currentUser.id,
-  buyer_id: currentUser.id,
-  user_id: currentUser.id,
-  items: source1688Cart,
-  request: requestText
- };
- const btn = event?.currentTarget;
- const oldHtml = btn?.innerHTML || '';
+ if (!source1688Cart.length) {
+  toast('Add products first', 'Paste at least one 1688 link into your request.', 'warn');
+  document.getElementById('src-links')?.focus();
+  return;
+ }
+ const contact = document.getElementById('ds-1688-contact')?.value.trim() || '';
+ const destination = document.getElementById('ds-1688-destination')?.value.trim() || '';
+ if (!contact) { toast('Add your WhatsApp number', 'BUYSELL sends your quote there.', 'warn'); document.getElementById('ds-1688-contact')?.focus(); return; }
+ if (!destination) { toast('Add a delivery city', 'Tell BUYSELL where to deliver.', 'warn'); document.getElementById('ds-1688-destination')?.focus(); return; }
+ const button = event?.currentTarget || document.getElementById('src-submit');
+ const oldHtml = button?.innerHTML || '';
+ if (button) { button.disabled = true; button.innerHTML = '<span class="spinner-dark"></span> Sending...'; }
  try {
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-dark"></span> Sending...'; }
-  await callEdge('order-workflow', { action: 'create_order', ...payload });
-  toast('Sent to BUYSELL Team', 'Admin will confirm cost, sourcing, and delivery tracking.', 'success', 6500);
+  const saved = await saveSourcingRequest({
+   items: source1688Cart,
+   contact,
+   destination,
+   note: document.getElementById('ds-1688-request-note')?.value.trim() || '',
+   estimate: sourcingEstimate(),
+  });
+  toast('Request sent', `Request ${sourcingRef(saved.id)} is with BUYSELL. You'll get the quote here and on WhatsApp.`, 'success', 7000);
   clear1688Cart();
-  loadSellerDropshipUpdates();
+  const noteInput = document.getElementById('ds-1688-request-note');
+  if (noteInput) noteInput.value = '';
+  switchSourcingTab('requests');
  } catch (error) {
-  const localRequests = readStoredJson('bs_1688_sourcing_requests', []);
-  localRequests.unshift({ ...payload, id: `local-${Date.now()}`, created_at: new Date().toISOString(), status: 'Submitted locally' });
-  appStorage.setItem('bs_1688_sourcing_requests', JSON.stringify(localRequests));
-  toast('Saved Locally', 'Supabase workflow is unavailable. The request was saved on this device.', 'warn', 7000);
+  toast('Request not sent', error.message || 'Please try again.', 'error', 7000);
  } finally {
-  if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
+  if (button) { button.disabled = false; button.innerHTML = oldHtml; }
+ }
+}
+
+// "My requests": the seller's requests with a step-by-step tracker.
+async function loadSellerDropshipUpdates() {
+ const list = document.getElementById('ds-1688-updates');
+ if (!list || !currentUser) return;
+ if (!sourcingRequests.length) list.innerHTML = '<div class="src-empty"><span class="spinner"></span></div>';
+ renderUnsentSourcingRequests();
+ const { data, error } = await db.from('sourcing_requests')
+  .select('id,status,items,link_count,contact,destination,note,estimate,quote_amount,admin_note,tracking,created_at,updated_at')
+  .eq('seller_id', currentUser.id)
+  .order('created_at', { ascending: false })
+  .limit(50);
+ if (error) {
+  list.innerHTML = `<div class="src-empty"><i class="fa-solid fa-triangle-exclamation"></i><span>${escHtml(/sourcing_requests/.test(error.message || '') ? 'Sourcing requests are being set up. Please try again shortly.' : (error.message || 'Could not load your requests.'))}</span></div>`;
+  return;
+ }
+ sourcingRequests = data || [];
+ const open = sourcingRequests.filter(row => !['delivered', 'cancelled'].includes(row.status));
+ const quoted = sourcingRequests.filter(row => row.status === 'quoted');
+ const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+ setText('src-open-count', open.length);
+ setText('src-quoted-count', quoted.length);
+ const tabCount = document.getElementById('src-requests-count');
+ if (tabCount) { tabCount.textContent = open.length; tabCount.classList.toggle('hidden', !open.length); }
+ list.innerHTML = sourcingRequests.length
+  ? sourcingRequests.map(renderSourcingRequestCard).join('')
+  : '<div class="src-empty"><i class="fa-solid fa-paper-plane"></i><span>No requests yet. Send your first 1688 links from New request.</span></div>';
+}
+
+function renderSourcingRequestCard(row) {
+ const items = Array.isArray(row.items) ? row.items : [];
+ const cancelled = row.status === 'cancelled';
+ const stepIndex = SOURCING_STEPS.findIndex(([status]) => status === row.status);
+ const steps = SOURCING_STEPS.map(([status, label], index) => `<li class="${!cancelled && index < stepIndex ? 'done' : ''}${!cancelled && index === stepIndex ? ' current' : ''}"><span></span>${escHtml(label)}</li>`).join('');
+ const units = items.reduce((sum, item) => sum + Number(item.quantity || 1), 0);
+ const canCancel = ['submitted', 'reviewing'].includes(row.status);
+ const quote = Number(row.quote_amount) > 0 && !cancelled
+  ? `<div class="src-quote"><div><span>BUYSELL quote</span><strong>${fmtN(row.quote_amount)}</strong></div><button type="button" class="src-btn src-btn--gold" onclick="askAboutSourcingQuote(${jsArg(row.id)})"><i class="fa-solid fa-comments"></i> Accept or ask</button></div>`
+  : '';
+ return `<article class="src-request${cancelled ? ' is-cancelled' : ''}">
+  <header class="src-request__head">
+   <div><strong>Request ${escHtml(sourcingRef(row.id))}</strong><span>${fmtDate(row.created_at)} · ${items.length} link${items.length === 1 ? '' : 's'}, ${units} item${units === 1 ? '' : 's'} · ${escHtml(row.destination || 'Nigeria')}</span></div>
+   <span class="src-status src-status--${escAttr(row.status)}">${escHtml(SOURCING_STATUS_LABELS[row.status] || row.status)}</span>
+  </header>
+  ${cancelled ? '' : `<ol class="src-track">${steps}</ol>`}
+  ${quote}
+  ${row.admin_note ? `<p class="src-request__note"><i class="fa-solid fa-message"></i> ${escHtml(row.admin_note)}</p>` : ''}
+  ${row.tracking ? `<p class="src-request__note"><i class="fa-solid fa-truck-fast"></i> ${escHtml(row.tracking)}</p>` : ''}
+  <details class="src-request__items"><summary>Products in this request</summary><ul>${items.map(item => `<li><span>${escHtml(item.title || '1688 product')}${item.variant ? ` · ${escHtml(item.variant)}` : ''}</span><b>×${Number(item.quantity || 1)}</b>${item.url ? `<a href="${escAttr(sanitizeUrl(item.url))}" target="_blank" rel="noopener" aria-label="Open on 1688"><i class="fa-solid fa-up-right-from-square"></i></a>` : ''}</li>`).join('')}</ul></details>
+  <footer class="src-request__actions">
+   <button type="button" class="src-link-btn" onclick="askAboutSourcingQuote(${jsArg(row.id)})"><i class="fa-solid fa-comments"></i> Chat about this</button>
+   ${canCancel ? `<button type="button" class="src-link-btn src-link-btn--danger" onclick="cancelSourcingRequest(${jsArg(row.id)})"><i class="fa-solid fa-xmark"></i> Cancel request</button>` : ''}
+  </footer>
+ </article>`;
+}
+
+async function askAboutSourcingQuote(id) {
+ const row = sourcingRequests.find(entry => entry.id === id);
+ await openDropshipSupportChat();
+ const input = document.getElementById('msg-input');
+ if (input && row) {
+  input.value = row.status === 'quoted'
+   ? `Hello BUYSELL, I accept the quote of ${fmtN(row.quote_amount)} for 1688 request ${sourcingRef(id)}. How do I pay?`
+   : `Hello BUYSELL, I have a question about 1688 request ${sourcingRef(id)}.`;
+  input.dispatchEvent(new Event('input'));
+ }
+}
+
+async function cancelSourcingRequest(id) {
+ if (!confirm(`Cancel request ${sourcingRef(id)}?`)) return;
+ const { error } = await db.from('sourcing_requests').update({ status: 'cancelled' }).eq('id', id).select('id').single();
+ if (error) { toast('Could not cancel', 'BUYSELL may already have quoted it. Chat with sourcing instead.', 'error'); return; }
+ toast('Request cancelled', `Request ${sourcingRef(id)} was cancelled.`, 'info');
+ loadSellerDropshipUpdates();
+}
+
+// Requests that only reached this browser before sourcing requests had a table.
+function renderUnsentSourcingRequests() {
+ const box = document.getElementById('src-local-unsent');
+ if (!box) return;
+ const unsent = readStoredJson('bs_1688_sourcing_requests', []).filter(row => Array.isArray(row.items) && row.items.length);
+ box.innerHTML = unsent.length
+  ? `<div class="src-alert"><i class="fa-solid fa-circle-exclamation"></i><div><strong>${unsent.length} earlier request${unsent.length === 1 ? ' was' : 's were'} never sent</strong><span>A fault kept ${unsent.length === 1 ? 'it' : 'them'} on this device only. Send ${unsent.length === 1 ? 'it' : 'them'} to BUYSELL now.</span></div><button type="button" class="src-btn src-btn--dark" onclick="sendUnsentSourcingRequests(event)">Send now</button></div>`
+  : '';
+}
+
+async function sendUnsentSourcingRequests(event) {
+ const button = event?.currentTarget;
+ if (button) { button.disabled = true; button.textContent = 'Sending...'; }
+ const unsent = readStoredJson('bs_1688_sourcing_requests', []);
+ const remaining = [];
+ let sent = 0;
+ for (const row of unsent) {
+  if (!Array.isArray(row.items) || !row.items.length) continue;
+  try {
+   await saveSourcingRequest({
+    items: row.items,
+    contact: row.contact || currentUser.profile?.whatsapp || currentUser.email || '',
+    destination: row.destination || 'Nigeria',
+    note: `Sent again from this device (first tried ${fmtDate(row.created_at)}).`,
+    estimate: {},
+   });
+   sent += 1;
+  } catch (_) {
+   remaining.push(row);
+  }
+ }
+ appStorage.setItem('bs_1688_sourcing_requests', JSON.stringify(remaining));
+ toast(sent ? 'Requests sent' : 'Not sent', sent ? `${sent} request${sent === 1 ? '' : 's'} sent to BUYSELL.` : 'Please try again shortly.', sent ? 'success' : 'error');
+ loadSellerDropshipUpdates();
+}
+
+// ---------- Admin: 1688 requests ----------
+const ADMIN_SOURCING_STATUSES = SOURCING_STEPS.map(([status]) => status).concat('cancelled');
+let adminSourcingFilter = 'open';
+
+async function loadAdminDropshipRequests() {
+ const lists = getActiveAdminElements('admin-dropship-requests-list');
+ if (!lists.length) return;
+ lists.forEach(el => { el.innerHTML = '<div class="skeleton" style="height:120px;border-radius:12px"></div>'; });
+ const { data, error } = await db.from('sourcing_requests')
+  .select('id,seller_id,status,items,link_count,contact,destination,note,estimate,quote_amount,admin_note,tracking,created_at,updated_at')
+  .order('created_at', { ascending: false })
+  .limit(150);
+ if (error) {
+  const msg = escHtml(error.message || 'Could not load 1688 requests.');
+  lists.forEach(el => { el.innerHTML = `<div class="empty-state compact"><i class="fa-solid fa-triangle-exclamation"></i><p>${msg}</p></div>`; });
+  return;
+ }
+ const rows = data || [];
+ const sellers = await getProfilesByIds(rows.map(row => row.seller_id));
+ window.__adminDropshipRequests = rows.map(row => ({ ...row, seller: sellers[row.seller_id] || {} }));
+ renderAdminDropshipRequests();
+}
+
+function renderAdminDropshipRequests() {
+ const rows = window.__adminDropshipRequests || [];
+ const filters = [['open', 'Open'], ['submitted', 'New'], ['quoted', 'Quoted'], ['in_progress', 'In progress'], ['done', 'Done'], ['all', 'All']];
+ const visible = rows.filter(row => {
+  if (adminSourcingFilter === 'all') return true;
+  if (adminSourcingFilter === 'open') return !['delivered', 'cancelled'].includes(row.status);
+  if (adminSourcingFilter === 'in_progress') return ['paid', 'ordered', 'at_warehouse', 'in_transit'].includes(row.status);
+  if (adminSourcingFilter === 'done') return ['delivered', 'cancelled'].includes(row.status);
+  return row.status === adminSourcingFilter;
+ });
+ const count = key => rows.filter(row => (key === 'open' ? !['delivered', 'cancelled'].includes(row.status) : key === 'submitted' ? row.status === 'submitted' : false)).length;
+ const head = `<div class="src-admin-filters">${filters.map(([key, label]) => `<button type="button" class="${adminSourcingFilter === key ? 'active' : ''}" onclick="adminSourcingFilter=${jsArg(key)};renderAdminDropshipRequests()">${label}${['open', 'submitted'].includes(key) && count(key) ? ` <b>${count(key)}</b>` : ''}</button>`).join('')}</div>`;
+ const html = head + (visible.length ? visible.map(renderAdminDropshipRequestCard).join('') : '<div class="empty-state compact"><i class="fa-solid fa-truck-ramp-box"></i><p>No 1688 requests here.</p></div>');
+ getActiveAdminElements('admin-dropship-requests-list').forEach(el => { el.innerHTML = html; });
+}
+
+function renderAdminDropshipRequestCard(row = {}) {
+ const id = escAttr(row.id || '');
+ const items = Array.isArray(row.items) ? row.items : [];
+ const seller = row.seller || {};
+ const sellerName = seller.store_name || seller.name || seller.email || 'Seller';
+ const phone = String(row.contact || '').replace(/[^\d+]/g, '');
+ const waNumber = phone.startsWith('0') ? `234${phone.slice(1)}` : phone.replace(/^\+/, '');
+ const options = ADMIN_SOURCING_STATUSES.map(status => `<option value="${status}" ${row.status === status ? 'selected' : ''}>${escHtml(SOURCING_STATUS_LABELS[status])}</option>`).join('');
+ return `<article class="admin-dropship-request-card src-admin-card">
+  <div class="admin-dropship-request-head">
+   <div><h4>Request ${escHtml(sourcingRef(row.id))} · ${escHtml(sellerName)}</h4><p>${fmtDate(row.created_at)} · ${items.length} link${items.length === 1 ? '' : 's'} · deliver to ${escHtml(row.destination || 'Nigeria')}</p></div>
+   <span class="src-status src-status--${escAttr(row.status)}">${escHtml(SOURCING_STATUS_LABELS[row.status] || row.status)}</span>
+  </div>
+  <ol class="src-admin-items">${items.map(item => `<li><a href="${escAttr(sanitizeUrl(item.url || '#'))}" target="_blank" rel="noopener">${escHtml(item.title || '1688 product')}</a> <b>×${Number(item.quantity || 1)}</b>${item.variant ? ` <span>${escHtml(item.variant)}</span>` : ''}${item.price ? ` <em>${escHtml(item.price)}</em>` : ''}</li>`).join('')}</ol>
+  ${row.note ? `<p class="src-request__note"><i class="fa-solid fa-note-sticky"></i> ${escHtml(row.note)}</p>` : ''}
+  <div class="admin-dropship-meta">
+   <span><i class="fa-brands fa-whatsapp"></i> ${waNumber ? `<a href="https://wa.me/${escAttr(waNumber)}" target="_blank" rel="noopener">${escHtml(row.contact)}</a>` : escHtml(row.contact || 'No number')}</span>
+   ${row.estimate?.total_ngn ? `<span><i class="fa-solid fa-calculator"></i> Seller's estimate ${fmtN(row.estimate.total_ngn)}</span>` : ''}
+  </div>
+  <div class="src-admin-form">
+   <label>Status<select class="form-select" id="ds-admin-status-${id}">${options}</select></label>
+   <label>Quote (₦)<input class="form-input" id="ds-admin-quote-${id}" type="number" min="0" inputmode="numeric" value="${row.quote_amount ?? ''}" placeholder="e.g. 250000"></label>
+   <label class="src-admin-form__wide">Note to the seller<input class="form-input" id="ds-admin-message-${id}" value="${escAttr(row.admin_note || '')}" maxlength="500" placeholder="What the quote covers, what you need from them..."></label>
+   <label class="src-admin-form__wide">Tracking<input class="form-input" id="ds-admin-tracking-${id}" value="${escAttr(row.tracking || '')}" maxlength="300" placeholder="Carrier and tracking number"></label>
+  </div>
+  <div class="flex gap-2 wrap mt-2">
+   <button class="btn btn-primary btn-sm" onclick="adminUpdateDropshipRequest(${jsArg(row.id)})"><i class="fa-solid fa-floppy-disk"></i> Save & notify seller</button>
+   <button class="btn btn-outline btn-sm" onclick="adminMessageDropshipper(${jsArg(row.id)})"><i class="fa-solid fa-message"></i> Chat with seller</button>
+  </div>
+ </article>`;
+}
+
+function getAdminDropshipInput(id, type) {
+ const selector = `[id="ds-admin-${type}-${id}"]`;
+ return Array.from(document.querySelectorAll(selector)).find(el => !el.closest('.adm-tab.hidden')) || document.querySelector(selector);
+}
+
+async function adminUpdateDropshipRequest(id) {
+ const status = getAdminDropshipInput(id, 'status')?.value || 'reviewing';
+ const quoteValue = getAdminDropshipInput(id, 'quote')?.value;
+ const quote = quoteValue === '' || quoteValue === undefined ? null : Math.max(0, Number(quoteValue) || 0);
+ if (status === 'quoted' && !quote) { toast('Add the quote', 'Enter the amount before marking it quoted.', 'warn'); return; }
+ const { error } = await db.from('sourcing_requests').update({
+  status,
+  quote_amount: quote,
+  admin_note: getAdminDropshipInput(id, 'message')?.value.trim() || '',
+  tracking: getAdminDropshipInput(id, 'tracking')?.value.trim() || '',
+ }).eq('id', id).select('id').single();
+ if (error) { toast('Update failed', error.message || 'Could not update the request.', 'error'); return; }
+ toast('Request updated', 'The seller has been notified.', 'success');
+ loadAdminDropshipRequests();
+}
+
+function adminMessageDropshipper(id) {
+ const row = (window.__adminDropshipRequests || []).find(entry => entry.id === id);
+ if (!row?.seller_id) { toast('Seller missing', 'This request has no seller.', 'warn'); return; }
+ const seller = row.seller || {};
+ openConversation(row.seller_id, seller.store_name || seller.name || 'Seller');
+ const input = document.getElementById('msg-input');
+ if (input && !input.value) {
+  input.value = `About your 1688 request ${sourcingRef(id)}: `;
+  input.dispatchEvent(new Event('input'));
  }
 }
 
@@ -8289,122 +8680,9 @@ async function openDropshipSupportChat() {
   return;
  }
  await openAdminSupportChat(dropshipChatPrefill());
- const meta = document.getElementById('msg-partner-meta');
- if (meta) meta.textContent = 'BUYSELL 1688 sourcing team';
+ chatState.metaNote = 'BUYSELL 1688 sourcing team';
+ renderChatHeader();
  setMessageQuickReplies('dropship');
-}
-
-async function loadSellerDropshipUpdates() {
- const el = document.getElementById('ds-1688-updates');
- if (!el || !currentUser) return;
- try {
-  const [{ data: messages = [] }, { data: orders = [] }] = await Promise.all([
-   runSelectWithColumnFallback('messages', MESSAGE_LIST_COLUMNS, q => q.eq('receiver_id', currentUser.id).order('created_at', { ascending: false }).limit(12)).catch(() => ({ data: [] })),
-   runSelectWithColumnFallback('orders', DROPSHIP_REQUEST_COLUMNS, q => q.order('created_at', { ascending: false }).limit(80)).catch(() => ({ data: [] }))
-  ]);
-  const requestUpdates = (orders || []).filter(row => is1688Request(row) && (row.seller_id === currentUser.id || row.buyer_id === currentUser.id || parseSellerIdFromRequest(row) === currentUser.id)).slice(0, 4);
-  const adminMessages = (messages || []).filter(row => /1688|dropship|sourcing|BUYSELL delivery/i.test(row.content || row.message || row.body || '')).slice(0, 4);
-   const updates = [
-    ...requestUpdates.map(row => ({ type: 'status', title: getDropshipRequestTitle(row), body: row.admin_note || row.tracking_update || buildDropshipRequestSummary(row), status: row.status || 'Submitted', date: row.updated_at || row.created_at })),
-    ...adminMessages.map(row => ({ type: 'message', title: 'Message from BUYSELL Admin', body: row.content || row.message || row.body || '', status: 'Admin update', date: row.created_at, senderId: row.sender_id || '' }))
-  ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)).slice(0, 5);
-  if (!updates.length) {
-   el.innerHTML = '<p class="text-xs color-text3">No admin updates yet. BUYSELL will message you here when your request is being reviewed.</p>';
-   return;
-  }
-   el.innerHTML = updates.map(item => {
-    const action = item.senderId
-     ? `<button class="btn btn-outline btn-sm" onclick="openConversation(${jsArg(item.senderId)},'BUYSELL Sourcing Team')"><i class="fa-solid fa-reply"></i> Reply</button>`
-     : '<button class="btn btn-outline btn-sm" onclick="openDropshipSupportChat()"><i class="fa-solid fa-comments"></i> Ask a question</button>';
-    return `<div class="ds-1688-update-card"><div><strong>${escHtml(item.title)}</strong><span>${escHtml(String(item.body || '').slice(0, 220))}</span></div><div class="ds-1688-update-foot"><div><span class="badge badge-green">${escHtml(item.status)}</span><small>${fmtDate(item.date)}</small></div>${action}</div></div>`;
-   }).join('');
- } catch (error) {
-  el.innerHTML = '<p class="text-xs color-text3">Updates will appear here when BUYSELL admin responds.</p>';
- }
-}
-
-async function loadAdminDropshipRequests() {
- const lists = getActiveAdminElements('admin-dropship-requests-list');
- if (!lists.length) return;
- lists.forEach(el => { el.innerHTML = '<div class="skeleton" style="height:120px;border-radius:12px"></div>'; });
- try {
-  const { data = [] } = await runSelectWithColumnFallback('orders', DROPSHIP_REQUEST_COLUMNS, q => q.order('created_at', { ascending: false }).limit(120));
-  const rows = (data || []).filter(is1688Request);
-  window.__adminDropshipRequests = rows;
-  const html = rows.length ? rows.map(row => renderAdminDropshipRequestCard(row)).join('') : '<div class="empty-state compact"><i class="fa-solid fa-truck-ramp-box"></i><p>No 1688 dropshipping requests found yet.</p></div>';
-  lists.forEach(el => { el.innerHTML = html; });
- } catch (error) {
-  const msg = escHtml(error.message || 'Could not load 1688 dropshipping requests.');
-  lists.forEach(el => { el.innerHTML = `<div class="empty-state compact"><i class="fa-solid fa-triangle-exclamation"></i><p>${msg}</p></div>`; });
- }
-}
-
-function renderAdminDropshipRequestCard(row = {}) {
- const id = escAttr(row.id || '');
- const title = getDropshipRequestTitle(row);
- const sellerId = parseSellerIdFromRequest(row);
- const note = row.admin_note || row.tracking_update || '';
- const status = row.status || 'submitted';
- const options = ['submitted','reviewing','quote sent','awaiting payment','sourcing','in transit','delivered','cancelled']
-  .map(opt => `<option value="${escAttr(opt)}" ${String(status).toLowerCase() === opt ? 'selected' : ''}>${escHtml(opt.replace(/\b\w/g, letter => letter.toUpperCase()))}</option>`).join('');
- return `<article class="admin-dropship-request-card">
- <div class="admin-dropship-request-head">
- <div><h4>${escHtml(title)}</h4><p>${escHtml(row.contact || row.destination || row.delivery_address || 'No contact details')}</p></div>
- <span class="badge badge-green">${escHtml(status)}</span>
- </div>
- <pre>${escHtml(buildDropshipRequestSummary(row))}</pre>
- <div class="admin-dropship-meta"><span><i class="fa-solid fa-user"></i> ${escHtml(sellerId || 'Seller unknown')}</span><span><i class="fa-solid fa-location-dot"></i> ${escHtml(row.destination || row.delivery_address || 'Destination not set')}</span><span><i class="fa-regular fa-clock"></i> ${fmtDate(row.created_at)}</span></div>
- <div class="form-grid form-grid-2 mt-3">
- <select class="form-select" id="ds-admin-status-${id}">${options}</select>
- <input class="form-input" id="ds-admin-message-${id}" value="${escAttr(note)}" placeholder="Message/update for seller">
- </div>
- <div class="flex gap-2 wrap mt-2">
- <button class="btn btn-primary btn-sm" onclick="adminUpdateDropshipRequest(${jsArg(id)})"><i class="fa-solid fa-paper-plane"></i> Save & Message</button>
- <button class="btn btn-outline btn-sm" onclick="adminMessageDropshipper(${jsArg(id)})"><i class="fa-solid fa-message"></i> Message Only</button>
- </div>
- </article>`;
-}
-
-function findRenderedDropshipRequest(id) {
- return window.__adminDropshipRequests?.find(row => String(row.id) === String(id)) || null;
-}
-
-function getAdminDropshipInput(id, type) {
- const selector = `[id="ds-admin-${type}-${id}"]`;
- return Array.from(document.querySelectorAll(selector)).find(el => !el.closest('.adm-tab.hidden')) || document.querySelector(selector);
-}
-
-async function adminUpdateDropshipRequest(id) {
- const status = getAdminDropshipInput(id, 'status')?.value || 'reviewing';
- const message = getAdminDropshipInput(id, 'message')?.value.trim() || '';
- try {
-  await updateRowWithColumnFallback('orders', id, { status, admin_note: message, tracking_update: message, updated_at: new Date().toISOString() });
-  if (message) await adminMessageDropshipper(id, false);
-  toast('1688 Request Updated', 'The seller can now see the BUYSELL update.', 'success');
-  loadAdminDropshipRequests();
- } catch (error) {
-  toast('Update Failed', error.message || 'Could not update the dropshipping request.', 'error');
- }
-}
-
-async function adminMessageDropshipper(id, showSuccess = true) {
- const row = findRenderedDropshipRequest(id);
- const recipientId = parseSellerIdFromRequest(row || {});
- const message = getAdminDropshipInput(id, 'message')?.value.trim() || '';
- if (!message) { toast('Add Message', 'Write an update before messaging the dropshipper.', 'warn'); return; }
- if (!recipientId) { toast('Seller Missing', 'This request has no seller ID. Ask the seller to submit a new 1688 request from their account.', 'warn', 7000); return; }
- try {
-  await insertMessageWithFallback({
-   sender_id: currentUser.id,
-   receiver_id: recipientId,
-   content: `[1688 request update] ${message}`,
-   order_id: id,
-   is_read: false
-  });
-  if (showSuccess) toast('Message Sent', 'The seller will see this in BUYSELL messages and 1688 updates.', 'success');
- } catch (error) {
-  toast('Message Not Sent', error.message || 'Could not send the seller update.', 'error');
- }
 }
 
 // ====================================================
@@ -12361,15 +12639,43 @@ function messageTextWithoutImageUrl(message = {}) {
  return imageUrl ? content.replace(imageUrl, '').trim() : content;
 }
 
-function renderMessageBubble(message) {
- const isMine = message.sender_id === currentUser.id;
- const imageUrl = extractMessageImageUrl(message);
+function renderMessageBubble(message, { joinPrev = false, joinNext = false } = {}) {
+ const isMine = message.sender_id === currentUser?.id;
+ const imageUrl = message.localImageUrl || extractMessageImageUrl(message);
  const text = messageTextWithoutImageUrl(message);
- const imageHtml = imageUrl
- ? `<img src="${escAttr(imageUrl)}" alt="Chat image" class="msg-image" loading="lazy" onclick="window.open(${jsArg(imageUrl)},'_blank')">`
- : '';
- const textHtml = text ? escHtml(text) : '';
- return `<div class="msg-bubble ${isMine ? 'mine' : 'theirs'}${imageUrl ? ' has-image' : ''}">${imageHtml}${textHtml}<div class="msg-time">${formatMsgTime(message.created_at)}${isMine ? ` <span>${message.is_read ? 'Read' : 'Sent'}</span>` : ''}</div></div>`;
+ const status = isMine ? (message.status || (message.is_read ? 'read' : 'sent')) : '';
+ const tick = {
+  sending: ['fa-regular fa-clock', 'Sending'],
+  sent: ['fa-solid fa-check', 'Sent'],
+  read: ['fa-solid fa-check-double', 'Read'],
+  failed: ['fa-solid fa-circle-exclamation', 'Not sent'],
+ }[status];
+ const classes = ['msg-bubble', isMine ? 'mine' : 'theirs', imageUrl ? 'has-image' : '', text ? '' : 'image-only',
+  joinPrev ? 'join-prev' : '', joinNext ? 'join-next' : '', status ? `is-${status}` : ''].filter(Boolean).join(' ');
+ const image = imageUrl
+  ? `<button type="button" class="msg-image-btn" data-chat-image="${escAttr(imageUrl)}" aria-label="Open photo"><img src="${escAttr(imageUrl)}" alt="Photo" class="msg-image" loading="lazy"></button>`
+  : '';
+ const body = text ? `<div class="msg-text">${linkifyChatText(text)}</div>` : '';
+ const meta = `<span class="msg-meta"><time datetime="${escAttr(message.created_at)}">${formatMsgTime(message.created_at)}</time>${tick ? `<i class="${tick[0]} msg-tick" title="${tick[1]}" aria-label="${tick[1]}"></i>` : ''}</span>`;
+ const retry = status === 'failed'
+  ? `<button type="button" class="msg-retry" data-chat-retry="${escAttr(message.id)}"><i class="fa-solid fa-rotate-right"></i> Not sent. Tap to retry</button>`
+  : '';
+ return `<div class="msg-row ${isMine ? 'mine' : 'theirs'}${joinPrev ? ' join-prev' : ''}${joinNext ? ' join-next' : ''}"><div class="${classes}">${image}${body}${meta}</div>${retry}</div>`;
+}
+
+// Escapes the text and turns http(s) links into links that open in a new tab.
+// Links are found before escaping, since escHtml also escapes "/".
+function linkifyChatText(text) {
+ const source = String(text || '');
+ let html = '';
+ let last = 0;
+ for (const match of source.matchAll(/https?:\/\/[^\s<>"']+/g)) {
+  const url = match[0].replace(/[).,!?;:]+$/, '');
+  html += escHtml(source.slice(last, match.index));
+  html += `<a href="${escAttr(url)}" target="_blank" rel="noopener noreferrer nofollow">${escHtml(url)}</a>`;
+  last = match.index + url.length;
+ }
+ return html + escHtml(source.slice(last));
 }
 
 function messagePreviewText(message = {}) {
@@ -12386,6 +12692,7 @@ function clearMessageImage() {
  preview.classList.add('hidden');
  preview.innerHTML = '';
  }
+ updateChatSendState();
 }
 
 async function openAdminSupportChat(prefill = '') {
@@ -12434,6 +12741,7 @@ function handleMessageImageSelect(input) {
  preview.innerHTML = `<img src="${escAttr(url)}" alt=""><span>${escHtml(file.name || 'Selected image')}</span><button type="button" onclick="clearMessageImage()" title="Remove image"><i class="fa-solid fa-times"></i></button>`;
  preview.classList.remove('hidden');
  }
+ updateChatSendState();
 }
 
 function openMessageModal(partnerId, partnerName = 'Seller', productId = null) {
@@ -12484,14 +12792,20 @@ async function queryMessages(buildQuery) {
  throw lastError || new Error('Could not load messages.');
 }
 
+const CHAT_PROFILE_COLUMNS = ['id', 'name', 'email', 'whatsapp', 'store_name', 'logo_url', 'seller_verified', 'last_seen_at', 'role'];
+
 async function getProfilesByIds(ids) {
  const unique = [...new Set((ids || []).filter(Boolean))];
  if (!unique.length) return {};
- let { data, error } = await db.from('profiles').select('id,name,email,whatsapp,store_name').in('id', unique);
- if (error && getMsgMissingColumn(error) === 'store_name') {
- ({ data } = await db.from('profiles').select('id,name,email,whatsapp').in('id', unique));
+ let columns = [...CHAT_PROFILE_COLUMNS];
+ while (columns.length > 1) {
+  const { data, error } = await db.from('profiles').select(columns.join(',')).in('id', unique);
+  if (!error) return Object.fromEntries((data || []).map(p => [p.id, p]));
+  const missing = getMsgMissingColumn(error);
+  if (!missing || !columns.includes(missing)) return {};
+  columns = columns.filter(column => column !== missing);
  }
- return Object.fromEntries((data || []).map(p => [p.id, p]));
+ return {};
 }
 
 function formatMsgTime(date) {
@@ -12523,101 +12837,539 @@ function partnerNameFromProfile(profile, fallback = 'User') {
  return profile?.store_name || profile?.name || profile?.email || fallback;
 }
 
-function renderInboxEmpty(container, text = 'No messages yet.') {
- container.innerHTML = `<div class="msg-empty" style="padding:2rem 1rem"><i class="fa-solid fa-envelope-open" style="font-size:1.6rem;color:var(--border2);display:block;margin-bottom:.55rem"></i>${escHtml(text)}</div>`;
+// ====================================================
+// CHAT
+// ====================================================
+// Phones use the inbox page, then a conversation page; computers get one
+// two-pane page (chats on the left, the open chat on the right). Messages show
+// at once while they send, update live, and carry read ticks.
+const CHAT_PAGE_SIZE = 60;
+const CHAT_GROUP_MS = 5 * 60 * 1000;
+
+function isChatSplit() {
+ return window.matchMedia?.('(min-width: 1024px)').matches === true;
+}
+
+function isChatConversationOpen() {
+ const modal = document.getElementById('message-modal');
+ return Boolean(modal?.classList.contains('open') && !modal.classList.contains('chat-no-selection'));
+}
+
+function chatProfile(partnerId) {
+ return chatState.profiles[partnerId] || {};
+}
+
+function chatPartnerName(partnerId, fallback = 'User') {
+ const profile = chatProfile(partnerId);
+ if (!profile.store_name && ['admin', 'super_admin'].includes(String(profile.role || ''))) return 'BUYSELL Support';
+ return partnerNameFromProfile(profile, fallback);
+}
+
+function chatIsVerified(profile = {}) {
+ return profile.seller_verified === true || ['admin', 'super_admin'].includes(String(profile.role || ''));
+}
+
+// Profiles record last_seen_at every minute while BUYSELL is open.
+function chatIsOnline(profile = {}) {
+ return Boolean(profile.last_seen_at) && Date.now() - new Date(profile.last_seen_at).getTime() < 150000;
+}
+
+function chatPresenceText(profile = {}) {
+ if (!profile.last_seen_at) return '';
+ const minutes = (Date.now() - new Date(profile.last_seen_at).getTime()) / 60000;
+ if (minutes < 2.5) return 'Online';
+ if (minutes < 60) return `Active ${Math.max(1, Math.round(minutes))} min ago`;
+ if (minutes < 1440) return `Active ${Math.round(minutes / 60)} h ago`;
+ return `Last seen ${formatMsgDay(profile.last_seen_at)}`;
+}
+
+function chatInitials(name) {
+ return String(name || 'U').trim().split(/\s+/).slice(0, 2).map(word => word[0] || '').join('').toUpperCase() || 'U';
+}
+
+function chatAvatarTone(id) {
+ let hash = 0;
+ for (const character of String(id || '')) hash = (hash * 31 + character.charCodeAt(0)) % 997;
+ return (hash % 6) + 1;
+}
+
+function chatAvatarInner(partnerId, name = chatPartnerName(partnerId)) {
+ const profile = chatProfile(partnerId);
+ const logo = sanitizeUrl(profile.logo_url || '');
+ const online = chatIsOnline(profile) ? '<span class="chat-online" title="Online"></span>' : '';
+ return logo
+  ? `<img src="${escAttr(logo)}" alt="" loading="lazy">${online}`
+  : `${escHtml(chatInitials(name))}${online}`;
+}
+
+function chatListTime(date) {
+ if (!date) return '';
+ const value = new Date(date);
+ const now = new Date();
+ if (value.toDateString() === now.toDateString()) return formatMsgTime(date);
+ if (formatMsgDay(date) === 'Yesterday') return 'Yesterday';
+ if (now - value < 7 * 86400000) return value.toLocaleDateString('en-NG', { weekday: 'short' });
+ return value.toLocaleDateString('en-NG', { day: 'numeric', month: 'short' });
+}
+
+function setupChatUi() {
+ if (!chatState.uiReady) {
+  chatState.uiReady = true;
+  document.addEventListener('click', handleChatClick);
+  document.addEventListener('input', event => {
+   const search = event.target.closest?.('[data-chat-search]');
+   if (!search) return;
+   chatState.query = search.value;
+   document.querySelectorAll('[data-chat-search]').forEach(other => { if (other !== search) other.value = search.value; });
+   renderChatThreads();
+  });
+  document.addEventListener('keydown', event => {
+   if (event.key === 'Escape' && !document.getElementById('chat-lightbox')?.classList.contains('hidden')) closeChatLightbox();
+  });
+  document.addEventListener('visibilitychange', () => {
+   if (!document.hidden && isChatConversationOpen() && currentChatPartner) markChatRead(currentChatPartner);
+  });
+  // Keep "Online" / "Active 5 min ago" current while a chat is open.
+  chatState.presenceTimer = setInterval(() => {
+   if (!isChatConversationOpen() || !currentChatPartner || document.hidden) return;
+   const partnerId = currentChatPartner;
+   getProfilesByIds([partnerId]).then(profiles => {
+    Object.assign(chatState.profiles, profiles);
+    if (currentChatPartner === partnerId) renderChatHeader();
+   }).catch(() => {});
+  }, 60000);
+ }
+ const input = document.getElementById('msg-input');
+ if (input && input.dataset.chatReady !== 'true') {
+  input.dataset.chatReady = 'true';
+  input.addEventListener('input', () => {
+   autoSizeChatInput();
+   updateChatSendState();
+   announceTyping();
+  });
+ }
+ const conversation = document.getElementById('msg-conversation');
+ if (conversation && conversation.dataset.chatReady !== 'true') {
+  conversation.dataset.chatReady = 'true';
+  conversation.addEventListener('scroll', () => {
+   chatState.stick = chatNearBottom();
+   if (chatState.stick) document.getElementById('msg-jump')?.classList.add('hidden');
+  }, { passive: true });
+  // Photos load after the first scroll; keep the newest message in view.
+  conversation.addEventListener('load', event => {
+   if (event.target.tagName === 'IMG' && chatState.stick) conversation.scrollTop = conversation.scrollHeight;
+  }, true);
+  // So does the message area shrinking (product card, photo preview, a longer reply).
+  if (typeof ResizeObserver === 'function') {
+   new ResizeObserver(() => {
+    if (chatState.stick) conversation.scrollTop = conversation.scrollHeight;
+   }).observe(conversation);
+  }
+ }
+}
+
+function handleChatClick(event) {
+ const thread = event.target.closest('[data-chat-partner]');
+ if (thread) {
+  const partnerId = thread.dataset.chatPartner;
+  openConversation(partnerId, chatPartnerName(partnerId), thread.dataset.chatProduct || null);
+  return;
+ }
+ const filter = event.target.closest('[data-chat-filter]');
+ if (filter) {
+  chatState.filter = filter.dataset.chatFilter;
+  document.querySelectorAll('[data-chat-filter]').forEach(button => {
+   const active = button.dataset.chatFilter === chatState.filter;
+   button.classList.toggle('active', active);
+   button.setAttribute('aria-pressed', String(active));
+  });
+  renderChatThreads();
+  return;
+ }
+ const older = event.target.closest('[data-chat-older]');
+ if (older) {
+  loadOlderChatMessages(older);
+  return;
+ }
+ const image = event.target.closest('[data-chat-image]');
+ if (image) {
+  openChatLightbox(image.dataset.chatImage);
+  return;
+ }
+ const retry = event.target.closest('[data-chat-retry]');
+ if (retry) {
+  const entry = chatState.messages.find(message => message.id === retry.dataset.chatRetry);
+  if (entry) deliverChatMessage(entry);
+  return;
+ }
+ const lightbox = event.target.closest('#chat-lightbox');
+ if (lightbox && (event.target === lightbox || event.target.closest('.chat-lightbox__close'))) closeChatLightbox();
+}
+
+function openChatLightbox(url) {
+ const box = document.getElementById('chat-lightbox');
+ if (!box) {
+  window.open(url, '_blank', 'noopener');
+  return;
+ }
+ box.querySelector('img').src = url;
+ box.classList.remove('hidden');
+ box.querySelector('.chat-lightbox__close')?.focus({ preventScroll: true });
+}
+
+function closeChatLightbox() {
+ const box = document.getElementById('chat-lightbox');
+ if (!box) return;
+ box.classList.add('hidden');
+ box.querySelector('img').removeAttribute('src');
+}
+
+function autoSizeChatInput() {
+ const input = document.getElementById('msg-input');
+ if (!input) return;
+ input.style.height = 'auto';
+ input.style.height = `${Math.min(input.scrollHeight, 132)}px`;
+}
+
+function updateChatSendState() {
+ const ready = Boolean(document.getElementById('msg-input')?.value.trim() || pendingMessageImage);
+ document.getElementById('msg-send-btn')?.classList.toggle('ready', ready);
+}
+
+async function loadChatThreads() {
+ if (!currentUser) return [];
+ const me = currentUser.id;
+ const data = await queryMessages((columns) => db.from('messages')
+  .select(columns)
+  .or(`sender_id.eq.${me},receiver_id.eq.${me}`)
+  .order('created_at', { ascending: false })
+  .limit(400));
+ const threads = new Map();
+ normalizeMessageRows(data).forEach(message => {
+  const partnerId = message.sender_id === me ? message.receiver_id : message.sender_id;
+  let thread = threads.get(partnerId);
+  if (!thread) {
+   thread = { id: partnerId, last: message, unread: 0, productId: '' };
+   threads.set(partnerId, thread);
+  }
+  if (!thread.productId && message.product_id) thread.productId = message.product_id;
+  if (message.receiver_id === me && !message.is_read) thread.unread += 1;
+ });
+ Object.assign(chatState.profiles, await getProfilesByIds([...threads.keys()]));
+ chatState.threads = [...threads.values()];
+ chatState.threadsLoaded = true;
+ return chatState.threads;
+}
+
+function refreshChatThreads() {
+ clearTimeout(chatState.refreshTimer);
+ chatState.refreshTimer = setTimeout(() => {
+  const listVisible = document.getElementById('inbox-modal')?.classList.contains('open')
+   || (document.getElementById('message-modal')?.classList.contains('open') && isChatSplit());
+  if (!currentUser || !listVisible) return;
+  loadChatThreads().then(() => renderChatThreads()).catch(error => console.warn('Chats could not refresh:', error));
+ }, 400);
+}
+
+function renderChatListState(icon, title, text = '') {
+ return `<div class="chat-list-state">${icon ? `<i class="${icon}" aria-hidden="true"></i>` : '<span class="spinner"></span>'}${title ? `<strong>${escHtml(title)}</strong>` : ''}${text ? `<span>${escHtml(text)}</span>` : ''}</div>`;
+}
+
+function renderChatThreads() {
+ const lists = [document.getElementById('inbox-list'), document.getElementById('chat-sidebar-list')].filter(Boolean);
+ if (!lists.length) return;
+ const me = currentUser?.id;
+ const query = chatState.query.trim().toLowerCase();
+ const visible = chatState.threads.filter(thread => {
+  if (chatState.filter === 'unread' && !thread.unread) return false;
+  if (!query) return true;
+  return chatPartnerName(thread.id).toLowerCase().includes(query) || messagePreviewText(thread.last).toLowerCase().includes(query);
+ });
+ let html;
+ if (!chatState.threadsLoaded) html = renderChatListState('', '');
+ else if (!chatState.threads.length) html = renderChatListState('fa-regular fa-comments', 'No chats yet', 'Message a seller from any product page and the chat will show up here.');
+ else if (!visible.length) html = renderChatListState('fa-solid fa-magnifying-glass', query ? 'No chats match' : 'No unread chats', query ? `Nothing for “${chatState.query.trim()}”.` : 'You are all caught up.');
+ else html = visible.map(thread => {
+  const profile = chatProfile(thread.id);
+  const name = chatPartnerName(thread.id);
+  const fromMe = thread.last.sender_id === me;
+  const hasImage = Boolean(thread.last.localImageUrl || extractMessageImageUrl(thread.last));
+  const preview = messageTextWithoutImageUrl(thread.last) || (hasImage ? 'Photo' : '');
+  const active = thread.id === currentChatPartner && isChatSplit() && isChatConversationOpen();
+  return `<button type="button" class="chat-thread${thread.unread ? ' unread' : ''}${active ? ' active' : ''}" data-chat-partner="${escAttr(thread.id)}" data-chat-product="${escAttr(thread.productId || '')}"${active ? ' aria-current="true"' : ''}>
+   <span class="chat-avatar chat-avatar--${chatAvatarTone(thread.id)}" aria-hidden="true">${chatAvatarInner(thread.id, name)}</span>
+   <span class="chat-thread__main">
+    <span class="chat-thread__top"><span class="chat-thread__name">${escHtml(name)}</span>${chatIsVerified(profile) ? '<i class="fa-solid fa-circle-check chat-verified" title="Verified by BUYSELL"></i>' : ''}<time datetime="${escAttr(thread.last.created_at)}">${escHtml(chatListTime(thread.last.created_at))}</time></span>
+    <span class="chat-thread__bottom"><span class="chat-thread__preview">${fromMe ? '<span class="chat-you">You:</span> ' : ''}${hasImage ? '<i class="fa-solid fa-image" aria-hidden="true"></i> ' : ''}${escHtml(preview)}</span>${thread.unread ? `<span class="chat-unread" aria-label="${thread.unread} unread">${thread.unread > 99 ? '99+' : thread.unread}</span>` : ''}</span>
+   </span>
+  </button>`;
+ }).join('');
+ lists.forEach(list => { list.innerHTML = html; });
+}
+
+// Moves a conversation to the top of the chat list after a new message.
+function bumpChatThread(message) {
+ const me = currentUser?.id;
+ const partnerId = message.sender_id === me ? message.receiver_id : message.sender_id;
+ let thread = chatState.threads.find(entry => entry.id === partnerId);
+ if (!thread) thread = { id: partnerId, last: message, unread: 0, productId: message.product_id || '' };
+ thread.last = message;
+ chatState.threads = [thread, ...chatState.threads.filter(entry => entry !== thread)];
+ renderChatThreads();
 }
 
 async function showInbox() {
- showModal('inbox-modal', { page: 'messages' });
- const container = document.getElementById('inbox-list');
- container.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
- if (!currentUser) { renderInboxEmpty(container, 'Sign in to view messages.'); return; }
- try {
-  const data = await queryMessages((columns) => db.from('messages')
-   .select(columns)
-  .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
-  .order('created_at', { ascending: false })
-  .limit(120));
- const msgs = normalizeMessageRows(data);
- if (!msgs.length) { renderInboxEmpty(container); return; }
- const profiles = await getProfilesByIds(msgs.flatMap(m => [m.sender_id, m.receiver_id]));
- const partners = {};
- msgs.forEach(m => {
- const pid = m.sender_id === currentUser.id ? m.receiver_id : m.sender_id;
- const profile = profiles[pid] || {};
- if (!partners[pid]) {
- partners[pid] = {
- id: pid,
- name: partnerNameFromProfile(profile),
- lastMsg: messagePreviewText(m),
- time: m.created_at,
- productId: m.product_id || '',
- unread: 0,
- };
+ setupChatUi();
+ if (isChatSplit()) {
+  closeModal('inbox-modal');
+  leaveTypingChannel();
+  showModal('message-modal', { page: 'conversation' });
+  document.getElementById('message-modal')?.classList.add('chat-no-selection');
+ } else {
+  showModal('inbox-modal', { page: 'messages' });
  }
- if (m.receiver_id === currentUser.id && !m.is_read) partners[pid].unread += 1;
- });
- container.innerHTML = Object.values(partners).map(p => `
- <div class="inbox-thread ${p.unread ? 'unread' : ''}" onclick="openConversation(${jsArg(p.id)},${jsArg(p.name)},${jsArg(p.productId)})">
- <div class="inbox-avatar">${escHtml((p.name || 'U')[0].toUpperCase())}</div>
- <div style="min-width:0">
- <div class="inbox-thread-title">${escHtml(p.name)}</div>
- <div class="inbox-thread-preview">${escHtml(p.lastMsg || '')}</div>
- ${p.productId ? '<div class="inbox-thread-product"><i class="fa-solid fa-box"></i> Product conversation</div>' : ''}
- </div>
- <div class="inbox-thread-side">
- <div class="text-xs color-text3">${formatMsgDay(p.time)}</div>
- ${p.unread ? `<div class="inbox-unread-dot">${p.unread}</div>` : ''}
- </div>
- </div>`).join('');
-  } catch(e) {
-  console.warn('Inbox unavailable:', e);
-  renderInboxEmpty(container, e.message || 'Messages are not available right now.');
-  }
+ if (!currentUser) {
+  const html = renderChatListState('fa-regular fa-comments', 'Sign in to see your messages');
+  ['inbox-list', 'chat-sidebar-list'].forEach(id => { const list = document.getElementById(id); if (list) list.innerHTML = html; });
+  return;
+ }
+ renderChatThreads();
+ try {
+  await loadChatThreads();
+  renderChatThreads();
+ } catch (error) {
+  console.warn('Inbox unavailable:', error);
+  const html = renderChatListState('fa-solid fa-triangle-exclamation', 'Messages could not load', error.message || 'Please try again.');
+  ['inbox-list', 'chat-sidebar-list'].forEach(id => { const list = document.getElementById(id); if (list) list.innerHTML = html; });
+ }
 }
 
 function openInbox() {
  return showInbox();
 }
 
+async function fetchConversation(partnerId, before = null) {
+ const me = currentUser.id;
+ const data = await queryMessages((columns) => {
+  let query = db.from('messages').select(columns)
+   .or(`and(sender_id.eq.${me},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${me})`)
+   .order('created_at', { ascending: false })
+   .limit(CHAT_PAGE_SIZE);
+  if (before) query = query.lt('created_at', before);
+  return query;
+ });
+ // Newest page first from the server, shown oldest to newest.
+ return normalizeMessageRows(data).reverse();
+}
+
 async function openConversation(partnerId, partnerName, productId = null) {
  if (!currentUser) { showModal('auth-modal'); toggleAuth('login'); return; }
+ if (!partnerId) return;
+ setupChatUi();
  markConversationNotificationsRead(partnerId);
+ const switching = partnerId !== currentChatPartner || !chatState.messages.length;
  currentChatPartner = partnerId;
  currentChatProductId = productId || null;
+ chatState.partnerName = partnerName || chatPartnerName(partnerId);
+ chatState.metaNote = '';
+ chatState.partnerTypingUntil = 0;
+ chatState.quickMode = 'general';
  closeModal('inbox-modal');
- document.getElementById('msg-partner-name').textContent = partnerName || 'User';
- document.getElementById('msg-partner-avatar').textContent = (partnerName || 'U')[0].toUpperCase();
- document.getElementById('msg-partner-meta').textContent = 'Loading conversation...';
  showModal('message-modal', { page: 'conversation' });
+ document.getElementById('message-modal')?.classList.remove('chat-no-selection');
+ renderChatHeader();
  setMessageQuickReplies();
- const conv = document.getElementById('msg-conversation');
- conv.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
- await renderMessageProductCard(currentChatProductId);
- try {
-  const data = await queryMessages((columns) => db.from('messages').select(columns)
-  .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${currentUser.id})`)
-  .order('created_at', { ascending: true }).limit(100));
- const msgs = normalizeMessageRows(data);
- const unreadIds = msgs.filter(m => m.receiver_id === currentUser.id && !m.is_read).map(m => m.id);
- if (unreadIds.length) {
- await db.from('messages').update({ is_read: true }).in('id', unreadIds).then(() => {}).catch(() => {});
- updateInboxCount();
+ joinTypingChannel(partnerId);
+ const conversation = document.getElementById('msg-conversation');
+ if (switching) {
+  chatState.messages = chatState.messages.filter(message => message.local && message.receiver_id === partnerId);
+  chatState.hasOlder = false;
+  conversation.innerHTML = renderChatListState('', '');
  }
- document.getElementById('msg-partner-meta').textContent = msgs.length ? `${msgs.length} message${msgs.length === 1 ? '' : 's'}` : 'New conversation';
- let lastDay = '';
- conv.innerHTML = msgs.map(m => {
- const isMine = m.sender_id === currentUser.id;
- const day = formatMsgDay(m.created_at);
- const divider = day !== lastDay ? `<div class="msg-day-divider">${escHtml(day)}</div>` : '';
- lastDay = day;
- return `${divider}${renderMessageBubble(m)}`;
- }).join('') || '<div class="msg-empty">No messages yet. Start with a quick question below.</div>';
- conv.scrollTop = conv.scrollHeight;
-  } catch(e) {
-  console.warn('Conversation unavailable:', e);
-  conv.innerHTML = `<p class="text-center color-text3 p-3">${escHtml(e.message || 'Could not load conversation.')}</p>`;
+ renderMessageProductCard(currentChatProductId);
+ if (isChatSplit()) {
+  if (chatState.threadsLoaded) renderChatThreads();
+  else loadChatThreads().then(() => renderChatThreads()).catch(() => {});
+ }
+ getProfilesByIds([partnerId]).then(profiles => {
+  Object.assign(chatState.profiles, profiles);
+  if (currentChatPartner === partnerId) renderChatHeader();
+ }).catch(() => {});
+ try {
+  const messages = await fetchConversation(partnerId);
+  if (currentChatPartner !== partnerId) return;
+  // Keep any message still being sent from this page.
+  const pending = chatState.messages.filter(message => message.local && message.receiver_id === partnerId);
+  chatState.messages = [...messages, ...pending];
+  chatState.hasOlder = messages.length === CHAT_PAGE_SIZE;
+  renderChatMessages();
+  scrollChatToLatest(false);
+  updateQuickRepliesVisibility();
+  if (!document.hidden) markChatRead(partnerId);
+ } catch (error) {
+  console.warn('Conversation unavailable:', error);
+  if (currentChatPartner === partnerId) {
+   conversation.innerHTML = renderChatListState('fa-solid fa-triangle-exclamation', 'This chat could not load', error.message || 'Please try again.');
   }
+ }
+}
+
+function renderChatHeader() {
+ const partnerId = currentChatPartner;
+ if (!partnerId) return;
+ const profile = chatProfile(partnerId);
+ const known = Boolean(chatState.profiles[partnerId]);
+ const name = known ? chatPartnerName(partnerId, chatState.partnerName) : (chatState.partnerName || 'User');
+ const nameEl = document.getElementById('msg-partner-name');
+ if (nameEl) nameEl.textContent = name;
+ const avatar = document.getElementById('msg-partner-avatar');
+ if (avatar) {
+  avatar.className = `message-avatar chat-avatar chat-avatar--${chatAvatarTone(partnerId)}`;
+  avatar.innerHTML = chatAvatarInner(partnerId, name);
+ }
+ document.getElementById('msg-partner-verified')?.classList.toggle('hidden', !chatIsVerified(profile));
+ const meta = document.getElementById('msg-partner-meta');
+ if (meta) {
+  const typing = Date.now() < chatState.partnerTypingUntil;
+  meta.classList.toggle('is-typing', typing);
+  meta.classList.toggle('is-online', !typing && chatIsOnline(profile));
+  meta.textContent = typing
+   ? 'typing…'
+   : chatState.metaNote || chatPresenceText(profile) || (known ? (profile.store_name ? 'Seller on BUYSELL' : 'BUYSELL member') : '');
+ }
+ const storeButton = document.getElementById('msg-store-btn');
+ if (storeButton) {
+  const hasStore = Boolean(profile.store_name) || ['seller', 'both'].includes(String(profile.role || ''));
+  storeButton.classList.toggle('hidden', !hasStore);
+  storeButton.onclick = () => {
+   closeModal('message-modal');
+   viewStorefront(partnerId);
+  };
+ }
+}
+
+function chatJoins(first, second) {
+ return Boolean(first && second)
+  && first.sender_id === second.sender_id
+  && formatMsgDay(first.created_at) === formatMsgDay(second.created_at)
+  && Math.abs(new Date(second.created_at) - new Date(first.created_at)) < CHAT_GROUP_MS;
+}
+
+function renderChatMessages() {
+ const conversation = document.getElementById('msg-conversation');
+ if (!conversation) return;
+ const messages = chatState.messages;
+ if (!messages.length) {
+  const name = document.getElementById('msg-partner-name')?.textContent || 'them';
+  conversation.innerHTML = `<div class="chat-start"><span class="chat-start__icon"><i class="fa-regular fa-comments"></i></span><strong>Say hello to ${escHtml(name)}</strong><span>Ask about price, condition or delivery. Pay only through BUYSELL checkout to stay protected.</span></div>`;
+  return;
+ }
+ let html = chatState.hasOlder ? '<button type="button" class="chat-older" data-chat-older>Load earlier messages</button>' : '';
+ let lastDay = '';
+ messages.forEach((message, index) => {
+  const day = formatMsgDay(message.created_at);
+  if (day !== lastDay) {
+   html += `<div class="msg-day-divider"><span>${escHtml(day)}</span></div>`;
+   lastDay = day;
+  }
+  html += renderMessageBubble(message, {
+   joinPrev: chatJoins(messages[index - 1], message),
+   joinNext: chatJoins(message, messages[index + 1]),
+  });
+ });
+ conversation.innerHTML = html;
+}
+
+async function loadOlderChatMessages(button) {
+ const partnerId = currentChatPartner;
+ const oldest = chatState.messages.find(message => !message.local);
+ if (!partnerId || !oldest || chatState.loadingOlder) return;
+ chatState.loadingOlder = true;
+ if (button) {
+  button.disabled = true;
+  button.textContent = 'Loading…';
+ }
+ try {
+  const older = await fetchConversation(partnerId, oldest.created_at);
+  if (currentChatPartner !== partnerId) return;
+  const conversation = document.getElementById('msg-conversation');
+  const fromBottom = conversation.scrollHeight - conversation.scrollTop;
+  const known = new Set(chatState.messages.map(message => message.id));
+  chatState.messages = [...older.filter(message => !known.has(message.id)), ...chatState.messages];
+  chatState.hasOlder = older.length === CHAT_PAGE_SIZE;
+  renderChatMessages();
+  conversation.scrollTop = conversation.scrollHeight - fromBottom;
+ } catch (error) {
+  toast('Could not load earlier messages', error.message || 'Please try again.', 'error');
+  if (button) {
+   button.disabled = false;
+   button.textContent = 'Load earlier messages';
+  }
+ } finally {
+  chatState.loadingOlder = false;
+ }
+}
+
+async function markChatRead(partnerId) {
+ if (!currentUser || !partnerId) return;
+ const unread = chatState.messages.filter(message => message.sender_id === partnerId && !message.is_read);
+ const thread = chatState.threads.find(entry => entry.id === partnerId);
+ if (!unread.length && !thread?.unread) return;
+ unread.forEach(message => { message.is_read = true; });
+ if (thread) thread.unread = 0;
+ renderChatThreads();
+ const { error } = await db.from('messages').update({ is_read: true })
+  .eq('receiver_id', currentUser.id)
+  .eq('sender_id', partnerId)
+  .eq('is_read', false);
+ if (error) console.warn('Could not mark the chat read:', error.message || error);
+ updateInboxCount();
+}
+
+function chatNearBottom() {
+ const conversation = document.getElementById('msg-conversation');
+ return !conversation || conversation.scrollHeight - conversation.scrollTop - conversation.clientHeight < 140;
+}
+
+function scrollChatToLatest(smooth = false) {
+ const conversation = document.getElementById('msg-conversation');
+ if (conversation) conversation.scrollTo({ top: conversation.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+ chatState.stick = true;
+ document.getElementById('msg-jump')?.classList.add('hidden');
+}
+
+// "typing…" travels over a Realtime broadcast channel for the two people.
+function joinTypingChannel(partnerId) {
+ leaveTypingChannel();
+ if (!db || typeof db.channel !== 'function' || !currentUser) return;
+ const key = [currentUser.id, partnerId].sort().join(':');
+ chatState.typingChannel = db.channel(`typing:${key}`, { config: { broadcast: { self: false } } })
+  .on('broadcast', { event: 'typing' }, ({ payload }) => {
+   if (payload?.from !== currentChatPartner) return;
+   chatState.partnerTypingUntil = Date.now() + 4000;
+   renderChatHeader();
+   clearTimeout(chatState.typingTimer);
+   chatState.typingTimer = setTimeout(renderChatHeader, 4100);
+  })
+  .subscribe();
+}
+
+function leaveTypingChannel() {
+ if (chatState.typingChannel && db?.removeChannel) db.removeChannel(chatState.typingChannel);
+ chatState.typingChannel = null;
+ chatState.partnerTypingUntil = 0;
+}
+
+function announceTyping() {
+ if (!chatState.typingChannel || !currentUser || Date.now() - chatState.lastTypingSent < 2500) return;
+ if (!document.getElementById('msg-input')?.value.trim()) return;
+ chatState.lastTypingSent = Date.now();
+ chatState.typingChannel.send({ type: 'broadcast', event: 'typing', payload: { from: currentUser.id } }).catch?.(() => {});
+}
+
+function resetChatState() {
+ leaveTypingChannel();
+ Object.assign(chatState, { profiles: {}, threads: [], threadsLoaded: false, messages: [], hasOlder: false, partnerName: '', metaNote: '' });
 }
 
 async function renderMessageProductCard(productId) {
@@ -12627,10 +13379,16 @@ async function renderMessageProductCard(productId) {
  card.innerHTML = '';
  if (!productId) return;
  try {
- const { data: product } = await db.from('products').select('id,name,price').eq('id', productId).maybeSingle();
- if (!product) return;
- card.innerHTML = `<div style="min-width:0"><strong>${escHtml(product.name || 'Product')}</strong><span>${fmtN(product.price || 0)}</span></div><button class="btn btn-outline btn-sm" onclick="openProduct(${jsArg(product.id)})">View</button>`;
- card.classList.remove('hidden');
+  const { data: product } = await db.from('products')
+   .select('id,name,price,image_url,images,video_url,videos,stock_quantity,status')
+   .eq('id', productId)
+   .maybeSingle();
+  if (!product || currentChatProductId !== productId) return;
+  const soldOut = Number(product.stock_quantity) === 0 || (product.status && product.status !== 'active');
+  card.innerHTML = `<img src="${escAttr(productThumbnail(product, 160) || PRODUCT_PLACEHOLDER_IMAGE)}" alt="" loading="lazy">
+   <div class="msg-product-card__text"><span class="msg-product-card__label">Chatting about</span><strong>${escHtml(product.name || 'Product')}</strong><span class="msg-product-card__price">${fmtN(product.price || 0)}${soldOut ? ' <em>· Sold out</em>' : ''}</span></div>
+   <button type="button" class="chat-pill-btn" onclick="openProduct(${jsArg(product.id)})">View</button>`;
+  card.classList.remove('hidden');
  } catch (_) {}
 }
 
@@ -12638,10 +13396,12 @@ function insertQuickMessage(text) {
  const input = document.getElementById('msg-input');
  if (!input) return;
  input.value = text;
+ input.dispatchEvent(new Event('input'));
  input.focus();
 }
 
 function setMessageQuickReplies(mode = 'general') {
+ chatState.quickMode = mode;
  const quickRow = document.querySelector('#message-modal .msg-quick-row');
  if (!quickRow) return;
  const replies = mode === 'dropship'
@@ -12659,6 +13419,15 @@ function setMessageQuickReplies(mode = 'general') {
   button.addEventListener('click', () => insertQuickMessage(reply));
   quickRow.appendChild(button);
  });
+ updateQuickRepliesVisibility();
+}
+
+// Suggested first messages, until you have written in this chat.
+function updateQuickRepliesVisibility() {
+ const quickRow = document.querySelector('#message-modal .msg-quick-row');
+ if (!quickRow) return;
+ const hasWritten = chatState.messages.some(message => message.sender_id === currentUser?.id);
+ quickRow.classList.toggle('hidden', hasWritten && chatState.quickMode !== 'dropship');
 }
 
 function handleMessageKey(event) {
@@ -12706,6 +13475,8 @@ async function sendMessageThroughVerifiedEndpoint(payload) {
  });
 }
 
+// Shows the message at once, then saves it; a failed send stays in the chat
+// with "Tap to retry".
 async function sendMessage() {
  if (!currentChatPartner) return;
  if (!currentUser) await ensureCurrentUser();
@@ -12714,94 +13485,119 @@ async function sendMessage() {
  const text = input.value.trim();
  const imageFile = pendingMessageImage;
  if (!text && !imageFile) return;
- const sendBtn = document.getElementById('msg-send-btn');
- input.value = '';
- if (sendBtn) sendBtn.disabled = true;
- 
-try {
- const messageClient = await getAuthenticatedMessageClient();
  if (currentUser.id === currentChatPartner) {
-  throw new Error('You cannot message yourself.');
+  toast('Message not sent', 'You cannot message yourself.', 'error');
+  return;
  }
-  let imageUrl = '';
- if (imageFile) {
- const ext = (imageFile.name || '').includes('.') ? imageFile.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') : 'jpg';
- const path = `chat/${currentUser.id}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext || 'jpg'}`;
- const uploaded = await uploadToFirstAvailableBucket(['chat', 'uploads', 'products'], path, imageFile, {
-  contentType: imageFile.type || undefined,
-  upsert: false,
- }, messageClient);
- imageUrl = uploaded.publicUrl;
- }
-
- const content = imageUrl
- ? [text, imageUrl].filter(Boolean).join('\n')
- : String(text);
-
- // Sanitize and structure the payload fields cleanly
- const payload = { 
- sender_id: currentUser.id, 
- receiver_id: currentChatPartner, 
- content, // Keep image URL in content as a compatibility fallback for older schemas.
- is_read: false 
+ const entry = {
+  id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  local: true,
+  sender_id: currentUser.id,
+  receiver_id: currentChatPartner,
+  product_id: currentChatProductId,
+  text,
+  content: text,
+  file: imageFile || null,
+  localImageUrl: imageFile ? URL.createObjectURL(imageFile) : '',
+  created_at: new Date().toISOString(),
+  is_read: false,
+  status: 'sending',
  };
+ input.value = '';
+ autoSizeChatInput();
+ clearMessageImage();
+ chatState.messages.push(entry);
+ renderChatMessages();
+ scrollChatToLatest(true);
+ updateQuickRepliesVisibility();
+ await deliverChatMessage(entry);
+}
 
- if (imageUrl) {
- payload.image_url = imageUrl;
- payload.attachment_url = imageUrl;
- payload.attachment_type = 'image';
- payload.metadata = { image_url: imageUrl, attachment_type: 'image' };
- }
- 
- if (currentChatProductId) {
- payload.product_id = currentChatProductId;
- }
- 
- // If your table schema has an extra metadata slot requiring explicit JSON structures, 
- // it must be safely included or initialized as a valid JSON string structure like this:
- // payload.metadata = {}; 
- 
- let delivered = false;
-  for (let attempt = 0; attempt < 8; attempt++) {
-   const { error } = await messageClient.from('messages').insert(payload);
- if (!error) {
- delivered = true;
- break;
- }
-
- const errText = (error?.message || '').toLowerCase();
- const isForeignKeyViolation = errText.includes('foreign key') || errText.includes('fkey');
- const missing = missingColumn(error);
-
-  if ((missing === 'product_id') || isForeignKeyViolation) {
- console.warn('Product relationship context is invalid or missing in DB. Removing product_id context and retrying plain chat delivery...');
- delete payload.product_id;
- continue;
- }
-  if (missing && Object.prototype.hasOwnProperty.call(payload, missing)) {
-  delete payload[missing];
-  continue;
+async function deliverChatMessage(entry) {
+ entry.status = 'sending';
+ renderChatMessages();
+ try {
+  const messageClient = await getAuthenticatedMessageClient();
+  let imageUrl = entry.uploadedImageUrl || '';
+  if (entry.file && !imageUrl) {
+   const ext = (entry.file.name || '').includes('.') ? entry.file.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') : 'jpg';
+   const path = `chat/${currentUser.id}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext || 'jpg'}`;
+   const uploaded = await uploadToFirstAvailableBucket(['chat', 'uploads', 'products'], path, entry.file, {
+    contentType: entry.file.type || undefined,
+    upsert: false,
+   }, messageClient);
+   imageUrl = uploaded.publicUrl;
+   entry.uploadedImageUrl = imageUrl;
   }
+
+  // The image link also goes in the text, for older message tables.
+  const content = imageUrl ? [entry.text, imageUrl].filter(Boolean).join('\n') : String(entry.text);
+  const payload = {
+   sender_id: entry.sender_id,
+   receiver_id: entry.receiver_id,
+   content,
+   is_read: false,
+  };
+  if (imageUrl) {
+   payload.image_url = imageUrl;
+   payload.attachment_url = imageUrl;
+   payload.attachment_type = 'image';
+   payload.metadata = { image_url: imageUrl, attachment_type: 'image' };
+  }
+  if (entry.product_id) payload.product_id = entry.product_id;
+
+  let saved = null;
+  let delivered = false;
+  for (let attempt = 0; attempt < 8; attempt++) {
+   const { data, error } = await messageClient.from('messages').insert(payload).select('id,created_at');
+   if (!error) {
+    saved = data?.[0] || null;
+    delivered = true;
+    break;
+   }
+   const errText = (error?.message || '').toLowerCase();
+   const isForeignKeyViolation = errText.includes('foreign key') || errText.includes('fkey');
+   const missing = missingColumn(error);
+   if (missing === 'product_id' || isForeignKeyViolation) {
+    // The product was removed: keep the chat, drop the product link.
+    delete payload.product_id;
+    continue;
+   }
+   if (missing && Object.prototype.hasOwnProperty.call(payload, missing)) {
+    delete payload[missing];
+    continue;
+   }
    if (isMissingMessagesTable(error)) {
-   throw new Error('Messaging database table is missing. Create the messages table in Supabase to send chats.');
+    throw new Error('Messaging database table is missing. Create the messages table in Supabase to send chats.');
    }
    if (isMessageRlsError(error)) {
-    await sendMessageThroughVerifiedEndpoint(payload);
+    const result = await sendMessageThroughVerifiedEndpoint(payload);
+    saved = result?.message || null;
     delivered = true;
     break;
    }
    throw error;
   }
- if (!delivered) throw new Error('Could not save message.');
- 
- clearMessageImage();
- openConversation(currentChatPartner, document.getElementById('msg-partner-name').textContent, currentChatProductId);
- } catch(e) {
- input.value = text; // Return text buffer to text input field if execution fails entirely
- toast('Message Failed', e.message || 'Could not send message', 'error');
- } finally {
- if (sendBtn) sendBtn.disabled = false;
+  if (!delivered) throw new Error('Could not save message.');
+
+  delete entry.status;
+  entry.content = content;
+  entry.file = null;
+  if (saved?.id) {
+   // Live updates may already have shown it from another tab.
+   const duplicate = chatState.messages.find(message => message.id === saved.id && message !== entry);
+   if (duplicate) chatState.messages = chatState.messages.filter(message => message !== entry);
+   entry.id = saved.id;
+   entry.created_at = saved.created_at || entry.created_at;
+  }
+  entry.local = false;
+  bumpChatThread(entry);
+ } catch (error) {
+  entry.status = 'failed';
+  toast('Message not sent', error.message || 'Could not send message', 'error');
  }
+ renderChatMessages();
+ if (chatState.stick) scrollChatToLatest(false);
 }
 async function updateInboxCount() {
  const badge = document.getElementById('inbox-count');
@@ -12829,19 +13625,48 @@ async function updateInboxCount() {
 function setupMessageRealtime() {
  if (!currentUser || messageChannel) return;
  messageChannel = db.channel(`messages-${currentUser.id}`)
- .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, payload => {
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, handleMessageChange)
+  .subscribe();
+}
+
+// New messages are added to the open chat in place; read receipts update the ticks.
+function handleMessageChange(payload) {
+ const me = currentUser?.id;
  const row = payload.new || payload.old || {};
- if (row.sender_id !== currentUser.id && row.receiver_id !== currentUser.id) return;
+ if (!me || (row.sender_id !== me && row.receiver_id !== me)) return;
  updateInboxCount();
- if (document.getElementById('inbox-modal')?.classList.contains('open')) showInbox();
- if (document.getElementById('message-modal')?.classList.contains('open') && currentChatPartner) {
- const involved = row.sender_id === currentChatPartner || row.receiver_id === currentChatPartner;
- if (involved) openConversation(currentChatPartner, document.getElementById('msg-partner-name').textContent, currentChatProductId);
- } else if (row.receiver_id === currentUser.id) {
- toast('New Message', row.content || 'You have a new message', 'info', 5000);
+ refreshChatThreads();
+ const partnerId = row.sender_id === me ? row.receiver_id : row.sender_id;
+ const inThisChat = isChatConversationOpen() && partnerId === currentChatPartner;
+
+ if (payload.eventType === 'UPDATE' && payload.new) {
+  const shown = chatState.messages.find(message => message.id === payload.new.id);
+  if (shown && Boolean(payload.new.is_read) !== Boolean(shown.is_read)) {
+   shown.is_read = Boolean(payload.new.is_read);
+   if (inThisChat) renderChatMessages();
+  }
+  return;
  }
- })
- .subscribe();
+ if (payload.eventType !== 'INSERT' || !payload.new) return;
+ const [message] = normalizeMessageRows([payload.new]);
+ if (!message) return;
+ if (!inThisChat) {
+  if (message.receiver_id === me) toast('New message', messagePreviewText(message) || 'You have a new message', 'info', 5000);
+  return;
+ }
+ if (chatState.messages.some(shown => shown.id === message.id)) return;
+ // Your own message from this page is already shown and gets its id when saved.
+ if (message.sender_id === me && chatState.messages.some(shown => shown.local)) return;
+ const wasNearBottom = chatNearBottom();
+ chatState.messages.push(message);
+ if (message.sender_id === partnerId) {
+  chatState.partnerTypingUntil = 0;
+  renderChatHeader();
+ }
+ renderChatMessages();
+ if (wasNearBottom) scrollChatToLatest(true);
+ else document.getElementById('msg-jump')?.classList.remove('hidden');
+ if (message.receiver_id === me && !document.hidden) markChatRead(partnerId);
 }
 
 // ====================================================
@@ -13991,6 +14816,7 @@ function notificationIcon(item) {
  if (item.kind === 'message') return ['fa-comment-dots', 'blue'];
  if (item.kind === 'product') return ['fa-tag', 'gold'];
  if (item.kind !== 'order') return ['fa-bell', 'green'];
+ if (data.sourcing_request_id) return data.status === 'cancelled' ? ['fa-circle-xmark', 'red'] : ['fa-boxes-packing', 'gold'];
  if (data.audience === 'seller' && data.status === 'confirmed') return ['fa-sack-dollar', 'gold'];
  return {
   pending: ['fa-hourglass-half', 'gold'],
@@ -14209,6 +15035,17 @@ async function openNotification(id) {
  closeNotificationPanel();
  markNotificationsRead(query => query.eq('id', item.id), entry => entry.id === item.id);
  const data = item.data || {};
+ if (data.sourcing_request_id) {
+  await showSellerDashboard();
+  if (data.audience === 'admin') {
+   showDash('admin');
+   switchAdminTab('dropship-requests');
+  } else {
+   showDash('dropshipping');
+   switchSourcingTab('requests');
+  }
+  return;
+ }
  if (item.kind === 'message' && data.partner_id) {
   openConversation(data.partner_id, data.partner_name || 'Chat');
   return;
