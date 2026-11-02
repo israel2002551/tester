@@ -275,6 +275,19 @@ html .prod-card .prod-quick-add {
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.22);
 }
 html .prod-card .prod-quick-add:hover { background: var(--xp-gold-2); }
+/* Wishlist heart, top right of the photo (the badges keep clear of it). */
+html .prod-card .prod-flags { right: 58px; }
+html .prod-card .prod-wish {
+  position: absolute; top: 10px; right: 10px; z-index: 3; width: 38px; height: 38px; margin: 0; padding: 0; border: 0; border-radius: 50%;
+  display: grid; place-items: center; background: rgba(255, 255, 255, 0.94); color: var(--xp-text); font-size: 1rem; cursor: pointer;
+  box-shadow: 0 6px 16px rgba(10, 26, 18, 0.18); transition: transform 0.15s var(--xp-ease), color 0.15s;
+}
+html .prod-card .prod-wish.is-saved { color: #e11d48; }
+html .prod-card .prod-wish:focus-visible { outline: 3px solid var(--xp-gold); outline-offset: 2px; }
+html .prod-card .prod-wish .prod-wish-pop { animation: gp-pop 0.35s var(--xp-ease); }
+@media (hover: hover) {
+  html .prod-card .prod-wish:hover { transform: scale(1.08); color: #e11d48; }
+}
 html .prod-card .prod-body { padding: 12px 6px 6px; gap: 6px; min-height: 0; }
 html .prod-card .prod-name { font-size: 0.9rem; font-weight: 600; line-height: 1.32; color: var(--xp-text); min-height: 2.64em; margin: 0; }
 html .prod-card .prod-price-row { min-height: 0; gap: 8px; }
@@ -581,6 +594,10 @@ html #seller-dashboard .empty-state i { color: var(--xp-gold); }
   html .prod-card .prod-name { font-size: 0.82rem; }
   html .prod-card .prod-price { font-size: 0.95rem; }
   html .prod-card .prod-quick-add { width: 34px; height: 34px; right: 8px; bottom: 8px; }
+  html .prod-card .prod-wish { top: 8px; right: 8px; width: 34px; height: 34px; font-size: 0.9rem; }
+  html .prod-card .prod-flags { top: 8px; left: 8px; right: 48px; }
+  /* Room for the heart: the words fit once the badge's icon is dropped. */
+  html .prod-card .prod-badge-platform i { display: none; }
   html .prod-card .prod-stock-label { display: none; }
 
   html #seller-dashboard .dash-main { padding: 22px 14px 48px; }
@@ -1388,5 +1405,7 @@ html #bogo-gift-modal .gp-btn--dark:hover { background: var(--xp-forest-2); }
   html .notify-panel { animation: none; }
   html .gp-card, html .gp-media img, html #bogo-gift-modal .gp-wish { transition: none; }
   html .gp-card:not(.is-selected):hover, html .gp-card:hover .gp-media img, html #bogo-gift-modal .gp-wish:hover { transform: none; }
-  html .gp-wish .gp-pop, html .gp-skeleton span { animation: none; }
+  html .gp-wish .gp-pop, html .gp-skeleton span, html .prod-card .prod-wish .prod-wish-pop { animation: none; }
+  html .prod-card .prod-wish { transition: none; }
+  html .prod-card .prod-wish:hover { transform: none; }
 }

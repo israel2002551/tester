@@ -3530,6 +3530,7 @@ function prodCard(p) {
  <div class="prod-img-wrap">
  <img src="${resolvedCardThumbnail}" alt="${escHtml(p.name)}" loading="lazy">
  ${badges ? `<div class="prod-flags">${badges}</div>` : ''}
+ <button type="button" class="prod-wish${isSaved ? ' is-saved' : ''}" data-wish-id="${escAttr(String(p.id))}" onclick="toggleWishlist(${jsArg(p.id)}, event)" aria-pressed="${isSaved}" aria-label="Save ${escAttr(p.name)} to wishlist" title="${isSaved ? 'Saved to your wishlist' : 'Save to wishlist'}"><i class="fa-${isSaved ? 'solid' : 'regular'} fa-heart" aria-hidden="true"></i></button>
  ${isSoldOut 
  ? `<div class="prod-sold-overlay"><span class="prod-sold-label">SOLD OUT</span></div>` 
  : `<button class="prod-quick-add" onclick="event.stopPropagation();addToCart(${serializedCartData})" aria-label="Add to cart"><i class="fa-solid fa-cart-plus"></i></button>`
@@ -7237,11 +7238,12 @@ async function saveSettings(e) {
  const logoFileInput = document.getElementById('s-brand-logo-file');
  if (logoFileInput?.files?.[0]) {
  const file = logoFileInput.files[0];
- const ext = file.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '');
- const path = `branding/merchant_${currentUser.id}_${Date.now()}.${ext}`;
- 
+ const ext = safeFileExt(file.name, 'jpg');
+ // uploads/branding/<user id>/ is the folder the storage policy lets each user write to.
+ const path = `branding/${currentUser.id}/${Date.now()}.${ext}`;
+
  toast('Uploading logo...', '', 'info', 2000);
- const uploaded = await uploadToFirstAvailableBucket(['uploads', 'products'], path, file, { contentType: file.type, upsert: true });
+ const uploaded = await uploadToFirstAvailableBucket(['uploads'], path, file, { contentType: file.type, upsert: false });
  updates.logo_url = uploaded.publicUrl;
  }
 
@@ -9070,10 +9072,10 @@ async function saveAdminLogo() {
 
  try {
  // 1. Upload to Supabase (using your existing 'uploads' bucket)
- const ext = tempLogoFile.name.split('.').pop();
- const path = `branding/logo_${Date.now()}.${ext}`;
- 
- const { error: upErr, data } = await db.storage.from('uploads').upload(path, tempLogoFile, { upsert: true });
+ const ext = safeFileExt(tempLogoFile.name, 'png');
+ const path = `branding/${currentUser.id}/logo_${Date.now()}.${ext}`;
+
+ const { error: upErr, data } = await db.storage.from('uploads').upload(path, tempLogoFile, { contentType: tempLogoFile.type, upsert: false });
  if (upErr) throw upErr;
  
  // 2. Get Public URL
@@ -12513,6 +12515,19 @@ function dismissPWA() {
 function saveWishlist() {
  appStorage.setItem('bs_wishlist', JSON.stringify(wishlist));
  updateWishlistCount();
+ syncWishlistHearts();
+}
+
+// The hearts on product cards follow the wishlist, wherever it was changed.
+function syncWishlistHearts() {
+ document.querySelectorAll('.prod-wish[data-wish-id]').forEach(btn => {
+  const saved = wishlist.includes(btn.dataset.wishId);
+  if (btn.classList.contains('is-saved') === saved) return;
+  btn.classList.toggle('is-saved', saved);
+  btn.setAttribute('aria-pressed', String(saved));
+  btn.title = saved ? 'Saved to your wishlist' : 'Save to wishlist';
+  btn.innerHTML = `<i class="fa-${saved ? 'solid' : 'regular'} fa-heart${saved ? ' prod-wish-pop' : ''}" aria-hidden="true"></i>`;
+ });
 }
 
 function updateWishlistCount() {
