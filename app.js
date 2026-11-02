@@ -4654,6 +4654,16 @@ window.bogoGiftModalState = {
  sort: 'closest',
 };
 
+const BOGO_GIFT_FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=300';
+
+function bogoGiftPrice(gift) {
+ return bogoNumber(gift?.customer_price ?? gift?.display_price ?? gift?.price, 0);
+}
+
+function bogoGiftImage(gift) {
+ return sanitizeUrl(gift?.image_url || '') || BOGO_GIFT_FALLBACK_IMAGE;
+}
+
 function ensureBogoGiftModal() {
  let modal = document.getElementById('bogo-gift-modal');
  if (modal) return modal;
@@ -4661,37 +4671,40 @@ function ensureBogoGiftModal() {
  modal.id = 'bogo-gift-modal';
  modal.className = 'modal-overlay';
  modal.innerHTML = `
-  <div class="modal-box bogo-modal-box">
-   <div class="bogo-modal-top">
-    <div class="bogo-modal-header-row">
-     <h2 class="bogo-modal-title"><i class="fa-solid fa-gift color-green"></i> Choose Your Free Gift</h2>
-     <button class="modal-close" onclick="closeModal('bogo-gift-modal')"><i class="fa-solid fa-times"></i></button>
-    </div>
-    <div class="bogo-allowance-pill">
-     <div class="bogo-allowance-left">
-      <i class="fa-solid fa-award"></i>
-      <div class="bogo-allowance-text">
-       <div>Free Gift Allowance:</div>
-       <div class="bogo-allowance-amount" id="bogo-modal-allowance">₦0</div>
-      </div>
+  <div class="modal-box bogo-modal-box" role="dialog" aria-modal="true" aria-labelledby="bogo-modal-title">
+   <div class="gp-head">
+    <div class="gp-title-row">
+     <span class="gp-icon" aria-hidden="true"><i class="fa-solid fa-gift"></i></span>
+     <div>
+      <h2 class="gp-title" id="bogo-modal-title">Pick your free gift</h2>
+      <p class="gp-sub" id="bogo-modal-sub"></p>
      </div>
-     <div class="bogo-allowance-tag">100% Covered</div>
+     <button type="button" class="gp-close" onclick="closeModal('bogo-gift-modal')" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
     </div>
-   </div>
-   <div class="bogo-modal-filter-bar">
-    <div class="bogo-modal-search-wrap">
-     <i class="fa-solid fa-magnifying-glass search-icon"></i>
-     <input type="search" id="bogo-modal-search" class="bogo-modal-search-input" placeholder="Search gifts by name (e.g. phone, shoes, bag...)" oninput="handleBogoSearchInput(this.value)">
-     <button type="button" id="bogo-modal-search-clear" class="bogo-modal-search-clear hidden" onclick="clearBogoModalSearch()"><i class="fa-solid fa-times"></i></button>
+    <div class="gp-tools">
+     <div class="gp-search">
+      <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+      <input type="search" id="bogo-modal-search" placeholder="Search gifts" aria-label="Search gifts" autocomplete="off" oninput="handleBogoSearchInput(this.value)">
+      <button type="button" id="bogo-modal-search-clear" class="gp-search-clear hidden" onclick="clearBogoModalSearch()" aria-label="Clear search"><i class="fa-solid fa-xmark"></i></button>
+     </div>
+     <label class="gp-sort"><span class="sr-only">Sort gifts</span>
+      <select id="bogo-modal-sort" onchange="setBogoSort(this.value)">
+       <option value="closest">Best value first</option>
+       <option value="price_asc">Lowest price first</option>
+      </select>
+     </label>
     </div>
-    <div class="bogo-chips-scroll" id="bogo-category-chips"></div>
+    <div class="gp-chips" id="bogo-category-chips" role="group" aria-label="Gift categories"></div>
    </div>
-   <div class="bogo-modal-body" id="bogo-modal-body">
-    <div class="bogo-gifts-grid" id="bogo-gifts-grid"></div>
+   <div class="gp-body" id="bogo-modal-body">
+    <div class="gp-grid" id="bogo-gifts-grid"></div>
    </div>
-   <div class="bogo-modal-bottom">
-    <button type="button" class="bogo-skip-btn" onclick="selectBogoFreeGiftAndClose('')"><i class="fa-solid fa-ban"></i> No gift for this order</button>
-    <button type="button" class="btn btn-outline btn-sm" onclick="closeModal('bogo-gift-modal')">Done</button>
+   <div class="gp-foot">
+    <div class="gp-current" id="bogo-modal-current"></div>
+    <div class="gp-actions">
+     <button type="button" class="gp-btn gp-btn--ghost" id="bogo-modal-skip" onclick="selectBogoFreeGiftAndClose('')"><i class="fa-solid fa-ban"></i> No gift</button>
+     <button type="button" class="gp-btn gp-btn--dark" onclick="closeModal('bogo-gift-modal')">Done</button>
+    </div>
    </div>
   </div>`;
  document.body.appendChild(modal);
@@ -4705,8 +4718,10 @@ function openBogoGiftModal() {
  const bogo = quote.bogo || quote.promotion || quote;
  const allowance = bogoNumber(bogo.max_free_customer_price, 0);
 
- const allowanceEl = document.getElementById('bogo-modal-allowance');
- if (allowanceEl) allowanceEl.textContent = fmtN(allowance);
+ const sub = document.getElementById('bogo-modal-sub');
+ if (sub) {
+  sub.innerHTML = `${allowance > 0 ? `Free with this order: any gift up to <strong>${fmtN(allowance)}</strong>.` : 'Free with this order.'} Tap <i class="fa-regular fa-heart" aria-hidden="true"></i> to save one to your wishlist.`;
+ }
 
  window.bogoGiftModalState = {
   search: '',
@@ -4716,8 +4731,9 @@ function openBogoGiftModal() {
 
  const searchInput = document.getElementById('bogo-modal-search');
  if (searchInput) searchInput.value = '';
- const clearBtn = document.getElementById('bogo-modal-search-clear');
- if (clearBtn) clearBtn.classList.add('hidden');
+ document.getElementById('bogo-modal-search-clear')?.classList.add('hidden');
+ const sortSelect = document.getElementById('bogo-modal-sort');
+ if (sortSelect) sortSelect.value = 'closest';
 
  renderBogoCategoryChips();
  renderBogoModalGifts();
@@ -4732,7 +4748,7 @@ function openBogoGiftModal() {
 async function refreshBogoModalGifts() {
  const grid = document.getElementById('bogo-gifts-grid');
  if (grid) {
-  grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:3rem 1rem;color:#64748b;"><span class="spinner" style="width:28px;height:28px;margin-bottom:0.75rem;"></span><p>Finding gifts close to your allowance…</p></div>';
+  grid.innerHTML = Array.from({ length: 8 }, () => '<div class="gp-skeleton" aria-hidden="true"><span></span><span></span><span></span></div>').join('');
  }
  try {
   const result = await getEligibleFreeGifts();
@@ -4741,7 +4757,8 @@ async function refreshBogoModalGifts() {
   renderBogoModalGifts();
  } catch (err) {
   if (grid) {
-   grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:2.5rem 1rem;color:#b91c1c;"><i class="fa-solid fa-triangle-exclamation" style="font-size:2rem;margin-bottom:0.5rem;"></i><p>Could not load gift products. Please try again.</p><button type="button" class="btn btn-outline btn-sm mt-2" onclick="refreshBogoModalGifts()">Retry</button></div>`;
+   grid.innerHTML = bogoGiftEmptyState('fa-solid fa-triangle-exclamation', 'Could not load the gifts', 'Check your connection and try again.',
+    '<button type="button" class="gp-btn gp-btn--dark" onclick="refreshBogoModalGifts()"><i class="fa-solid fa-rotate-right"></i> Try again</button>', true);
   }
  }
 }
@@ -4750,44 +4767,38 @@ function renderBogoCategoryChips() {
  const host = document.getElementById('bogo-category-chips');
  if (!host) return;
  const gifts = bogoCheckoutState.gifts || [];
- const cats = Array.from(new Set(gifts.map(g => (g.category || '').trim()).filter(Boolean)));
- 
- const currentCat = window.bogoGiftModalState?.category || 'all';
- const currentSort = window.bogoGiftModalState?.sort || 'closest';
-
- let html = `
-  <button type="button" class="bogo-chip ${currentSort === 'closest' ? 'active' : ''}" onclick="setBogoSort('closest')">💎 Closest to Allowance</button>
-  <button type="button" class="bogo-chip ${currentSort === 'price_asc' ? 'active' : ''}" onclick="setBogoSort('price_asc')">🏷️ Price: Low to High</button>
-  <button type="button" class="bogo-chip ${currentCat === 'all' ? 'active' : ''}" onclick="setBogoCategory('all')">All Products (${gifts.length})</button>
- `;
-
- cats.forEach(cat => {
-  const count = gifts.filter(g => (g.category || '').toLowerCase() === cat.toLowerCase()).length;
-  const active = currentCat.toLowerCase() === cat.toLowerCase() ? 'active' : '';
-  html += `<button type="button" class="bogo-chip ${active}" onclick="setBogoCategory(${jsArg(cat)})">${escHtml(cat)} (${count})</button>`;
+ const current = window.bogoGiftModalState.category;
+ const categories = new Map();
+ gifts.forEach(gift => {
+  const label = String(gift.category || '').trim();
+  if (!label) return;
+  const key = label.toLowerCase();
+  categories.set(key, { label: categories.get(key)?.label || label, count: (categories.get(key)?.count || 0) + 1 });
  });
+ const saved = gifts.filter(gift => wishlist.includes(String(gift.id))).length;
+ const chip = (value, label, count, icon = '') => `<button type="button" class="gp-chip${current === value ? ' active' : ''}" aria-pressed="${current === value}" onclick="setBogoCategory(${jsArg(value)})">${icon}${escHtml(label)} <span class="gp-chip-count">${count}</span></button>`;
 
- host.innerHTML = html;
+ host.innerHTML = [
+  chip('all', 'All gifts', gifts.length),
+  saved ? chip('saved', 'Saved', saved, '<i class="fa-solid fa-heart" aria-hidden="true"></i>') : '',
+  ...[...categories].map(([key, entry]) => chip(key, entry.label, entry.count)),
+ ].join('');
 }
 
 function setBogoCategory(cat) {
- if (!window.bogoGiftModalState) window.bogoGiftModalState = {};
- window.bogoGiftModalState.category = cat;
+ window.bogoGiftModalState.category = String(cat || 'all').toLowerCase();
  renderBogoCategoryChips();
  renderBogoModalGifts();
 }
 
 function setBogoSort(sort) {
- if (!window.bogoGiftModalState) window.bogoGiftModalState = {};
- window.bogoGiftModalState.sort = sort;
- renderBogoCategoryChips();
+ window.bogoGiftModalState.sort = sort === 'price_asc' ? 'price_asc' : 'closest';
  renderBogoModalGifts();
 }
 
 function handleBogoSearchInput(val) {
  const clearBtn = document.getElementById('bogo-modal-search-clear');
  if (clearBtn) clearBtn.classList.toggle('hidden', !val);
- if (!window.bogoGiftModalState) window.bogoGiftModalState = {};
  window.bogoGiftModalState.search = String(val || '').trim();
  renderBogoModalGifts();
 }
@@ -4797,72 +4808,104 @@ function clearBogoModalSearch() {
  if (searchInput) searchInput.value = '';
  const clearBtn = document.getElementById('bogo-modal-search-clear');
  if (clearBtn) clearBtn.classList.add('hidden');
- if (!window.bogoGiftModalState) window.bogoGiftModalState = {};
  window.bogoGiftModalState.search = '';
  renderBogoModalGifts();
+}
+
+function bogoGiftEmptyState(icon, title, text, action = '', isError = false) {
+ return `<div class="gp-empty${isError ? ' is-error' : ''}"><i class="${icon}" aria-hidden="true"></i><h4>${title}</h4><p>${text}</p>${action}</div>`;
+}
+
+// The footer shows the gift already chosen, so "No gift" only appears when there is one to remove.
+function renderBogoModalCurrent() {
+ const host = document.getElementById('bogo-modal-current');
+ if (!host) return;
+ const selectedId = String(bogoCheckoutState.freeItemId || '');
+ const gift = selectedId ? (bogoCheckoutState.gifts || []).find(g => String(g.id) === selectedId) : null;
+ host.innerHTML = gift
+  ? `<img src="${escAttr(bogoGiftImage(gift))}" alt=""><span><small>Your free gift</small><strong>${escHtml(gift.name || 'Selected gift')}</strong></span>`
+  : '<i class="fa-solid fa-gift" aria-hidden="true"></i><span><small>No gift chosen yet</small><strong>Tap a gift to choose it</strong></span>';
+ document.getElementById('bogo-modal-skip')?.classList.toggle('hidden', !gift);
 }
 
 function renderBogoModalGifts() {
  const grid = document.getElementById('bogo-gifts-grid');
  if (!grid) return;
- let gifts = [...(bogoCheckoutState.gifts || [])];
- const query = (window.bogoGiftModalState?.search || '').toLowerCase();
- const cat = (window.bogoGiftModalState?.category || 'all').toLowerCase();
- const sort = window.bogoGiftModalState?.sort || 'closest';
+ renderBogoModalCurrent();
+ const allGifts = bogoCheckoutState.gifts || [];
+ const state = window.bogoGiftModalState;
+ const words = state.search.toLowerCase().split(/\s+/).filter(Boolean);
+ let gifts = [...allGifts];
 
- if (cat !== 'all') {
-  gifts = gifts.filter(g => (g.category || '').toLowerCase() === cat);
+ if (state.category === 'saved') {
+  gifts = gifts.filter(g => wishlist.includes(String(g.id)));
+ } else if (state.category !== 'all') {
+  gifts = gifts.filter(g => (g.category || '').toLowerCase() === state.category);
  }
- if (query) {
-  gifts = gifts.filter(g => (g.name || '').toLowerCase().includes(query) || (g.category || '').toLowerCase().includes(query));
+ if (words.length) {
+  gifts = gifts.filter(g => {
+   const text = `${g.name || ''} ${g.category || ''}`.toLowerCase();
+   return words.every(word => text.includes(word));
+  });
  }
+ // Best value: the gifts worth the most first (none is above the allowance).
+ gifts.sort((a, b) => state.sort === 'price_asc' ? bogoGiftPrice(a) - bogoGiftPrice(b) : bogoGiftPrice(b) - bogoGiftPrice(a));
 
- if (sort === 'price_asc') {
-  gifts.sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
- } else {
-  // closest to allowance (highest price first)
-  gifts.sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0));
+ if (!allGifts.length) {
+  grid.innerHTML = bogoGiftEmptyState('fa-solid fa-gift', 'No gifts available yet', 'There are no gifts within your allowance right now. Please check again soon.');
+  return;
  }
-
  if (!gifts.length) {
-  grid.innerHTML = `
-   <div style="grid-column: 1 / -1; text-align: center; padding: 3rem 1rem; color: #64748b;">
-    <i class="fa-solid fa-magnifying-glass" style="font-size: 2.2rem; color: #cbd5e1; margin-bottom: 0.75rem;"></i>
-    <h4 style="color: #334155; margin-bottom: 0.35rem;">No gifts found</h4>
-    <p style="font-size: 0.85rem; margin-bottom: 1rem;">${query ? `No items match "${escHtml(query)}"` : 'No qualifying gifts available for this filter.'}</p>
-    <button type="button" class="btn btn-outline btn-sm" onclick="clearBogoModalSearch(); setBogoCategory('all');">Clear Filters</button>
-   </div>`;
+  grid.innerHTML = bogoGiftEmptyState('fa-solid fa-magnifying-glass', 'No gifts found',
+   words.length ? `Nothing matches “${escHtml(state.search)}”.` : 'There are no gifts in this group.',
+   '<button type="button" class="gp-btn gp-btn--ghost" onclick="clearBogoModalSearch(); setBogoCategory(\'all\')">Show all gifts</button>');
   return;
  }
 
  const selectedId = String(bogoCheckoutState.freeItemId || '');
  grid.innerHTML = gifts.map(gift => {
-  const isSelected = String(gift.id) === selectedId;
-  const img = sanitizeUrl(gift.image_url || '') || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=300';
-  const displayPrice = bogoNumber(gift.customer_price ?? gift.display_price ?? gift.price, 0);
-  const catTag = gift.category ? `<span class="bogo-card-category-tag">${escHtml(gift.category)}</span>` : '';
+  const id = String(gift.id);
+  const isSelected = id === selectedId;
+  const saved = wishlist.includes(id);
+  const name = gift.name || 'Gift';
   return `
-   <div class="bogo-gift-card ${isSelected ? 'is-selected' : ''}" onclick="selectBogoFreeGiftAndClose(${jsArg(gift.id)})">
-    <div class="bogo-card-img-wrap">
-     <img src="${escAttr(img)}" alt="${escAttr(gift.name)}" loading="lazy">
-     <span class="bogo-card-free-tag"><i class="fa-solid fa-gift"></i> FREE</span>
-     ${isSelected ? '<span class="bogo-card-selected-tag"><i class="fa-solid fa-check"></i> SELECTED</span>' : ''}
-     ${catTag}
-    </div>
-    <div class="bogo-card-info">
-     <h4 class="bogo-card-name" title="${escAttr(gift.name)}">${escHtml(gift.name)}</h4>
-     <div class="bogo-card-pricing">
-      <div class="bogo-card-pricing-left">
-       <span class="bogo-card-free-price">FREE</span>
-       <span class="bogo-card-orig-price">${fmtN(displayPrice)}</span>
-      </div>
-     </div>
-     <button type="button" class="bogo-card-select-btn ${isSelected ? 'btn-active-choice' : 'btn-choose'}">
-      ${isSelected ? '<i class="fa-solid fa-check"></i> Selected' : '<i class="fa-solid fa-gift"></i> Choose as Gift'}
-     </button>
-    </div>
-   </div>`;
+   <article class="gp-card${isSelected ? ' is-selected' : ''}" data-gift-id="${escAttr(id)}">
+    <button type="button" class="gp-pick" aria-pressed="${isSelected}" onclick="selectBogoFreeGiftAndClose(${jsArg(id)})">
+     <span class="gp-media">
+      <img src="${escAttr(bogoGiftImage(gift))}" alt="" loading="lazy">
+      ${isSelected ? '<span class="gp-chosen-tag"><i class="fa-solid fa-check"></i> Your gift</span>' : ''}
+     </span>
+     <span class="gp-info">
+      ${gift.category ? `<span class="gp-cat">${escHtml(gift.category)}</span>` : ''}
+      <span class="gp-name" title="${escAttr(name)}">${escHtml(name)}</span>
+      <span class="gp-price"><strong>Free</strong><s><span class="sr-only">usually </span>${fmtN(bogoGiftPrice(gift))}</s></span>
+      <span class="gp-cta">${isSelected ? '<i class="fa-solid fa-check"></i> Chosen' : 'Choose this gift'}</span>
+     </span>
+    </button>
+    <button type="button" class="gp-wish${saved ? ' is-saved' : ''}" aria-pressed="${saved}" aria-label="Save ${escAttr(name)} to wishlist" title="${saved ? 'Saved to your wishlist' : 'Save to wishlist'}" onclick="toggleBogoGiftWishlist(${jsArg(id)}, event)"><i class="fa-${saved ? 'solid' : 'regular'} fa-heart" aria-hidden="true"></i></button>
+   </article>`;
  }).join('');
+}
+
+// Saves a gift to the same wishlist as the shop (the heart in the menu bar).
+function toggleBogoGiftWishlist(productId, event) {
+ const id = String(productId);
+ toggleWishlist(id, event);
+ const saved = wishlist.includes(id);
+ const state = window.bogoGiftModalState;
+ const inSavedView = state.category === 'saved';
+ if (inSavedView && !(bogoCheckoutState.gifts || []).some(g => wishlist.includes(String(g.id)))) state.category = 'all';
+ renderBogoCategoryChips();
+ if (inSavedView) {
+  renderBogoModalGifts();
+  return;
+ }
+ const btn = document.querySelector(`#bogo-gifts-grid [data-gift-id="${CSS.escape(id)}"] .gp-wish`);
+ if (!btn) return;
+ btn.classList.toggle('is-saved', saved);
+ btn.setAttribute('aria-pressed', String(saved));
+ btn.title = saved ? 'Saved to your wishlist' : 'Save to wishlist';
+ btn.innerHTML = `<i class="fa-${saved ? 'solid' : 'regular'} fa-heart${saved ? ' gp-pop' : ''}" aria-hidden="true"></i>`;
 }
 
 function selectBogoFreeGiftAndClose(productId) {
@@ -4872,10 +4915,10 @@ function selectBogoFreeGiftAndClose(productId) {
  if (id) {
   const gift = (bogoCheckoutState.gifts || []).find(g => String(g.id) === id);
   if (gift?.name) {
-   toast('Free Gift Selected! 🎁', gift.name, 'success', 2500);
+   toast('Free gift added 🎁', `${gift.name} comes free with this order.`, 'success', 2500);
   }
  } else {
-  toast('Free Gift Removed', 'You can choose a gift anytime before placing your order.', 'info', 2000);
+  toast('Free gift removed', 'You can choose a gift any time before you pay.', 'info', 2000);
  }
 }
 
@@ -12893,12 +12936,20 @@ function chatAvatarTone(id) {
  return (hash % 6) + 1;
 }
 
+// Store logos that would not load (deleted files): show initials for them instead.
+const chatBrokenLogos = new Set();
+
+function chatAvatarFailed(img) {
+ chatBrokenLogos.add(img.getAttribute('src'));
+ img.replaceWith(document.createTextNode(img.dataset.initials || 'U'));
+}
+
 function chatAvatarInner(partnerId, name = chatPartnerName(partnerId)) {
  const profile = chatProfile(partnerId);
  const logo = sanitizeUrl(profile.logo_url || '');
  const online = chatIsOnline(profile) ? '<span class="chat-online" title="Online"></span>' : '';
- return logo
-  ? `<img src="${escAttr(logo)}" alt="" loading="lazy">${online}`
+ return logo && !chatBrokenLogos.has(logo)
+  ? `<img src="${escAttr(logo)}" alt="" loading="lazy" data-initials="${escAttr(chatInitials(name))}" onerror="chatAvatarFailed(this)">${online}`
   : `${escHtml(chatInitials(name))}${online}`;
 }
 
