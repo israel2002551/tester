@@ -44,6 +44,16 @@ const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const openAiApiKey = Deno.env.get("OPENAI_API_KEY") ?? "";
 const openAiModel = Deno.env.get("OPENAI_KYC_MODEL") ?? "gpt-5-mini";
+const KYC_BUCKET = "kyc-documents";
+
+type KycImages = { front: string; back: string; selfie: string };
+type SignedUrlClient = {
+  storage: {
+    from: (bucket: string) => {
+      createSignedUrl: (path: string, expiresIn: number) => Promise<{ data: { signedUrl: string } | null; error: unknown }>;
+    };
+  };
+};
 
 function json(body: Json, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -93,6 +103,36 @@ function validateLocalRules(kyc: KycRow, profile: ProfileRow) {
   return errors;
 }
 
+// The site stores each photo's private object URL (kyc-documents/<user id>/<file>);
+// OpenAI gets a 10-minute signed link to it. Photos sent before November 2026
+// are public files in uploads/kyc/<user id>/. Any other link is not used.
+async function kycImageUrl(admin: SignedUrlClient, value: string | null | undefined, userId: string) {
+  let url: URL;
+  try {
+    url = new URL(String(value || ""));
+  } catch {
+    return "";
+  }
+  if (url.origin !== new URL(supabaseUrl).origin) return "";
+  const privatePath = url.pathname.match(new RegExp(`^/storage/v1/object/${KYC_BUCKET}/(.+)$`))?.[1];
+  if (privatePath) {
+    const path = decodeURIComponent(privatePath);
+    if (!path.startsWith(`${userId}/`)) return "";
+    const { data, error } = await admin.storage.from(KYC_BUCKET).createSignedUrl(path, 600);
+    return error ? "" : data?.signedUrl || "";
+  }
+  return url.pathname.startsWith(`/storage/v1/object/public/uploads/kyc/${userId}/`) ? url.toString() : "";
+}
+
+async function resolveKycImages(admin: SignedUrlClient, kyc: KycRow): Promise<KycImages> {
+  const [front, back, selfie] = await Promise.all([
+    kycImageUrl(admin, kyc.front_url, kyc.user_id),
+    kyc.back_url ? kycImageUrl(admin, kyc.back_url, kyc.user_id) : Promise.resolve(""),
+    kycImageUrl(admin, kyc.selfie_url, kyc.user_id),
+  ]);
+  return { front, back, selfie };
+}
+
 function parseAiJson(text: string): Record<string, unknown> {
   const trimmed = text.trim();
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
@@ -114,7 +154,7 @@ function extractOutputText(raw: Json) {
   return parts.join("\n");
 }
 
-async function callOpenAiKycReview(kyc: KycRow, profile: ProfileRow): Promise<AiReviewResult> {
+async function callOpenAiKycReview(kyc: KycRow, profile: ProfileRow, images: KycImages): Promise<AiReviewResult> {
   if (!openAiApiKey) {
     return {
       status: "in_review",
@@ -141,16 +181,16 @@ async function callOpenAiKycReview(kyc: KycRow, profile: ProfileRow): Promise<Ai
         `Seller profile name/email: ${profile.name || ""} / ${profile.email || ""}`,
       ].join("\n"),
     },
-    { type: "input_image", image_url: kyc.front_url },
+    { type: "input_image", image_url: images.front },
   ];
 
-  if (kyc.back_url) content.push({ type: "input_image", image_url: kyc.back_url });
-  if (kyc.selfie_url) {
+  if (images.back) content.push({ type: "input_image", image_url: images.back });
+  if (images.selfie) {
     content.push({
       type: "input_text",
       text: "The next image is a selfie/holder image. Use it only to check basic submission quality and whether an ID document is present; do not perform face recognition.",
     });
-    content.push({ type: "input_image", image_url: kyc.selfie_url });
+    content.push({ type: "input_image", image_url: images.selfie });
   }
 
   const res = await fetch("https://api.openai.com/v1/responses", {
@@ -247,6 +287,10 @@ serve(async (req) => {
     if (!profile) return json({ error: "Profile not found." }, 404);
 
     const localErrors = validateLocalRules(kyc, profile);
+    const images = localErrors.length ? { front: "", back: "", selfie: "" } : await resolveKycImages(admin, kyc);
+    if (!localErrors.length && (!images.front || !images.selfie || (kyc.back_url && !images.back))) {
+      localErrors.push("The ID photos could not be opened. Please upload them again.");
+    }
     if (localErrors.length) {
       await Promise.all([
         admin.from("kyc_verifications").update({
@@ -269,7 +313,7 @@ serve(async (req) => {
       });
     }
 
-    const aiReview = await callOpenAiKycReview(kyc, profile);
+    const aiReview = await callOpenAiKycReview(kyc, profile, images);
     const nextStatus = aiReview.status;
     const profileStatus = "pending";
 

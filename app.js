@@ -1393,6 +1393,13 @@ async function uploadToFirstAvailableBucket(buckets, path, file, options = {}, c
 }
 
 const PAYMENT_PROOF_BUCKET = 'payment-proofs';
+// ID photos for seller verification: private, at <user id>/<file>.
+const KYC_DOCUMENT_BUCKET = 'kyc-documents';
+
+/** The non-public URL stored for a file in a private bucket (opened through signed URLs). */
+function privateStorageObjectUrl(bucket, path) {
+ return `${String(window.SB_URL || '').replace(/\/+$/, '')}/storage/v1/object/${bucket}/${path}`;
+}
 
 /**
  * Receipts contain bank details, so they go to a private bucket and are stored
@@ -1404,15 +1411,15 @@ async function uploadPaymentProof(client, file, ext) {
  const options = { contentType: file.type || undefined, upsert: false };
  const privatePath = `${currentUser.id}/${Date.now()}.${ext}`;
  const { data, error } = await client.storage.from(PAYMENT_PROOF_BUCKET).upload(privatePath, file, options);
- if (!error) return `${String(window.SB_URL || '').replace(/\/+$/, '')}/storage/v1/object/${PAYMENT_PROOF_BUCKET}/${data.path}`;
+ if (!error) return privateStorageObjectUrl(PAYMENT_PROOF_BUCKET, data.path);
  if (!/bucket not found/i.test(error.message || '')) throw error;
  console.warn('Private payment-proofs bucket missing; using the legacy public bucket.');
  const legacy = await uploadToFirstAvailableBucket(['uploads', 'products'], `proofs/${currentUser.id}/${Date.now()}.${ext}`, file, options, client);
  return legacy.publicUrl;
 }
 
-function privatePaymentProofPath(url) {
- const match = String(url || '').match(new RegExp(`/storage/v1/object/${PAYMENT_PROOF_BUCKET}/(.+)$`));
+function privateStoragePath(bucket, url) {
+ const match = String(url || '').match(new RegExp(`/storage/v1/object/${bucket}/(.+)$`));
  return match ? decodeURIComponent(match[1].split('?')[0]) : '';
 }
 
@@ -1425,29 +1432,37 @@ function safeHttpsUrl(url) {
  }
 }
 
-/** Opens a payment receipt; private receipts get a 5-minute signed URL. */
-async function openPaymentProof(url) {
+/** Opens a file from a private bucket through a 5-minute signed URL; older public links open as they are. */
+async function openPrivateStorageFile(bucket, url, failureTitle) {
  // Open the tab synchronously so popup blockers allow it, then navigate.
  const tab = window.open('', '_blank');
  if (tab) tab.opener = null;
  try {
- const path = privatePaymentProofPath(url);
+ const path = privateStoragePath(bucket, url);
  let target = '';
  if (path) {
  const client = await getAuthenticatedMessageClient();
- const { data, error } = await client.storage.from(PAYMENT_PROOF_BUCKET).createSignedUrl(path, 300);
+ const { data, error } = await client.storage.from(bucket).createSignedUrl(path, 300);
  if (error) throw error;
  target = data?.signedUrl || '';
  } else {
  target = safeHttpsUrl(url);
  }
- if (!target) throw new Error('This receipt link is not valid.');
+ if (!target) throw new Error('This link is not valid.');
  if (tab) tab.location.href = target;
  else window.location.href = target;
  } catch (error) {
  tab?.close();
- toast('Receipt unavailable', error.message || 'Could not open this receipt.', 'error');
+ toast(failureTitle, error.message || 'Could not open this file.', 'error');
  }
+}
+
+function openPaymentProof(url) {
+ return openPrivateStorageFile(PAYMENT_PROOF_BUCKET, url, 'Receipt unavailable');
+}
+
+function openKycDocument(url) {
+ return openPrivateStorageFile(KYC_DOCUMENT_BUCKET, url, 'Document unavailable');
 }
 
 /** Upload product media directly to Cloudinary using a short-lived server signature. */
@@ -12209,9 +12224,9 @@ async function loadAdminKyc() {
  <span class="color-text3">Name on ID: <b>${escHtml(k.full_name || k.legal_name || 'N/A')}</b></span>
  </div>
  <div class="flex gap-2 flex-wrap mb-3">
- ${k.front_url ? `<a href="${k.front_url}" target="_blank" class="btn btn-ghost btn-sm" style="color:var(--blue)"><i class="fa-solid fa-image"></i> Front</a>` : ''}
- ${k.back_url ? `<a href="${k.back_url}" target="_blank" class="btn btn-ghost btn-sm" style="color:var(--blue)"><i class="fa-solid fa-image"></i> Back</a>` : ''}
-  ${k.selfie_url ? `<a href="${k.selfie_url}" target="_blank" class="btn btn-ghost btn-sm" style="color:var(--blue)"><i class="fa-solid fa-user"></i> Selfie</a>` : ''}
+ ${k.front_url ? `<button type="button" class="btn btn-ghost btn-sm" style="color:var(--blue)" onclick="openKycDocument(${jsArg(k.front_url)})"><i class="fa-solid fa-image"></i> Front</button>` : ''}
+ ${k.back_url ? `<button type="button" class="btn btn-ghost btn-sm" style="color:var(--blue)" onclick="openKycDocument(${jsArg(k.back_url)})"><i class="fa-solid fa-image"></i> Back</button>` : ''}
+  ${k.selfie_url ? `<button type="button" class="btn btn-ghost btn-sm" style="color:var(--blue)" onclick="openKycDocument(${jsArg(k.selfie_url)})"><i class="fa-solid fa-user"></i> Selfie</button>` : ''}
   </div>
   ${k.admin_note ? `<div class="text-xs color-text3 mb-3"><b>Note:</b> ${escHtml(k.admin_note)}</div>` : ''}
   ${isPending ? `<div class="flex gap-2">
@@ -12374,14 +12389,16 @@ async function submitKyc(event) {
  return allowedExts.includes(ext) ? ext : 'jpg';
  }
 
+ // ID photos are private: kyc-documents/<user id>/<file>, which admins open through signed links.
+ const kycImageTypes = { jpg: 'image/jpeg', jpeg: 'image/jpeg', jfif: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif', avif: 'image/avif' };
  async function uploadKycFile(file, label) {
  const ext = validateKycFile(file, label);
- const path = `kyc/${currentUser.id}/${label}_${Date.now()}.${ext}`;
- const uploaded = await uploadToFirstAvailableBucket(['kyc', 'uploads', 'products'], path, file, {
- contentType: file.type || undefined,
- upsert: false,
- });
- return uploaded.publicUrl;
+ const path = `${currentUser.id}/${label}_${Date.now()}.${ext}`;
+ // The bucket accepts listed image types only, and some phones send photos without one.
+ const photo = new Blob([file], { type: kycImageTypes[ext] || 'image/jpeg' });
+ const { data, error } = await db.storage.from(KYC_DOCUMENT_BUCKET).upload(path, photo, { contentType: photo.type, upsert: false });
+ if (error) throw error;
+ return privateStorageObjectUrl(KYC_DOCUMENT_BUCKET, data.path);
  }
 
  const frontUrl = await uploadKycFile(frontFile, 'front');
