@@ -11,6 +11,8 @@ const PRODUCT_COLUMNS = "id,seller_id,name,description,price,original_price,ship
 const NATIVE_CATEGORIES = new Set(["electronics", "fashion", "home", "phones", "beauty", "sports", "dropship", "other"]);
 const NATIVE_CONDITIONS = new Set(["new", "used-like-new", "used-good"]);
 const WHATSAPP_PRICE_MARKUP_PERCENT = 20;
+// Shop cards say "Only N left" at 5 or fewer, so imported listings start above that.
+const IMPORTED_STOCK_QUANTITY = 10;
 // These were the original Bot 2 allow-listed groups. Keep them valid while
 // their settings are being migrated to whatsapp_group_settings in this project.
 const LEGACY_LISTED_GROUPS = new Set([
@@ -548,7 +550,7 @@ async function ingest(admin: ReturnType<typeof createClient>, req: Request, body
     image_url: images[0] || null,
     video_url: videos[0] || null,
     has_video: videos.length > 0,
-    stock_quantity: Math.max(1, finiteNumber(body.stock_quantity) || 1),
+    stock_quantity: Math.max(IMPORTED_STOCK_QUANTITY, Math.trunc(finiteNumber(body.stock_quantity) || 0)),
     negotiable: body.negotiable === true,
     // Imported listings are not public until a BUYSELL admin reviews them.
     status: "pending",
@@ -806,7 +808,7 @@ async function adminDashboardAction(admin: ReturnType<typeof createClient>, req:
 
     const { data: meta, error: metaError } = await admin
       .from("whatsapp_listing_meta")
-      .select("product_id,sold_at,deleted_at")
+      .select("product_id,sold_at,deleted_at,products(stock_quantity)")
       .eq("product_id", productId)
       .maybeSingle();
     if (metaError) throw new Error("Could not find this WhatsApp listing.");
@@ -815,8 +817,10 @@ async function adminDashboardAction(admin: ReturnType<typeof createClient>, req:
       return json({ error: "Sold or removed listings cannot be reactivated." }, 409);
     }
 
+    const linkedProduct = Array.isArray(meta.products) ? meta.products[0] : meta.products;
+    const currentStock = Number(linkedProduct?.stock_quantity) || 0;
     const productPatch = mode === "activate"
-      ? { status: "active", stock_quantity: 1, condition: "new" }
+      ? { status: "active", stock_quantity: Math.max(IMPORTED_STOCK_QUANTITY, currentStock), condition: "new" }
       : { status: "paused" };
     const { error: productError } = await admin.from("products").update(productPatch).eq("id", productId);
     if (productError) throw new Error("Could not update the marketplace product.");
