@@ -93,8 +93,15 @@ type BroadcastProduct = {
   created_at?: string | null;
 };
 
-const resendApiKey = Deno.env.get("RESEND_API_KEY") ?? "";
-const fromEmail = Deno.env.get("FROM_EMAIL") ?? "BUYSELL Nigeria <info@updates.buysell-markerplace.com>";
+// Emails go out through the BUYSELL email service on Render
+// (https://github.com/israel2002551/emailservice), which sends them with
+// SendGrid from its own EMAIL_FROM address.
+const emailServiceUrl = (Deno.env.get("EMAIL_SERVICE_URL") ?? "").trim().replace(/\/+$/, "");
+const emailServiceSecret = (Deno.env.get("EMAIL_SERVICE_SECRET") ?? "").trim();
+// Recipients per request. The service takes up to 1,000 and gives each person their own copy.
+const EMAIL_BATCH_SIZE = 500;
+// Long enough for a sleeping free-plan Render instance to wake up (about a minute).
+const EMAIL_SERVICE_TIMEOUT_MS = 100_000;
 const publicSiteUrl = Deno.env.get("PUBLIC_SITE_URL") ?? "https://buysell-marketplace.com";
 const invalidRecipientDomains = new Set([
   "example.com",
@@ -199,9 +206,24 @@ function isDeliverableEmail(email: string) {
   return true;
 }
 
-function getResendErrorHint(errorMessage: string) {
-  if (errorMessage.includes("Invalid `to` field")) {
-    return "Resend rejected at least one recipient. Placeholder emails are now filtered automatically. If all remaining recipients are real and this still happens, your Resend account/API key is likely in testing mode; verify your sending domain in Resend or send only to Resend's allowed test address.";
+function getEmailErrorHint(errorMessage: string) {
+  if (/verified Sender Identity/i.test(errorMessage)) {
+    return "SendGrid has not verified the sender address. Verify it in SendGrid under Settings > Sender Authentication, or change EMAIL_FROM on the email service.";
+  }
+  if (/authorization grant is invalid/i.test(errorMessage)) {
+    return "SendGrid rejected the API key. Check SENDGRID_API_KEY on the Render email service.";
+  }
+  if (/access forbidden/i.test(errorMessage)) {
+    return "The SendGrid API key is not allowed to send mail. Give it Mail Send access in SendGrid.";
+  }
+  if (/Maximum credits exceeded/i.test(errorMessage)) {
+    return "The SendGrid plan's sending limit has been reached.";
+  }
+  if (errorMessage.startsWith("Email service error (401)")) {
+    return "The email service refused the shared secret. EMAIL_SERVICE_SECRET must be the same in Supabase and on Render.";
+  }
+  if (/timed out/i.test(errorMessage)) {
+    return "The email service did not answer in time. On Render's free plan it may still be waking up, so try again in a minute.";
   }
   return "";
 }
@@ -316,18 +338,25 @@ ${products}
 BUYSELL Nigeria`;
 }
 
-async function sendEmailBatch(batch: { from: string; to: string; subject: string; html: string; text: string; }[]) {
-  const res = await fetch("https://api.resend.com/emails/batch", {
+// One request to the email service for a batch of recipients. SendGrid accepts or
+// refuses the batch as a whole.
+async function sendEmailBatch(to: string[], email: { subject: string; html: string; text: string }) {
+  const res = await fetch(`${emailServiceUrl}/api/send-email`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${resendApiKey}`,
+      Authorization: `Bearer ${emailServiceSecret}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(batch),
+    body: JSON.stringify({ to, ...email }),
+    signal: AbortSignal.timeout(EMAIL_SERVICE_TIMEOUT_MS),
   });
 
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Resend batch failed: ${JSON.stringify(data)}`);
+  if (!res.ok) {
+    const details = Array.isArray(data?.details) ? data.details : [];
+    const reason = [data?.error, ...details].filter(Boolean).join(" ") || res.statusText || "No details";
+    throw new Error(`Email service error (${res.status}): ${reason}`);
+  }
   return data;
 }
 
@@ -445,54 +474,22 @@ serve(async (req) => {
       });
     }
 
-    if (!resendApiKey) {
-      return json({ error: "RESEND_API_KEY is not configured." }, 500);
+    if (!emailServiceUrl || !emailServiceSecret) {
+      return json({ error: "Email sending is not set up. Add EMAIL_SERVICE_URL and EMAIL_SERVICE_SECRET to the Supabase function secrets." }, 500);
     }
 
     const results: any[] = [];
     const failures: any[] = [];
 
-    if (recipients.length > 0) {
-      // Chunk recipients in groups of 100 (Resend batch API limit)
-      const chunkSize = 100;
-      for (let i = 0; i < recipients.length; i += chunkSize) {
-        const chunk = recipients.slice(i, i + chunkSize);
-        
-        const batchPayload = chunk.map((recipient) => ({
-          from: fromEmail,
-          to: String(recipient.email),
-          subject,
-          html,
-          text,
-        }));
-
-        try {
-          const result = await sendEmailBatch(batchPayload);
-          // Resend returns an array under `data` containing each email's ID or failure
-          const resList = Array.isArray(result?.data) ? result.data : [];
-          chunk.forEach((recipient, idx) => {
-            const resItem = resList[idx];
-            if (resItem?.id) {
-              results.push({ email: recipient.email, id: resItem.id });
-            } else {
-              failures.push({
-                email: recipient.email,
-                error: resItem?.error?.message || resItem?.error || "Send failed without details"
-              });
-            }
-          });
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          const hint = getResendErrorHint(errorMessage);
-          chunk.forEach((recipient) => {
-            failures.push({ email: recipient.email, error: errorMessage, hint });
-          });
-        }
-
-        // Delay 1 second between batches to stay safe from Resend's 10 reqs/sec limit
-        if (i + chunkSize < recipients.length) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-        }
+    for (let i = 0; i < recipients.length; i += EMAIL_BATCH_SIZE) {
+      const chunk = recipients.slice(i, i + EMAIL_BATCH_SIZE);
+      try {
+        const result = await sendEmailBatch(chunk.map((recipient) => String(recipient.email)), { subject, html, text });
+        chunk.forEach((recipient) => results.push({ email: recipient.email, id: result?.message_id ?? null }));
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const hint = getEmailErrorHint(errorMessage);
+        chunk.forEach((recipient) => failures.push({ email: recipient.email, error: errorMessage, hint }));
       }
     }
 
