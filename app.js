@@ -378,12 +378,18 @@ async function callEdge(fnName, body) {
  'Authorization': `Bearer ${token}`,
  'apikey': SB_KEY
  },
- body: JSON.stringify(body)
+ body: JSON.stringify(withTeamStore(fnName, body))
  });
 
  const data = await res.json();
  if (!res.ok) throw new Error(data.error || `${fnName} failed (${res.status})`);
  return data;
+}
+
+// Team members work on the store they picked; these functions get its id.
+function withTeamStore(fnName, body) {
+ if (!sellerStoreContext || !TEAM_STORE_FUNCTIONS.has(fnName) || !body || typeof body !== 'object' || body.store_id !== undefined) return body;
+ return { ...body, store_id: sellerStoreContext.id };
 }
 
 function getAdminEmails() {
@@ -571,6 +577,9 @@ function clearAuthenticatedSessionUi() {
  currentRole = 'buyer';
  currentChatPartner = null;
  currentChatProductId = null;
+ sellerStoreContext = null;
+ teamStores = [];
+ teamInviteNoted = false;
  syncAuthenticationNavigation();
  if (typeof updateInboxCount === 'function') updateInboxCount();
 }
@@ -1061,25 +1070,80 @@ function profileHasSellerAccess(profile = currentUser?.profile) {
  return role === 'seller' || role === 'admin' || role === 'both' || role === 'service_provider' || accounts === 'seller' || accounts === 'both' || accounts === 'service_provider' || !!profile?.seller_access_category;
 }
 
-async function resolveSellerStaffPermission(email = currentUser?.email) {
- const normalizedEmail = String(email || '').trim().toLowerCase();
- if (!normalizedEmail) return null;
- // Access is granted only from the database. The local list is the inviting
- // seller's own record and anyone can write to their browser storage.
+// Team Access: stores the signed-in user was added to by their owners
+// (public.buysell_my_stores). The seller dashboard works on one store at a
+// time: the user's own, or the team store they picked. The server checks the
+// role on every request (public.buysell_store_role), so this only decides what
+// to show.
+let teamStores = [];
+let sellerStoreContext = null; // { id, name, logo, role } while working on a team store
+let teamInviteNoted = false;
+const TEAM_STORE_KEY = 'bs_team_store';
+// Seller functions that work on the store sent as store_id.
+const TEAM_STORE_FUNCTIONS = new Set(['manage-product', 'manage-coupon', 'seller-analytics']);
+
+async function loadTeamStores() {
  try {
-  const { data, error } = await db.from('seller_staff_permissions')
-  .select('id,seller_id,email,category,note,status,created_at')
-  .eq('email', normalizedEmail)
-  .eq('status', 'active')
-  .order('created_at', { ascending: false })
-  .limit(1)
-  .maybeSingle();
+  const { data, error } = await db.rpc('buysell_my_stores');
   if (error) throw error;
-  return data || null;
+  teamStores = (data || []).map(row => ({
+   id: row.store_id,
+   name: row.store_name || 'Store',
+   logo: row.logo_url || '',
+   role: normalizeTeamRole(row.role),
+   invitedEmail: row.invited_email || '',
+   verified: row.google_verified === true,
+  }));
  } catch (error) {
-  console.info('Seller staff permission lookup skipped:', error.message || error);
-  return null;
+  console.info('Team stores unavailable:', error.message || error);
+  teamStores = [];
  }
+ return teamStores;
+}
+
+function sellerStoreId() {
+ return sellerStoreContext?.id || currentUser?.id || null;
+}
+
+function isTeamStore() {
+ return Boolean(sellerStoreContext);
+}
+
+// Opens the store picked last time, else the user's own store, else the first
+// team store they can work on.
+function chooseSellerStore() {
+ const usable = teamStores.filter(store => store.verified);
+ const saved = appStorage.getItem(TEAM_STORE_KEY);
+ const pick = usable.find(store => store.id === saved) || (currentUser?.ownsStore ? null : usable[0]) || null;
+ sellerStoreContext = pick ? { id: pick.id, name: pick.name, logo: pick.logo, role: pick.role } : null;
+ if (sellerStoreContext && !currentUser.ownsStore) {
+  // Lets someone with no store of their own open the seller dashboard.
+  currentUser.profile = { ...(currentUser.profile || {}), role: 'seller', accounts: 'seller', seller_access_category: sellerStoreContext.role };
+ }
+ return sellerStoreContext;
+}
+
+async function setupTeamStores() {
+ if (!currentUser) return null;
+ if (currentUser.ownsStore === undefined) currentUser.ownsStore = profileHasSellerAccess(currentUser.profile);
+ await loadTeamStores();
+ const store = chooseSellerStore();
+ const waiting = teamStores.find(team => !team.verified);
+ if (waiting && !teamInviteNoted) {
+  teamInviteNoted = true;
+  toast(`${waiting.name} added you to their team`, `To work on it, sign out and sign in with Google using ${waiting.invitedEmail}.`, 'info', 12000);
+ }
+ return store;
+}
+
+function switchSellerStore(storeId) {
+ appStorage.setItem(TEAM_STORE_KEY, storeId || '');
+ chooseSellerStore();
+ if (!sellerStoreContext && !currentUser?.ownsStore) return;
+ sellerProductRows = [];
+ sellerProductRowsOwner = null;
+ showSellerDashboard();
+ showDash('overview');
 }
 
 async function ensureSellerProfileRole() {
@@ -1094,10 +1158,13 @@ async function ensureSellerProfileRole() {
  }
  }
 
+ // A team member works on the owner's store; their own profile is left alone.
+ if (isTeamStore()) {
+  currentRole = 'seller';
+  return true;
+ }
  if (!profileHasSellerAccess(profile)) {
-  const staffAccess = await resolveSellerStaffPermission(currentUser.email);
-  if (staffAccess) {
-   currentUser.profile = { ...profile, role: 'seller', accounts: 'seller', seller_access_category: staffAccess.category, delegated_seller_id: staffAccess.seller_id };
+  if (await setupTeamStores()) {
    currentRole = 'seller';
    return true;
   }
@@ -1863,10 +1930,8 @@ async function onAuthSuccess(user, options = {}) {
   } else {
   currentUser.profile = profile;
   }
-  const staffAccess = await resolveSellerStaffPermission(user.email);
-  if (staffAccess && !profileHasSellerAccess(currentUser.profile)) {
-  currentUser.profile = { ...(currentUser.profile || {}), role: 'seller', accounts: 'seller', seller_access_category: staffAccess.category, delegated_seller_id: staffAccess.seller_id };
-  }
+  currentUser.ownsStore = profileHasSellerAccess(currentUser.profile);
+  await setupTeamStores();
   appStorage.removeItem('bs_google_profile_hint');
 
  currentRole = currentUser.profile?.role || 'buyer';
@@ -2184,13 +2249,14 @@ async function showSellerDashboard() {
  if (typeof stopCarousel === 'function') stopCarousel();
  if (typeof checkSellerCommission === 'function') checkSellerCommission();
  if (typeof loadSellerStats === 'function') loadSellerStats();
- if (typeof loadSellerProds === 'function') loadSellerProds();
- if (typeof loadSellerOrders === 'function') loadSellerOrders();
+ // Team members load only the sections their role opens.
+ if (typeof loadSellerProds === 'function' && canAccessSellerSection('products')) loadSellerProds();
+ if (typeof loadSellerOrders === 'function' && canAccessSellerSection('orders')) loadSellerOrders();
  if (typeof renderChart === 'function') renderChart();
- if (typeof loadWithdrawalData === 'function') loadWithdrawalData();
- if (typeof loadDropshipData === 'function') loadDropshipData();
- if (typeof loadAffiliateData === 'function') loadAffiliateData();
- if (typeof loadSellerAds === 'function') loadSellerAds();
+ if (typeof loadWithdrawalData === 'function' && canAccessSellerSection('withdrawals')) loadWithdrawalData();
+ if (typeof loadDropshipData === 'function' && canAccessSellerSection('dropshipping')) loadDropshipData();
+ if (typeof loadAffiliateData === 'function' && canAccessSellerSection('affiliate')) loadAffiliateData();
+ if (typeof loadSellerAds === 'function' && canAccessSellerSection('advertise')) loadSellerAds();
 }
 function isSellerAccessExpired(profile = currentUser?.profile) {
  return false;
@@ -2230,7 +2296,8 @@ async function getSellerKycStatus(userId = currentUser?.id) {
 }
 
 async function requireSellerKyc() {
- if (!currentUser || isAdminEmail()) return true;
+ // Team members work on the owner's store, which the owner's KYC covers.
+ if (!currentUser || isAdminEmail() || isTeamStore()) return true;
  const { status, row } = await getSellerKycStatus(currentUser.id);
  if (isKycApprovedStatus(status) || isKycSubmittedStatus(status)) return true;
  if (row?.id) return true;
@@ -2259,47 +2326,41 @@ function handleNavBrand(e) {
  else loadProducts();
 }
 
+// What each role can open. The owner has everything; team roles see only what
+// the server lets them do (public.buysell_store_role and the seller edge
+// functions). Payouts, bank details, the team, the selling plan, ads,
+// affiliate and 1688 sourcing stay with the owner.
 const SELLER_ACCESS_CATEGORIES = {
- store_manager: {
-  label: 'Store Manager',
-  sections: ['overview','orders','dropshipping','affiliate','advertise','reviews','analytics','coupons','flash','settings','support']
+ owner: {
+  label: 'Store Owner',
+  sections: ['overview','products','add-product','orders','dropshipping','affiliate','advertise','reviews','analytics','coupons','flash','withdrawals','commission','settings','permissions','support','admin']
  },
  product_manager: {
   label: 'Product Manager',
-  sections: ['overview','products','add-product','dropshipping','reviews','analytics','support']
+  sections: ['overview','products','add-product','reviews','analytics','support']
+ },
+ store_manager: {
+  label: 'Store Manager',
+  sections: ['overview','orders','reviews','analytics','coupons','settings','support']
  },
  full_admin: {
-  label: 'Full Admin Access',
-  sections: ['overview','products','add-product','orders','dropshipping','affiliate','advertise','reviews','analytics','coupons','flash','withdrawals','commission','settings','permissions','support','admin']
+  label: 'Full Admin',
+  sections: ['overview','products','add-product','orders','reviews','analytics','coupons','settings','withdrawals','support']
  }
 };
+const TEAM_ROLES = ['product_manager', 'store_manager', 'full_admin'];
 
-function normalizeSellerAccessCategory(value = '') {
+function normalizeTeamRole(value = '') {
  const key = String(value || '').toLowerCase().replace(/[\s-]+/g, '_');
- return SELLER_ACCESS_CATEGORIES[key] ? key : 'full_admin';
-}
-
-function getLocalSellerPermissions() {
- return readStoredJson(SELLER_PERMISSIONS_KEY, []);
-}
-
-function saveLocalSellerPermissions(rows) {
- appStorage.setItem(SELLER_PERMISSIONS_KEY, JSON.stringify(rows || []));
+ return TEAM_ROLES.includes(key) ? key : 'store_manager';
 }
 
 function currentSellerAccessCategory() {
- if (!currentUser) return 'full_admin';
- if (isAdminEmail() || isPlatformProfile(currentUser.profile || {})) return 'full_admin';
- const profile = currentUser.profile || {};
- const direct = profile.seller_access_category || profile.access_category || profile.team_role || profile.staff_role || profile.permission_category;
- if (direct) return normalizeSellerAccessCategory(direct);
- const localMatch = getLocalSellerPermissions().find(row => String(row.email || '').toLowerCase() === String(currentUser.email || '').toLowerCase() && row.status !== 'revoked');
- return normalizeSellerAccessCategory(localMatch?.category || 'full_admin');
+ return sellerStoreContext?.role || 'owner';
 }
 
 function canAccessSellerSection(section) {
- const category = currentSellerAccessCategory();
- return (SELLER_ACCESS_CATEGORIES[category]?.sections || SELLER_ACCESS_CATEGORIES.full_admin.sections).includes(section);
+ return (SELLER_ACCESS_CATEGORIES[currentSellerAccessCategory()] || SELLER_ACCESS_CATEGORIES.owner).sections.includes(section);
 }
 
 function updateSellerAccessChrome() {
@@ -2312,85 +2373,122 @@ function updateSellerAccessChrome() {
  });
  const nameEl = document.getElementById('dash-user-name');
  if (nameEl && currentUser) {
-  const label = SELLER_ACCESS_CATEGORIES[category]?.label || 'Full Admin Access';
-  nameEl.title = label;
+  nameEl.title = SELLER_ACCESS_CATEGORIES[category]?.label || 'Store Owner';
  }
+ renderTeamStoreBanner();
 }
 
-function renderSellerPermissions(rows = getLocalSellerPermissions()) {
- const list = document.getElementById('seller-permissions-list');
- if (!list) return;
- const visible = (rows || []).filter(row => row.status !== 'revoked');
- if (!visible.length) {
-  list.innerHTML = '<p class="text-xs color-text3">No team access records yet.</p>';
+// Shown on the seller dashboard while working on someone else's store, with a
+// switcher when there is more than one store to work on.
+function renderTeamStoreBanner() {
+ const main = document.querySelector('#seller-dashboard .dash-main');
+ if (!main) return;
+ let banner = document.getElementById('team-store-banner');
+ const choices = [
+  ...(currentUser?.ownsStore ? [{ id: '', name: 'My own store' }] : []),
+  ...teamStores.filter(store => store.verified).map(store => ({ id: store.id, name: `${store.name} (${SELLER_ACCESS_CATEGORIES[store.role].label})` })),
+ ];
+ if (!isTeamStore() && choices.length < 2) {
+  banner?.remove();
   return;
  }
- list.innerHTML = visible.map(row => {
-  const category = normalizeSellerAccessCategory(row.category);
-  return `<div class="seller-permission-row"><div><strong>${escHtml(row.email)}</strong><span>${escHtml(SELLER_ACCESS_CATEGORIES[category].label)}${row.note ? ` - ${escHtml(row.note)}` : ''}</span></div><button class="btn btn-outline btn-sm" onclick="revokeSellerPermission(${jsArg(row.id || row.email)})"><i class="fa-solid fa-user-slash"></i> Revoke</button></div>`;
+ if (!banner) {
+  banner = document.createElement('div');
+  banner.id = 'team-store-banner';
+  banner.className = 'team-store-banner';
+  main.prepend(banner);
+ }
+ const text = isTeamStore()
+  ? `You're working on <strong>${escHtml(sellerStoreContext.name)}</strong> as ${escHtml(SELLER_ACCESS_CATEGORIES[sellerStoreContext.role].label)}. Payouts, bank details and the team stay with the store owner.`
+  : "You're working on your own store.";
+ const current = sellerStoreContext?.id || '';
+ const switcher = choices.length > 1
+  ? `<label class="team-store-switch"><span>Switch store</span><select onchange="switchSellerStore(this.value)">${choices.map(choice => `<option value="${escAttr(choice.id)}"${choice.id === current ? ' selected' : ''}>${escHtml(choice.name)}</option>`).join('')}</select></label>`
+  : '';
+ banner.innerHTML = `<i class="fa-solid fa-people-group" aria-hidden="true"></i><p>${text}</p>${switcher}`;
+}
+
+// The owner's Team Access list, straight from the database.
+let sellerTeamRows = [];
+
+function renderSellerPermissions() {
+ const list = document.getElementById('seller-permissions-list');
+ if (!list) return;
+ if (!sellerTeamRows.length) {
+  list.innerHTML = '<p class="text-xs color-text3">No team members yet. Add someone above to share the work of running your store.</p>';
+  return;
+ }
+ list.innerHTML = sellerTeamRows.map(row => {
+  const role = normalizeTeamRole(row.category);
+  const options = TEAM_ROLES.map(key => `<option value="${key}"${key === role ? ' selected' : ''}>${escHtml(SELLER_ACCESS_CATEGORIES[key].label)}</option>`).join('');
+  return `<div class="seller-permission-row">
+   <div><strong>${escHtml(row.email)}</strong><span>Added ${escHtml(fmtDate(row.created_at))}${row.note ? ` · ${escHtml(row.note)}` : ''}</span></div>
+   <div class="seller-permission-actions">
+    <select class="form-select" aria-label="Role for ${escAttr(row.email)}" onchange="changeSellerPermissionRole(${jsArg(row.id)}, this.value)">${options}</select>
+    <button type="button" class="btn btn-outline btn-sm" onclick="revokeSellerPermission(${jsArg(row.id)})"><i class="fa-solid fa-user-slash"></i> Remove</button>
+   </div>
+  </div>`;
  }).join('');
 }
 
 async function loadSellerPermissions() {
- if (!currentUser) return;
- renderSellerPermissions();
+ if (!currentUser || isTeamStore()) return;
+ const list = document.getElementById('seller-permissions-list');
  try {
   const { data, error } = await db.from('seller_staff_permissions')
-  .select('id,seller_id,email,category,note,status,created_at')
-  .eq('seller_id', currentUser.id)
-  .neq('status', 'revoked')
-  .order('created_at', { ascending: false });
+   .select('id,email,category,note,status,created_at')
+   .eq('seller_id', currentUser.id)
+   .eq('status', 'active')
+   .order('created_at', { ascending: false });
   if (error) throw error;
-  const rows = data || [];
-  saveLocalSellerPermissions(rows);
-  renderSellerPermissions(rows);
+  sellerTeamRows = data || [];
+  renderSellerPermissions();
  } catch (error) {
-  console.info('Seller permissions using local fallback:', error.message || error);
+  if (list) list.innerHTML = `<p class="text-xs color-text3">Could not load your team. ${escHtml(error.message || '')}</p>`;
  }
 }
 
 async function saveSellerPermission(event) {
  event.preventDefault();
+ const form = event.currentTarget;
  if (!currentUser) { showModal('auth-modal'); return; }
- const email = document.getElementById('perm-email')?.value.trim().toLowerCase();
- const category = normalizeSellerAccessCategory(document.getElementById('perm-role')?.value);
+ const email = document.getElementById('perm-email')?.value.trim().toLowerCase() || '';
+ const category = normalizeTeamRole(document.getElementById('perm-role')?.value);
  const note = document.getElementById('perm-note')?.value.trim() || '';
- if (!email) { toast('Email Required', 'Add the team member email address first.', 'warn'); return; }
- const row = { id: `perm-${Date.now()}`, seller_id: currentUser.id, email, category, note, status: 'active', created_at: new Date().toISOString() };
- try {
-  const { data, error } = await db.from('seller_staff_permissions').upsert({
-   seller_id: currentUser.id,
-   email,
-   category,
-   note,
-   status: 'active'
-  }, { onConflict: 'seller_id,email' }).select('id,seller_id,email,category,note,status,created_at').single();
-  if (error) throw error;
-  const rows = [data, ...getLocalSellerPermissions().filter(item => String(item.email).toLowerCase() !== email)];
-  saveLocalSellerPermissions(rows);
- } catch (error) {
-  const rows = [row, ...getLocalSellerPermissions().filter(item => String(item.email).toLowerCase() !== email)];
-  saveLocalSellerPermissions(rows);
-  toast('Saved Locally', 'Apply the seller_staff_permissions migration to sync team access in Supabase.', 'info', 7000);
- }
- event.currentTarget.reset();
- loadSellerPermissions();
- toast('Access Saved', `${SELLER_ACCESS_CATEGORIES[category].label} access is ready for ${email}.`, 'success');
+ if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('Check the email', 'Enter the email address your team member signs in with.', 'warn'); return; }
+ if (email === String(currentUser.email || '').toLowerCase()) { toast("That's your own email", "Add the email address of the person you're giving access to.", 'warn'); return; }
+ const { error } = await db.from('seller_staff_permissions').upsert({
+  seller_id: currentUser.id,
+  email,
+  category,
+  note: note || null,
+  status: 'active'
+ }, { onConflict: 'seller_id,email' });
+ if (error) { toast('Could not add team member', error.message || 'Please try again.', 'error'); return; }
+ form.reset();
+ await loadSellerPermissions();
+ toast('Team member added', `${email} can work on your store as ${SELLER_ACCESS_CATEGORIES[category].label}. They sign in to BUYSELL with Google using this email, then open Seller Dashboard.`, 'success', 9000);
 }
 
-async function revokeSellerPermission(idOrEmail) {
+async function changeSellerPermissionRole(id, role) {
  if (!currentUser) return;
- const rows = getLocalSellerPermissions().map(row => (String(row.id) === String(idOrEmail) || String(row.email) === String(idOrEmail)) ? { ...row, status: 'revoked' } : row);
- saveLocalSellerPermissions(rows);
- renderSellerPermissions(rows);
- try {
-  const row = rows.find(item => String(item.id) === String(idOrEmail) || String(item.email) === String(idOrEmail));
-  if (row?.id && !String(row.id).startsWith('perm-')) await db.from('seller_staff_permissions').update({ status: 'revoked' }).eq('id', row.id);
-  else if (row?.email) await db.from('seller_staff_permissions').update({ status: 'revoked' }).eq('seller_id', currentUser.id).eq('email', row.email);
- } catch (error) {
-  console.info('Permission revoke kept locally:', error.message || error);
- }
- toast('Access Revoked', 'This team member no longer has active seller access.', 'info');
+ const category = normalizeTeamRole(role);
+ const row = sellerTeamRows.find(item => item.id === id);
+ const { error } = await db.from('seller_staff_permissions').update({ category }).eq('id', id).eq('seller_id', currentUser.id);
+ if (error) { toast('Could not change role', error.message || 'Please try again.', 'error'); loadSellerPermissions(); return; }
+ if (row) row.category = category;
+ toast('Role changed', `${row?.email || 'Your team member'} is now ${SELLER_ACCESS_CATEGORIES[category].label}.`, 'success');
+}
+
+async function revokeSellerPermission(id) {
+ if (!currentUser) return;
+ const row = sellerTeamRows.find(item => item.id === id);
+ if (!confirm(`Remove ${row?.email || 'this person'} from your team? They lose access straight away.`)) return;
+ const { error } = await db.from('seller_staff_permissions').update({ status: 'revoked' }).eq('id', id).eq('seller_id', currentUser.id);
+ if (error) { toast('Could not remove', error.message || 'Please try again.', 'error'); return; }
+ sellerTeamRows = sellerTeamRows.filter(item => item.id !== id);
+ renderSellerPermissions();
+ toast('Removed from your team', `${row?.email || 'They'} can no longer work on your store.`, 'info');
 }
 
 function setupProductCategoryField() {
@@ -5189,8 +5287,9 @@ function isSellerAccount(profile = currentUser?.profile || {}) {
 async function getSellerAvailableRevenue(sellerId = currentUser?.id) {
  if (!sellerId) return { available: 0, revenue: 0, pending: 0, paid: 0, walletDebits: 0 };
 
- const sellerLedger = sellerId === currentUser?.id
-  ? callEdge('bogo-promo', { action: 'seller_payout_summary' }).catch(() => null)
+ // The store's own payout ledger, for its owner or a full admin on its team.
+ const sellerLedger = sellerId === sellerStoreId()
+  ? callEdge('bogo-promo', { action: 'seller_payout_summary', ...(isTeamStore() ? { store_id: sellerId } : {}) }).catch(() => null)
   : Promise.resolve(null);
  const [{ data: orders }, { data: withdrawals }, { data: walletTransactions }, ledgerResult] = await Promise.all([
  db.from('orders').select('total_amount,status').eq('seller_id', sellerId),
@@ -6222,21 +6321,24 @@ async function loadBuyerOrders() {
 // ====================================================
 async function loadSellerStats() {
  if (!currentUser) return;
- const { data: prods } = await db.from('products').select('id,status').eq('seller_id', currentUser.id);
- const { data: orders } = await db.from('orders').select('total_amount,status,created_at').eq('seller_id', currentUser.id);
+ const storeId = sellerStoreId();
+ // Product managers do not see the store's orders or money.
+ const seesOrders = canAccessSellerSection('orders');
+ const { data: prods } = await db.from('products').select('id,status').eq('seller_id', storeId);
+ const { data: orders } = seesOrders ? await db.from('orders').select('total_amount,status,created_at').eq('seller_id', storeId) : { data: [] };
  const { data: revs } = await db.from('reviews').select('rating').in('product_id', (prods||[]).map(p=>p.id));
  const active = (prods||[]).filter(p=>p.status==='active').length;
  const revenue = (orders||[]).filter(o=>o.status!=='cancelled').reduce((s,o)=>s+o.total_amount,0);
  const avgR = (revs||[]).length ? ((revs.reduce((s,r)=>s+r.rating,0)/revs.length).toFixed(1)) : ' - ';
  document.getElementById('st-products').textContent = active;
- document.getElementById('st-revenue').textContent = fmtN(revenue);
- document.getElementById('st-orders').textContent = (orders||[]).length;
+ document.getElementById('st-revenue').textContent = seesOrders ? fmtN(revenue) : '—';
+ document.getElementById('st-orders').textContent = seesOrders ? (orders||[]).length : '—';
  document.getElementById('st-rating').textContent = avgR;
  document.getElementById('st-trial').textContent = 'Free';
  document.getElementById('st-days').textContent = 'Seller Access';
  // Withdrawal data
- try {
- const wallet = await getSellerAvailableRevenue(currentUser.id);
+ if (canAccessSellerSection('withdrawals')) try {
+ const wallet = await getSellerAvailableRevenue(storeId);
  document.getElementById('wd-available').textContent = fmtN(wallet.available);
  document.getElementById('wd-total').textContent = fmtN(wallet.paid);
  if (currentUser.profile) currentUser.profile.wallet_balance = wallet.available;
@@ -6253,11 +6355,15 @@ async function loadSellerStats() {
 
 async function renderChart() {
  if (!currentUser) return;
+ // The sales chart is made from orders, which product managers do not see.
+ const seesOrders = canAccessSellerSection('orders');
+ document.getElementById('chart-period')?.closest('.chart-card')?.classList.toggle('hidden', !seesOrders);
+ if (!seesOrders) return;
  const days = parseInt(document.getElementById('chart-period').value);
  const since = new Date(); since.setDate(since.getDate() - days);
  const { data: orders } = await db.from('orders')
  .select('total_amount,created_at,status')
- .eq('seller_id', currentUser.id)
+ .eq('seller_id', sellerStoreId())
  .gte('created_at', since.toISOString())
  .neq('status','cancelled');
 
@@ -6550,7 +6656,7 @@ async function loadSellerProds() {
  const list = document.getElementById('sp-list');
  const empty = document.getElementById('sp-empty');
  // After a pause or delete, keep the seller's list (and place in it) on screen while it refreshes.
- const refreshing = sellerProductRowsOwner === currentUser.id && sellerProductRows.length > 0;
+ const refreshing = sellerProductRowsOwner === sellerStoreId() && sellerProductRows.length > 0;
  if (!refreshing) {
   skeleton?.classList.remove('hidden');
   list?.classList.add('hidden');
@@ -6573,7 +6679,7 @@ async function loadSellerProds() {
     const fallback = await runSelectWithColumnFallback(
      'products',
      SELLER_PRODUCT_COLUMNS,
-     q => q.eq('seller_id', currentUser.id).order('created_at', { ascending: false }).limit(DASHBOARD_PAGE_SIZE),
+     q => q.eq('seller_id', sellerStoreId()).order('created_at', { ascending: false }).limit(DASHBOARD_PAGE_SIZE),
     );
     data = fallback.data || [];
     console.warn('manage-product list endpoint is not deployed yet; using the seller product fallback.');
@@ -6587,7 +6693,7 @@ async function loadSellerProds() {
  skeleton?.classList.add('hidden');
  if (error) { toast('Products unavailable', error.message, 'error'); return; }
  sellerProductRows = data || [];
- sellerProductRowsOwner = currentUser.id;
+ sellerProductRowsOwner = sellerStoreId();
  renderSellerProds();
  window.BuysellSearch?.prepareSearch(sellerProductRows);
 }
@@ -6704,7 +6810,7 @@ if (nameVal.length > 300) {
   const createdProductId = createResult?.product?.id || createResult?.product_id || createResult?.id;
   productNotificationRecord = createdProductId
   ? await fetchProductForNotification(createdProductId)
-  : { ...prodData, status: 'active', seller_id: currentUser.id };
+  : { ...prodData, status: 'active', seller_id: sellerStoreId() };
   toast('Product Published! ', 'Your product is now live', 'success');
   }
    notifyProductIfActive(productNotificationRecord, oldProductNotificationRecord);
@@ -6907,7 +7013,7 @@ async function loadSellerOrders() {
  document.getElementById('orders-list')?.classList.add('hidden');
  document.getElementById('orders-empty')?.classList.add('hidden');
  const { data: orders } = await runSelectWithColumnFallback('orders', ORDER_LIST_COLUMNS, q => q
- .eq('seller_id', currentUser.id)
+ .eq('seller_id', sellerStoreId())
  .order('created_at',{ascending:false})
  .limit(DASHBOARD_PAGE_SIZE));
  document.getElementById('orders-skeleton').classList.add('hidden');
@@ -7053,7 +7159,7 @@ async function submitTrackingUpdate() {
 // ====================================================
 async function loadSellerReviews() {
  if (!currentUser) return;
- const { data: prods } = await db.from('products').select('id').eq('seller_id', currentUser.id);
+ const { data: prods } = await db.from('products').select('id').eq('seller_id', sellerStoreId());
  let { data: revs, error } = await db.from('reviews').select('*,profiles!reviewer_id(name)').in('product_id', (prods||[]).map(p=>p.id)).order('created_at',{ascending:false});
  if (error) {
  ({ data: revs } = await db.from('reviews').select('*,profiles!buyer_id(name)').in('product_id', (prods||[]).map(p=>p.id)).order('created_at',{ascending:false}));
@@ -7154,8 +7260,19 @@ async function submitCommissionReceipt() {
 // ====================================================
 async function loadSettings() {
  if (!currentUser?.profile) return;
- const p = currentUser.profile;
- 
+ const team = isTeamStore();
+ let p = currentUser.profile;
+ if (team) {
+  // A team member edits the store's details; update-profile returns only those.
+  try {
+   p = (await callEdge('update-profile', { action: 'get', store_id: sellerStoreId() }))?.profile || {};
+  } catch (error) {
+   toast('Store details unavailable', error.message || 'Please try again.', 'error');
+   return;
+  }
+ }
+ setSettingsForTeam(team);
+
  // Pre-fill existing basic data
  document.getElementById('s-store-name').value = p.store_name || '';
  document.getElementById('s-store-cat').value = p.store_category || p.category || 'Electronics';
@@ -7194,7 +7311,7 @@ async function loadSettings() {
  </div>
  <div class="form-group flex items-center justify-center">
  <div id="brand-logo-preview-wrap" style="width: 90px; height: 90px; border-radius: 14px; border: 2px dashed var(--border); overflow: hidden; background: var(--cream); display: flex; align-items: center; justify-content: center;">
- ${p.logo_url ? `<img src="${p.logo_url}" style="width:100%; height:100%; object-fit:cover;">` : `<i class="fa-solid fa-store" style="font-size: 1.8rem; color: var(--border2)"></i>`}
+ ${storeLogoPreview(p.logo_url)}
  </div>
  </div>
  </div>
@@ -7204,14 +7321,14 @@ async function loadSettings() {
  <label class="form-label">Instagram Handle</label>
  <div class="input-group">
  <span class="input-prefix"><i class="fa-brands fa-instagram"></i></span>
- <input type="text" id="s-instagram" class="form-input" placeholder="username" value="${p.instagram_handle || ''}">
+ <input type="text" id="s-instagram" class="form-input" placeholder="username" value="${escAttr(p.instagram_handle || '')}">
  </div>
  </div>
  <div class="form-group">
  <label class="form-label">Physical Store Address</label>
  <div class="input-group">
  <span class="input-prefix"><i class="fa-solid fa-location-dot"></i></span>
- <input type="text" id="s-address" class="form-input" placeholder="e.g. Computer Village, Ikeja" value="${p.store_address || ''}">
+ <input type="text" id="s-address" class="form-input" placeholder="e.g. Computer Village, Ikeja" value="${escAttr(p.store_address || '')}">
  </div>
  </div>
  </div>
@@ -7224,10 +7341,29 @@ async function loadSettings() {
  // If the node elements exist already, just populate fresh variables
  document.getElementById('s-instagram').value = p.instagram_handle || '';
  document.getElementById('s-address').value = p.store_address || '';
- if (p.logo_url) {
- document.getElementById('brand-logo-preview-wrap').innerHTML = `<img src="${p.logo_url}" style="width:100%; height:100%; object-fit:cover;">`;
+ document.getElementById('brand-logo-preview-wrap').innerHTML = storeLogoPreview(p.logo_url);
  }
- }
+}
+
+function storeLogoPreview(url) {
+ return url
+  ? `<img src="${escAttr(url)}" style="width:100%; height:100%; object-fit:cover;" alt="">`
+  : '<i class="fa-solid fa-store" style="font-size: 1.8rem; color: var(--border2)"></i>';
+}
+
+// Team members edit the store's details only: the bank, payment and
+// notification fields stay with the owner.
+function setSettingsForTeam(team) {
+ const payment = document.getElementById('s-bank-name')?.closest('.form-grid')?.parentElement;
+ const notification = document.getElementById('s-notif-email')?.closest('.form-group');
+ payment?.classList.toggle('hidden', team);
+ notification?.classList.toggle('hidden', team);
+ ['s-bank-name', 's-account-num', 's-account-name', 's-notif-email'].forEach(id => {
+  const input = document.getElementById(id);
+  if (input) input.disabled = team;
+ });
+ const subtitle = document.querySelector('#ds-settings .dash-page-sub');
+ if (subtitle) subtitle.textContent = team ? "Edit the store's details. Bank and payment details stay with the owner." : 'Manage your store info & payment details';
 }
 
 // Live local form file picker reader mapping callback
@@ -7274,7 +7410,10 @@ async function saveSettings(e) {
   instagram_handle: document.getElementById('s-instagram')?.value.trim() || '',
   store_address: document.getElementById('s-address')?.value.trim() || ''
  };
- 
+ // A team member saves the store's details only, to the store they work on.
+ const team = isTeamStore();
+ if (team) ['paystack_key', 'notif_email', 'bank_name', 'account_number', 'account_name'].forEach(key => delete updates[key]);
+
  if (!updates.store_name || !updates.whatsapp) {
  toast('Missing details', 'Store Name and WhatsApp contact are required.', 'warn');
  return;
@@ -7298,8 +7437,14 @@ async function saveSettings(e) {
 
 // 2. Clean payload metrics and transmit straight to the profile edge framework
  const cleanUpdates = purgePayloadNulls(updates);
- const updateResult = await callEdge('update-profile', cleanUpdates);
- 
+ const updateResult = await callEdge('update-profile', team ? { ...cleanUpdates, store_id: sellerStoreId() } : cleanUpdates);
+
+ if (team) {
+  sellerStoreContext.name = updateResult?.profile?.store_name || sellerStoreContext.name;
+  renderTeamStoreBanner();
+  toast('Store Details Saved', `${sellerStoreContext.name} is updated.`, 'success');
+  return;
+ }
  // Synced properties updates locally
  if (currentUser.profile) Object.assign(currentUser.profile, updateResult?.profile || cleanUpdates);
  toast('Profile Brand Saved! ', 'Your store profile parameters are updated.', 'success');
@@ -7318,11 +7463,27 @@ async function saveSettings(e) {
 async function loadWithdrawalData() {
  if (!currentUser) return;
  
+ // A full admin on the team sees the store's earnings and payouts, but not
+ // the owner's bank details, and cannot request a payout.
+ const team = isTeamStore();
+ const requestCard = document.getElementById('wd-amount')?.closest('.card');
+ requestCard?.classList.toggle('hidden', team);
+ let teamNote = document.getElementById('wd-team-note');
+ if (team && !teamNote && requestCard) {
+  teamNote = document.createElement('div');
+  teamNote.id = 'wd-team-note';
+  teamNote.className = 'card card-pad mb-4';
+  teamNote.style.maxWidth = '500px';
+  teamNote.innerHTML = '<h3 class="mb-1">Payouts</h3><p class="text-sm color-text3">Only the store owner can request payouts. Payouts go to the bank account the owner saved.</p>';
+  requestCard.insertAdjacentElement('afterend', teamNote);
+ }
+ teamNote?.classList.toggle('hidden', !team);
+
  // Simultaneously pull profile configs, raw order vectors, standard bank payouts, and internal wallet purchases
  const [{ data: profile }, { data: withdrawals }, wallet] = await Promise.all([
- fetchOwnPrivateProfile(currentUser.id).then(data => ({ data })),
- db.from('withdrawals').select('amount,status,created_at,id').eq('seller_id', currentUser.id).order('created_at',{ascending:false}),
- getSellerAvailableRevenue(currentUser.id)
+ team ? Promise.resolve({ data: null }) : fetchOwnPrivateProfile(currentUser.id).then(data => ({ data })),
+ db.from('withdrawals').select('amount,status,created_at,id').eq('seller_id', sellerStoreId()).order('created_at',{ascending:false}),
+ getSellerAvailableRevenue(sellerStoreId())
  ]);
 
  if (profile) {
@@ -7350,6 +7511,7 @@ async function loadWithdrawalData() {
 }
 
 async function requestWithdrawal() {
+ if (isTeamStore()) { toast('Owner only', 'Only the store owner can request payouts.', 'warn'); return; }
  const amount = parseFloat(document.getElementById('wd-amount').value);
  if (!amount || amount < 5000) { toast('Minimum withdrawal is \u20A65,000','','warn'); return; }
  try {
@@ -7737,7 +7899,6 @@ const source1688Catalog = [
 ];
 const DS_1688_CART_KEY = 'bs_1688_sourcing_cart';
 const DS_1688_BULK_QUEUE_KEY = 'bs_1688_bulk_queue';
-const SELLER_PERMISSIONS_KEY = 'bs_seller_permissions';
 let active1688Category = 'all';
 let extracted1688Product = null;
 let source1688Cart = readStoredJson(DS_1688_CART_KEY, []);
@@ -8977,7 +9138,7 @@ async function loadWithdrawalHistory() {
  if (!currentUser) return;
  const { data: wds } = await db.from('withdrawals')
  .select('id,amount,status,created_at')
- .eq('seller_id', currentUser.id)
+ .eq('seller_id', sellerStoreId())
  .order('created_at',{ascending:false})
  .limit(DASHBOARD_PAGE_SIZE);
  const tbody = document.getElementById('wd-history');
@@ -13884,11 +14045,11 @@ async function __legacyDuplicate_loadFlashSaleProducts_9673() {
  try {
  const { data: products, error } = await db.from('products')
  .select('id, name, price')
- .eq('seller_id', currentUser.id)
+ .eq('seller_id', sellerStoreId())
  .eq('status', 'active');
- 
+
  if (error) throw error;
- 
+
  // Check if products exist and is an array
  if (!products || products.length === 0) {
  selectEl.innerHTML = '<option value="">No active products found</option>';
@@ -13930,16 +14091,21 @@ async function createFlashSale() {
  // 1. Calculate end time
  const flashEnd = new Date(Date.now() + hours * 3600000).toISOString();
  
- // 2. Update the database
+ // 2. Update the database. Team members go through the server, which
+ // checks their role; owners update their own product directly.
+ if (isTeamStore()) {
+ await callEdge('manage-product', { action: 'flash_sale', product_id: productId, data: { flash_price: flashPrice, hours } });
+ } else {
  const { error } = await db.from('products')
- .update({ 
- flash_price: flashPrice, 
- flash_end: flashEnd 
+ .update({
+ flash_price: flashPrice,
+ flash_end: flashEnd
  })
  .eq('id', productId)
  .eq('seller_id', currentUser.id);
 
  if (error) throw error;
+ }
 
  toast('Flash Sale Live! Flash', `Sale ends in ${hours} hours`, 'success');
  
@@ -14053,7 +14219,7 @@ async function loadFlashSaleProducts() {
  try {
  const { data: products, error } = await db.from('products')
  .select('id, name, price')
- .eq('seller_id', currentUser.id)
+ .eq('seller_id', sellerStoreId())
  .eq('status', 'active'); // Only load active products
  
  if (error) throw error;

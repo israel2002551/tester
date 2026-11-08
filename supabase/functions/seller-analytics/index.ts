@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { requireStoreRole, storeAccess } from "../_shared/storeAccess.ts"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,8 +40,12 @@ async function getAuthedClient(req: Request) {
   const admin = createClient(supabaseUrl, serviceRoleKey)
   const { data: { user }, error } = await admin.auth.getUser(token)
   if (error || !user) throw new Error("Unauthorized")
+  // Acts as the caller, so their role in another store is worked out for them.
+  const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") ?? "", {
+    global: { headers: { Authorization: authHeader } },
+  })
 
-  return { admin, user }
+  return { admin, user, userClient }
 }
 
 async function ensureSellerProfile(admin: any, userId: string) {
@@ -68,9 +73,12 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders })
 
   try {
-    const { admin, user } = await getAuthedClient(req)
-    await ensureSellerProfile(admin, user.id)
+    const { admin, user, userClient } = await getAuthedClient(req)
     const body = await readJson(req)
+    const access = await storeAccess(userClient, user.id, body.store_id)
+    requireStoreRole(access, ["product_manager", "store_manager", "full_admin"], "view analytics")
+    const storeId = access.storeId
+    await ensureSellerProfile(admin, storeId)
     const days = Math.min(365, Math.max(7, Number.parseInt(String(body.days || 30), 10) || 30))
     const since = new Date()
     since.setDate(since.getDate() - days)
@@ -78,7 +86,7 @@ serve(async (req) => {
     const { data: products, error: productError } = await admin
       .from("products")
       .select("id,name,price,status,created_at")
-      .eq("seller_id", user.id)
+      .eq("seller_id", storeId)
     if (productError) throw productError
 
     const productIds = (products || []).map((product: any) => product.id)
@@ -86,7 +94,7 @@ serve(async (req) => {
     const { data: events, error: eventError } = await admin
       .from("seller_analytics_events")
       .select("event_type,product_id,order_id,quantity,amount,session_id,created_at")
-      .eq("seller_id", user.id)
+      .eq("seller_id", storeId)
       .gte("created_at", since.toISOString())
       .order("created_at", { ascending: true })
     if (eventError) throw eventError
@@ -94,7 +102,7 @@ serve(async (req) => {
     const { data: orders, error: orderError } = await admin
       .from("orders")
       .select("id,total_amount,status,created_at,items")
-      .eq("seller_id", user.id)
+      .eq("seller_id", storeId)
       .gte("created_at", since.toISOString())
     if (orderError) throw orderError
 

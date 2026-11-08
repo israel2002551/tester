@@ -1409,3 +1409,29 @@ html #bogo-gift-modal .gp-btn--dark:hover { background: var(--xp-forest-2); }
   html .prod-card .prod-wish { transition: none; }
   html .prod-card .prod-wish:hover { transform: none; }
 }
+
+/* Team Access: the owner's team list, and the banner a team member sees on the
+   seller dashboard while working on someone else's store. */
+html .seller-permission-row + .seller-permission-row { margin-top: 8px; }
+html .seller-permission-row > div:first-child { flex: 1 1 220px; min-width: 0; }
+html .seller-permission-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+html .seller-permission-actions .form-select { width: auto; min-width: 170px; padding-top: 7px; padding-bottom: 7px; font-size: .82rem; }
+
+html .team-store-banner {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin: 0 0 18px; padding: 12px 16px; border-radius: 14px;
+  background: #ecfdf3; border: 1px solid #bbf7d0; color: #14532d;
+}
+html .team-store-banner > i { font-size: 1.1rem; color: var(--green); }
+html .team-store-banner p { flex: 1 1 260px; margin: 0; font-size: .86rem; line-height: 1.45; }
+html .team-store-switch { display: flex; align-items: center; gap: 8px; font-size: .8rem; font-weight: 600; max-width: 100%; }
+html .team-store-switch select {
+  max-width: 100%; padding: 7px 10px; border-radius: 10px;
+  border: 1px solid #86efac; background: #fff; color: inherit; font-size: .82rem;
+}
+@media (max-width: 640px) {
+  html .team-store-switch { flex: 1 1 100%; }
+  html .team-store-switch select { flex: 1; min-width: 0; }
+  html .seller-permission-actions { width: 100%; }
+  html .seller-permission-actions .form-select { flex: 1; min-width: 0; }
+}

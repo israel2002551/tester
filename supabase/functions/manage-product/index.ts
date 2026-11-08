@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { requireStoreRole, storeAccess } from "../_shared/storeAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -138,27 +139,31 @@ async function getAuthedUser(req: Request, supabaseUrl: string, anonKey: string)
   });
   const { data, error } = await userClient.auth.getUser();
   if (error || !data.user) throw new Error("Not authenticated");
-  return data.user;
+  return { user: data.user, userClient };
 }
 
-async function ensureSellerAccess(admin: ReturnType<typeof createClient>, userId: string) {
+/** The store must belong to an active seller. A team member's own profile is left alone. */
+async function ensureSellerAccess(admin: ReturnType<typeof createClient>, storeId: string, isOwner: boolean) {
   const { data: profile, error } = await admin
     .from("profiles")
     .select("id,role,accounts,is_suspended")
-    .eq("id", userId)
+    .eq("id", storeId)
     .maybeSingle();
 
   if (error) throw error;
   const role = String(profile?.role || "");
   const accounts = String(profile?.accounts || "");
   const hasAccess = SELLER_ROLES.has(role) || SELLER_ROLES.has(accounts);
-  if (!hasAccess) throw new Error("Seller account required. Please sign in with a seller account.");
+  if (!hasAccess) {
+    throw new Error(isOwner ? "Seller account required. Please sign in with a seller account." : "This store is no longer a seller account.");
+  }
   if (profile?.is_suspended === true) throw new Error("Seller account suspended. Please contact support.");
+  if (!isOwner) return;
 
   await admin.from("profiles").update({
     commission_paid: true,
     trial_end: null,
-  }).eq("id", userId);
+  }).eq("id", storeId);
 }
 
 /**
@@ -185,6 +190,7 @@ async function createProducts(
   admin: ReturnType<typeof createClient>,
   rawProducts: Record<string, unknown>[],
   sellerId: string,
+  recordedBy: string,
 ) {
   if (!rawProducts.length) throw new Error("At least one product is required.");
   if (rawProducts.length > MAX_BULK_PRODUCTS) {
@@ -210,7 +216,7 @@ async function createProducts(
       product_id: String(product.id),
       seller_price: rows[index].sellerPrice,
       source: "seller_submission",
-      recorded_by: sellerId,
+      recorded_by: recordedBy,
     })),
     { onConflict: "product_id" },
   );
@@ -323,25 +329,30 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     if (!supabaseUrl || !anonKey || !serviceRoleKey) throw new Error("Supabase environment is not configured.");
 
-    const user = await getAuthedUser(req, supabaseUrl, anonKey);
+    const { user, userClient } = await getAuthedUser(req, supabaseUrl, anonKey);
     const admin = createClient(supabaseUrl, serviceRoleKey);
-    const { action, product_id, data = {}, products = [] } = await req.json();
-    await ensureSellerAccess(admin, user.id);
+    const { action, product_id, data = {}, products = [], store_id } = await req.json();
+    // Team members send the store they work on; everyone else works on their own.
+    const access = await storeAccess(userClient, user.id, store_id);
+    if (action === "flash_sale") requireStoreRole(access, ["store_manager", "full_admin"], "run flash sales");
+    else requireStoreRole(access, ["product_manager", "full_admin"], "manage products");
+    await ensureSellerAccess(admin, access.storeId, access.isOwner);
+    const storeId = access.storeId;
 
     if (action === "create") {
-      const [product] = await createProducts(admin, [data], user.id);
+      const [product] = await createProducts(admin, [data], storeId, user.id);
       return json({ product, product_id: product.id });
     }
 
     if (action === "bulk_create") {
       if (!Array.isArray(products)) throw new Error("Products must be an array.");
       const inputRows = products.map((product) => product && typeof product === "object" ? product as Record<string, unknown> : {});
-      const created = await createProducts(admin, inputRows, user.id);
+      const created = await createProducts(admin, inputRows, storeId, user.id);
       return json({ products: created, product_ids: created.map((product: Record<string, unknown>) => product.id), count: created.length });
     }
 
     if (action === "list") {
-      const sellerProducts = await productsForSeller(admin, user.id);
+      const sellerProducts = await productsForSeller(admin, storeId);
       return json({ products: sellerProducts, count: sellerProducts.length });
     }
 
@@ -353,15 +364,28 @@ serve(async (req) => {
       .maybeSingle();
     if (lookupError) throw lookupError;
     if (!product) throw new Error("Product not found.");
-    if (product.seller_id !== user.id) throw new Error("You can only manage your own products.");
+    if (product.seller_id !== storeId) throw new Error("You can only manage your own products.");
 
     if (action === "get") {
-      const fullProduct = await productForSeller(admin, String(product_id), user.id);
+      const fullProduct = await productForSeller(admin, String(product_id), storeId);
       return json({ product: fullProduct, product_id: fullProduct.id });
     }
 
+    if (action === "flash_sale") {
+      const flashPrice = wholeNaira(data.flash_price);
+      const hours = Math.trunc(cleanNumber(data.hours, 24));
+      if (flashPrice <= 0) throw new Error("Enter a flash sale price.");
+      if (hours < 1 || hours > 720) throw new Error("A flash sale can run for 1 to 720 hours.");
+      const { data: updated, error } = await admin.from("products").update({
+        flash_price: flashPrice,
+        flash_end: new Date(Date.now() + hours * 3600000).toISOString(),
+      }).eq("id", product_id).select("*").single();
+      if (error) throw error;
+      return json({ product: updated, product_id: updated.id });
+    }
+
     if (action === "update") {
-      const payload = buildProductPayload(data, user.id, false);
+      const payload = buildProductPayload(data, storeId, false);
       const { data: updated, error } = await admin.from("products").update(payload).eq("id", product_id).select("*").single();
       if (error) throw error;
       if (data.price !== undefined) {

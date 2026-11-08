@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { requireStoreRole, storeAccess } from "../_shared/storeAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,6 +23,18 @@ const ALLOWED_FIELDS = new Set([
   "store_address",
   "logo_url",
 ]);
+
+// What a team member may see and change in the store's profile. Bank, payment
+// and notification details stay with the owner.
+const STORE_DETAIL_FIELDS = [
+  "store_name",
+  "store_category",
+  "store_description",
+  "whatsapp",
+  "instagram_handle",
+  "store_address",
+  "logo_url",
+];
 
 function json(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -78,10 +91,34 @@ serve(async (req) => {
     if (authError || !authData.user) return json({ error: "Not authenticated" }, 401);
 
     const body = await req.json().catch(() => ({}));
+    const admin = createClient(supabaseUrl, serviceRoleKey);
+
+    // A team member editing the store they work on.
+    const access = await storeAccess(userClient, authData.user.id, body.store_id);
+    if (!access.isOwner) {
+      requireStoreRole(access, ["store_manager", "full_admin"], "edit the store details");
+      if (body.action === "get") {
+        const { data: store, error } = await admin.from("profiles").select(STORE_DETAIL_FIELDS.join(",")).eq("id", access.storeId).single();
+        if (error) throw error;
+        return json({ ok: true, profile: store });
+      }
+      const storePayload = Object.fromEntries(
+        Object.entries(buildUpdatePayload(body)).filter(([key]) => STORE_DETAIL_FIELDS.includes(key)),
+      );
+      if (!Object.keys(storePayload).length) return json({ error: "No store details supplied." }, 400);
+      const { data: store, error } = await admin
+        .from("profiles")
+        .update(storePayload)
+        .eq("id", access.storeId)
+        .select(STORE_DETAIL_FIELDS.join(","))
+        .single();
+      if (error) throw error;
+      return json({ ok: true, profile: store });
+    }
+
     const payload = buildUpdatePayload(body);
     if (!Object.keys(payload).length) return json({ error: "No valid profile fields supplied." }, 400);
 
-    const admin = createClient(supabaseUrl, serviceRoleKey);
     const { data: profile, error } = await admin
       .from("profiles")
       .update(payload)

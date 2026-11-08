@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { requireStoreRole, storeAccess } from "../_shared/storeAccess.ts";
 
 /**
  * This pricing module deliberately stays in this function's source file.
@@ -1176,7 +1177,15 @@ serve(async (req) => {
     if (action === "create_flutterwave_pending") {
       throw new RequestError("Online payment is unavailable. Please pay by bank transfer and submit your receipt for verification.");
     }
-    if (action === "seller_payout_summary") return await sellerPayoutSummary(admin, user);
+    if (action === "seller_payout_summary") {
+      // A full admin on the store's team sees the store's figures.
+      const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") || "", {
+        global: { headers: { Authorization: req.headers.get("authorization") || "" } },
+      });
+      const access = await storeAccess(userClient, user.id, body.store_id);
+      requireStoreRole(access, ["full_admin"], "see the store's earnings");
+      return await sellerPayoutSummary(admin, { id: access.storeId });
+    }
 
     if (action === "admin_get_config") {
       await requireDashboardAdmin(admin, user);

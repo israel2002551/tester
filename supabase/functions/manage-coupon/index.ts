@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { requireStoreRole, storeAccess } from "../_shared/storeAccess.ts"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -33,8 +34,12 @@ async function getAuthedClient(req: Request) {
   const admin = createClient(supabaseUrl, serviceRoleKey)
   const { data: { user }, error } = await admin.auth.getUser(token)
   if (error || !user) throw new Error("Unauthorized")
+  // Acts as the caller, so their role in another store is worked out for them.
+  const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") ?? "", {
+    global: { headers: { Authorization: authHeader } },
+  })
 
-  return { admin, user }
+  return { admin, user, userClient }
 }
 
 function handleOptions(req: Request) {
@@ -80,21 +85,21 @@ function friendlyCouponError(error: any) {
   return error
 }
 
-async function ensureSellerProfile(admin: any, userId: string) {
+const SELLER_ROLES = new Set(["seller", "admin", "both", "service_provider"])
+
+// Selling is free, so a seller needs no paid-up date (manage-product clears
+// trial_end); only a suspended account is stopped. As in manage-product.
+async function ensureSellerProfile(admin: any, storeId: string) {
   const { data, error } = await admin
     .from("profiles")
-    .select("role,trial_end,is_suspended")
-    .eq("id", userId)
+    .select("role,accounts,is_suspended")
+    .eq("id", storeId)
     .single()
   if (error) throw error
-  if (data?.role !== "seller" && data?.role !== "admin") {
+  if (!SELLER_ROLES.has(String(data?.role || "")) && !SELLER_ROLES.has(String(data?.accounts || ""))) {
     throw new Error("Forbidden: Seller access required")
   }
-  if (data?.role === "admin") return
-  const activeUntil = data?.trial_end ? new Date(data.trial_end) : null
-  if (data?.is_suspended || !activeUntil || activeUntil <= new Date()) {
-    throw new Error("Seller subscription expired. Please pay your commission to continue using seller tools.")
-  }
+  if (data?.is_suspended) throw new Error("Seller account suspended. Please contact support.")
 }
 
 serve(async (req) => {
@@ -102,16 +107,19 @@ serve(async (req) => {
   if (options) return options
 
   try {
-    const { admin, user } = await getAuthedClient(req)
-    await ensureSellerProfile(admin, user.id)
+    const { admin, user, userClient } = await getAuthedClient(req)
     const body = await readJson(req)
+    const access = await storeAccess(userClient, user.id, body.store_id)
+    requireStoreRole(access, ["store_manager", "full_admin"], "manage coupons")
+    const storeId = access.storeId
+    await ensureSellerProfile(admin, storeId)
     const action = body.action
 
     if (action === "list") {
       const { data, error } = await admin
         .from("coupons")
         .select("id,code,discount_type,discount_value,min_order,max_uses,used_count,expires_at,is_active,created_at")
-        .eq("seller_id", user.id)
+        .eq("seller_id", storeId)
         .order("created_at", { ascending: false })
       if (error) throw error
       return json({ success: true, coupons: data || [] })
@@ -135,7 +143,7 @@ serve(async (req) => {
       const { data, error } = await admin
         .from("coupons")
         .insert({
-          seller_id: user.id,
+          seller_id: storeId,
           code,
           discount_type: discountType,
           discount_value: discountValue,
@@ -159,7 +167,7 @@ serve(async (req) => {
         .from("coupons")
         .delete({ count: "exact" })
         .eq("id", couponId)
-        .eq("seller_id", user.id)
+        .eq("seller_id", storeId)
       if (error) throw error
       if (count === 0) throw new Error("Coupon not found or you do not have permission to delete it")
 
