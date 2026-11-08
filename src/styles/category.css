@@ -104,7 +104,7 @@ html body.category-page .cx-live-dot {
 html body.category-page .cx-hero h1 {
   display: flex; align-items: center; gap: 16px;
   margin: 16px 0 12px; color: #fff;
-  font-family: 'Syne', sans-serif; font-weight: 800; letter-spacing: -0.035em;
+  font-family: 'DM Sans', sans-serif; font-weight: 800; letter-spacing: -0.025em;
   font-size: clamp(2.2rem, 5vw, 4.2rem); line-height: 1;
 }
 html body.category-page .cx-hero-icon {
@@ -320,7 +320,7 @@ html body.category-page .cx .category-empty > i {
   width: 64px; height: 64px; display: grid; place-items: center; border-radius: 20px;
   background: rgba(244, 180, 0, 0.16); color: #a06a00; font-size: 1.5rem;
 }
-html body.category-page .cx .category-empty h2 { font-family: 'Syne', sans-serif; font-weight: 800; color: var(--cx-text); }
+html body.category-page .cx .category-empty h2 { font-family: 'DM Sans', sans-serif; font-weight: 800; color: var(--cx-text); }
 html body.category-page .cx .category-empty p { max-width: 30rem; }
 html body.category-page .cx .category-empty .btn { border-radius: 999px; }
 

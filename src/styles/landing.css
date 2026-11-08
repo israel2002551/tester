@@ -21,7 +21,7 @@
 }
 @supports (overflow: clip) { .bh { overflow-x: clip; } }
 
-.bh h1, .bh h2, .bh h3 { font-family: 'Syne', sans-serif; letter-spacing: -0.02em; }
+.bh h1, .bh h2, .bh h3 { font-family: 'DM Sans', sans-serif; letter-spacing: -0.02em; }
 .bh a { color: inherit; }
 .bh-sr-only {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
@@ -108,7 +108,7 @@
 .bh-hero h1 {
   margin: 22px 0 22px;
   font-weight: 800; font-size: clamp(2.6rem, 6.4vw, 5.6rem); line-height: 0.98;
-  letter-spacing: -0.035em; color: #fff;
+  letter-spacing: -0.025em; color: #fff;
 }
 .bh-rotator { display: block; height: 1.08em; overflow: hidden; }
 .bh-rotator-word {
@@ -345,7 +345,7 @@
   background: rgba(255, 255, 255, 0.92); color: var(--bh-ink);
 }
 .bh-cat-copy { display: grid; gap: 4px; }
-.bh-cat-copy strong { font: 800 1.3rem/1.1 'Syne', sans-serif; }
+.bh-cat-copy strong { font: 800 1.3rem/1.1 'DM Sans', sans-serif; }
 .bh-cat--hero .bh-cat-copy strong { font-size: clamp(2rem, 3.4vw, 2.8rem); }
 .bh-cat-copy span { display: inline-flex; align-items: center; gap: 8px; font-size: 0.88rem; opacity: 0.88; }
 .bh-cat-copy span i { transition: transform 0.25s var(--bh-ease); }
@@ -382,7 +382,7 @@
 }
 .bh-step-num {
   position: absolute; top: 12px; right: 20px;
-  font: 800 3.4rem/1 'Syne', sans-serif; color: rgba(255, 255, 255, 0.07);
+  font: 800 3.4rem/1 'DM Sans', sans-serif; color: rgba(255, 255, 255, 0.07);
 }
 .bh-step-icon {
   position: relative; display: grid; place-items: center;
@@ -411,7 +411,7 @@
 .bh-split-card--source::after { background: linear-gradient(to top, rgba(38, 22, 4, 0.94), rgba(38, 22, 4, 0.3) 55%, rgba(38, 22, 4, 0.05)); }
 .bh-split-copy { display: grid; gap: 10px; padding: 34px; max-width: 30rem; }
 .bh-split-copy .bh-kicker { justify-self: start; }
-.bh-split-copy strong { font: 800 clamp(1.7rem, 2.8vw, 2.4rem)/1.05 'Syne', sans-serif; letter-spacing: -0.02em; }
+.bh-split-copy strong { font: 800 clamp(1.7rem, 2.8vw, 2.4rem)/1.05 'DM Sans', sans-serif; letter-spacing: -0.02em; }
 .bh-split-copy > span:not(.bh-kicker) { color: rgba(255, 255, 255, 0.8); line-height: 1.6; }
 .bh-split-copy em {
   display: inline-flex; align-items: center; gap: 8px; margin-top: 6px;

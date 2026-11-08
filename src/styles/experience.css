@@ -87,8 +87,8 @@ html #buyer-view .slide-overlay {
 }
 html #buyer-view .slide-content { max-width: 600px; }
 html #buyer-view .slide-content h2 {
-  font-family: 'Syne', sans-serif; font-weight: 800;
-  font-size: clamp(1.35rem, 2.9vw, 2.6rem); line-height: 1.02; letter-spacing: -0.03em;
+  font-family: 'DM Sans', sans-serif; font-weight: 800;
+  font-size: clamp(1.35rem, 2.9vw, 2.6rem); line-height: 1.02; letter-spacing: -0.02em;
   max-width: 16ch;
 }
 html #buyer-view .slide-content p { color: rgba(255, 255, 255, 0.8); font-size: 0.98rem; }
@@ -221,7 +221,7 @@ html #buyer-view .quick-filter-row { gap: 8px; margin-bottom: 22px; }
 /* Section heading and protections */
 html #buyer-view .section-header { margin-bottom: 14px; }
 html #buyer-view .section-title {
-  font-family: 'Syne', sans-serif; font-weight: 800; letter-spacing: -0.02em;
+  font-family: 'DM Sans', sans-serif; font-weight: 800; letter-spacing: -0.02em;
   font-size: clamp(1.4rem, 2.4vw, 2rem); color: var(--xp-text);
 }
 html #buyer-view .buyer-assurance-strip {
@@ -340,7 +340,7 @@ html #buyer-view .trust-section > .card {
     var(--xp-forest);
 }
 html #buyer-view .trust-section h2 {
-  color: #fff; font-family: 'Syne', sans-serif; font-weight: 800; letter-spacing: -0.02em;
+  color: #fff; font-family: 'DM Sans', sans-serif; font-weight: 800; letter-spacing: -0.02em;
   font-size: clamp(1.5rem, 2.6vw, 2.2rem);
 }
 html #buyer-view .trust-card {
@@ -362,7 +362,7 @@ html .cart-drawer__grand-total dd {
 html .modal-overlay { background: rgba(6, 18, 12, 0.55); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 html #cart-modal .modal-box,
 html #checkout-modal .modal-box { border-radius: 28px; border: 0; box-shadow: 0 40px 90px rgba(6, 18, 12, 0.35); }
-html #cart-modal .modal-box > h2 { font-family: 'Syne', sans-serif; font-weight: 800; letter-spacing: -0.02em; }
+html #cart-modal .modal-box > h2 { font-family: 'DM Sans', sans-serif; font-weight: 800; letter-spacing: -0.02em; }
 html #cart-modal .modal-close,
 html #checkout-modal .modal-close { border-radius: 50%; background: #f1f3ee; }
 html #cart-modal .cart-item {
@@ -435,7 +435,7 @@ html #seller-dashboard .dash-user-card { border-radius: 16px; background: rgba(2
 html #seller-dashboard .dash-main { padding: 34px clamp(16px, 3vw, 44px) 56px; }
 html #seller-dashboard .dash-section { max-width: 1240px; }
 html #seller-dashboard .dash-page-title {
-  font-family: 'Syne', sans-serif; font-weight: 800; letter-spacing: -0.03em;
+  font-family: 'DM Sans', sans-serif; font-weight: 800; letter-spacing: -0.03em;
   font-size: clamp(1.7rem, 3vw, 2.5rem); color: var(--xp-text); line-height: 1.05;
 }
 html #seller-dashboard .dash-page-sub { color: var(--xp-muted); font-size: 0.98rem; margin-bottom: 24px; }
@@ -468,7 +468,6 @@ html #seller-dashboard .chart-card {
   border-radius: var(--xp-radius); background: #fff;
   border: 1px solid var(--xp-line); box-shadow: var(--xp-shadow-sm);
 }
-/* Card headings often hold numbers ("Last 30 Days"); Syne's zero reads as an o. */
 html #seller-dashboard .card h3,
 html #seller-dashboard .chart-card h3 { font-family: 'DM Sans', system-ui, sans-serif; font-weight: 800; letter-spacing: -0.02em; }
 html #seller-dashboard .quick-actions-grid { gap: 12px; }

@@ -153,7 +153,7 @@ body {
 
 .mini-section-head h3,
 .section-title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'DM Sans', sans-serif;
   letter-spacing: -0.02em;
   color: var(--bs-ink);
 }
@@ -585,7 +585,7 @@ body {
 }
 
 .product-detail-price {
-  font-family: 'Syne', sans-serif;
+  font-family: 'DM Sans', sans-serif;
   letter-spacing: -0.03em;
   color: var(--bs-forest);
 }
