@@ -11,6 +11,9 @@ const SELLER_ROLES = new Set(["seller", "admin", "both", "service_provider"]);
 const ACTIVE_STATUSES = new Set(["active", "paused", "draft", "pending", "sold", "out_of_stock"]);
 const VALID_CATEGORIES = new Set(["electronics", "fashion", "home", "phones", "beauty", "sports", "dropship", "other"]);
 const VALID_CONDITIONS = new Set(["new", "used-like-new", "used-good"]);
+// Who a fashion or beauty product is for. Left empty, the database reads it
+// from the name and description (public.buysell_audience_from_text).
+const VALID_AUDIENCES = new Set(["men", "women", "unisex", "kids"]);
 // This is deliberately server-owned. Browsers submit the seller's amount;
 // only this function calculates the buyer-facing marketplace amount.
 const PLATFORM_COMMISSION_PERCENT = 20;
@@ -63,6 +66,7 @@ function buildProductPayload(data: Record<string, unknown>, sellerId: string, is
   const description = cleanString(data.description, 2000);
   const category = cleanString(data.category, 40);
   const condition = cleanString(data.condition, 40);
+  const audience = cleanString(data.audience, 20).toLowerCase();
   // `data.price` and `data.original_price` are the amounts the seller enters.
   // The public products table stores only the price that a buyer pays, while
   // the private product_seller_pricing table keeps the exact seller amount for
@@ -91,6 +95,7 @@ function buildProductPayload(data: Record<string, unknown>, sellerId: string, is
   if (isCreate || data.condition !== undefined) {
     if (!VALID_CONDITIONS.has(condition)) throw new Error("Please select a valid product condition.");
   }
+  if (audience && !VALID_AUDIENCES.has(audience)) throw new Error("Please choose who the product is for.");
 
   const payload: Record<string, unknown> = {
     name,
@@ -120,6 +125,8 @@ function buildProductPayload(data: Record<string, unknown>, sellerId: string, is
   }
   if (includesImages) payload.images = images;
   if (includesVideos) payload.videos = videos;
+  // Older versions of the site do not send it; their edits keep the audience.
+  if (hasOwn(data, "audience")) payload.audience = audience || null;
 
   return payload;
 }

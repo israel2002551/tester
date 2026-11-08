@@ -14,6 +14,7 @@ import '../styles/category.css';
 
 const categoryColumnFallbacks = [
   categoryProductColumns,
+  categoryProductColumns.replace(',audience', ''),
   'id,seller_id,name,description,price,original_price,category,condition,location,images,videos,image_url,video_url,has_video,stock_quantity,status,created_at,avg_rating,review_count',
   'id,seller_id,name,description,price,category,condition,location,image_url,status,created_at',
 ];
@@ -58,6 +59,11 @@ function customCategoryConfig(category) {
 function matchesCategory(product, category) {
   const target = normalizeCategory(category);
   if (target === 'all' || target === 'trending') return true;
+  // Men and Women list products made for them, and unisex ones on both.
+  if (target === 'men' || target === 'women') {
+    const audience = normalizeCategory(product.audience);
+    return audience === target || audience === 'unisex';
+  }
   const value = normalizeCategory(product.category);
   const matchingTerms = {
     phones: ['phone', 'mobile', 'tablet', 'gadget', 'accessor'],

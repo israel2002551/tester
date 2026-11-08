@@ -12,6 +12,8 @@ const htmlEntries = {
   'category-trending': 'category-trending.html',
   'category-phones': 'category-phones.html',
   'category-fashion': 'category-fashion.html',
+  'category-women': 'category-women.html',
+  'category-men': 'category-men.html',
   'category-home': 'category-home.html',
   'category-electronics': 'category-electronics.html',
   'category-beauty': 'category-beauty.html',

@@ -110,7 +110,7 @@ const DASHBOARD_PAGE_SIZE = 80;
 const CACHE_TTL_MS = 45000;
 const PRODUCT_LIST_COLUMNS = [
  'id','seller_id','name','description','price','original_price','shipping_fee','shipping_cost',
- 'category','condition','location','images','videos','image_url','video_url','has_video',
+ 'category','audience','condition','location','images','videos','image_url','video_url','has_video',
  'stock_quantity','status','created_at','flash_price','flash_end','negotiable','low_stock_alert'
 ];
 const PRODUCT_MINIMAL_COLUMNS = ['id','seller_id','name','price','category','status','created_at','image_url'];
@@ -2410,15 +2410,33 @@ function setupProductCategoryField() {
  group.innerHTML = '<label class="form-label">Custom category <span class="req">*</span></label><input id="p-custom-category" class="form-input" maxlength="60" placeholder="e.g. Baby Products, Auto Parts">';
   select.closest('.form-group')?.insertAdjacentElement('afterend', group);
  }
+ let audienceGroup = document.getElementById('p-audience-group');
+ if (!audienceGroup) {
+  audienceGroup = document.createElement('div');
+  audienceGroup.id = 'p-audience-group';
+  audienceGroup.className = 'form-group';
+  audienceGroup.innerHTML = '<label class="form-label" for="p-audience">Who is it for?</label><select id="p-audience" class="form-select"><option value="">Pick from the name</option><option value="women">Women</option><option value="men">Men</option><option value="unisex">Men and women</option><option value="kids">Kids</option></select>';
+  select.closest('.form-grid')?.insertAdjacentElement('afterend', audienceGroup);
+ }
  const sync = () => {
   const isCustom = isCustomProductCategoryValue(select.value);
   group.classList.toggle('hidden', !isCustom);
   const input = document.getElementById('p-custom-category');
   if (input) input.required = isCustom;
+  audienceGroup.classList.toggle('hidden', !isCustom && !productCategoryHasAudience(select.value));
  };
  select.onchange = sync;
  sync();
  setupProductCategorySuggestion(select);
+}
+
+// Fashion, beauty and sellers' own categories say who a product is for, which
+// lists it on the Men or Women page. Left on "Pick from the name", the database
+// reads it from the name and description (public.buysell_audience_from_text).
+const CATEGORIES_WITHOUT_AUDIENCE = new Set(['electronics', 'home', 'phones', 'sports', 'dropship', 'other']);
+
+function productCategoryHasAudience(category) {
+ return !CATEGORIES_WITHOUT_AUDIENCE.has(normalizeProductCategory(category));
 }
 
 // The category is picked from the product name as the seller types, until they
@@ -2444,6 +2462,8 @@ function setupProductCategorySuggestion(select) {
  document.getElementById('add-prod-form')?.addEventListener('reset', () => {
   productCategoryChosen = false;
   showProductCategoryHint('');
+  // The reset event comes before the fields are cleared.
+  window.setTimeout(() => select.onchange?.(), 0);
  });
 }
 
@@ -2486,6 +2506,7 @@ async function suggestProductCategory() {
   showProductCategoryHint('');
  } else if (!productCategoryChosen) {
   select.value = suggested;
+  select.onchange?.();
   showProductCategoryHint(`Category picked from the name: ${label}. Change it if that's wrong.`);
  } else if (select.value !== suggested && select.value !== 'dropship') {
   showProductCategoryHint(`From its name this is ${label}, so it will be listed there. You can change it after publishing.`);
@@ -3575,6 +3596,8 @@ const CATEGORY_PAGE_LABELS = {
  electronics: 'Electronics',
  phones: 'Phones & Tablets',
  fashion: 'Fashion',
+ women: 'Women',
+ men: 'Men',
  home: 'Home & Kitchen',
  beauty: 'Beauty & Health',
  sports: 'Sports',
@@ -3588,6 +3611,8 @@ const CATEGORY_PAGE_URLS = {
  electronics: '/category/electronics',
  phones: '/category/phones',
  fashion: '/category/fashion',
+ women: '/category/women',
+ men: '/category/men',
  home: '/category/home',
  beauty: '/category/beauty',
  sports: '/category/sports',
@@ -3596,7 +3621,7 @@ const CATEGORY_PAGE_URLS = {
 };
 
 const MARKETPLACE_BUILTIN_CATEGORIES = new Set([
- 'all', 'trending', 'electronics', 'phones', 'fashion', 'home', 'beauty', 'sports', 'dropship', 'upcoming'
+ 'all', 'trending', 'electronics', 'phones', 'fashion', 'women', 'men', 'home', 'beauty', 'sports', 'dropship', 'upcoming'
 ]);
 
 function normalizeProductCategory(value = '') {
@@ -3613,6 +3638,11 @@ function productMatchesMarketplaceCategory(product, category) {
  const value = normalizeProductCategory(product?.category);
  if (!selected || selected === 'all') return true;
  if (selected === 'trending') return Number(product?.review_count || 0) > 0 || Number(product?.avg_rating || 0) >= 4;
+ // Men and Women list products made for them, and unisex ones on both.
+ if (selected === 'men' || selected === 'women') {
+  const audience = normalizeProductCategory(product?.audience);
+  return audience === selected || audience === 'unisex';
+ }
  const matchingTerms = {
   phones: ['phone', 'mobile', 'tablet', 'gadget', 'accessor'],
   electronics: ['electronics', 'electronic', 'laptop', 'computer', 'audio', 'television', 'tv', 'tech'],
@@ -6582,6 +6612,7 @@ async function submitProduct(e) {
   const customCategory = document.getElementById('p-custom-category')?.value.trim() || '';
   const isCustomCategory = isCustomProductCategoryValue(selectedCategory);
   const catVal = isCustomCategory ? customCategory.toLowerCase() : selectedCategory;
+  const audienceVal = isCustomCategory || productCategoryHasAudience(catVal) ? document.getElementById('p-audience')?.value || '' : '';
  const condVal = document.getElementById('p-condition').value;
  const locVal = document.getElementById('p-location').value.trim();
 
@@ -6626,6 +6657,7 @@ if (nameVal.length > 300) {
  shipping_fee: shippingFee,
  shipping_cost: shippingFee,
  category: catVal,
+ audience: audienceVal || null,
  condition: condVal,
  location: locVal.substring(0, 100),
  has_video: videoUrls.length > 0, negotiable: document.getElementById('p-negotiable').checked,
@@ -6826,8 +6858,10 @@ async function editProduct(id) {
   if (categorySelect.value !== savedCategory) {
    categorySelect.value = '__custom__';
    document.getElementById('p-custom-category').value = savedCategory;
-   categorySelect.onchange?.();
   }
+  categorySelect.onchange?.();
+  const audienceSelect = document.getElementById('p-audience');
+  if (audienceSelect) audienceSelect.value = p.audience || '';
  document.getElementById('p-condition').value = p.condition || 'new';
  document.getElementById('p-desc').value = p.description || '';
  document.getElementById('p-location').value = p.location || '';

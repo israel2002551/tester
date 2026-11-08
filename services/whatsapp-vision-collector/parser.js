@@ -185,6 +185,9 @@ CRITICAL STRICT RULES:
    - Expand Nigerian formats: "350k" -> 350000, "1.5m" -> 1500000, "₦60,000" -> 60000, "N5500" -> 5500, "5 500" -> 5500, and written amounts such as "five thousand five hundred naira" -> 5500.
    - Return both price_raw (the wording seen) and price (the normalized whole-naira integer).
    - Never invent a price. Set price and price_raw to null when no fixed price is stated.
+4. CATEGORY AND WHO IT IS FOR:
+   - Houses, flats, rooms, hostels, land and other property, and events, courses, services and adverts, are "Other", never "Home & Furniture".
+   - For clothing, shoes, bags, jewellery, watches, perfume and other personal items, start the title with who the item is for when the photo or text makes it clear: "Women's", "Men's", "Unisex" or "Kids'" (for example "Women's Red Bodycon Gown", "Men's Leather Slides"). Leave it out when you cannot tell.
 
 Return exactly one JSON object with these keys:
 - is_commercial_listing: boolean (true if one or more commercial items/services are offered for sale; false for chat, memes, complaints, or requests to buy)

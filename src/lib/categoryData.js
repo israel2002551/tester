@@ -25,6 +25,18 @@ export const categoryConfig = {
     icon: 'fa-shirt',
     searchPlaceholder: 'Search fashion products...',
   },
+  women: {
+    title: 'Women',
+    subtitle: "Women's clothing, shoes, bags, jewellery, and beauty.",
+    icon: 'fa-person-dress',
+    searchPlaceholder: "Search women's products...",
+  },
+  men: {
+    title: 'Men',
+    subtitle: "Men's clothing, shoes, watches, bags, and grooming.",
+    icon: 'fa-person',
+    searchPlaceholder: "Search men's products...",
+  },
   home: {
     title: 'Home & Living',
     subtitle: 'Furniture, appliances, decor, and everyday home essentials.',
@@ -68,6 +80,8 @@ export const categoryLinks = [
   ['Trending', '/category/trending', 'trending'],
   ['Phones', '/category/phones', 'phones'],
   ['Fashion', '/category/fashion', 'fashion'],
+  ['Women', '/category/women', 'women'],
+  ['Men', '/category/men', 'men'],
   ['Home', '/category/home', 'home'],
   ['Electronics', '/category/electronics', 'electronics'],
   ['Beauty', '/category/beauty', 'beauty'],
@@ -82,6 +96,8 @@ export const categoryImages = {
   trending: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1200&h=900&fit=crop&q=80',
   phones: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1200&h=900&fit=crop&q=80',
   fashion: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1200&h=900&fit=crop&q=80',
+  women: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1200&h=900&fit=crop&q=80',
+  men: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1200&h=900&fit=crop&q=80',
   home: 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1200&h=900&fit=crop&q=80',
   electronics: 'https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=1200&h=900&fit=crop&q=80',
   beauty: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=1200&h=900&fit=crop&q=80',
@@ -94,7 +110,7 @@ export function categoryIcon(key) {
   return categoryConfig[key]?.icon || 'fa-tags';
 }
 
-export const categoryProductColumns = 'id,seller_id,name,description,price,original_price,category,condition,location,images,videos,image_url,video_url,has_video,stock_quantity,status,created_at,avg_rating,review_count,profiles(name,store_name,role)';
+export const categoryProductColumns = 'id,seller_id,name,description,price,original_price,category,audience,condition,location,images,videos,image_url,video_url,has_video,stock_quantity,status,created_at,avg_rating,review_count,profiles(name,store_name,role)';
 export const upcomingColumns = 'id,title,description,image_url,video_url,images,videos,launch_date,priority,status,created_at';
 
 export function productImage(product = {}) {
