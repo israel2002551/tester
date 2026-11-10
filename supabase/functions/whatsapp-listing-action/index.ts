@@ -433,6 +433,8 @@ function productResponse(product: Record<string, unknown>, meta: Record<string, 
       name: product.name,
       description: product.description,
       price: product.price,
+      // What the seller asked for. `price` is what buyers pay: this plus BUYSELL's 20%.
+      your_price: meta.source_price ?? null,
       category: product.category,
       condition: product.condition,
       location: product.location,
@@ -453,7 +455,7 @@ async function managedListing(admin: ReturnType<typeof createClient>, body: Reco
   const hash = await sha256(token);
   const { data: meta, error: metaError } = await admin
     .from("whatsapp_listing_meta")
-    .select("product_id,sold_at,deleted_at")
+    .select("product_id,source_price,sold_at,deleted_at")
     .eq("product_id", productId)
     .eq("manage_token_hash", hash)
     .maybeSingle();
@@ -650,9 +652,12 @@ async function sellerCommand(admin: ReturnType<typeof createClient>, req: Reques
   return json({ found: true, product: { id: product.id, name: product.name }, command });
 }
 
-async function manageUpdate(admin: ReturnType<typeof createClient>, body: Record<string, unknown>) {
-  const listing = await managedListing(admin, body);
-  if (!listing) return json({ error: "This management link is invalid or has expired." }, 404);
+type SellerListing = { meta: Record<string, any>; product: Record<string, any> };
+
+// Saves a seller's edit, "sold" or "delete" on one of their listings, from a
+// per-item management link or their catalog. Returns an error response, or
+// null once the change is saved.
+async function changeListing(admin: ReturnType<typeof createClient>, listing: SellerListing, body: Record<string, unknown>) {
   if (listing.meta.deleted_at) return json({ error: "This listing has already been removed." }, 410);
 
   const mode = value(body.mode, 20);
@@ -707,10 +712,151 @@ async function manageUpdate(admin: ReturnType<typeof createClient>, body: Record
       if (metaError) throw new Error("Could not save the WhatsApp price details.");
     }
   }
+  return null;
+}
 
+async function manageUpdate(admin: ReturnType<typeof createClient>, body: Record<string, unknown>) {
+  const listing = await managedListing(admin, body);
+  if (!listing) return json({ error: "This management link is invalid or has expired." }, 404);
+  const failure = await changeListing(admin, listing, body);
+  if (failure) return failure;
   const refreshed = await managedListing(admin, body);
   if (!refreshed) throw new Error("Could not reload this listing.");
   return json(productResponse(refreshed.product, refreshed.meta));
+}
+
+// ---- Seller catalogs: one private link per WhatsApp seller, listing every
+// item the bot collected from them (the page is /manage?catalog=<token>).
+
+const CATALOG_LIMIT = 1000;
+
+function base64url(bytes: Uint8Array) {
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+// An HMAC of the seller's WhatsApp ID, so the bot can send the same link every
+// time while whatsapp_seller_catalogs keeps only its hash.
+async function catalogToken(senderJid: string) {
+  const secret = Deno.env.get("WHATSAPP_INGEST_SECRET") || "";
+  if (!secret) throw new Error("WHATSAPP_INGEST_SECRET is not configured.");
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`seller-catalog:v1:${senderJid}`));
+  return base64url(new Uint8Array(signature).slice(0, 24));
+}
+
+// For the collector: the link it sends a seller after taking their items.
+async function sellerCatalogLink(admin: ReturnType<typeof createClient>, req: Request, body: Record<string, unknown>) {
+  if (!requireCollectorSecret(req)) return json({ error: "Unauthorized catalog request." }, 401);
+  const senderJid = value(body.sender_jid, 200);
+  if (!senderJid) return json({ error: "The seller's WhatsApp ID is required." }, 400);
+
+  const token = await catalogToken(senderJid);
+  const { error } = await admin.from("whatsapp_seller_catalogs").upsert(
+    { sender_jid: senderJid, token_hash: await sha256(token), updated_at: new Date().toISOString() },
+    { onConflict: "sender_jid" },
+  );
+  if (error) throw new Error("Could not save the seller's catalog link.");
+
+  const siteUrl = value(Deno.env.get("PUBLIC_SITE_URL"), 500).replace(/\/+$/, "");
+  return json({
+    catalog_token: token,
+    catalog_url: siteUrl ? `${siteUrl}/manage?catalog=${encodeURIComponent(token)}` : "",
+  });
+}
+
+// The seller a catalog link belongs to, or "" when the link is wrong.
+async function catalogSender(admin: ReturnType<typeof createClient>, body: Record<string, unknown>) {
+  const token = value(body.catalog_token, 200);
+  if (token.length < 20) return "";
+  const { data, error } = await admin
+    .from("whatsapp_seller_catalogs")
+    .select("sender_jid")
+    .eq("token_hash", await sha256(token))
+    .maybeSingle();
+  if (error) throw new Error("Could not open this link.");
+  return value(data?.sender_jid, 200);
+}
+
+function catalogItem(product: Record<string, any>, meta: Record<string, any>) {
+  const images = (Array.isArray(product.images) ? product.images : [])
+    .filter((url: unknown) => typeof url === "string" && url);
+  if (!images.length && typeof product.image_url === "string" && product.image_url) images.push(product.image_url);
+  return {
+    id: product.id,
+    name: product.name,
+    description: product.description || "",
+    // What buyers pay, and what the seller asked for (buyers pay this plus BUYSELL's 20%).
+    price: product.price,
+    your_price: meta.source_price ?? null,
+    category: product.category,
+    location: product.location || "",
+    images: images.slice(0, 12),
+    has_video: product.has_video === true,
+    listing_state: listingState(meta, product),
+    created_at: meta.created_at,
+  };
+}
+
+async function catalogGet(admin: ReturnType<typeof createClient>, body: Record<string, unknown>) {
+  const senderJid = await catalogSender(admin, body);
+  if (!senderJid) return json({ error: "This link is wrong or no longer works." }, 404);
+
+  const { data, error } = await admin
+    .from("whatsapp_listing_meta")
+    .select("product_id,source_price,sold_at,deleted_at,created_at,products(id,name,description,price,category,location,status,stock_quantity,image_url,images,has_video)")
+    .eq("sender_jid", senderJid)
+    .order("created_at", { ascending: false })
+    .limit(CATALOG_LIMIT);
+  if (error) throw new Error("Could not load your items.");
+
+  const rows = data || [];
+  const items = rows.flatMap((row: Record<string, any>) => {
+    const product = Array.isArray(row.products) ? row.products[0] : row.products;
+    return product ? [catalogItem(product, row)] : [];
+  });
+  return json({ items, limited: rows.length >= CATALOG_LIMIT });
+}
+
+// One of the seller's listings, or null if the product isn't theirs.
+async function sellerListing(admin: ReturnType<typeof createClient>, senderJid: string, productId: string): Promise<SellerListing | null> {
+  if (!productId) return null;
+  const { data: meta, error } = await admin
+    .from("whatsapp_listing_meta")
+    .select("product_id,source_price,sold_at,deleted_at,created_at")
+    .eq("product_id", productId)
+    .eq("sender_jid", senderJid)
+    .maybeSingle();
+  if (error) throw new Error("Could not find this item.");
+  if (!meta) return null;
+
+  const { data: product, error: productError } = await admin
+    .from("products")
+    .select(PRODUCT_COLUMNS)
+    .eq("id", productId)
+    .maybeSingle();
+  if (productError) throw new Error("Could not load this item.");
+  return product ? { meta, product } : null;
+}
+
+async function catalogUpdate(admin: ReturnType<typeof createClient>, body: Record<string, unknown>) {
+  const senderJid = await catalogSender(admin, body);
+  if (!senderJid) return json({ error: "This link is wrong or no longer works." }, 404);
+
+  const productId = value(body.product_id, 80);
+  const listing = await sellerListing(admin, senderJid, productId);
+  if (!listing) return json({ error: "This item is not one of yours." }, 404);
+  const failure = await changeListing(admin, listing, body);
+  if (failure) return failure;
+
+  const refreshed = await sellerListing(admin, senderJid, productId);
+  if (!refreshed) throw new Error("Could not reload this item.");
+  return json({ item: catalogItem(refreshed.product, refreshed.meta) });
 }
 
 async function approvedGroupsForCollector(admin: ReturnType<typeof createClient>, req: Request) {
@@ -936,6 +1082,9 @@ serve(async (req) => {
       return listing ? json(productResponse(listing.product, listing.meta)) : json({ error: "This management link is invalid or has expired." }, 404);
     }
     if (action === "manage_update") return await manageUpdate(admin, body);
+    if (action === "seller_catalog_link") return await sellerCatalogLink(admin, req, body);
+    if (action === "catalog_get") return await catalogGet(admin, body);
+    if (action === "catalog_update") return await catalogUpdate(admin, body);
     return json({ error: "Unknown action." }, 400);
   } catch (error) {
     console.error("whatsapp-listing-action error:", error);

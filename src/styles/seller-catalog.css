@@ -1,0 +1,274 @@
+/* A WhatsApp seller's catalog (/manage?catalog=…): a private mini store of the
+   items the BUYSELL bot collected from one seller. It builds on the
+   .wa-manage-* styles in styles.css. */
+
+.wa-catalog .wa-catalog-header,
+.wa-catalog-shell {
+  width: min(1180px, 100%);
+  margin-inline: auto;
+}
+
+.wa-catalog-shell { display: grid; gap: 14px; }
+
+.wa-catalog-head h1,
+.wa-catalog-error h1 {
+  margin: 0 0 6px;
+  color: #10263a;
+  font-size: clamp(1.6rem, 4vw, 2.3rem);
+  letter-spacing: -0.025em;
+}
+.wa-catalog-head .wa-manage-copy { margin: 0; max-width: 62ch; }
+.wa-catalog-error { padding: clamp(24px, 5vw, 48px); background: #fff; border: 1px solid #dbe7df; border-radius: 20px; }
+
+/* Search and filters stay in reach while scrolling a long list. */
+.wa-catalog-tools {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: grid;
+  gap: 10px;
+  margin-inline: -8px;
+  padding: 10px 8px;
+  background: rgba(245, 251, 248, 0.94);
+  backdrop-filter: blur(8px);
+}
+
+.wa-catalog-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  background: #fff;
+  border: 1px solid #cbd9d0;
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(20, 55, 35, 0.08);
+}
+.wa-catalog-search:focus-within { border-color: #15995a; outline: 3px solid rgba(28, 156, 92, 0.18); }
+.wa-catalog-search i { color: #6c7d72; }
+.wa-catalog-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 13px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #1d3125;
+  font: inherit;
+  font-size: 1rem;
+}
+
+.wa-catalog-filters {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.wa-catalog-filters::-webkit-scrollbar { display: none; }
+.wa-catalog-filters button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #fff;
+  border: 1px solid #cbd9d0;
+  border-radius: 999px;
+  color: #294537;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.wa-catalog-filters button span { color: #6c7d72; font-weight: 600; font-variant-numeric: tabular-nums; }
+.wa-catalog-filters button[aria-pressed="true"] { background: #0b6b3a; border-color: #0b6b3a; color: #fff; }
+.wa-catalog-filters button[aria-pressed="true"] span { color: #c8efd4; }
+.wa-catalog-filters button:focus-visible,
+.wa-catalog-card:focus-visible,
+.wa-catalog-close:focus-visible { outline: 3px solid #15995a; outline-offset: 2px; }
+
+.wa-catalog-count { margin: 0; color: #557064; font-size: 0.9rem; }
+
+/* Two columns on phones, more on wider screens. */
+.wa-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+@media (min-width: 720px) {
+  .wa-catalog-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 18px; }
+}
+
+.wa-catalog-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  padding: 0 0 12px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #dbe7df;
+  border-radius: 16px;
+  box-shadow: 0 6px 18px rgba(20, 55, 35, 0.06);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.wa-catalog-card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(20, 55, 35, 0.12); }
+
+.wa-catalog-photo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  margin-bottom: 6px;
+  background: #eef4f0;
+  color: #9fb3a6;
+  font-size: 2rem;
+}
+.wa-catalog-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.wa-catalog-photo .wa-state { position: absolute; top: 8px; left: 8px; padding: 4px 8px; font-size: 0.64rem; }
+.wa-catalog-photo-count {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  background: rgba(16, 38, 26, 0.72);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.wa-catalog-name {
+  display: -webkit-box;
+  padding: 0 12px;
+  overflow: hidden;
+  color: #10263a;
+  font-weight: 700;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.wa-catalog-price { padding: 0 12px; margin-top: auto; color: #0b6b3a; font-weight: 800; font-variant-numeric: tabular-nums; }
+.wa-catalog-small { margin: 0; padding: 0 12px; color: #6c7d72; font-size: 0.78rem; line-height: 1.4; }
+.wa-catalog-dialog .wa-catalog-small { padding: 0; }
+
+.wa-catalog-empty {
+  padding: 40px 16px;
+  background: #fff;
+  border: 1px dashed #cbd9d0;
+  border-radius: 16px;
+  color: #557064;
+  text-align: center;
+}
+.wa-catalog-text-button {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: #097142;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.wa-catalog-more { justify-self: center; }
+
+/* One item: a centred panel, or the whole screen on phones. */
+.wa-catalog-dialog {
+  width: min(720px, calc(100% - 32px));
+  max-height: min(92vh, 100%);
+  /* The site's reset sets margin: 0 on everything, which would pin the panel top-left. */
+  margin: auto;
+  padding: 0;
+  overflow-y: auto;
+  background: #fff;
+  border: 0;
+  border-radius: 20px;
+  box-shadow: 0 30px 80px rgba(10, 30, 20, 0.35);
+  color: #132a1e;
+}
+.wa-catalog-dialog::backdrop { background: rgba(10, 25, 18, 0.55); }
+body:has(.wa-catalog-dialog[open]) { overflow: hidden; }
+
+.wa-catalog-dialog__body { display: grid; gap: 10px; padding: 14px clamp(16px, 4vw, 28px) 28px; }
+.wa-catalog-dialog__bar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -14px calc(-1 * clamp(16px, 4vw, 28px)) 0;
+  padding: 12px clamp(16px, 4vw, 28px);
+  background: rgba(255, 255, 255, 0.96);
+}
+.wa-catalog-close {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  background: #f1f5f2;
+  border: 0;
+  border-radius: 50%;
+  color: #294537;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.wa-catalog-gallery {
+  display: flex;
+  gap: 8px;
+  margin-inline: calc(-1 * clamp(16px, 4vw, 28px));
+  padding-inline: clamp(16px, 4vw, 28px);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+}
+.wa-catalog-gallery a {
+  flex: 0 0 min(86%, 420px);
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: #eef4f0;
+  border-radius: 14px;
+  scroll-snap-align: center;
+}
+.wa-catalog-gallery img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.wa-catalog-gallery__empty {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  gap: 6px;
+  min-height: 180px;
+  background: #eef4f0;
+  border-radius: 14px;
+  color: #6c7d72;
+}
+
+.wa-catalog-dialog h2 { margin: 6px 0 0; color: #10263a; font-size: clamp(1.3rem, 3.4vw, 1.7rem); letter-spacing: -0.02em; }
+.wa-catalog-prices { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; color: #557064; }
+.wa-catalog-prices strong { color: #0b6b3a; font-variant-numeric: tabular-nums; }
+.wa-catalog-dialog .wa-public-link { margin-bottom: 0; }
+.wa-catalog-dialog .wa-manage-form { margin-top: 8px; }
+.wa-catalog-dialog .wa-manage-copy { margin: 0; }
+.wa-catalog-dialog .wa-manage-danger { margin-top: 12px; }
+.wa-catalog-notice--error { background: #fef3f2; border-color: #f7c9c5; color: #b42318; }
+
+@media (max-width: 560px) {
+  .wa-catalog-dialog {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    max-height: 100%;
+    margin: 0;
+    border-radius: 0;
+  }
+}

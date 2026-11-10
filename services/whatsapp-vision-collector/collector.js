@@ -580,11 +580,17 @@ async function processListing(bundle, sock) {
     throw new Error(`${importErrors.length} product import${importErrors.length === 1 ? '' : 's'} failed.`);
   }
 
-  // Notify seller of imported listing(s)
+  // Notify the seller, with one link to all their items. Without that link the
+  // message falls back to each item's own management link.
   if (createdListings.length > 0 && sock) {
+    const catalog = await api.sellerCatalogLink({ senderJid: bundle.senderJid }).catch(error => {
+      console.warn('[Seller catalog link]', error?.message || error);
+      return null;
+    });
     await sendSellerBatchConfirmation(sock, {
       senderJid: bundle.senderJid,
       listings: createdListings,
+      catalog,
       publicSiteUrl: process.env.PUBLIC_SITE_URL,
     });
   }

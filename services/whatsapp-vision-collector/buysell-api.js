@@ -88,6 +88,12 @@ export class BuySellListingsApi {
     return this.request({ action: 'seller_command', sender_jid: senderJid, command });
   }
 
+  // The seller's one link to every item BUYSELL collected from them. It is the
+  // same each time: { catalog_token, catalog_url }.
+  sellerCatalogLink({ senderJid }) {
+    return this.request({ action: 'seller_catalog_link', sender_jid: senderJid });
+  }
+
   listTargetGroups() {
     return this.request({ action: 'collector_groups' });
   }

@@ -1,32 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
 import BrandLogo from '../components/BrandLogo.jsx';
-import { ensureRuntimeConfig, runtimeConfig } from '../lib/browserConfig.js';
 import { money } from '../lib/format.js';
+import { LISTING_CATEGORIES, STATE_LABELS, listingRequest, useNoIndex } from '../lib/whatsappListings.js';
+import WhatsAppCatalog from './WhatsAppCatalog.jsx';
 
-async function listingRequest(payload) {
-  await ensureRuntimeConfig();
-  const config = runtimeConfig();
-  const url = String(config.SB_URL || '').replace(/\/+$/, '');
-  const key = String(config.SB_KEY || '');
-  if (!url || !key) throw new Error('Marketplace configuration is unavailable.');
-  const response = await fetch(`${url}/functions/v1/whatsapp-listing-action`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify(payload),
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.error || 'Could not manage this listing.');
-  return data;
+// /manage?catalog=<token> is a seller's catalog of everything the BUYSELL bot
+// took from their WhatsApp posts. /manage?product=<id>&token=<token> is the
+// older one-item link, which earlier bot messages still point to.
+export default function WhatsAppManagePage() {
+  const params = useMemo(() => new URLSearchParams(window.location.search), []);
+  useNoIndex();
+  const catalogToken = params.get('catalog') || '';
+  if (catalogToken) return <WhatsAppCatalog token={catalogToken} />;
+  return <SingleListing productId={params.get('product') || ''} token={params.get('token') || ''} />;
 }
 
 function formFor(product = {}) {
   return {
     title: product.name || '',
-    price: product.price ?? '',
+    // The seller edits their own price; buyers pay it plus BUYSELL's fee.
+    price: product.your_price ?? product.price ?? '',
     description: product.description || '',
     location: product.location || '',
     category: product.category || 'other',
@@ -34,10 +27,7 @@ function formFor(product = {}) {
   };
 }
 
-export default function WhatsAppManagePage() {
-  const params = useMemo(() => new URLSearchParams(window.location.search), []);
-  const productId = params.get('product') || '';
-  const token = params.get('token') || '';
+function SingleListing({ productId, token }) {
   const [listing, setListing] = useState(null);
   const [form, setForm] = useState({});
   const [status, setStatus] = useState('loading');
@@ -124,7 +114,7 @@ export default function WhatsAppManagePage() {
         {status === 'error' ? <ManageError message={notice || 'This management link is unavailable.'} /> : null}
         {status === 'ready' ? (
           <>
-            <span className={`wa-state wa-state--${listing.listing_state}`}>{listing.listing_state === 'live' ? 'Live' : listing.listing_state}</span>
+            <span className={`wa-state wa-state--${listing.listing_state}`}>{STATE_LABELS[listing.listing_state] || listing.listing_state}</span>
             <h1>Manage your WhatsApp listing</h1>
             <p className="wa-manage-copy">
               {listing.listing_state === 'pending'
@@ -137,10 +127,10 @@ export default function WhatsAppManagePage() {
             {listing.listing_state === 'live' ? <a className="wa-public-link" href={`/product?id=${encodeURIComponent(product.id)}`}>View public listing <i className="fa-solid fa-arrow-up-right-from-square" /></a> : null}
             <form onSubmit={submit} className="wa-manage-form">
               <label>Item title<input name="title" value={form.title || ''} minLength="3" maxLength="300" onChange={updateForm} disabled={busy || closed} required /></label>
-              <label>Price (₦)<input name="price" value={form.price ?? ''} type="number" min="1" max="100000000" step="1" onChange={updateForm} disabled={busy || closed} required /></label>
+              <label>Your price (₦)<input name="price" value={form.price ?? ''} type="number" min="1" max="100000000" step="1" onChange={updateForm} disabled={busy || closed} required /></label>
               <label>Category
                 <select name="category" value={form.category || 'other'} onChange={updateForm} disabled={busy || closed}>
-                  <option value="phones">Phones &amp; tablets</option><option value="electronics">Electronics &amp; computers</option><option value="fashion">Fashion</option><option value="home">Home &amp; furniture</option><option value="beauty">Beauty &amp; health</option><option value="sports">Sports</option><option value="dropship">Dropship</option><option value="other">Other</option>
+                  {LISTING_CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </label>
               <label>Condition
@@ -153,7 +143,7 @@ export default function WhatsAppManagePage() {
               {!closed ? <button className="btn btn-primary wa-manage-save" disabled={busy} type="submit">{busy ? 'Saving…' : 'Save changes'}</button> : null}
             </form>
             {!closed ? <div className="wa-manage-danger"><button className="btn btn-outline" disabled={busy} type="button" onClick={() => closeListing('sold')}>Mark as sold</button><button className="btn btn-outline wa-delete" disabled={busy} type="button" onClick={() => closeListing('delete')}>Remove listing</button></div> : null}
-            <p className="wa-manage-meta">Current asking price: {money(product.price)}</p>
+            <p className="wa-manage-meta">Buyers see {money(product.price)} on BUYSELL: your price plus BUYSELL&apos;s fee.</p>
           </>
         ) : null}
       </section>

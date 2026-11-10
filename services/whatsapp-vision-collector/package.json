@@ -11,7 +11,7 @@
     "start": "node collector.js",
     "list-groups": "node list-groups.js",
     "check": "node --check collector.js && node --check parser.js && node --check notifier.js && node --check cloudinary.js && node --check buysell-api.js && node --check queue.js && node --check auth-store.js && node --check upload-session.js",
-    "test": "node --test tests/collector-utils.test.js tests/auth-store.test.js",
+    "test": "node --test tests/collector-utils.test.js tests/auth-store.test.js tests/notifier.test.js",
     "upload-session": "node upload-session.js"
   },
   "dependencies": {
