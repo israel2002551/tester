@@ -1,0 +1,19 @@
+# Secrets
+.env
+.env.local
+.env.*.local
+wa_auth_session/
+wa_admin_dispatcher_session/
+notified_sales.json
+
+# Dependencies
+node_modules/
+
+# Logs & OS files
+*.log
+.DS_Store
+Thumbs.db
+
+# WhatsApp sessions under any folder name hold the account’s keys; never commit them.
+wa_*session*/
+pairing-qr.html

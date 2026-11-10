@@ -45,4 +45,21 @@ export class BuySellListingsApi {
   getOrderWhatsAppSales() {
     return this.request({ action: 'order_whatsapp_sales' });
   }
+
+  // The WhatsApp session, kept in Supabase when WHATSAPP_AUTH_STORE=supabase (see auth-store.js).
+  authStateList({ sessionId, after = null }) {
+    return this.request({ action: 'auth_state_list', session_id: sessionId, after });
+  }
+
+  authStateGet({ sessionId, keys }) {
+    return this.request({ action: 'auth_state_get', session_id: sessionId, keys });
+  }
+
+  authStateSet({ sessionId, entries }) {
+    return this.request({ action: 'auth_state_set', session_id: sessionId, entries });
+  }
+
+  authStateClear({ sessionId }) {
+    return this.request({ action: 'auth_state_clear', session_id: sessionId });
+  }
 }

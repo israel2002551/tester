@@ -9,7 +9,10 @@
   "scripts": {
     "start": "node collector.js",
     "list-groups": "node list-groups.js",
-    "check": "node --check collector.js && node --check parser.js && node --check notifier.js && node --check cloudinary.js && node --check buysell-api.js"
+    "check": "node --check collector.js && node --check parser.js && node --check notifier.js && node --check cloudinary.js && node --check buysell-api.js && node --check sale-alert.js && node --check auth-store.js && node --check upload-session.js && node --check pair-qr.js",
+    "test": "node --test tests/sale-alert.test.js tests/auth-store.test.js",
+    "upload-session": "node upload-session.js",
+    "pair-qr": "node pair-qr.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.9",

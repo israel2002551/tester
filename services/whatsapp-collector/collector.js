@@ -2,15 +2,17 @@ import makeWASocket, {
   Browsers,
   DisconnectReason,
   extractMessageContent,
+  fetchLatestWaWebVersion,
   normalizeMessageContent,
-  useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
-import { rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import 'dotenv/config';
 import { BuySellListingsApi } from './buysell-api.js';
+import { buildAdminSaleAlert } from './sale-alert.js';
+import { openAuthState } from './auth-store.js';
 
 const api = new BuySellListingsApi();
 const phoneNumber = (process.env.WHATSAPP_PHONE_NUMBER || '2348080302256').replace(/\D/g, '');
@@ -77,50 +79,14 @@ function extractText(msg) {
   ).trim();
 }
 
-function cleanPhone(raw) {
-  let digits = String(raw || '').replace(/\D/g, '');
-  if (digits.startsWith('0') && digits.length === 11) {
-    digits = '234' + digits.slice(1);
-  }
-  return digits;
-}
-
-function formatMoney(amount) {
-  return `₦${Number(amount || 0).toLocaleString('en-NG')}`;
-}
-
-function buildAdminSaleAlert(sale) {
-  const sellerNum = cleanPhone(sale.seller_phone);
-  const waLink = sellerNum ? `https://wa.me/${sellerNum}` : 'No phone provided';
-  const orderShort = String(sale.order_id || '').slice(0, 8);
-
-  return [
-    '🚨 *NEW ORDER: WHATSAPP ITEM PURCHASED!* 🛍️',
-    '',
-    `📦 *Product:* ${sale.product_name || 'Marketplace Item'}`,
-    `💰 *Amount Paid by Buyer:* ${formatMoney(sale.paid_price)}`,
-    `🧾 *Order ID:* #${orderShort}`,
-    '',
-    '📍 *WHERE BOT 2 COLLECTED THIS:*',
-    `👥 *Group Name:* ${sale.group_name || 'Seller Group'}`,
-    `🆔 *Group ID:* \`${sale.group_jid || 'unknown'}\``,
-    sale.source_price ? `💵 *Original Stated Price:* ${formatMoney(sale.source_price)}` : '',
-    sellerNum ? `📱 *Original Seller Phone:* +${sellerNum}` : '',
-    sellerNum ? `💬 *Tap to Chat with Seller:*\n${waLink}` : '',
-    '',
-    '🚚 *DELIVERY DETAILS:*',
-    `👤 *Buyer Name:* ${sale.delivery_name || 'Customer'}`,
-    sale.delivery_phone ? `📞 *Buyer Phone:* ${sale.delivery_phone}` : '',
-    sale.delivery_address ? `🏠 *Delivery Address:* ${sale.delivery_address}` : '',
-    '',
-    '👉 *Next Step:* Tap the seller link above to confirm availability and purchase the item for delivery!',
-  ].filter(Boolean).join('\n');
-}
-
 let activeSock = null;
+let whatsappConnected = false;
 
 async function checkAndNotifySales() {
-  if (!activeSock) return;
+  // A socket is created before WhatsApp has accepted its credentials. Do not
+  // attempt to deliver alerts during pairing or a reconnect, because Baileys
+  // will reject the send and leave the order looking like a delivery failure.
+  if (!activeSock || !whatsappConnected) return;
   try {
     const result = await api.getOrderWhatsAppSales();
     const sales = Array.isArray(result?.sales) ? result.sales : [];
@@ -146,13 +112,51 @@ async function checkAndNotifySales() {
   }
 }
 
+// The WhatsApp Web version bundled with Baileys goes stale between releases.
+// WhatsApp still opens the socket for an outdated client but rejects the
+// phone-number link step ("Couldn't link device"), so use the live version.
+let cachedWaWebVersion = null;
+async function resolveWaWebVersion() {
+  try {
+    const { version, isLatest } = await fetchLatestWaWebVersion({ timeout: 10_000 });
+    if (isLatest && Array.isArray(version)) cachedWaWebVersion = version;
+  } catch (error) {
+    console.warn('[Bot 1] Could not fetch the latest WhatsApp Web version:', error?.message || error);
+  }
+  return cachedWaWebVersion || undefined;
+}
+
+// When another copy takes over the connection (code 440), it is usually the new
+// copy started by a deploy while this one still runs. Reconnecting at once makes
+// the two fight over one session until WhatsApp logs the device out, so wait.
+const REPLACED_RETRY_MS = 3 * 60_000;
+let activeAuth = null;
+
+function restartDispatcher(delayMs) {
+  setTimeout(() => {
+    startDispatcher().catch(error => {
+      console.error('[Bot 1] Could not restart the WhatsApp connection:', error?.message || error);
+      restartDispatcher(30_000);
+    });
+  }, delayMs);
+}
+
 async function startDispatcher() {
-  const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+  // WHATSAPP_AUTH_STORE=supabase keeps the session in Supabase, so redeploys don't
+  // unlink the bot; otherwise it lives in SESSION_DIR (lost on Render's free disk).
+  const auth = await openAuthState({ api, sessionDir });
+  activeAuth = auth;
+  console.info(`[Session] WhatsApp session stored in ${auth.description}.`);
+  const { state, saveCreds } = auth;
+  const waWebVersion = await resolveWaWebVersion();
 
   const sock = makeWASocket({
+    ...(waWebVersion ? { version: waWebVersion } : {}),
     logger: pino({ level: 'silent' }),
     auth: state,
-    browser: Browsers.ubuntu('Chrome'),
+    // WhatsApp rejects phone-number linking for the Ubuntu identity
+    // ("Couldn't link device"); the macOS identity pairs successfully.
+    browser: Browsers.macOS('Chrome'),
     markOnlineOnConnect: true,
     syncFullHistory: false,
     shouldIgnoreJid: (jid) => jid.endsWith('@g.us') || jid.endsWith('@broadcast') || jid.endsWith('@newsletter'),
@@ -162,50 +166,70 @@ async function startDispatcher() {
     },
   });
   activeSock = sock;
+  let pairingCodeRequestedOnSocket = false;
 
   sock.ev.on('creds.update', saveCreds);
 
-  if (phoneNumber && !state.creds.registered) {
-    setTimeout(async () => {
-      try {
-        const code = await sock.requestPairingCode(phoneNumber);
-        const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
-        console.log('\n============================================================');
-        console.log(`[BOT 1 DISPATCHER] PAIRING CODE FOR ${phoneNumber}: ${formatted}`);
-        console.log('============================================================');
-        console.log(`On your phone (${phoneNumber}):`);
-        console.log('1. Open WhatsApp -> Settings -> Linked Devices');
-        console.log('2. Tap "Link a device" -> "Link with phone number instead"');
-        console.log(`3. Enter code: ${formatted}\n`);
-      } catch (err) {
-        console.error('[Bot 1] Failed to request pairing code:', err?.message || err);
-      }
-    }, 3000);
+  async function requestPairingCode() {
+    try {
+      const code = await sock.requestPairingCode(phoneNumber);
+      const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
+      console.log('\n============================================================');
+      console.log(`[BOT 1 DISPATCHER] PAIRING CODE FOR ${phoneNumber}: ${formatted}`);
+      console.log('============================================================');
+      console.log(`On your phone (${phoneNumber}):`);
+      console.log('1. Open WhatsApp -> Settings -> Linked Devices');
+      console.log('2. Tap "Link a device" -> "Link with phone number instead"');
+      console.log(`3. Enter code: ${formatted}\n`);
+    } catch (err) {
+      // Allow a later QR-ready event from this socket to retry the request.
+      pairingCodeRequestedOnSocket = false;
+      console.error('[Bot 1] Failed to request pairing code:', err?.message || err);
+    }
   }
 
   sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+    // Baileys emits a QR reference even when phone-number pairing is selected.
+    // Waiting for it matters: requesting a code on a fixed startup timer can
+    // produce a code that WhatsApp displays but subsequently refuses.
+    if (qr && phoneNumber && !state.creds.registered && !pairingCodeRequestedOnSocket) {
+      pairingCodeRequestedOnSocket = true;
+      void requestPairingCode();
+    }
+
     if (qr && !phoneNumber) {
       console.log('[BOT 1 DISPATCHER] Scan QR code to link:');
       qrcode.generate(qr, { small: true });
     }
     if (connection === 'open') {
+      if (activeSock !== sock) return;
+      whatsappConnected = true;
       console.log(`BUYSELL Admin Dispatcher (Bot 1) is ACTIVE. Admin alert target: +${adminPhoneNumber}`);
       sock.sendPresenceUpdate('available').catch(() => {});
       // Check for sales immediately upon connection
       checkAndNotifySales().catch(() => {});
     }
     if (connection === 'close') {
+      if (activeSock !== sock) return;
       const code = lastDisconnect?.error?.output?.statusCode;
       const isLoggedOut = code === DisconnectReason.loggedOut;
-      const reconnect = !isLoggedOut;
-      console.warn(`[Bot 1] WhatsApp connection closed (${code || 'unknown'}). Reconnect: ${reconnect}`);
-      if (isLoggedOut) {
-        console.warn('[Session] Session logged out. Resetting session directory.');
-        try { rmSync(sessionDir, { recursive: true, force: true }); } catch {}
-      }
+      const isReplaced = code === DisconnectReason.connectionReplaced;
+      console.warn(`[Bot 1] WhatsApp connection closed (${code || 'unknown'}).`);
       try { sock.ws?.close(); } catch {}
       activeSock = null;
-      if (reconnect) setTimeout(startDispatcher, 3_000);
+      whatsappConnected = false;
+      if (isLoggedOut) {
+        // Unlinked: start over with a fresh session and a new pairing code.
+        console.warn('[Session] Session logged out. Clearing it and requesting a new pairing code.');
+        auth.clear()
+          .catch(error => console.error('[Session] Could not clear the stored session:', error?.message || error))
+          .finally(() => restartDispatcher(3_000));
+        return;
+      }
+      if (isReplaced) {
+        console.warn(`[Bot 1] Another copy of Bot 1 took over the WhatsApp connection. Reconnecting in ${REPLACED_RETRY_MS / 60_000} minutes.`);
+      }
+      restartDispatcher(isReplaced ? REPLACED_RETRY_MS : 3_000);
     }
   });
 
@@ -304,11 +328,14 @@ if (port) {
       req.on('end', async () => {
         try {
           const payload = JSON.parse(bodyStr || '{}');
-          if (payload && activeSock) {
-            const message = buildAdminSaleAlert(payload);
-            const targetJid = `${adminPhoneNumber}@s.whatsapp.net`;
-            await activeSock.sendMessage(targetJid, { text: message });
+          if (!activeSock || !whatsappConnected) {
+            res.writeHead(503, { 'Content-Type': 'application/json', 'Retry-After': '20' });
+            res.end(JSON.stringify({ status: 'not_connected', error: 'WhatsApp is still pairing or reconnecting.' }));
+            return;
           }
+          const message = buildAdminSaleAlert(payload);
+          const targetJid = `${adminPhoneNumber}@s.whatsapp.net`;
+          await activeSock.sendMessage(targetJid, { text: message });
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ status: 'sent' }));
         } catch (e) {
@@ -324,6 +351,7 @@ if (port) {
       status: 'ok',
       service: 'buysell-admin-dispatcher',
       admin_phone: adminPhoneNumber,
+      whatsapp_connected: whatsappConnected,
       alerts_sent: notifiedSales.size,
       uptime: Math.round(process.uptime()),
     }));
@@ -331,6 +359,21 @@ if (port) {
 
   server.listen(port, () => {
     console.info(`[HTTP] Admin Dispatcher health check listening on port ${port}`);
+  });
+}
+
+// Render stops the old copy with SIGTERM during a deploy: save the session, then exit.
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => {
+    console.info(`[Bot 1] ${signal} received; saving the WhatsApp session and stopping.`);
+    try {
+      activeSock?.ev?.removeAllListeners?.();
+      activeSock?.ws?.close();
+    } catch {}
+    Promise.race([
+      Promise.resolve(activeAuth?.flush?.()).catch(() => {}),
+      new Promise(resolve => setTimeout(resolve, 8_000)),
+    ]).finally(() => process.exit(0));
   });
 }
 
