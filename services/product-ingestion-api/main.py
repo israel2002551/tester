@@ -25,11 +25,12 @@ from partner_api import PartnerError, PartnerGateway, partner_error_response, ro
 
 EXPLICIT_PRICE = re.compile(r"(?:\u20a6|\bngn\b|\bnaira\b|\bprice\b|\bcost\b|\bfor\b|\bat\b|\bN(?=\s*\d)|#)\s*(\d+(?:[,.]\d+)?)\s*([km])?\b", re.I)
 SCALED_PRICE = re.compile(r"\b(\d+(?:[,.]\d+)?)\s*([km])\b", re.I)
-ALLOWED_CATEGORIES = {"electronics", "fashion", "home", "phones", "beauty", "sports", "dropship", "other"}
+ALLOWED_CATEGORIES = {"electronics", "fashion", "home", "phones", "beauty", "sports", "arts", "dropship", "other"}
 CATEGORY_ALIASES = {
     "phones & accessories": "phones", "phones & tablets": "phones",
     "home & kitchen": "home", "home & furniture": "home",
     "beauty & health": "beauty", "computers & laptops": "electronics",
+    "arts & crafts": "arts", "arts and crafts": "arts",
 }
 
 
@@ -318,7 +319,7 @@ async def vision_fallback(settings: Settings, title: str, description: str, imag
         "temperature": 0.2,
         "max_tokens": 400,
         "messages": [{"role": "user", "content": [
-            {"type": "text", "text": "Return JSON only with title, description, and suggested_category for this marketplace product. Do not include a price. Allowed categories: electronics, fashion, home, phones, beauty, sports, dropship, other."},
+            {"type": "text", "text": "Return JSON only with title, description, and suggested_category for this marketplace product. Do not include a price. Allowed categories: electronics, fashion, home, phones, beauty, sports, arts (arts and crafts), dropship, other."},
             {"type": "image_url", "image_url": {"url": f"data:{image.content_type};base64,{encoded}"}},
         ]}],
     }

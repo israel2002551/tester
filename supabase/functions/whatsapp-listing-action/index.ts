@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 const PRODUCT_COLUMNS = "id,seller_id,name,description,price,original_price,shipping_fee,shipping_cost,category,condition,location,images,videos,image_url,video_url,has_video,stock_quantity,status,created_at,negotiable";
-const NATIVE_CATEGORIES = new Set(["electronics", "fashion", "home", "phones", "beauty", "sports", "dropship", "other"]);
+const NATIVE_CATEGORIES = new Set(["electronics", "fashion", "home", "phones", "beauty", "sports", "arts", "dropship", "other"]);
 const NATIVE_CONDITIONS = new Set(["new", "used-like-new", "used-good"]);
 const WHATSAPP_PRICE_MARKUP_PERCENT = 20;
 // Shop cards say "Only N left" at 5 or fewer, so imported listings start above that.
@@ -79,6 +79,27 @@ function finiteNumber(value: unknown) {
 
 function validGroupJid(input: unknown) {
   return /^[0-9-]{10,80}@g\.us$/.test(value(input, 100));
+}
+
+// WhatsApp names many group members by a private ID (…@lid) instead of their
+// number. Earlier listings saved that ID's digits as the seller's phone, and
+// wa.me links reject them, so only a real number is ever stored or passed on.
+function privateIdDigits(senderJid: string) {
+  return senderJid.endsWith("@lid") ? senderJid.split("@")[0].replace(/\D/g, "") : "";
+}
+
+function cleanSenderPhone(senderJid: string, phone: unknown) {
+  const digits = value(phone, 30).replace(/\D/g, "");
+  if (digits.length < 8 || digits.length > 15) return null;
+  return digits === privateIdDigits(senderJid) ? null : digits;
+}
+
+// The seller's real WhatsApp number for a listing, or "" when WhatsApp hides it.
+function sellerPhoneOf(meta: { sender_jid?: unknown; sender_phone?: unknown }) {
+  const senderJid = value(meta.sender_jid, 200);
+  const stored = cleanSenderPhone(senderJid, meta.sender_phone);
+  if (stored) return stored;
+  return /@(s\.whatsapp\.net|c\.us)$/.test(senderJid) ? senderJid.split("@")[0].split(":")[0].replace(/\D/g, "") : "";
 }
 
 function configuredAdminEmails() {
@@ -183,7 +204,7 @@ async function queueListingJob(admin: ReturnType<typeof createClient>, req: Requ
 
   const groupJid = value(body.group_jid, 200);
   const senderJid = value(body.sender_jid, 200);
-  const senderPhone = value(body.sender_phone, 30) || null;
+  const senderPhone = cleanSenderPhone(senderJid, body.sender_phone);
   const dedupeKey = value(body.dedupe_key, 300);
   const rawMessageIds = Array.isArray(body.message_ids) ? body.message_ids : [];
   const messageIds = [...new Set(rawMessageIds.map((id) => value(id, 300)).filter(Boolean))].slice(0, 100);
@@ -257,6 +278,7 @@ async function claimListingJobs(admin: ReturnType<typeof createClient>, req: Req
     dedupe_key: j.dedupe_key,
     group_jid: j.group_jid,
     sender_jid: j.sender_jid,
+    sender_phone: j.sender_phone ?? null,
     message_ids: j.message_ids,
     payload: j.payload,
     lock_token: j.lock_token,
@@ -403,6 +425,8 @@ function nativeCategory(input: unknown) {
     vehicles: "other",
     "home & furniture": "home",
     "beauty & health": "beauty",
+    "arts & crafts": "arts",
+    "arts and crafts": "arts",
     services: "other",
   };
   const mapped = aliases[raw] || raw;
@@ -570,7 +594,7 @@ async function ingest(admin: ReturnType<typeof createClient>, req: Request, body
     source_message_id: sourceMessageId,
     group_jid: groupJid,
     sender_jid: senderJid,
-    sender_phone: value(body.sender_phone, 30) || null,
+    sender_phone: cleanSenderPhone(senderJid, body.sender_phone),
     manage_token_hash: await sha256(manageToken),
     source_price: price,
     price_markup: priceMarkup,
@@ -984,6 +1008,49 @@ async function adminDashboardAction(admin: ReturnType<typeof createClient>, req:
   return json({ error: "Unknown administrator action." }, 400);
 }
 
+// Bot 2 fills in the real numbers of sellers WhatsApp named only by a private
+// ID, from the member lists of its groups.
+//   mode "missing": the private IDs that still have no real number
+//   mode "save":    phones: [{ sender_jid, phone }] for those sellers
+async function sellerPhones(admin: ReturnType<typeof createClient>, req: Request, body: Record<string, unknown>) {
+  if (!requireCollectorSecret(req)) return json({ error: "Unauthorized seller phone request." }, 401);
+  const mode = value(body.mode, 20);
+
+  if (mode === "missing") {
+    const { data, error } = await admin
+      .from("whatsapp_listing_meta")
+      .select("sender_jid,sender_phone")
+      .like("sender_jid", "%@lid")
+      .limit(20_000);
+    if (error) throw new Error("Could not list the sellers without a number.");
+    const missing = new Set<string>();
+    for (const row of data || []) {
+      if (!sellerPhoneOf(row)) missing.add(String(row.sender_jid));
+    }
+    return json({ sender_jids: [...missing].slice(0, 1_000) });
+  }
+
+  if (mode !== "save") return json({ error: "Unknown seller phone mode." }, 400);
+  let updated = 0;
+  for (const entry of (Array.isArray(body.phones) ? body.phones : []).slice(0, 1_000)) {
+    const row = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
+    const senderJid = value(row.sender_jid, 200);
+    const idDigits = privateIdDigits(senderJid);
+    const phone = cleanSenderPhone(senderJid, row.phone);
+    if (!/^\d{5,25}$/.test(idDigits) || !phone) continue;
+    // Only listings without a real number: none saved, or just the private ID's digits.
+    const { data, error } = await admin
+      .from("whatsapp_listing_meta")
+      .update({ sender_phone: phone })
+      .eq("sender_jid", senderJid)
+      .or(`sender_phone.is.null,sender_phone.eq.${idDigits}`)
+      .select("product_id");
+    if (error) throw new Error("Could not save the sellers' numbers.");
+    updated += (data || []).length;
+  }
+  return json({ updated });
+}
+
 async function orderWhatsAppSales(admin: ReturnType<typeof createClient>, req: Request, _body: Record<string, unknown>) {
   const ingestSecret = Deno.env.get("WHATSAPP_INGEST_SECRET") || "";
   if (!ingestSecret || req.headers.get("x-whatsapp-ingest-secret") !== ingestSecret) {
@@ -1040,7 +1107,8 @@ async function orderWhatsAppSales(admin: ReturnType<typeof createClient>, req: R
           paid_price: item?.price || order.total_amount,
           group_jid: meta.group_jid,
           group_name: groupNameMap.get(meta.group_jid) || "WhatsApp Seller Group",
-          seller_phone: meta.sender_phone || String(meta.sender_jid || "").split("@")[0] || "",
+          // "" when WhatsApp hides the seller's number (never their private ID's digits).
+          seller_phone: sellerPhoneOf(meta),
           source_price: meta.source_price,
           delivery_name: order.delivery_name || "Customer",
           delivery_phone: order.delivery_phone || "",
@@ -1073,6 +1141,7 @@ serve(async (req) => {
     if (action === "seller_command") return await sellerCommand(admin, req, body);
     if (action === "collector_groups") return await approvedGroupsForCollector(admin, req);
     if (action === "order_whatsapp_sales") return await orderWhatsAppSales(admin, req, body);
+    if (action === "seller_phones") return await sellerPhones(admin, req, body);
     if (action === "admin") return await adminDashboardAction(admin, req, body);
     if (action === "auth_state_list" || action === "auth_state_get" || action === "auth_state_set" || action === "auth_state_clear") {
       return await authStateAction(admin, req, body, action);

@@ -30,6 +30,8 @@ const categoryRoutes = {
   '/category-beauty.html': 'beauty',
   '/category/sports': 'sports',
   '/category-sports.html': 'sports',
+  '/category/arts': 'arts',
+  '/category-arts.html': 'arts',
   '/category/dropship': 'dropship',
   '/category-dropship.html': 'dropship',
   '/upcoming': 'upcoming',

@@ -10,7 +10,7 @@ const corsHeaders = {
 
 const SELLER_ROLES = new Set(["seller", "admin", "both", "service_provider"]);
 const ACTIVE_STATUSES = new Set(["active", "paused", "draft", "pending", "sold", "out_of_stock"]);
-const VALID_CATEGORIES = new Set(["electronics", "fashion", "home", "phones", "beauty", "sports", "dropship", "other"]);
+const VALID_CATEGORIES = new Set(["electronics", "fashion", "home", "phones", "beauty", "sports", "arts", "dropship", "other"]);
 const VALID_CONDITIONS = new Set(["new", "used-like-new", "used-good"]);
 // Who a fashion or beauty product is for. Left empty, the database reads it
 // from the name and description (public.buysell_audience_from_text).

@@ -9,6 +9,7 @@
 /category-electronics.html /category/electronics 301
 /category-beauty.html /category/beauty 301
 /category-sports.html /category/sports 301
+/category-arts.html /category/arts 301
 /category-dropship.html /category/dropship 301
 /category-trending /category/trending 301
 /category-phones /category/phones 301
@@ -17,6 +18,7 @@
 /category-electronics /category/electronics 301
 /category-beauty /category/beauty 301
 /category-sports /category/sports 301
+/category-arts /category/arts 301
 /category-dropship /category/dropship 301
 /products /products.html 200
 /upcoming /upcoming.html 200
@@ -30,5 +32,6 @@
 /category/electronics /category-electronics.html 200
 /category/beauty /category-beauty.html 200
 /category/sports /category-sports.html 200
+/category/arts /category-arts.html 200
 /category/dropship /category-dropship.html 200
 /manage /index.html 200

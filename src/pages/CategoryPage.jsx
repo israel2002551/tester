@@ -72,10 +72,12 @@ function matchesCategory(product, category) {
     home: ['home', 'furniture', 'kitchen', 'appliance', 'decor'],
     beauty: ['beauty', 'skincare', 'cosmetic', 'fragrance', 'perfume', 'personal care'],
     sports: ['sport', 'fitness', 'gym', 'activewear', 'outdoor'],
+    // Not "arts" or "art" as a word part: "auto parts" and "party" contain them.
+    arts: ['craft', 'handmade', 'artwork', 'painting'],
     dropship: ['dropship', '1688', 'sourcing'],
   };
   if (matchingTerms[target]) {
-    return matchingTerms[target].some(term => value === term || value.includes(term));
+    return value === target || matchingTerms[target].some(term => value === term || value.includes(term));
   }
   // Seller-defined categories should stay separate rather than being mixed into
   // an unrelated built-in category.

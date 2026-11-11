@@ -30,7 +30,7 @@ Returns active, in-stock products and current BUYSELL ads. Prices are in Naira a
 |---|---|---|
 | `limit` | 50 | 1–100 products per page |
 | `offset` | 0 | Use `pagination.next_offset` to read the next page |
-| `category` | – | Optional: `electronics`, `fashion`, `home`, `phones`, `beauty`, `sports`, `dropship` or `other` |
+| `category` | – | Optional: `electronics`, `fashion`, `home`, `phones`, `beauty`, `sports`, `arts` (arts and crafts), `dropship` or `other` |
 
 ```bash
 curl -H "X-BUYSELL-API-KEY: $BUYSELL_KEY" "https://<host>/api/v1/partner/feed?limit=50"

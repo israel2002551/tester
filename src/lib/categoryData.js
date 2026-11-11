@@ -61,6 +61,12 @@ export const categoryConfig = {
     icon: 'fa-dumbbell',
     searchPlaceholder: 'Search sports products...',
   },
+  arts: {
+    title: 'Arts & Crafts',
+    subtitle: 'Paintings, art supplies, craft kits, and handmade pieces.',
+    icon: 'fa-palette',
+    searchPlaceholder: 'Search arts and crafts...',
+  },
   dropship: {
     title: '1688 & Dropship Deals',
     subtitle: 'Sourcing-ready products for bulk orders and resellers.',
@@ -86,6 +92,7 @@ export const categoryLinks = [
   ['Electronics', '/category/electronics', 'electronics'],
   ['Beauty', '/category/beauty', 'beauty'],
   ['Sports', '/category/sports', 'sports'],
+  ['Arts & Crafts', '/category/arts', 'arts'],
   ['Dropship', '/category/dropship', 'dropship'],
   ['Upcoming', '/upcoming', 'upcoming'],
 ];
@@ -102,6 +109,7 @@ export const categoryImages = {
   electronics: 'https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=1200&h=900&fit=crop&q=80',
   beauty: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=1200&h=900&fit=crop&q=80',
   sports: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=1200&h=900&fit=crop&q=80',
+  arts: 'https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=1200&h=900&fit=crop&q=80',
   dropship: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1200&h=900&fit=crop&q=80',
   upcoming: 'https://images.unsplash.com/photo-1556742502-ec7c0e9f34b1?w=1200&h=900&fit=crop&q=80',
 };

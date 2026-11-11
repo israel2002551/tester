@@ -18,6 +18,7 @@ const htmlEntries = {
   'category-electronics': 'category-electronics.html',
   'category-beauty': 'category-beauty.html',
   'category-sports': 'category-sports.html',
+  'category-arts': 'category-arts.html',
   'category-dropship': 'category-dropship.html',
 };
 

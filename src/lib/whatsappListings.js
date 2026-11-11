@@ -30,6 +30,7 @@ export const LISTING_CATEGORIES = [
   ['home', 'Home & furniture'],
   ['beauty', 'Beauty & health'],
   ['sports', 'Sports'],
+  ['arts', 'Arts & crafts'],
   ['dropship', 'Dropship'],
   ['other', 'Other'],
 ];

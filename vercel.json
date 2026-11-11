@@ -48,6 +48,11 @@
       "permanent": true
     },
     {
+      "source": "/category-arts",
+      "destination": "/category/arts",
+      "permanent": true
+    },
+    {
       "source": "/category-dropship",
       "destination": "/category/dropship",
       "permanent": true
@@ -188,6 +193,10 @@
     {
       "source": "/category/sports",
       "destination": "/category-sports.html"
+    },
+    {
+      "source": "/category/arts",
+      "destination": "/category-arts.html"
     },
     {
       "source": "/category/dropship",

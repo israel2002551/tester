@@ -40,7 +40,7 @@ logger = logging.getLogger("buysell.partner")
 API_KEY_HEADER = "x-buysell-api-key"
 API_KEY_PATTERN = re.compile(r"^bsk_live_[0-9a-f]{64}$")
 PARTNER_ORDER_ID_PATTERN = r"^[A-Za-z0-9._:-]{1,120}$"
-FEED_CATEGORIES = {"electronics", "fashion", "home", "phones", "beauty", "sports", "dropship", "other"}
+FEED_CATEGORIES = {"electronics", "fashion", "home", "phones", "beauty", "sports", "arts", "dropship", "other"}
 MAX_ORDER_BYTES = 64_000
 # (requests, window seconds) per API key.
 RATE_LIMITS = {"feed": (120, 60.0), "orders": (300, 60.0)}
