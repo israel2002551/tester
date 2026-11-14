@@ -2775,6 +2775,53 @@ body.in-seller #main-nav .mob-ham-btn {
  transform: translateY(-50%);
  z-index: 1;
 }
+/* The way back to the buyer marketplace from the seller workspace. */
+.seller-shop-btn { display: none; }
+body.in-seller #main-nav .seller-shop-btn {
+ position: absolute;
+ right: .75rem;
+ top: 50%;
+ z-index: 1;
+ display: inline-flex;
+ align-items: center;
+ gap: .45rem;
+ min-height: 40px;
+ padding: 0 1rem;
+ border: 1.5px solid rgba(14, 89, 55, .22);
+ border-radius: 999px;
+ color: #0e5937;
+ background: #edf6ee;
+ font: 800 .84rem 'DM Sans', sans-serif;
+ white-space: nowrap;
+ cursor: pointer;
+ transform: translateY(-50%);
+ transition: background .2s, border-color .2s;
+}
+body.in-seller #main-nav .seller-shop-btn:hover { border-color: #167447; background: #dcefe0; }
+.seller-shop-btn__short { display: none; }
+@media (max-width: 600px) {
+ body.in-seller #main-nav .seller-shop-btn { padding: 0 .8rem; }
+ .seller-shop-btn__long { display: none; }
+ .seller-shop-btn__short { display: inline; }
+}
+.dash-shop-link {
+ display: flex;
+ align-items: center;
+ gap: .55rem;
+ width: 100%;
+ margin-bottom: .4rem;
+ padding: .62rem .75rem;
+ border: 1px solid rgba(255, 255, 255, .14);
+ border-radius: 12px;
+ color: #fff;
+ background: rgba(255, 255, 255, .08);
+ font: 700 .84rem 'DM Sans', sans-serif;
+ text-align: left;
+ cursor: pointer;
+ transition: background .2s, border-color .2s;
+}
+.dash-shop-link:hover { border-color: rgba(244, 180, 0, .55); background: rgba(244, 180, 0, .14); }
+.dash-shop-link i { color: #f4b400; }
 
 /* ====================================================
    BUYER MOBILE SIDEBAR & CLEANER HEADER NAVIGATION

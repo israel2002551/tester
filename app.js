@@ -2326,6 +2326,13 @@ function handleNavBrand(e) {
  else loadProducts();
 }
 
+// "Back to shopping" in the seller workspace header and sidebar.
+function leaveSellerWorkspace() {
+ closeMobSidebar();
+ showBuyerView();
+ window.scrollTo({ top: 0 });
+}
+
 // What each role can open. The owner has everything; team roles see only what
 // the server lets them do (public.buysell_store_role and the seller edge
 // functions). Payouts, bank details, the team, the selling plan, ads,
