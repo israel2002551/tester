@@ -5499,7 +5499,8 @@ function updateCheckoutTotals() {
  }
 }
 
-function addToCart(prod) {
+// options.quiet skips the toast, for callers that add several items and say so once.
+function addToCart(prod, options = {}) {
  if (!prod?.id) return;
  cart = normalizeCartItems(cart);
  const shippingFee = itemShippingFee(prod);
@@ -5531,7 +5532,7 @@ function addToCart(prod) {
  amount: prod.price || 0 
  });
  
- toast('Added to Cart!', prod.name, 'success', 2000);
+ if (!options.quiet) toast('Added to Cart!', prod.name, 'success', 2000);
 }
 
 function removeFromCart(id) { cart = cart.filter(c => c.id !== id); saveCart(); renderCartItems(); }
@@ -13125,73 +13126,191 @@ function toggleWishlist(productId, event) {
  }
 }
 
+// The saved products last loaded into the wishlist, newest saved first, so
+// removing one or adding all to the cart needs no new request.
+let wishlistLoadedItems = [];
+let wishlistMissingCount = 0;
+
+function wishlistItemPrice(product) {
+ const flash = Boolean(product.flash_price && product.flash_end && new Date(product.flash_end) > new Date());
+ return { flash, price: Number(flash ? product.flash_price : product.price) || 0 };
+}
+
+function wishlistCartItem(product) {
+ const { flash, price } = wishlistItemPrice(product);
+ return {
+  id: product.id,
+  name: product.name,
+  price,
+  image_url: productThumbnail(product),
+  seller_id: product.seller_id,
+  profiles: product.profiles,
+  shipping_fee: product.shipping_fee,
+  shipping_cost: product.shipping_cost,
+  is_flash: flash,
+ };
+}
+
+// Sold out only when the seller says so; no stock figure means it can be ordered.
+function wishlistSoldOut(product) {
+ return product.stock_quantity !== null && product.stock_quantity !== undefined && Number(product.stock_quantity) <= 0;
+}
+
+function setWishlistSummary(text) {
+ const summary = document.getElementById('wishlist-summary');
+ if (summary) summary.textContent = text;
+}
+
+function renderWishlistEmpty(container) {
+ setWishlistSummary('Products you save will appear here');
+ container.innerHTML = `<div class="wl-empty">
+  <span class="wl-empty-icon"><i class="fa-regular fa-heart"></i></span>
+  <h3>Nothing saved yet</h3>
+  <p>Tap the heart on any product to keep it here for later.</p>
+  <button type="button" class="btn btn-primary" onclick="closeModal('wishlist-modal');switchBuyerTab?.('shop')"><i class="fa-solid fa-bag-shopping"></i> Start shopping</button>
+ </div>`;
+}
+
+function renderWishlistItems() {
+ const container = document.getElementById('wishlist-items');
+ if (!container) return;
+ const items = wishlistLoadedItems;
+ if (!items.length && !wishlistMissingCount) {
+  renderWishlistEmpty(container);
+  return;
+ }
+ const available = items.filter(product => !wishlistSoldOut(product));
+ setWishlistSummary(`${items.length} saved ${items.length === 1 ? 'product' : 'products'}`);
+
+ const toolbar = items.length ? `<div class="wl-toolbar">
+  <button type="button" class="wl-text-btn" onclick="clearWishlist()">Clear all</button>
+  ${available.length ? `<button type="button" class="btn btn-primary btn-sm" onclick="addAllWishlistToCart()"><i class="fa-solid fa-cart-plus"></i> Add all to cart${available.length > 1 ? ` (${available.length})` : ''}</button>` : ''}
+ </div>` : '';
+
+ const missing = wishlistMissingCount ? `<div class="wl-note">
+  <i class="fa-solid fa-circle-info"></i>
+  <span>${wishlistMissingCount} saved ${wishlistMissingCount === 1 ? 'product is' : 'products are'} no longer for sale.</span>
+  <button type="button" class="wl-text-btn" onclick="removeMissingWishlistItems()">Remove</button>
+ </div>` : '';
+
+ const cards = items.map(product => {
+  const { flash, price } = wishlistItemPrice(product);
+  const original = Number(product.original_price) || 0;
+  const off = original > price && price > 0 ? Math.round((1 - price / original) * 100) : 0;
+  const soldOut = wishlistSoldOut(product);
+  const stock = Number(product.stock_quantity);
+  const stockNote = soldOut
+   ? '<span class="wl-stock is-out">Sold out</span>'
+   : Number.isFinite(stock) && product.stock_quantity !== null && stock > 0 && stock <= 5
+    ? `<span class="wl-stock is-low">Only ${stock} left</span>`
+    : '<span class="wl-stock">In stock</span>';
+  const store = product.profiles?.store_name || product.profiles?.name || '';
+  const name = product.name || 'Product';
+  const id = jsArg(product.id);
+  return `<article class="wl-item${soldOut ? ' is-sold-out' : ''}">
+   <button type="button" class="wl-media" onclick="openWishlistProduct(${id})" aria-label="View ${escAttr(name)}">
+    <img src="${escAttr(productThumbnail(product, 240) || PRODUCT_PLACEHOLDER_IMAGE)}" alt="" loading="lazy">
+    ${flash ? '<span class="wl-badge"><i class="fa-solid fa-bolt"></i> Flash</span>' : off >= 5 ? `<span class="wl-badge">-${off}%</span>` : ''}
+   </button>
+   <div class="wl-info">
+    <button type="button" class="wl-name" onclick="openWishlistProduct(${id})">${escHtml(name)}</button>
+    ${store ? `<span class="wl-store"><i class="fa-solid fa-store"></i> ${escHtml(store)}</span>` : ''}
+    <div class="wl-price"><strong>${fmtN(price)}</strong>${off >= 5 ? `<s>${fmtN(original)}</s>` : ''}</div>
+    ${stockNote}
+   </div>
+   <div class="wl-actions">
+    <button type="button" class="btn btn-primary btn-sm wl-cart" onclick="addWishlistItemToCart(${id})" ${soldOut ? 'disabled' : ''}>
+     <i class="fa-solid fa-cart-plus"></i><span>${soldOut ? 'Sold out' : 'Add to cart'}</span>
+    </button>
+    <button type="button" class="wl-remove" onclick="removeFromWishlist(${id})" aria-label="Remove ${escAttr(name)} from wishlist" title="Remove">
+     <i class="fa-regular fa-trash-can"></i>
+    </button>
+   </div>
+  </article>`;
+ }).join('');
+
+ container.innerHTML = `${toolbar}${missing}<div class="wl-list">${cards}</div>`;
+}
+
 async function showWishlistModal() {
  showModal('wishlist-modal');
  const container = document.getElementById('wishlist-items');
+ if (!container) return;
  if (!wishlist.length) {
- container.innerHTML = '<p class="text-center color-text3 p-3">Your wishlist is empty.</p>';
- return;
+  wishlistLoadedItems = [];
+  wishlistMissingCount = 0;
+  renderWishlistEmpty(container);
+  return;
  }
- 
- container.innerHTML = '<div class="text-center p-3"><span class="spinner"></span></div>';
- 
+
+ setWishlistSummary(`${wishlist.length} saved ${wishlist.length === 1 ? 'product' : 'products'}`);
+ container.innerHTML = `<div class="wl-list" aria-busy="true">${'<div class="wl-item wl-skeleton"><span></span><div><i></i><i></i><i></i></div></div>'.repeat(Math.min(wishlist.length, 3))}</div>`;
+
  try {
   const { data } = await fetchProductRows(q => q.in('id', wishlist).limit(60));
-  const items = await hydrateProductProfiles(data || []);
- if (!items || !items.length) {
- container.innerHTML = '<p class="text-center color-text3 p-3">Products no longer available.</p>';
- return;
- }
- 
- // --- FLASH SALE LOGIC ---
- const now = new Date();
- 
- container.innerHTML = items.map(p => {
- const isFlashActive = p.flash_price && p.flash_end && new Date(p.flash_end) > now;
- const displayPrice = isFlashActive ? p.flash_price : p.price;
- 
- // Prepare object for addToCart
- const cartItem = {
- id: p.id,
- name: p.name,
- price: displayPrice,
- image_url: productThumbnail(p),
- seller_id: p.seller_id,
- profiles: p.profiles,
- is_flash: isFlashActive
- };
-
- return `
- <div class="wishlist-item" style="display:flex; gap:12px; align-items:center; padding:10px; border-bottom:1px solid var(--border)">
- <img src="${productThumbnail(p, 200) || PRODUCT_PLACEHOLDER_IMAGE}" style="width:60px; height:60px; border-radius:8px; object-fit:cover">
- <div style="flex:1">
- <div class="font-600 text-sm">${escHtml(p.name)}</div>
- <div class="color-green font-bold text-sm">
- ${isFlashActive ? `<span style="color:var(--red); font-size:0.7rem">Flash</span> ` : ''}
- \u20A6${fmtN(displayPrice)}
- </div>
- </div>
- <div style="display:flex; gap:5px">
- <button class="btn btn-outline btn-sm" onclick="addToCart(${escAttr(JSON.stringify(cartItem))})">
- <i class="fa-solid fa-cart-plus"></i>
- </button>
- <button class="btn btn-ghost btn-sm" onclick="toggleWishlist(${jsArg(p.id)})">
- <i class="fa-solid fa-trash" style="color:var(--danger)"></i>
- </button>
- </div>
- </div>
- `}).join('');
-  } catch(e) {
+  const rows = await hydrateProductProfiles(data || []);
+  // Newest saved first.
+  const order = [...wishlist].reverse();
+  wishlistLoadedItems = (rows || [])
+   .filter(product => product && order.includes(product.id))
+   .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+  wishlistMissingCount = Math.max(0, wishlist.length - wishlistLoadedItems.length);
+  renderWishlistItems();
+ } catch (e) {
   console.warn('Wishlist load failed:', e);
-  container.innerHTML = `
-  <div class="text-center p-3">
-  <p class="color-danger" style="margin-bottom:12px">Could not load saved products.</p>
-  <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-  <button class="btn btn-outline btn-sm" onclick="showWishlistModal()"><i class="fa-solid fa-rotate-right"></i> Retry</button>
-  <button class="btn btn-ghost btn-sm" onclick="wishlist=[];saveWishlist();showWishlistModal()"><i class="fa-solid fa-trash"></i> Clear</button>
-  </div>
+  container.innerHTML = `<div class="wl-empty">
+   <span class="wl-empty-icon is-error"><i class="fa-solid fa-wifi"></i></span>
+   <h3>Couldn't load your saved products</h3>
+   <p>Check your connection and try again.</p>
+   <button type="button" class="btn btn-primary" onclick="showWishlistModal()"><i class="fa-solid fa-rotate-right"></i> Try again</button>
   </div>`;
-  }
+ }
+}
+
+function openWishlistProduct(id) {
+ closeModal('wishlist-modal');
+ openProduct(id);
+}
+
+function addWishlistItemToCart(id) {
+ const product = wishlistLoadedItems.find(item => item.id === id);
+ if (!product || wishlistSoldOut(product)) return;
+ addToCart(wishlistCartItem(product));
+}
+
+function addAllWishlistToCart() {
+ const available = wishlistLoadedItems.filter(product => !wishlistSoldOut(product));
+ if (!available.length) return;
+ available.forEach(product => addToCart(wishlistCartItem(product), { quiet: true }));
+ toast('Added to cart', `${available.length} saved ${available.length === 1 ? 'product' : 'products'} added`, 'success', 2500);
+ closeModal('wishlist-modal');
+ if (typeof openCart === 'function') openCart();
+}
+
+function removeFromWishlist(id) {
+ wishlist = wishlist.filter(savedId => savedId !== id);
+ wishlistLoadedItems = wishlistLoadedItems.filter(product => product.id !== id);
+ saveWishlist();
+ updateModalWishBtn();
+ renderWishlistItems();
+}
+
+function removeMissingWishlistItems() {
+ const loaded = new Set(wishlistLoadedItems.map(product => product.id));
+ wishlist = wishlist.filter(id => loaded.has(id));
+ wishlistMissingCount = 0;
+ saveWishlist();
+ renderWishlistItems();
+}
+
+function clearWishlist() {
+ if (!window.confirm('Remove every product from your wishlist?')) return;
+ wishlist = [];
+ wishlistLoadedItems = [];
+ wishlistMissingCount = 0;
+ saveWishlist();
+ updateModalWishBtn();
+ renderWishlistItems();
 }
 
 // ====================================================
