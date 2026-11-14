@@ -62,11 +62,8 @@ export default function CartDrawer({ isOpen, onClose, onCartChange }) {
     notifyCartChange(updated);
   };
 
+  // The cart shows the items' subtotal only; checkout shows the amount to pay.
   const productTotal = items.reduce((sum, item) => sum + Number(item.price || 0) * (Number(item.qty) || 1), 0);
-  // BUYSELL charges one flat delivery fee per order, however many stores supply it
-  // (as the checkout does). It is part of the total but not listed on its own.
-  const shippingTotal = items.length ? 2500 : 0;
-  const total = productTotal + shippingTotal;
   const quantity = cartQuantity(items);
   const proceedToCheckout = () => {
     // Checkout loads the classic marketplace in a new document. Persist both
@@ -135,8 +132,7 @@ export default function CartDrawer({ isOpen, onClose, onCartChange }) {
         {items.length > 0 ? (
           <footer className="cart-drawer__footer">
             <dl className="cart-drawer__summary">
-              <div><dt>Items subtotal</dt><dd>{money(productTotal)}</dd></div>
-              <div className="cart-drawer__grand-total"><dt>Total</dt><dd>{money(total)}</dd></div>
+              <div className="cart-drawer__grand-total"><dt>Subtotal</dt><dd>{money(productTotal)}</dd></div>
             </dl>
             <button
               className="btn btn-primary cart-drawer__checkout"

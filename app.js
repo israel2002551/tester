@@ -5587,9 +5587,8 @@ function renderCartItems() {
  const summary = document.getElementById('cart-summary');
  if (!cart.length) { list.innerHTML=''; empty.classList.remove('hidden'); summary.classList.add('hidden'); return; }
  empty.classList.add('hidden'); summary.classList.remove('hidden');
+ // The cart shows the items' subtotal only; checkout shows the amount to pay.
  const productTotal = cartProductTotal();
- const shippingTotal = cartShippingTotal();
- const total = productTotal + shippingTotal;
  list.innerHTML = cart.map(c => `
  <div class="cart-item">
  <img src="${c.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=200'}" alt="${escHtml(c.name)}" loading="lazy">
@@ -5608,9 +5607,6 @@ function renderCartItems() {
  </div>
  </div>`).join('');
  document.getElementById('cart-subtotal').textContent = fmtN(productTotal);
- const shippingEl = document.getElementById('cart-shipping');
- if (shippingEl) shippingEl.textContent = fmtN(shippingTotal);
- document.getElementById('cart-total').textContent = fmtN(total);
 }
 
 // ====================================================
