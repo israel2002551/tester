@@ -11,6 +11,11 @@ const corsHeaders = {
 const SELLER_ROLES = new Set(["seller", "admin", "both", "service_provider"]);
 const ACTIVE_STATUSES = new Set(["active", "paused", "draft", "pending", "sold", "out_of_stock"]);
 const VALID_CATEGORIES = new Set(["electronics", "fashion", "home", "phones", "beauty", "sports", "arts", "dropship", "other"]);
+// Sellers can also name their own category ("Baby Products", "Auto Parts"),
+// listed under "More categories" on the marketplace. Page names and the form's
+// "Custom category" option are not categories. The database's
+// products_category_check holds the same limits, except the need for a letter.
+const RESERVED_CATEGORY_NAMES = new Set(["all", "trending", "women", "men", "upcoming", "custom", "__custom__", "custom-category", "custom_category"]);
 const VALID_CONDITIONS = new Set(["new", "used-like-new", "used-good"]);
 // Who a fashion or beauty product is for. Left empty, the database reads it
 // from the name and description (public.buysell_audience_from_text).
@@ -62,10 +67,19 @@ function hasOwn(data: Record<string, unknown>, key: string) {
   return Object.prototype.hasOwnProperty.call(data, key);
 }
 
+/** A built-in category key, a seller's own category in lower case, or "" when neither. */
+function productCategory(input: unknown) {
+  const category = cleanString(input, 200).toLowerCase().replace(/\s+/g, " ");
+  if (VALID_CATEGORIES.has(category)) return category;
+  if (category.length < 2 || category.length > 60 || RESERVED_CATEGORY_NAMES.has(category)) return "";
+  if (/[<>"`\\\u0000-\u001f]/.test(category) || !/\p{L}/u.test(category)) return "";
+  return category;
+}
+
 function buildProductPayload(data: Record<string, unknown>, sellerId: string, isCreate: boolean) {
   const name = cleanString(data.name, 300);
   const description = cleanString(data.description, 2000);
-  const category = cleanString(data.category, 40);
+  const category = productCategory(data.category);
   const condition = cleanString(data.condition, 40);
   const audience = cleanString(data.audience, 20).toLowerCase();
   // `data.price` and `data.original_price` are the amounts the seller enters.
@@ -91,7 +105,7 @@ function buildProductPayload(data: Record<string, unknown>, sellerId: string, is
     if (sellerPrice <= 0 || sellerPrice > 100000000) throw new Error("Enter a valid seller product price.");
   }
   if (isCreate || data.category !== undefined) {
-    if (!VALID_CATEGORIES.has(category)) throw new Error("Please select a valid product category.");
+    if (!category) throw new Error("Please select a category, or name your own in 2 to 60 characters.");
   }
   if (isCreate || data.condition !== undefined) {
     if (!VALID_CONDITIONS.has(condition)) throw new Error("Please select a valid product condition.");

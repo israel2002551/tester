@@ -3,6 +3,8 @@
 -- Shoppers can browse Arts & Crafts (/category/arts) and sellers can list
 -- in it. Its key in public.products.category is 'arts'.
 --
+--   0. products_category_check, the list of categories a product may have,
+--      includes 'arts'.
 --   1. public.buysell_category_from_text() also knows art and craft
 --      supplies and handmade crafts: paintings, easels, canvases, paint
 --      brushes, sketchbooks, crayons, resin art, yarn and crochet hooks,
@@ -21,6 +23,10 @@
 --   update public.products p set category = f.old_category
 --     from public.product_category_fixes f
 --     where f.product_id = p.id and f.new_category = 'arts' and f.fixed_at >= '2026-11-11';
+
+alter table public.products drop constraint if exists products_category_check;
+alter table public.products add constraint products_category_check
+  check (category in ('electronics', 'fashion', 'home', 'phones', 'beauty', 'sports', 'arts', 'dropship', 'other'));
 
 -- As in 20261108010000_men_women_sections.sql, plus Arts & Crafts.
 create or replace function public.buysell_category_from_text(p_text text)
