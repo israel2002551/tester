@@ -5469,7 +5469,8 @@ function checkoutDeliveryNote(quoted) {
  if (checkoutDeliveryMode() === 'pickup') return 'Safe Pickup: no delivery fee';
  const quote = bogoCheckoutState.quote || {};
  const charge = quoted ? bogoNumber(quote.customer_shipping_charge ?? quote.shipping_total, 0) : cartShippingTotal();
- return charge > 0 ? `Includes ${fmtN(charge)} delivery` : 'Free delivery';
+ // The delivery fee is part of the total but not listed on its own.
+ return charge > 0 ? '' : 'Free delivery';
 }
 
 function updateCheckoutTotals() {
@@ -5595,7 +5596,6 @@ function renderCartItems() {
  <div style="flex:1;min-width:0">
  <div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px">${escHtml(c.name)}</div>
  <div class="color-green font-bold">${fmtN(c.price)}</div>
-   <div class="text-xs color-text3">BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} flat fee per order</div>
  <div class="flex items-center gap-2 mt-1">
  <button onclick="changeCartQty(${jsArg(c.id)},-1)" class="btn btn-outline btn-sm" style="padding:.2rem .5rem">-</button>
  <span class="text-sm font-bold">${c.qty||1}</span>
@@ -5767,7 +5767,7 @@ async function startCheckout(options = {}) {
  coItemsEl.innerHTML = cart.map(c=>`
  <div class="order-item">
  <img src="${c.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=100'}" alt="" loading="lazy">
-   <div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(c.name)}</div><div class="color-text3 text-xs">Qty: ${c.qty||1} - BUYSELL delivery: ${fmtN(BUYSELL_DELIVERY_FEE)} flat fee per order</div></div>
+   <div style="flex:1;min-width:0"><div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${escHtml(c.name)}</div><div class="color-text3 text-xs">Qty: ${c.qty||1}</div></div>
  <div class="font-bold text-sm">${fmtN(c.price*(c.qty||1))}</div>
  </div>`).join('');
  }

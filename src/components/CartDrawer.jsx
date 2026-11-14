@@ -63,9 +63,9 @@ export default function CartDrawer({ isOpen, onClose, onCartChange }) {
   };
 
   const productTotal = items.reduce((sum, item) => sum + Number(item.price || 0) * (Number(item.qty) || 1), 0);
-  const sellerIds = new Set(items.map(item => item.seller_id).filter(Boolean));
-  const sellerCount = Math.max(1, sellerIds.size);
-  const shippingTotal = items.length ? sellerCount * 2500 : 0;
+  // BUYSELL charges one flat delivery fee per order, however many stores supply it
+  // (as the checkout does). It is part of the total but not listed on its own.
+  const shippingTotal = items.length ? 2500 : 0;
   const total = productTotal + shippingTotal;
   const quantity = cartQuantity(items);
   const proceedToCheckout = () => {
@@ -136,7 +136,6 @@ export default function CartDrawer({ isOpen, onClose, onCartChange }) {
           <footer className="cart-drawer__footer">
             <dl className="cart-drawer__summary">
               <div><dt>Items subtotal</dt><dd>{money(productTotal)}</dd></div>
-              <div><dt>BUYSELL delivery · {sellerCount} {sellerCount === 1 ? 'store' : 'stores'}</dt><dd>{money(shippingTotal)}</dd></div>
               <div className="cart-drawer__grand-total"><dt>Total</dt><dd>{money(total)}</dd></div>
             </dl>
             <button
