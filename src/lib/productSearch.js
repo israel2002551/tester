@@ -2,7 +2,29 @@
 // and the category pages. Matching is by whole words, so "ring" finds rings rather
 // than every "dining" or "earring", and results come back best match first.
 
-const FIELD_WEIGHTS = { name: 10, category: 5, store: 4, location: 2, description: 1.5 };
+const FIELD_WEIGHTS = { name: 10, category: 5, store: 4, audience: 4, location: 2, description: 1.5 };
+
+// What shoppers call each category, so "clothes" finds Fashion and "crafts"
+// finds Arts & Crafts. Seller-named categories are searched by their own name.
+const CATEGORY_WORDS = {
+  phones: 'phones tablets gadgets mobile',
+  electronics: 'electronics gadgets appliances',
+  fashion: 'fashion clothes clothing apparel wear outfits',
+  home: 'home living household',
+  beauty: 'beauty health cosmetics personal care',
+  sports: 'sports fitness',
+  arts: 'arts crafts art craft handmade painting drawing',
+  dropship: 'dropship dropshipping sourcing 1688',
+};
+
+// Who a fashion or beauty product is for (products.audience), so "men shoes"
+// finds men's loafers whose names never say "men". Unisex counts for both.
+const AUDIENCE_WORDS = {
+  men: 'men male gents',
+  women: 'women ladies female',
+  unisex: 'unisex men women ladies',
+  kids: 'kids children child baby boys girls',
+};
 // Numbers and model codes only count in these fields: "iphone 12" must not match
 // "12 months warranty", nor "a16" a laptop described as "a 16-inch display".
 const NUMBER_FIELDS = new Set(['name', 'category', 'store']);
@@ -59,15 +81,55 @@ const SYNONYMS = {
   jewellery: ['jewelry', 'necklace', 'bracelet', 'earring', 'ring'],
   dropship: ['dropshipping', '1688', 'sourcing'],
   sourcing: ['dropship', '1688'],
+  // Everyday Nigerian shopping words.
+  earpiece: ['earbud', 'earphone', 'airpod', 'headphone'],
+  gen: ['generator'],
+  palm: ['pam', 'slipper', 'slide'],
+  pam: ['palm', 'slipper', 'slide'],
+  slipper: ['slide', 'pam', 'palm'],
+  slide: ['slipper', 'pam'],
+  canvas: ['sneaker'],
+  native: ['kaftan', 'caftan', 'agbada', 'senator', 'jalabia', 'jalabiya', 'buba', 'bubu', 'ankara', 'aso'],
+  senator: ['kaftan', 'native'],
+  kaftan: ['caftan', 'senator', 'jalabia'],
+  caftan: ['kaftan'],
+  agbada: ['kaftan', 'senator', 'native'],
+  jalabiya: ['jalabia'],
+  jalabia: ['jalabiya', 'kaftan'],
+  singlet: ['vest', 'tank'],
+  vest: ['singlet'],
+  boxer: ['underwear'],
+  underwear: ['boxer', 'panty'],
+  jogger: ['sweatpant', 'trackpant'],
+  sweatpant: ['jogger'],
+  jean: ['denim'],
+  denim: ['jean'],
+  cap: ['hat'],
+  hat: ['cap'],
+  pouch: ['case', 'cover'],
+  wig: ['frontal'],
+  cream: ['lotion', 'moisturizer', 'moisturiser'],
+  lotion: ['cream', 'moisturizer', 'moisturiser'],
+  duvet: ['comforter', 'bedsheet'],
+  bedsheet: ['duvet', 'bedspread'],
+  gym: ['fitness', 'workout'],
+  fitness: ['gym', 'workout'],
+  art: ['artwork', 'painting'],
+  painting: ['artwork'],
+  craft: ['handmade'],
 };
 
 // Describing words, by stem. When nothing matches every word, these are dropped
 // first: "women's bag" then shows bags rather than nothing.
 const MODIFIERS = new Set([
   'red', 'blue', 'black', 'white', 'green', 'pink', 'gold', 'golden', 'silver', 'brown', 'grey', 'gray',
-  'purple', 'yellow', 'orange', 'wine', 'maroon', 'beige', 'navy',
-  'men', 'man', 'women', 'woman', 'lady', 'male', 'female', 'kid', 'child', 'children', 'boy', 'girl', 'unisex',
+  'purple', 'yellow', 'orange', 'wine', 'maroon', 'beige', 'navy', 'ash', 'cream', 'nude',
+  'multicolor', 'multicolour', 'colorful', 'colourful',
+  'men', 'man', 'women', 'woman', 'lady', 'male', 'female', 'kid', 'child', 'children', 'boy', 'girl', 'unisex', 'gent',
   'new', 'used', 'original', 'quality', 'cheap', 'affordable', 'luxury', 'big', 'small', 'mini', 'large', 'latest',
+  'plain', 'designer', 'classic', 'premium', 'nice', 'beautiful', 'unique', 'stylish', 'trendy', 'fashionable',
+  // "face cap" is a cap, "face towel" a towel.
+  'face',
 ]);
 
 const QUALITY = { exact: 1, stem: 0.9, synonym: 0.75, correction: 0.7, prefix: 0.6, correctionSynonym: 0.5 };
@@ -114,10 +176,12 @@ function indexProduct(product) {
   let index = productIndexes.get(product);
   if (index) return index;
   const profile = product.profiles || {};
+  const category = String(product.category || '').trim().toLowerCase();
   index = {
     name: indexField(product.name || product.title),
-    category: indexField(product.category),
+    category: indexField(`${category} ${CATEGORY_WORDS[category] || ''}`),
     store: indexField([profile.store_name, profile.name, product.store_name].filter(Boolean).join(' ')),
+    audience: indexField(AUDIENCE_WORDS[String(product.audience || '').trim().toLowerCase()] || ''),
     location: indexField(product.location),
     description: indexField(product.description),
   };
@@ -223,6 +287,8 @@ function parseQuery(query, vocabulary) {
     if (group.parts.length > 1 || !isWord(term)) return;
     const known = vocabulary.counts.has(term) || vocabulary.stems.has(stem(term));
     if (known) return;
+    // Listings may only use another name for it ("vest" for "singlet"): not a typo.
+    if ([...group.synonyms].some(value => vocabulary.counts.has(value) || vocabulary.stems.has(value))) return;
     // Not a word in the catalogue: the shopper is still typing, or made a typo.
     group.prefix = term.length >= 2 && vocabulary.words.some(word => word.startsWith(term));
     if (group.prefix) return;

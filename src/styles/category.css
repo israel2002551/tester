@@ -199,6 +199,27 @@ html body.category-page .cx .category-search-field button {
   position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
   width: 32px; height: 32px; border-radius: 50%; border: 0; background: #eef0ea; color: var(--cx-muted); cursor: pointer;
 }
+/* Photo search sits at the end of the box, the clear button just before it. */
+html body.category-page .cx .category-search-field--photo input { padding-right: 84px; }
+html body.category-page .cx .category-search-field .category-photo-btn { background: transparent; color: var(--cx-text); }
+html body.category-page .cx .category-search-field .category-photo-btn:hover { background: #eef0ea; }
+html body.category-page .cx .category-search-field .category-photo-btn:disabled { opacity: 0.5; cursor: progress; }
+html body.category-page .cx .category-search-field--photo .category-clear-btn { right: 44px; }
+html body.category-page .cx .cx-photo-note {
+  display: flex; align-items: center; gap: 12px; margin: 12px 0 0; padding: 10px 12px;
+  border: 1px solid var(--cx-line); border-radius: 16px; background: #fff; color: var(--cx-text); font-size: 0.88rem; font-weight: 600;
+}
+html body.category-page .cx .cx-photo-note.is-error { border-color: rgba(190, 60, 40, 0.3); background: #fff7f5; }
+html body.category-page .cx .cx-photo-note img,
+html body.category-page .cx .cx-photo-note__icon {
+  flex: 0 0 auto; width: 44px; height: 44px; border-radius: 10px; object-fit: cover;
+}
+html body.category-page .cx .cx-photo-note__icon { display: grid; place-items: center; background: #eef0ea; color: var(--cx-muted); }
+html body.category-page .cx .cx-photo-note > span:not(.cx-photo-note__icon) { flex: 1; min-width: 0; }
+html body.category-page .cx .cx-photo-note > button {
+  flex: 0 0 auto; width: 30px; height: 30px; border: 0; border-radius: 50%; background: #eef0ea; color: var(--cx-muted); cursor: pointer;
+}
+html body.category-page .cx .category-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 html body.category-page .cx .cx-sort {
   display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: #eef0ea;
   overflow-x: auto; scrollbar-width: none; flex-shrink: 0; min-width: 0; max-width: 100%;

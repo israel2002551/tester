@@ -3855,6 +3855,11 @@ let searchTimeout;
 // Typo fixes and ranking from the latest search, for the status line and the "Best match" sort.
 let marketplaceSearchResult = { fixes: [], partial: false };
 let marketplaceSearchRank = new Map();
+// While results come from a photo: { thumbnail, query }, or { pending: true } while it is read.
+let marketplacePhotoSearch = null;
+// The highlighted suggestion under the search box (-1: none).
+let marketplaceSuggestIndex = -1;
+const RECENT_SEARCHES_KEY = 'bs_recent_searches';
 
 // Marketplace search is intentionally local and deterministic: results are
 // instant, work on weak connections, and are easy to share through `?q=`.
@@ -3900,6 +3905,44 @@ function syncMarketplaceSearchUrl(query) {
  history.replaceState({ view: 'shop', search: normalizedQuery }, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
+// Recent searches are kept on this device only.
+function readRecentSearches() {
+ try {
+  const saved = JSON.parse(appStorage.getItem(RECENT_SEARCHES_KEY) || '[]');
+  return Array.isArray(saved) ? saved.filter(value => typeof value === 'string' && value.trim()).slice(0, 6) : [];
+ } catch (_) {
+  return [];
+ }
+}
+
+function writeRecentSearches(list) {
+ try { appStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(list.slice(0, 6))); } catch (_) {}
+}
+
+function rememberMarketplaceSearch(query) {
+ const normalized = normalizeMarketplaceSearch(query);
+ if (normalized.length < 2) return;
+ writeRecentSearches([normalized, ...readRecentSearches().filter(value => value.toLowerCase() !== normalized.toLowerCase())]);
+}
+
+function marketplacePhotoRow(thumbnail, message, pending = false) {
+ const row = document.createElement('div');
+ row.className = `market-photo-row${pending ? ' is-pending' : ''}`;
+ if (thumbnail) {
+  const image = document.createElement('img');
+  image.src = thumbnail;
+  image.alt = 'Your photo';
+  row.appendChild(image);
+ } else {
+  row.insertAdjacentHTML('beforeend', '<span class="market-photo-row__icon"><i class="fa-solid fa-camera"></i></span>');
+ }
+ const text = document.createElement('span');
+ text.textContent = message;
+ row.appendChild(text);
+ if (pending) row.insertAdjacentHTML('beforeend', '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>');
+ return row;
+}
+
 function renderMarketplaceSearchStatus() {
  const input = document.getElementById('search-input');
  if (!input) return;
@@ -3925,10 +3968,20 @@ function renderMarketplaceSearchStatus() {
   shell.appendChild(clearButton);
  }
  const query = normalizeMarketplaceSearch(input.value);
+ const photo = marketplacePhotoSearch;
+ shell.classList.toggle('has-query', Boolean(query));
  clearButton.classList.toggle('hidden', !query);
  panel.replaceChildren();
+ if (photo?.pending) {
+  panel.classList.remove('hidden');
+  panel.appendChild(marketplacePhotoRow(photo.thumbnail, 'Looking at your photo…', true));
+  return;
+ }
  panel.classList.toggle('hidden', !query);
  if (!query) return;
+ if (photo?.query && photo.query === query) {
+  panel.appendChild(marketplacePhotoRow(photo.thumbnail, 'Searched from your photo. Not quite right? Change the words or try another photo.'));
+ }
  const summary = document.createElement('span');
  summary.className = 'market-search-status__summary';
  const count = filteredProducts.length;
@@ -3969,6 +4022,7 @@ function runMarketplaceSearch(query, options = {}) {
  applyCurrentFilters();
  if (updateUrl) syncMarketplaceSearchUrl(normalizedQuery);
  renderMarketplaceSearchStatus();
+ renderMarketplaceSuggest();
  if (scroll) {
   switchBuyerTab?.('shop');
   document.querySelector('.products-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -3977,6 +4031,7 @@ function runMarketplaceSearch(query, options = {}) {
 }
 
 function clearMarketplaceSearch(options = {}) {
+ marketplacePhotoSearch = null;
  runMarketplaceSearch('', { updateUrl: true, scroll: false, focus: options.focus });
 }
 
@@ -3987,16 +4042,59 @@ function setupMarketplaceSearchInput() {
  input.setAttribute('type', 'search');
  input.setAttribute('autocomplete', 'off');
  input.setAttribute('aria-label', 'Search marketplace products');
+ input.setAttribute('role', 'combobox');
+ input.setAttribute('aria-autocomplete', 'list');
+ input.setAttribute('aria-expanded', 'false');
+ input.setAttribute('aria-controls', 'market-search-suggest');
+ // Enter is handled on keydown below, so it can also pick a highlighted suggestion.
+ input.onkeyup = null;
+ input.removeAttribute('onkeyup');
  const initialQuery = new URLSearchParams(window.location.search).get('q');
- if (initialQuery) input.value = normalizeMarketplaceSearch(initialQuery);
+ if (initialQuery) {
+  input.value = normalizeMarketplaceSearch(initialQuery);
+  // A photo search started on the landing page.
+  const handedOver = window.BuysellImageSearch?.takeRememberedPhotoSearch?.(initialQuery);
+  if (handedOver) marketplacePhotoSearch = { thumbnail: handedOver.thumbnail, query: normalizeMarketplaceSearch(handedOver.query) };
+ }
+ setupMarketplacePhotoSearch(input);
  input.addEventListener('input', () => {
+  marketplacePhotoSearch = null;
   window.clearTimeout(searchTimeout);
   searchTimeout = window.setTimeout(() => runMarketplaceSearch(input.value, { updateUrl: true }), 180);
  });
+ input.addEventListener('focus', () => renderMarketplaceSuggest());
+ input.addEventListener('blur', () => {
+  window.setTimeout(() => { if (document.activeElement !== input) closeMarketplaceSuggest(); }, 120);
+  const query = normalizeMarketplaceSearch(input.value);
+  if (query && filteredProducts.length) rememberMarketplaceSearch(query);
+ });
  input.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && input.value) {
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+   if (!input.closest('.nav-search')?.classList.contains('suggest-open')) renderMarketplaceSuggest();
+   if (moveMarketplaceSuggest(event.key === 'ArrowDown' ? 1 : -1)) event.preventDefault();
+   return;
+  }
+  if (event.key === 'Enter') {
    event.preventDefault();
-   clearMarketplaceSearch({ focus: true });
+   const active = marketplaceSuggestIndex >= 0 ? document.getElementById(`market-suggest-${marketplaceSuggestIndex}`) : null;
+   if (active) {
+    pickMarketplaceSuggestion(active);
+   } else {
+    closeMarketplaceSuggest();
+    doSearch();
+    // Puts the phone keyboard away so the results can be seen.
+    input.blur();
+   }
+   return;
+  }
+  if (event.key === 'Escape') {
+   if (input.closest('.nav-search')?.classList.contains('suggest-open')) {
+    event.preventDefault();
+    closeMarketplaceSuggest();
+   } else if (input.value) {
+    event.preventDefault();
+    clearMarketplaceSearch({ focus: true });
+   }
   }
  });
  renderMarketplaceSearchStatus();
@@ -4004,7 +4102,240 @@ function setupMarketplaceSearchInput() {
 
 function doSearch() {
  const input = document.getElementById('search-input');
+ rememberMarketplaceSearch(input?.value || '');
  runMarketplaceSearch(input?.value || '', { updateUrl: true, scroll: true });
+}
+
+// ---- Suggestions under the search box ----
+// While the box has focus: recent searches and photo search when it is empty,
+// otherwise the best matching products, their categories and "See all".
+
+function closeMarketplaceSuggest() {
+ const input = document.getElementById('search-input');
+ const shell = input?.closest('.nav-search');
+ marketplaceSuggestIndex = -1;
+ shell?.classList.remove('suggest-open');
+ const box = document.getElementById('market-search-suggest');
+ if (box) {
+  box.classList.add('hidden');
+  box.replaceChildren();
+ }
+ input?.setAttribute('aria-expanded', 'false');
+ input?.removeAttribute('aria-activedescendant');
+}
+
+// A small square rendition for the suggestion thumbnails, not the full photo.
+function marketplaceSuggestThumb(product) {
+ const source = productThumbnail(product, 96) || PRODUCT_PLACEHOLDER_IMAGE;
+ if (!source.includes('res.cloudinary.com/') || !source.includes('/image/upload/')) return source;
+ return source.replace('/image/upload/', '/image/upload/f_auto,q_auto,c_fill,g_auto,w_96,h_96/');
+}
+
+function marketplaceDisplayPrice(product) {
+ const flashLive = product.flash_price && product.flash_end && new Date(product.flash_end) > new Date();
+ return flashLive ? product.flash_price : product.price;
+}
+
+function renderMarketplaceSuggest() {
+ const input = document.getElementById('search-input');
+ const shell = input?.closest('.nav-search');
+ if (!input || !shell) return;
+ if (document.activeElement !== input || marketplacePhotoSearch?.pending) {
+  closeMarketplaceSuggest();
+  return;
+ }
+ let box = document.getElementById('market-search-suggest');
+ if (!box) {
+  box = document.createElement('div');
+  box.id = 'market-search-suggest';
+  box.className = 'market-search-suggest hidden';
+  box.setAttribute('role', 'listbox');
+  box.setAttribute('aria-label', 'Search suggestions');
+  // Keeps the focus in the search box while a suggestion is clicked.
+  box.addEventListener('pointerdown', event => event.preventDefault());
+  box.addEventListener('click', event => {
+   const option = event.target.closest('[data-suggest]');
+   if (option) pickMarketplaceSuggestion(option);
+  });
+  shell.appendChild(box);
+ }
+
+ const query = normalizeMarketplaceSearch(input.value);
+ const photoOption = { kind: 'photo', icon: 'fa-camera', label: 'Search with a photo', hint: 'Find products like the one in your picture' };
+ const sections = [];
+ if (!query) {
+  const recent = readRecentSearches();
+  if (recent.length) {
+   sections.push({ title: 'Recent searches', clear: true, options: recent.map(value => ({ kind: 'search', value, icon: 'fa-clock-rotate-left', label: value })) });
+  }
+  sections.push({ options: [photoOption] });
+ } else if (!filteredProducts.length) {
+  sections.push({ title: `No matches for “${query}”`, options: [photoOption] });
+ } else {
+  const rank = marketplaceSearchRank;
+  const top = [...filteredProducts]
+   .sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity))
+   .slice(0, 5);
+  sections.push({
+   title: 'Products',
+   options: top.map(product => ({
+    kind: 'product',
+    value: product.id,
+    image: marketplaceSuggestThumb(product),
+    label: product.name || 'Product',
+    hint: `${fmtN(marketplaceDisplayPrice(product))} · ${categoryLabel(product.category)}`,
+   })),
+  });
+  if (!activeFilters.category) {
+   const counts = new Map();
+   filteredProducts.forEach(product => {
+    const key = normalizeProductCategory(product.category);
+    if (key) counts.set(key, (counts.get(key) || 0) + 1);
+   });
+   const categories = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+   if (categories.length > 1) {
+    sections.push({
+     title: 'In a category',
+     options: categories.map(([key, count]) => ({ kind: 'category', value: key, icon: 'fa-tags', label: `${query} in ${categoryLabel(key)}`, hint: `${count} ${count === 1 ? 'item' : 'items'}` })),
+    });
+   }
+  }
+  const count = filteredProducts.length;
+  sections.push({ options: [{ kind: 'all', value: query, icon: 'fa-magnifying-glass', label: `See all ${count} ${count === 1 ? 'result' : 'results'}` }] });
+ }
+
+ let index = 0;
+ box.innerHTML = sections.map(section => {
+  const head = section.title
+   ? `<div class="market-suggest-head"><span>${escHtml(section.title)}</span>${section.clear ? '<button type="button" data-suggest="clear-recent">Clear</button>' : ''}</div>`
+   : '<div class="market-suggest-sep" aria-hidden="true"></div>';
+  const options = section.options.map(option => {
+   const media = option.image
+    ? `<img src="${escAttr(option.image)}" alt="" loading="lazy">`
+    : `<span class="market-suggest-icon"><i class="fa-solid ${option.icon}"></i></span>`;
+   return `<button type="button" class="market-suggest-item" role="option" id="market-suggest-${index++}" aria-selected="false" data-suggest="${escAttr(option.kind)}" data-value="${escAttr(option.value ?? '')}">${media}<span class="market-suggest-text"><strong>${escHtml(option.label)}</strong>${option.hint ? `<small>${escHtml(option.hint)}</small>` : ''}</span></button>`;
+  }).join('');
+  return head + options;
+ }).join('');
+ marketplaceSuggestIndex = -1;
+ box.classList.remove('hidden');
+ shell.classList.add('suggest-open');
+ input.setAttribute('aria-expanded', 'true');
+ input.removeAttribute('aria-activedescendant');
+}
+
+function moveMarketplaceSuggest(step) {
+ const input = document.getElementById('search-input');
+ const box = document.getElementById('market-search-suggest');
+ const options = box && !box.classList.contains('hidden') ? [...box.querySelectorAll('[role="option"]')] : [];
+ if (!options.length) return false;
+ let next = marketplaceSuggestIndex + step;
+ if (next >= options.length) next = -1;
+ if (next < -1) next = options.length - 1;
+ marketplaceSuggestIndex = next;
+ options.forEach((option, index) => option.setAttribute('aria-selected', String(index === next)));
+ if (next >= 0) {
+  input?.setAttribute('aria-activedescendant', options[next].id);
+  options[next].scrollIntoView({ block: 'nearest' });
+ } else {
+  input?.removeAttribute('aria-activedescendant');
+ }
+ return true;
+}
+
+function pickMarketplaceSuggestion(option) {
+ const kind = option.dataset.suggest;
+ const value = option.dataset.value || '';
+ const input = document.getElementById('search-input');
+ const query = normalizeMarketplaceSearch(input?.value || '');
+ if (kind === 'clear-recent') {
+  writeRecentSearches([]);
+  renderMarketplaceSuggest();
+  return;
+ }
+ if (kind === 'photo') {
+  openMarketplacePhotoPicker();
+  return;
+ }
+ closeMarketplaceSuggest();
+ input?.blur();
+ if (kind === 'product') {
+  rememberMarketplaceSearch(query);
+  openProduct(value);
+  return;
+ }
+ if (kind === 'category') {
+  rememberMarketplaceSearch(query);
+  filterCat(value, { updateUrl: true });
+  runMarketplaceSearch(query, { updateUrl: true, scroll: true });
+  return;
+ }
+ // A recent search, or "See all results".
+ if (normalizeMarketplaceSearch(value) !== query) marketplacePhotoSearch = null;
+ rememberMarketplaceSearch(value);
+ runMarketplaceSearch(value, { updateUrl: true, scroll: true });
+}
+
+// ---- Search with a photo ----
+// The photo is read by the image-search edge function (src/lib/imageSearch.js),
+// and what it shows ("black leather handbag") is searched like typed words.
+
+function setupMarketplacePhotoSearch(input) {
+ const shell = input.closest('.nav-search');
+ if (!shell || document.getElementById('market-photo-btn')) return;
+ const fileInput = document.createElement('input');
+ fileInput.type = 'file';
+ fileInput.accept = 'image/*';
+ fileInput.id = 'market-photo-input';
+ fileInput.hidden = true;
+ fileInput.addEventListener('change', () => {
+  const [file] = fileInput.files || [];
+  fileInput.value = '';
+  if (file) runMarketplacePhotoSearch(file);
+ });
+ const button = document.createElement('button');
+ button.type = 'button';
+ button.id = 'market-photo-btn';
+ button.className = 'market-photo-btn';
+ button.title = 'Search with a photo';
+ button.setAttribute('aria-label', 'Search with a photo');
+ button.innerHTML = '<i class="fa-solid fa-camera"></i>';
+ button.addEventListener('click', openMarketplacePhotoPicker);
+ shell.append(fileInput, button);
+}
+
+function openMarketplacePhotoPicker() {
+ closeMarketplaceSuggest();
+ document.getElementById('market-photo-input')?.click();
+}
+
+async function runMarketplacePhotoSearch(file) {
+ const api = window.BuysellImageSearch;
+ if (!api) {
+  toast('Photo search', 'Photo search is still loading. Please try again in a moment.', 'warn');
+  return;
+ }
+ const button = document.getElementById('market-photo-btn');
+ if (button) button.disabled = true;
+ document.getElementById('search-input')?.blur();
+ marketplacePhotoSearch = { pending: true };
+ renderMarketplaceSearchStatus();
+ try {
+  const photo = await api.preparePhoto(file);
+  marketplacePhotoSearch = { pending: true, thumbnail: photo.thumbnail };
+  renderMarketplaceSearchStatus();
+  const analysis = await api.describePhoto(photo.image);
+  const query = api.photoSearchQuery(products, analysis);
+  marketplacePhotoSearch = { thumbnail: photo.thumbnail, query: normalizeMarketplaceSearch(query) };
+  rememberMarketplaceSearch(query);
+  runMarketplaceSearch(query, { updateUrl: true, scroll: true });
+ } catch (error) {
+  marketplacePhotoSearch = null;
+  renderMarketplaceSearchStatus();
+  toast('Photo search', error?.message || "Photo search isn't available right now. Please type your search instead.", 'warn');
+ } finally {
+  if (button) button.disabled = false;
+ }
 }
 
 function applyFilters() {
@@ -4084,6 +4415,7 @@ function removeFilter(key) {
 function clearFilters() {
  marketplaceCurrentPage = 1;
  activeFilters = {};
+ marketplacePhotoSearch = null;
  const searchInput = document.getElementById('search-input');
  if (searchInput) searchInput.value = '';
  syncMarketplaceSearchUrl('');

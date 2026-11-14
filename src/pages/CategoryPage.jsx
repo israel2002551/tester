@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import BrandHeader from '../components/BrandHeader.jsx';
 import CategoryNav from '../components/CategoryNav.jsx';
 import CategoryTrustBar from '../components/CategoryTrustBar.jsx';
@@ -10,6 +10,7 @@ import { createSupabaseClient } from '../lib/browserConfig.js';
 import { cardImage, categoryConfig, categoryImages, categoryLinks, categoryProductColumns, upcomingColumns } from '../lib/categoryData.js';
 import { money } from '../lib/format.js';
 import { prepareSearch, searchProducts } from '../lib/productSearch.js';
+import { describePhoto, photoSearchQuery, preparePhoto } from '../lib/imageSearch.js';
 import '../styles/category.css';
 
 const categoryColumnFallbacks = [
@@ -150,6 +151,9 @@ export default function CategoryPage({ category = 'all' }) {
   const [status, setStatus] = useState('loading');
   const [allRows, setAllRows] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  // A search by photo: { pending, thumbnail }, { thumbnail, query } or { error }.
+  const [photo, setPhoto] = useState(null);
+  const photoInputRef = useRef(null);
 
   useEffect(() => {
     document.body.className = 'category-page';
@@ -226,10 +230,30 @@ export default function CategoryPage({ category = 'all' }) {
   // "Best match" is offered while searching and chosen when a search starts.
   const isSearching = Boolean(search.trim());
   const activeSort = sort === 'relevance' && !isSearching ? 'newest' : sort;
-  const updateSearch = value => {
+  const applySearch = value => {
     if (value.trim() && !isSearching && sort === 'newest') setSort('relevance');
     if (!value.trim() && sort === 'relevance') setSort('newest');
     setSearch(value);
+  };
+  // Typing or clearing replaces a search by photo.
+  const updateSearch = value => {
+    setPhoto(null);
+    applySearch(value);
+  };
+  // The photo is read by the image-search function, and what it shows
+  // ("black leather handbag") is searched in this category like typed words.
+  const runPhotoSearch = async file => {
+    setPhoto({ pending: true });
+    try {
+      const prepared = await preparePhoto(file);
+      setPhoto({ pending: true, thumbnail: prepared.thumbnail });
+      const analysis = await describePhoto(prepared.image);
+      const query = photoSearchQuery(items, analysis);
+      applySearch(query);
+      setPhoto({ thumbnail: prepared.thumbnail, query });
+    } catch (error) {
+      setPhoto({ error: error?.message || "Photo search isn't available right now. Please type your search instead." });
+    }
   };
 
   const searchResult = useMemo(() => searchProducts(items, search), [items, search]);
@@ -333,7 +357,7 @@ export default function CategoryPage({ category = 'all' }) {
         <CategoryNav active={normalizedCategory} customLabel={isCustomCategory ? config.title : ''} counts={counts} />
 
         <section className="category-toolbar cx-toolbar" aria-label="Browse and filter products">
-          <label className="category-search-field">
+          <label className={`category-search-field${isUpcoming ? '' : ' category-search-field--photo'}`}>
             <span className="sr-only">Search {config.title}</span>
             <i className="fa-solid fa-magnifying-glass" aria-hidden="true" />
             <input
@@ -344,8 +368,31 @@ export default function CategoryPage({ category = 'all' }) {
               onChange={event => updateSearch(event.target.value)}
               aria-controls="category-products"
             />
-            {search ? <button type="button" onClick={() => updateSearch('')} aria-label="Clear search"><i className="fa-solid fa-xmark" /></button> : null}
+            {search ? <button type="button" className="category-clear-btn" onClick={() => updateSearch('')} aria-label="Clear search"><i className="fa-solid fa-xmark" /></button> : null}
+            {isUpcoming ? null : (
+              <button
+                type="button"
+                className="category-photo-btn"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={Boolean(photo?.pending)}
+                aria-label="Search with a photo"
+                title="Search with a photo"
+              >
+                <i className="fa-solid fa-camera" />
+              </button>
+            )}
           </label>
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={event => {
+              const [file] = event.target.files || [];
+              event.target.value = '';
+              if (file) runPhotoSearch(file);
+            }}
+          />
           <div className="cx-sort" role="group" aria-label="Sort products">
             {sortOptions.map(([value, label]) => (
               <button key={value} type="button" className={activeSort === value ? 'active' : ''} aria-pressed={activeSort === value} onClick={() => setSort(value)}>
@@ -354,6 +401,22 @@ export default function CategoryPage({ category = 'all' }) {
             ))}
           </div>
         </section>
+
+        {photo ? (
+          <div className={`cx-photo-note${photo.error ? ' is-error' : ''}`} role="status">
+            {photo.thumbnail
+              ? <img src={photo.thumbnail} alt="Your photo" />
+              : <span className="cx-photo-note__icon"><i className={`fa-solid ${photo.error ? 'fa-circle-exclamation' : 'fa-camera'}`} aria-hidden="true" /></span>}
+            <span>
+              {photo.pending
+                ? 'Looking at your photo…'
+                : photo.error || 'Searched from your photo. Not quite right? Change the words or try another photo.'}
+            </span>
+            {photo.pending
+              ? <i className="fa-solid fa-spinner fa-spin" aria-hidden="true" />
+              : <button type="button" onClick={() => setPhoto(null)} aria-label="Dismiss"><i className="fa-solid fa-xmark" /></button>}
+          </div>
+        ) : null}
 
         <p className="category-results-count cx-results" aria-live="polite">
           {status === 'loading' ? 'Loading products…' : status === 'error' ? '' : visibleItems.length > 0 ? (
@@ -391,9 +454,14 @@ export default function CategoryPage({ category = 'all' }) {
             <i className="fa-solid fa-box-open" />
             <h2>No matches found</h2>
             <p>{search ? 'Try a shorter search term, another spelling, or clear the search to browse this category.' : 'No products here yet. Check back soon for new listings.'}</p>
-            {search
-              ? <button className="btn btn-outline btn-sm" type="button" onClick={() => updateSearch('')}>Clear search</button>
-              : <a className="btn btn-outline btn-sm" href="/products">Browse all products</a>}
+            {search ? (
+              <div className="category-empty-actions">
+                {normalizedCategory !== 'all'
+                  ? <a className="btn btn-primary btn-sm" href={`/products?q=${encodeURIComponent(search.trim())}`}>Search all products</a>
+                  : null}
+                <button className="btn btn-outline btn-sm" type="button" onClick={() => updateSearch('')}>Clear search</button>
+              </div>
+            ) : <a className="btn btn-outline btn-sm" href="/products">Browse all products</a>}
           </div>
         ) : null}
         {status === 'ready' && visibleItems.length ? (

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import BrandLogo from '../components/BrandLogo.jsx';
 import { landingCategories, naira, useLandingCatalog } from '../lib/landingData.js';
+import { describePhoto, preparePhoto, rememberPhotoSearch } from '../lib/imageSearch.js';
 import '../styles/landing.css';
 
 const rotatingWords = ['fashion', 'phones', 'home finds', 'beauty', 'gadgets'];
@@ -85,18 +86,62 @@ function useCountUp(target, duration = 1200) {
 }
 
 function SearchForm({ id, large = false }) {
+  const photoInputRef = useRef(null);
+  // A search by photo: { pending: true } or { error }.
+  const [photo, setPhoto] = useState(null);
   const submit = event => {
     event.preventDefault();
     const query = new FormData(event.currentTarget).get('q')?.toString().trim() || '';
     window.location.href = query ? `/?view=shop&q=${encodeURIComponent(query)}` : '/?view=shop';
   };
+  // What the photo shows ("black leather handbag") is searched on the marketplace.
+  const searchWithPhoto = async file => {
+    setPhoto({ pending: true });
+    try {
+      const prepared = await preparePhoto(file);
+      const analysis = await describePhoto(prepared.image);
+      const query = analysis.query || analysis.item;
+      rememberPhotoSearch(query, prepared.thumbnail);
+      window.location.href = `/?view=shop&q=${encodeURIComponent(query)}`;
+    } catch (error) {
+      setPhoto({ error: error?.message || "Photo search isn't available right now. Please type your search instead." });
+    }
+  };
   return (
-    <form className={`bh-search${large ? ' bh-search--large' : ''}`} role="search" onSubmit={submit}>
-      <label htmlFor={id} className="bh-sr-only">Search BUYSELL</label>
-      <i className="fa-solid fa-magnifying-glass" aria-hidden="true" />
-      <input id={id} name="q" type="search" autoComplete="off" placeholder="Search sneakers, iPhones, blenders…" />
-      <button type="submit">Search</button>
-    </form>
+    <>
+      <form className={`bh-search${large ? ' bh-search--large' : ''}`} role="search" onSubmit={submit}>
+        <label htmlFor={id} className="bh-sr-only">Search BUYSELL</label>
+        <i className="fa-solid fa-magnifying-glass" aria-hidden="true" />
+        <input id={id} name="q" type="search" autoComplete="off" placeholder="Search sneakers, iPhones, blenders…" />
+        <button
+          type="button"
+          className="bh-photo-btn"
+          onClick={() => photoInputRef.current?.click()}
+          disabled={Boolean(photo?.pending)}
+          aria-label="Search with a photo"
+          title="Search with a photo"
+        >
+          <i className={`fa-solid ${photo?.pending ? 'fa-spinner fa-spin' : 'fa-camera'}`} aria-hidden="true" />
+        </button>
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={event => {
+            const [file] = event.target.files || [];
+            event.target.value = '';
+            if (file) searchWithPhoto(file);
+          }}
+        />
+        <button type="submit">Search</button>
+      </form>
+      {photo ? (
+        <p className={`bh-photo-note${photo.error ? ' is-error' : ''}`} role="status">
+          {photo.pending ? 'Looking at your photo…' : photo.error}
+        </p>
+      ) : null}
+    </>
   );
 }
 

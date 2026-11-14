@@ -56,6 +56,9 @@ html #main-nav .nav-search .search-btn {
   transition: background 0.2s, transform 0.2s var(--xp-ease);
 }
 html #main-nav .nav-search .search-btn:hover { background: var(--xp-gold-2); transform: translateY(-50%) scale(1.05); }
+/* Room for the photo search button, and for the clear button while there is a search. */
+html #main-nav .nav-search input { padding-right: 5.6rem; }
+html #main-nav .nav-search.has-query input { padding-right: 7.5rem; }
 html #main-nav .nav-legal-link {
   padding: 8px 11px; border-radius: 999px;
   color: var(--xp-muted); font-size: 0.82rem; font-weight: 600;
