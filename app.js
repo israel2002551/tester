@@ -11760,6 +11760,18 @@ async function saveOrderToDb(txRef, method, paystackRef, proofUrl='') {
 // STOREFRONT SALES COUNT
 // ====================================================
 // viewStorefront - full implementation with order count + reviews
+// ====================================================
+// STORE PAGE
+// ====================================================
+// A store's active products are loaded once (1,000 at a time), then searched,
+// filtered by category, sorted and shown 24 at a time in the browser. Its
+// public totals (delivered orders, reviews, rating) come from
+// public.buysell_store_stats, because shoppers cannot read orders themselves.
+const STORE_PAGE_SIZE = 24;
+const STORE_MAX_PRODUCTS = 5000;
+let storefrontState = null;
+let storefrontSearchTimer;
+
 async function viewStorefront(sellerId) {
  if (!sellerId) return false;
  closeModal('product-modal');
@@ -11769,21 +11781,18 @@ async function viewStorefront(sellerId) {
  const adminPortal = document.getElementById('admin-portal-view');
  const accountView = document.getElementById('account-view');
 
- // Profiles have evolved over time, so use the application's existing column
- // fallback instead of making a storefront depend on every optional field.
- // Resolve it before changing views: a missing/deleted seller must leave the
- // visitor on their current page instead of creating a blank screen.
+ // Resolve the seller before changing views: a missing or deleted seller must
+ // leave the visitor on their current page instead of a blank screen.
  let seller = null;
  try {
   seller = await fetchProfileById(sellerId);
  } catch (error) {
   console.warn('Storefront profile lookup failed:', error);
  }
- if (!seller) { toast('Store not found','','error'); return false; }
+ if (!seller) { toast('Store not found', '', 'error'); return false; }
 
- // Storefront links are used from product cards, direct URLs, adverts, and
- // the Admin "View store" control.  Hide every competing top-level surface
- // so the admin/seller workspace cannot remain layered over the store page.
+ // Store links come from product cards, direct URLs, adverts and the Admin
+ // "View store" control, so hide every other top-level surface.
  [buyerView, sellerDash, adminPortal, accountView].forEach(view => {
   if (!view) return;
   view.classList.add('hidden');
@@ -11791,100 +11800,329 @@ async function viewStorefront(sellerId) {
  });
  revealView(storefrontView);
  document.body.classList.remove('in-seller', 'platform-seller-mode');
-   const platformStore = isPlatformProfile(seller);
-  const storeLabel = platformStore ? 'BUYSELL Platform Store' : getPlatformStoreLabel(seller);
-  const storeDescription = platformStore
+
+ const platformStore = isPlatformProfile(seller);
+ const storeLabel = platformStore ? 'BUYSELL Platform Store' : getPlatformStoreLabel(seller);
+ const storeDescription = platformStore
   ? (seller.store_description || 'Official BUYSELL marketplace store for platform-listed products and trusted offers.')
-  : (seller.store_description || 'Welcome to our store!');
-  // --- DYNAMIC LOGO IMAGE CONTEXT RESOLUTION ---
-  const avatarNode = document.getElementById('sf-avatar');
-  if (seller.logo_url) {
- avatarNode.style.background = 'transparent';
- avatarNode.style.boxShadow = 'none';
- avatarNode.innerHTML = `<img src="${sanitizeUrl(seller.logo_url)}" alt="Logo" style="width:100%; height:100%; object-fit:cover; border-radius:50%; border:2px solid rgba(255,255,255,0.4);">`;
- } else {
-  avatarNode.style.background = platformStore ? 'linear-gradient(135deg, var(--forest), var(--gold))' : 'linear-gradient(135deg, var(--green), var(--green-lt))';
-  avatarNode.innerHTML = platformStore ? '<i class="fa-solid fa-shield-halved"></i>' : '';
-  if (!platformStore) avatarNode.textContent = (seller.name || 'S')[0].toUpperCase();
-  }
+  : (seller.store_description || '');
+ const verified = platformStore || Boolean(seller.seller_verified) || isKycApprovedStatus(seller.kyc_status || seller.verification_status);
 
- document.getElementById('sf-name').textContent = storeLabel;
- document.getElementById('sf-desc').textContent = storeDescription;
- const sfBadge = document.getElementById('sf-store-badge');
- if (sfBadge) {
-  sfBadge.className = platformStore ? 'badge badge-platform' : 'badge badge-verified';
-  sfBadge.innerHTML = platformStore
-  ? '<i class="fa-solid fa-shield-halved"></i> Platform Store'
-  : '<i class="fa-solid fa-check"></i> Verified Seller';
- }
+ storefrontState = { sellerId, seller, label: storeLabel, rows: [], stats: null, loading: true, query: '', category: 'all', sort: 'newest', shown: STORE_PAGE_SIZE };
+ setupStorefrontControls();
+ renderStorefrontHeader({ seller, sellerId, platformStore, storeLabel, storeDescription, verified });
+ renderStorefrontStats();
+ renderStorefrontChips();
+ renderStorefrontProducts();
 
-  // Append new location metrics if available under the desc elements context
-  if (seller.store_address) {
-  document.getElementById('sf-desc').insertAdjacentHTML('beforeend', `
- <div style="font-size:0.75rem; color:rgba(255,255,255,0.7); margin-top:6px;">
- <i class="fa-solid fa-location-dot"></i> Store Hub: ${escHtml(seller.store_address)}
- </div>`);
- }
- // ====================================================
- // EXCLUSION SECURED: PRIVACY AND TRANSACTION RETENTION
- // ====================================================
- // 1. Permanently hide or hijack the legacy public WhatsApp link element
- const sfWaLink = document.getElementById('sf-wa-link');
- if (sfWaLink) {
- sfWaLink.removeAttribute('target'); // Prevent opening an external window
- sfWaLink.href = '#';
- 
- // Repurpose the button layout to invoke the secure in-app messaging matrix instead
- sfWaLink.innerHTML = '<i class="fa-solid fa-comments"></i> Message Seller';
- sfWaLink.className = 'btn btn-primary btn-sm';
- sfWaLink.onclick = (e) => {
- e.preventDefault();
- e.stopPropagation();
-  openConversation(sellerId, storeLabel);
- };
- }
-
- const { data: prods } = await runSelectWithColumnFallback('products', PRODUCT_LIST_COLUMNS, q => q
- .eq('seller_id', sellerId)
- .eq('status','active')
- .order('created_at', { ascending: false })
- .range(0, 999));
-  const sfProds = (prods || []).map(product => ({ ...product, profiles: seller }));
- document.getElementById('sf-prod-count').textContent = sfProds.length;
- // Real order count
- const { count: orderCount } = await db.from('orders').select('id', { count: 'exact', head: true }).eq('seller_id', sellerId);
- document.getElementById('sf-sales-count').textContent = (orderCount||0) + '+';
- // Reviews
- const { data: revs } = await db.from('reviews').select('rating').in('product_id', sfProds.map(p=>p.id));
- const allRevs = revs || [];
- const avgRating = allRevs.length ? (allRevs.reduce((s,r)=>s+r.rating,0)/allRevs.length).toFixed(1) : '5.0';
- document.getElementById('sf-rating').textContent = avgRating;
- document.getElementById('sf-review-count').textContent = `${allRevs.length} reviews`;
- document.getElementById('sf-stars').textContent = starText(avgRating);
- // Share button URL
-// Share button URL setup
- const sfUrl = `${window.location.origin}${window.location.pathname}?store=${sellerId}`;
- const storeShare = {
+ currentStoreShare = {
   title: storeLabel,
-  text: storeDescription,
-  url: sfUrl,
+  text: storeDescription || `Shop ${storeLabel} on BUYSELL Nigeria.`,
+  url: `${window.location.origin}${window.location.pathname}?store=${sellerId}`,
   logoUrl: seller.logo_url || '',
  };
- currentStoreShare = storeShare;
- const sfWaButtonElement = document.getElementById('sf-wa-link');
-  if (sfWaButtonElement && sfWaButtonElement.parentElement) {
-  sfWaButtonElement.parentElement.querySelectorAll('button').forEach(b => {
-  if (b.textContent.includes('Share')) b.onclick = () => { shareStore(); };
-  });
-  }
- const grid = document.getElementById('sf-products-grid');
- const empty = document.getElementById('sf-empty');
- if (!sfProds.length) { grid.innerHTML=''; empty.classList.remove('hidden'); }
- else { empty.classList.add('hidden'); grid.innerHTML = sfProds.map(p=>prodCard(p)).join(''); }
- // Update page title
-  document.title = `${storeLabel} - BUYSELL Nigeria`;
- history.pushState(null,'',`?store=${sellerId}`);
+ document.title = `${storeLabel} - BUYSELL Nigeria`;
+ history.pushState(null, '', `?store=${sellerId}`);
+ window.scrollTo({ top: 0 });
+
+ const [rows, stats] = await Promise.all([loadStorefrontProducts(sellerId), loadStorefrontStats(sellerId)]);
+ // Another store may have been opened while this one loaded.
+ if (storefrontState?.sellerId !== sellerId) return true;
+ storefrontState.rows = rows.map(product => ({ ...product, profiles: seller }));
+ storefrontState.stats = stats;
+ storefrontState.loading = false;
+ renderStorefrontStats();
+ renderStorefrontChips();
+ renderStorefrontProducts();
  return true;
+}
+
+async function loadStorefrontProducts(sellerId) {
+ const rows = [];
+ for (let start = 0; start < STORE_MAX_PRODUCTS; start += 1000) {
+  const { data, error } = await runSelectWithColumnFallback('products', PRODUCT_LIST_COLUMNS, q => q
+   .eq('seller_id', sellerId)
+   .eq('status', 'active')
+   .order('created_at', { ascending: false })
+   .range(start, start + 999));
+  if (error) {
+   console.warn('Store products could not be loaded:', error);
+   break;
+  }
+  rows.push(...(data || []));
+  if (!data || data.length < 1000) break;
+ }
+ return rows;
+}
+
+async function loadStorefrontStats(sellerId) {
+ try {
+  const { data, error } = await db.rpc('buysell_store_stats', { p_seller_id: sellerId });
+  if (error) throw error;
+  return data && typeof data === 'object' ? data : null;
+ } catch (error) {
+  console.warn('Store totals unavailable:', error?.message || error);
+  return null;
+ }
+}
+
+function renderStorefrontHeader({ seller, sellerId, platformStore, storeLabel, storeDescription, verified }) {
+ document.getElementById('storefront-view')?.classList.toggle('is-platform', platformStore);
+
+ const avatar = document.getElementById('sfx-avatar');
+ const logo = sanitizeUrl(seller.logo_url || '');
+ if (logo) avatar.innerHTML = `<img src="${escAttr(logo)}" alt="">`;
+ else if (platformStore) avatar.innerHTML = '<i class="fa-solid fa-shield-halved"></i>';
+ else avatar.textContent = String(storeLabel || 'S').trim().charAt(0).toUpperCase();
+
+ document.getElementById('sfx-name').textContent = storeLabel;
+ const badge = document.getElementById('sfx-badge');
+ if (platformStore) {
+  badge.className = 'sfx-badge is-platform';
+  badge.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Platform Store';
+ } else if (verified) {
+  badge.className = 'sfx-badge is-verified';
+  badge.innerHTML = '<i class="fa-solid fa-circle-check"></i> Verified seller';
+ } else {
+  badge.className = 'sfx-badge hidden';
+  badge.innerHTML = '';
+ }
+
+ const meta = ['<span class="sfx-rating-line" id="sfx-rating-line"></span>'];
+ if (seller.store_address) meta.push(`<span><i class="fa-solid fa-location-dot"></i> ${escHtml(seller.store_address)}</span>`);
+ const since = seller.created_at ? new Date(seller.created_at) : null;
+ if (since && !Number.isNaN(since.getTime())) {
+  meta.push(`<span><i class="fa-regular fa-calendar"></i> On BUYSELL since ${escHtml(since.toLocaleDateString('en-NG', { month: 'long', year: 'numeric' }))}</span>`);
+ }
+ document.getElementById('sfx-meta').innerHTML = meta.join('');
+
+ const desc = document.getElementById('sfx-desc');
+ const readMore = document.getElementById('sfx-read-more');
+ desc.textContent = storeDescription;
+ desc.classList.toggle('hidden', !storeDescription);
+ desc.classList.add('is-clamped');
+ readMore.textContent = 'Read more';
+ readMore.classList.toggle('hidden', storeDescription.length < 160);
+
+ const messageButton = document.getElementById('sfx-message-btn');
+ messageButton.querySelector('span').textContent = platformStore ? 'Chat with BUYSELL' : 'Message seller';
+ messageButton.onclick = () => openConversation(sellerId, storeLabel);
+}
+
+function toggleStorefrontDescription() {
+ const desc = document.getElementById('sfx-desc');
+ const readMore = document.getElementById('sfx-read-more');
+ const clamped = desc.classList.toggle('is-clamped');
+ readMore.textContent = clamped ? 'Read more' : 'Show less';
+}
+
+function renderStorefrontStats() {
+ const state = storefrontState;
+ const box = document.getElementById('sfx-stats');
+ const ratingLine = document.getElementById('sfx-rating-line');
+ if (!state || !box) return;
+ if (state.loading) {
+  box.innerHTML = '<div class="sfx-stat is-loading"></div>'.repeat(4);
+  if (ratingLine) ratingLine.innerHTML = '';
+  return;
+ }
+ const { rows, stats } = state;
+ const categories = new Set(rows.map(product => normalizeProductCategory(product.category) || 'other')).size;
+ const reviews = Number(stats?.reviews) || 0;
+ const rating = Number(stats?.rating) || 0;
+ const delivered = Number(stats?.delivered) || 0;
+ const tiles = [
+  ['fa-box-open', fmtNum(rows.length), rows.length === 1 ? 'Product' : 'Products'],
+  ['fa-layer-group', fmtNum(categories), categories === 1 ? 'Category' : 'Categories'],
+ ];
+ if (delivered > 0) tiles.push(['fa-truck-fast', fmtNum(delivered), delivered === 1 ? 'Order delivered' : 'Orders delivered']);
+ tiles.push(reviews > 0
+  ? ['fa-star', rating.toFixed(1), `${fmtNum(reviews)} ${reviews === 1 ? 'review' : 'reviews'}`]
+  : ['fa-seedling', 'New', 'No reviews yet']);
+ box.innerHTML = tiles.map(([icon, value, label]) => `<div class="sfx-stat"><i class="fa-solid ${icon}" aria-hidden="true"></i><strong>${escHtml(value)}</strong><span>${escHtml(label)}</span></div>`).join('');
+ if (ratingLine) {
+  ratingLine.innerHTML = reviews > 0
+   ? `<span class="sfx-stars" aria-hidden="true">${starIcons(rating)}</span> ${rating.toFixed(1)} · ${fmtNum(reviews)} ${reviews === 1 ? 'review' : 'reviews'}`
+   : '<i class="fa-regular fa-star"></i> No reviews yet';
+ }
+}
+
+function setupStorefrontControls() {
+ const search = document.getElementById('sfx-search');
+ const clear = document.getElementById('sfx-search-clear');
+ const sort = document.getElementById('sfx-sort');
+ const chips = document.getElementById('sfx-chips');
+ if (!search || !sort || !chips) return;
+ search.value = '';
+ clear?.classList.add('hidden');
+ sort.value = 'newest';
+ sort.querySelector('option[value="relevance"]').hidden = true;
+ if (search.dataset.ready === 'true') return;
+ search.dataset.ready = 'true';
+ search.addEventListener('input', () => {
+  clear?.classList.toggle('hidden', !search.value);
+  window.clearTimeout(storefrontSearchTimer);
+  storefrontSearchTimer = window.setTimeout(() => setStorefrontQuery(search.value), 180);
+ });
+ search.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && search.value) {
+   event.preventDefault();
+   search.value = '';
+   clear?.classList.add('hidden');
+   setStorefrontQuery('');
+  } else if (event.key === 'Enter') {
+   event.preventDefault();
+   search.blur();
+  }
+ });
+ clear?.addEventListener('click', () => {
+  search.value = '';
+  clear.classList.add('hidden');
+  setStorefrontQuery('');
+  search.focus();
+ });
+ sort.addEventListener('change', () => {
+  if (!storefrontState) return;
+  storefrontState.sort = sort.value;
+  storefrontState.shown = STORE_PAGE_SIZE;
+  renderStorefrontProducts();
+ });
+ chips.addEventListener('click', event => {
+  const chip = event.target.closest('[data-store-cat]');
+  if (!chip || !storefrontState) return;
+  storefrontState.category = chip.dataset.storeCat;
+  storefrontState.shown = STORE_PAGE_SIZE;
+  renderStorefrontChips();
+  renderStorefrontProducts();
+ });
+}
+
+function setStorefrontQuery(value) {
+ const state = storefrontState;
+ if (!state) return;
+ const query = normalizeMarketplaceSearch(value);
+ const sort = document.getElementById('sfx-sort');
+ const relevance = sort?.querySelector('option[value="relevance"]');
+ if (relevance) relevance.hidden = !query;
+ // "Best match" is chosen when a search starts, and dropped when it ends.
+ if (query && !state.query && state.sort === 'newest') state.sort = 'relevance';
+ if (!query && state.sort === 'relevance') state.sort = 'newest';
+ if (sort) sort.value = state.sort;
+ state.query = query;
+ state.shown = STORE_PAGE_SIZE;
+ renderStorefrontProducts();
+}
+
+function renderStorefrontChips() {
+ const state = storefrontState;
+ const box = document.getElementById('sfx-chips');
+ if (!state || !box) return;
+ const counts = new Map();
+ state.rows.forEach(product => {
+  const key = normalizeProductCategory(product.category) || 'other';
+  counts.set(key, (counts.get(key) || 0) + 1);
+ });
+ if (state.loading || counts.size < 2) {
+  box.innerHTML = '';
+  box.classList.add('hidden');
+  return;
+ }
+ const chips = [['all', 'All', state.rows.length], ...[...counts.entries()]
+  .sort((a, b) => b[1] - a[1])
+  .map(([key, count]) => [key, categoryLabel(key), count])];
+ box.classList.remove('hidden');
+ box.innerHTML = chips.map(([key, label, count]) => {
+  const active = state.category === key;
+  return `<button type="button" class="sfx-chip${active ? ' active' : ''}" data-store-cat="${escAttr(key)}" aria-pressed="${active}">${escHtml(label)}<span>${fmtNum(count)}</span></button>`;
+ }).join('');
+}
+
+function storefrontResults() {
+ const state = storefrontState;
+ let rows = state.rows;
+ if (state.category !== 'all') rows = rows.filter(product => (normalizeProductCategory(product.category) || 'other') === state.category);
+ let fixes = [];
+ let partial = false;
+ if (state.query) {
+  if (window.BuysellSearch) {
+   const result = window.BuysellSearch.searchProducts(rows, state.query);
+   rows = result.items;
+   fixes = result.fixes;
+   partial = result.partial;
+  } else {
+   const term = state.query.toLowerCase();
+   rows = rows.filter(product => `${product.name} ${product.description} ${product.category}`.toLowerCase().includes(term));
+  }
+ }
+ const price = product => Number(marketplaceDisplayPrice(product)) || 0;
+ const created = product => new Date(product.created_at || 0).getTime() || 0;
+ if (state.sort === 'price-asc') rows = [...rows].sort((a, b) => price(a) - price(b));
+ else if (state.sort === 'price-desc') rows = [...rows].sort((a, b) => price(b) - price(a));
+ else if (state.sort === 'newest' && state.query) rows = [...rows].sort((a, b) => created(b) - created(a));
+ return { rows, fixes, partial };
+}
+
+function renderStorefrontProducts() {
+ const state = storefrontState;
+ const grid = document.getElementById('sfx-grid');
+ const empty = document.getElementById('sfx-empty');
+ const count = document.getElementById('sfx-count');
+ const more = document.getElementById('sfx-more');
+ if (!state || !grid || !empty || !count || !more) return;
+
+ if (state.loading) {
+  grid.innerHTML = '<div class="sfx-skeleton"><span></span><i></i><i></i></div>'.repeat(8);
+  grid.setAttribute('aria-busy', 'true');
+  count.textContent = 'Loading products…';
+  empty.classList.add('hidden');
+  more.classList.add('hidden');
+  return;
+ }
+ grid.removeAttribute('aria-busy');
+
+ const { rows, fixes, partial } = storefrontResults();
+ const visible = rows.slice(0, state.shown);
+ grid.innerHTML = visible.map(product => prodCard(product)).join('');
+
+ if (!state.rows.length) {
+  empty.innerHTML = '<span class="sfx-empty-icon"><i class="fa-solid fa-box-open"></i></span><h3>No products here yet</h3><p>This store hasn\'t listed anything for sale. Check back soon.</p>';
+  empty.classList.remove('hidden');
+ } else if (!rows.length) {
+  empty.innerHTML = `<span class="sfx-empty-icon"><i class="fa-solid fa-magnifying-glass"></i></span><h3>No matches in this store</h3><p>Try another word or category.</p><button type="button" class="btn btn-outline btn-sm" onclick="resetStorefrontFilters()">Show all products</button>`;
+  empty.classList.remove('hidden');
+ } else {
+  empty.classList.add('hidden');
+ }
+
+ if (!state.rows.length) {
+  count.textContent = '';
+ } else {
+  const corrected = state.query.split(' ').map(word => fixes.find(fix => fix.from === word.toLowerCase())?.to || word).join(' ');
+  const parts = [`${fmtNum(rows.length)} ${rows.length === 1 ? 'product' : 'products'}`];
+  if (state.query) parts.push(`for “${corrected}”`);
+  if (state.category !== 'all') parts.push(`in ${categoryLabel(state.category)}`);
+  count.textContent = `${parts.join(' ')}${partial ? ' (closest matches)' : ''}`;
+ }
+
+ const remaining = rows.length - visible.length;
+ more.classList.toggle('hidden', remaining <= 0);
+ more.textContent = remaining > 0 ? `Show more products (${fmtNum(remaining)} left)` : '';
+}
+
+function showMoreStorefrontProducts() {
+ if (!storefrontState) return;
+ storefrontState.shown += STORE_PAGE_SIZE;
+ renderStorefrontProducts();
+}
+
+function resetStorefrontFilters() {
+ if (!storefrontState) return;
+ const search = document.getElementById('sfx-search');
+ if (search) search.value = '';
+ document.getElementById('sfx-search-clear')?.classList.add('hidden');
+ storefrontState.category = 'all';
+ renderStorefrontChips();
+ setStorefrontQuery('');
 }
 
 // ====================================================
