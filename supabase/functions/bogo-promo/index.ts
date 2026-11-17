@@ -1,16 +1,23 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { requireStoreRole, storeAccess } from "../_shared/storeAccess.ts";
+import {
+  buyerPriceForSellerPrice,
+  commissionForSellerPrice,
+  commissionPercentForSellerPrice,
+  sellerPriceForBuyerPrice,
+} from "../_shared/commission.ts";
 
 /**
- * This pricing module deliberately stays in this function's source file.
- * Some dashboard-based Edge Function deploys upload index.ts alone, so a
- * parent-directory import (../_shared/bogo.ts) would be missing at bundle
- * time. Keeping the trusted pricing primitives here makes this function
- * deployable from both the CLI and the Supabase Dashboard.
+ * The promotion pricing lives in this file. BUYSELL's commission comes from
+ * ../_shared/commission.ts, the rule manage-product and the WhatsApp imports
+ * use, so checkout always charges what product pages show. Deploy with the
+ * CLI, which bundles the ../_shared files.
  */
-const CUSTOMER_MARKUP_BPS = 2_000; // 20.00%
 const BPS_DENOMINATOR = 10_000;
+// A promotion share can be at most the highest commission (8%); per item it is
+// further capped at that item's own commission (promoShareBpsFor).
+const MAX_PROMO_SHARE_PERCENT = 8;
 
 type BogoSettings = {
   bogo_promo_enabled: boolean;
@@ -78,8 +85,13 @@ function amountForBps(amount: number, basisPoints: number) {
 }
 
 function customerPriceForSellerPrice(sellerPrice: number) {
-  const sellerAmount = wholeNaira(sellerPrice);
-  return sellerAmount + amountForBps(sellerAmount, CUSTOMER_MARKUP_BPS);
+  return buyerPriceForSellerPrice(wholeNaira(sellerPrice));
+}
+
+// A promotion's share of an item may not exceed that item's commission, so
+// promotions are always paid out of what BUYSELL earns on the item.
+function promoShareBpsFor(sellerPrice: number, shareBps: number) {
+  return Math.min(Math.max(0, Math.round(shareBps)), commissionPercentForSellerPrice(sellerPrice) * 100);
 }
 
 function normalizeBogoSettings(input: Partial<BogoSettings> | null | undefined): BogoSettings {
@@ -89,12 +101,13 @@ function normalizeBogoSettings(input: Partial<BogoSettings> | null | undefined):
     : "HYBRID";
   return {
     bogo_promo_enabled: input?.bogo_promo_enabled === true,
-    // The promo is funded from the 20% marketplace markup, never more.
-    bogo_profit_share_percent: Math.min(20, Math.max(0, percentToBps(input?.bogo_profit_share_percent, 1_000) / 100)),
+    // Promotions are funded from the commission, never more: each item's
+    // share is capped at its own commission (promoShareBpsFor).
+    bogo_profit_share_percent: Math.min(MAX_PROMO_SHARE_PERCENT, Math.max(0, percentToBps(input?.bogo_profit_share_percent, 1_000) / 100)),
     bogo_min_order_value: wholeNaira(input?.bogo_min_order_value),
     free_shipping_promo_enabled: input?.free_shipping_promo_enabled === true,
     free_shipping_mode: freeShippingMode,
-    free_shipping_profit_share_percent: Math.min(20, Math.max(0, percentToBps(input?.free_shipping_profit_share_percent, 1_000) / 100)),
+    free_shipping_profit_share_percent: Math.min(MAX_PROMO_SHARE_PERCENT, Math.max(0, percentToBps(input?.free_shipping_profit_share_percent, 1_000) / 100)),
     free_shipping_min_order_value: wholeNaira(input?.free_shipping_min_order_value, 100),
     allow_promo_stacking: input?.allow_promo_stacking === true,
   };
@@ -123,7 +136,7 @@ function calculateBogoPricing(input: BogoPricingInput) {
   const profitShareBps = percentToBps(settings.bogo_profit_share_percent, 1_000);
   const totalGiftAllowance = paidItems.reduce((sum, item) => {
     const itemTotalSeller = item.seller_price * item.qty;
-    return sum + amountForBps(itemTotalSeller, profitShareBps);
+    return sum + amountForBps(itemTotalSeller, promoShareBpsFor(item.seller_price, profitShareBps));
   }, 0);
   const minOrderMet = paidMerchandiseTotal >= settings.bogo_min_order_value;
 
@@ -145,7 +158,7 @@ function calculateBogoPricing(input: BogoPricingInput) {
   const promoContribution = requestedGift ? Math.min(requestedGift.seller_price, totalGiftAllowance) : 0;
   const giftSellerBalance = requestedGift ? Math.max(0, requestedGift.seller_price - promoContribution) : 0;
   const extraCustomerCharge = requestedGift ? customerPriceForSellerPrice(giftSellerBalance) : 0;
-  const mainPlatformMarkup = primary ? amountForBps(primary.seller_price * primary.qty, CUSTOMER_MARKUP_BPS) : 0;
+  const mainPlatformMarkup = primary ? commissionForSellerPrice(primary.seller_price) * primary.qty : 0;
 
   // Allocate promo contribution proportionally across all paid items based on their contribution to the gift allowance
   let allocatedPromoDiscount = 0;
@@ -153,7 +166,7 @@ function calculateBogoPricing(input: BogoPricingInput) {
     const sellerAmount = item.seller_price * item.qty;
     const customerAmount = customerPriceForSellerPrice(item.seller_price) * item.qty;
     const itemMarkup = customerAmount - sellerAmount;
-    const itemMaxCap = amountForBps(sellerAmount, profitShareBps);
+    const itemMaxCap = amountForBps(sellerAmount, promoShareBpsFor(item.seller_price, profitShareBps));
 
     let itemPromoDiscount = 0;
     if (requestedGift && promoContribution > 0 && totalGiftAllowance > 0) {
@@ -202,7 +215,10 @@ function calculateBogoPricing(input: BogoPricingInput) {
   const shippingPrimary = primary || [...paidItems].sort((left, right) => right.seller_price - left.seller_price)[0] || null;
   const shippingThresholdMet = merchandiseTotal >= settings.free_shipping_min_order_value;
   const maxShippingDiscount = shippingPrimary
-    ? amountForBps(shippingPrimary.seller_price, percentToBps(settings.free_shipping_profit_share_percent, 1_000))
+    ? amountForBps(
+      shippingPrimary.seller_price,
+      promoShareBpsFor(shippingPrimary.seller_price, percentToBps(settings.free_shipping_profit_share_percent, 1_000)),
+    )
     : 0;
   const stackingBlocked = Boolean(requestedGift && !settings.allow_promo_stacking);
   let shippingDiscount = 0;
@@ -495,8 +511,8 @@ async function loadPricedProducts(admin: ReturnType<typeof createClient>, ids: s
     if (sellerPrice < 1) {
       const publicPrice = wholeNaira(product?.price);
       if (publicPrice > 0) {
-        // Derive seller price by reversing the 20% platform markup
-        sellerPrice = Math.max(1, Math.round(publicPrice / 1.20));
+        // Derive seller price by taking BUYSELL's commission back off
+        sellerPrice = Math.max(1, sellerPriceForBuyerPrice(publicPrice));
         // Persist into product_seller_pricing so future operations have it cached
         try {
           await admin.from("product_seller_pricing").upsert({
@@ -764,7 +780,7 @@ async function eligibleGifts(admin: ReturnType<typeof createClient>, body: Recor
     let sellerPrice = priceByProduct.get(id) || 0;
 
     if (sellerPrice < 1) {
-      sellerPrice = Math.max(1, Math.round(publicPrice / 1.20));
+      sellerPrice = Math.max(1, sellerPriceForBuyerPrice(publicPrice));
       unpricedToUpsert.push({
         product_id: id,
         seller_price: sellerPrice,
@@ -873,8 +889,8 @@ async function insertPendingOrderWithAllocations(
     // Keep a customer-safe audit trail of the applied settings. Seller prices
     // and per-seller payouts stay only in `order_seller_allocations`.
     bogo_pricing_snapshot: {
-      formula_version: "commission-funded-promotions-v2",
-      customer_markup_percent: 20,
+      formula_version: "tiered-commission-v3",
+      commission_rule: "8% below ₦300,000; 6% from ₦300,000; 4% from ₦1,000,000 (seller price per item)",
       bogo_profit_share_percent: quote.settings.bogo_profit_share_percent,
       bogo_min_order_value: quote.settings.bogo_min_order_value,
       is_bogo_order: pricing.is_bogo_order,
@@ -1000,8 +1016,8 @@ async function adminUpdateConfig(admin: ReturnType<typeof createClient>, user: {
   }
   if (hasOwn(source, "bogo_profit_share_percent")) {
     const percent = finiteNumber(source.bogo_profit_share_percent);
-    if (percent === null || percent < 0 || percent > 20) {
-      throw new RequestError("The promotion share must be between 0% and 20%.");
+    if (percent === null || percent < 0 || percent > MAX_PROMO_SHARE_PERCENT) {
+      throw new RequestError(`The promotion share must be between 0% and ${MAX_PROMO_SHARE_PERCENT}%.`);
     }
     next.bogo_profit_share_percent = percent;
   }
@@ -1026,8 +1042,8 @@ async function adminUpdateConfig(admin: ReturnType<typeof createClient>, user: {
   }
   if (hasOwn(source, "free_shipping_profit_share_percent")) {
     const percent = finiteNumber(source.free_shipping_profit_share_percent);
-    if (percent === null || percent < 0 || percent > 20) {
-      throw new RequestError("The free-shipping share must be between 0% and 20%.");
+    if (percent === null || percent < 0 || percent > MAX_PROMO_SHARE_PERCENT) {
+      throw new RequestError(`The free-shipping share must be between 0% and ${MAX_PROMO_SHARE_PERCENT}%.`);
     }
     next.free_shipping_profit_share_percent = percent;
   }

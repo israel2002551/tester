@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { requireStoreRole, storeAccess } from "../_shared/storeAccess.ts";
+import { buyerPriceForSellerPrice, sellerPriceForBuyerPrice } from "../_shared/commission.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,10 +21,8 @@ const VALID_CONDITIONS = new Set(["new", "used-like-new", "used-good"]);
 // Who a fashion or beauty product is for. Left empty, the database reads it
 // from the name and description (public.buysell_audience_from_text).
 const VALID_AUDIENCES = new Set(["men", "women", "unisex", "kids"]);
-// This is deliberately server-owned. Browsers submit the seller's amount;
-// only this function calculates the buyer-facing marketplace amount.
-const PLATFORM_COMMISSION_PERCENT = 20;
-const PLATFORM_COMMISSION_MULTIPLIER = 1 + (PLATFORM_COMMISSION_PERCENT / 100);
+// The buyer price is deliberately server-owned. Browsers submit the seller's
+// amount; this function adds BUYSELL's commission (../_shared/commission.ts).
 const MAX_BULK_PRODUCTS = 100;
 
 function json(body: Record<string, unknown>, status = 200) {
@@ -45,14 +44,6 @@ function cleanNumber(value: unknown, fallback = 0) {
 function wholeNaira(value: unknown, fallback = 0) {
   const number = cleanNumber(value, fallback);
   return Number.isFinite(number) ? Math.round(number) : fallback;
-}
-
-function buyerPriceForSellerPrice(sellerPrice: unknown) {
-  return Math.round(wholeNaira(sellerPrice) * PLATFORM_COMMISSION_MULTIPLIER);
-}
-
-function sellerPriceForBuyerPrice(buyerPrice: unknown) {
-  return Math.max(0, Math.round(wholeNaira(buyerPrice) / PLATFORM_COMMISSION_MULTIPLIER));
 }
 
 function cleanUrlArray(value: unknown, limit = 8) {
@@ -269,7 +260,7 @@ async function productForSeller(
     ? null
     : wholeNaira(pricing.seller_price);
   const buyerPrice = wholeNaira(product.price);
-  // New products have public price = seller price × 1.20. Older listings may
+  // Public price = seller price plus BUYSELL's commission. Older listings may
   // predate this rule, in which case their original price is already a seller
   // amount and must not be divided a second time when the edit form opens.
   const priceHasCommission = sellerPrice !== null && buyerPrice === buyerPriceForSellerPrice(sellerPrice);

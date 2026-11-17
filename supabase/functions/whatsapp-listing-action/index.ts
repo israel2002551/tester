@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { commissionForSellerPrice } from "../_shared/commission.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,7 +11,6 @@ const corsHeaders = {
 const PRODUCT_COLUMNS = "id,seller_id,name,description,price,original_price,shipping_fee,shipping_cost,category,condition,location,images,videos,image_url,video_url,has_video,stock_quantity,status,created_at,negotiable";
 const NATIVE_CATEGORIES = new Set(["electronics", "fashion", "home", "phones", "beauty", "sports", "arts", "dropship", "other"]);
 const NATIVE_CONDITIONS = new Set(["new", "used-like-new", "used-good"]);
-const WHATSAPP_PRICE_MARKUP_PERCENT = 20;
 // Shop cards say "Only N left" at 5 or fewer, so imported listings start above that.
 const IMPORTED_STOCK_QUANTITY = 10;
 // These were the original Bot 2 allow-listed groups. Keep them valid while
@@ -457,7 +457,7 @@ function productResponse(product: Record<string, unknown>, meta: Record<string, 
       name: product.name,
       description: product.description,
       price: product.price,
-      // What the seller asked for. `price` is what buyers pay: this plus BUYSELL's 20%.
+      // What the seller asked for. `price` is what buyers pay: this plus BUYSELL's commission.
       your_price: meta.source_price ?? null,
       category: product.category,
       condition: product.condition,
@@ -553,10 +553,9 @@ async function ingest(admin: ReturnType<typeof createClient>, req: Request, body
   const shippingFee = Math.max(0, finiteNumber(Deno.env.get("WHATSAPP_LISTING_SHIPPING_FEE")) ?? 2_500);
 
   // Bot 2 writes straight to the public products table instead of going
-  // through manage-product. Its amount below is therefore already the final
-  // buyer price and must receive this one 20% commission only once.
-  const markupPercent = WHATSAPP_PRICE_MARKUP_PERCENT;
-  const priceMarkup = Math.round((price * markupPercent) / 100);
+  // through manage-product, so BUYSELL's commission (8%, 6% or 4% by price,
+  // ../_shared/commission.ts) is added here, once.
+  const priceMarkup = commissionForSellerPrice(price);
   const marketplacePrice = price + priceMarkup;
   const productPayload = {
     seller_id: sellerId,
@@ -710,11 +709,10 @@ async function changeListing(admin: ReturnType<typeof createClient>, listing: Se
     if ("price" in updates) {
       const price = finiteNumber(updates.price);
       if (price === null || price <= 0 || price > 100_000_000) return json({ error: "Enter a valid price in naira." }, 400);
-      // The management page edits the seller/source price. Keep Bot 2 at its
-      // existing single 20% markup instead of treating this public listing as
-      // a regular seller-dashboard submission (which would add it again).
+      // The management page edits the seller/source price; the commission is
+      // added once, as for a new import.
       revisedSourcePrice = price;
-      revisedPriceMarkup = Math.round((price * WHATSAPP_PRICE_MARKUP_PERCENT) / 100);
+      revisedPriceMarkup = commissionForSellerPrice(price);
       patch.price = price + revisedPriceMarkup;
       patch.original_price = patch.price;
     }
@@ -815,7 +813,7 @@ function catalogItem(product: Record<string, any>, meta: Record<string, any>) {
     id: product.id,
     name: product.name,
     description: product.description || "",
-    // What buyers pay, and what the seller asked for (buyers pay this plus BUYSELL's 20%).
+    // What buyers pay, and what the seller asked for (buyers pay this plus BUYSELL's commission).
     price: product.price,
     your_price: meta.source_price ?? null,
     category: product.category,

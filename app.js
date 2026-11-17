@@ -131,9 +131,19 @@ let carouselIndex = 0, carouselTimer = null;
 let selectedRating = 0, checkoutPaymentMethod = 'buysell_bank_transfer';
 const WALLET_CHECKOUT_ENABLED = false;
 const BUYSELL_DELIVERY_FEE = 2500;
-// Seller-facing UI only. The matching 20% calculation is enforced again in
-// the manage-product Edge Function before every product write.
-const SELLER_PRICE_COMMISSION_RATE = 0.20;
+// BUYSELL's commission on the seller's price for one item: 8% below ₦300,000,
+// 6% up to ₦999,999, 4% from ₦1,000,000. Seller-facing previews only: the
+// server applies the same rule (supabase/functions/_shared/commission.ts).
+const COMMISSION_TIERS = [
+ { below: 300000, percent: 8 },
+ { below: 1000000, percent: 6 },
+ { below: Infinity, percent: 4 },
+];
+
+function commissionPercentForSellerPrice(value) {
+ const amount = Math.max(0, Math.round(Number(value) || 0));
+ return (COMMISSION_TIERS.find(tier => amount < tier.below) || COMMISSION_TIERS[COMMISSION_TIERS.length - 1]).percent;
+}
 const BUYSELL_BANK_ACCOUNT_NUMBER = '9061484256';
 const BUYSELL_BANK_NAME = 'Moniepoint';
 const BUYSELL_BANK_ACCOUNT_NAME = 'Israel Efe';
@@ -5926,7 +5936,7 @@ async function payWithFlutterwave() {
  }
 
  // Ask the server for an authoritative quote immediately before opening the
- // payment sheet. This includes the 20% customer price and any BOGO top-up.
+ // payment sheet. This includes the commission-inclusive price and any BOGO top-up.
  const quote = await refreshBogoCheckout();
  const quotedTotal = bogoNumber(quote?.total_amount, 0);
  if (quotedTotal <= 0) throw new Error('Could not calculate the checkout total. Please refresh and try again.');
@@ -6797,8 +6807,9 @@ async function loadSellerAnalytics() {
 const NEWLY_COMING_PRODUCT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 function buyerFacingPriceForSellerPrice(value) {
- const amount = Number(value);
- return Number.isFinite(amount) && amount > 0 ? Math.round(amount * (1 + SELLER_PRICE_COMMISSION_RATE)) : 0;
+ const amount = Math.round(Number(value));
+ if (!Number.isFinite(amount) || amount <= 0) return 0;
+ return amount + Math.round((amount * commissionPercentForSellerPrice(amount)) / 100);
 }
 
 function ensureSellerPriceCommissionUI() {
@@ -6823,8 +6834,8 @@ function ensureSellerPriceCommissionUI() {
   const sellerPrice = Number(priceInput.value);
   const buyerPrice = buyerFacingPriceForSellerPrice(sellerPrice);
   preview.innerHTML = buyerPrice > 0
-   ? `<i class="fa-solid fa-circle-check" style="color:var(--green)"></i> Buyer sees ${fmtN(buyerPrice)} (includes BUYSELL's 20% commission).`
-   : 'BUYSELL adds 20% to this amount for the buyer-facing price.';
+   ? `<i class="fa-solid fa-circle-check" style="color:var(--green)"></i> Buyer sees ${fmtN(buyerPrice)} (includes BUYSELL's ${commissionPercentForSellerPrice(sellerPrice)}% commission).`
+   : 'BUYSELL adds 8% to this amount for buyers (6% from ₦300,000, 4% from ₦1,000,000).';
  };
  if (!priceInput.dataset.commissionPreviewBound) {
   priceInput.addEventListener('input', updatePreview);
@@ -6930,7 +6941,7 @@ function sellerProductRow(p) {
  <div class="prod-list-info">
  <div class="prod-list-name">${escHtml(p.name)}</div>
   <div class="prod-list-price">Buyer price: ${fmtN(p.price)}</div>
-  ${Number(p.seller_price) > 0 ? `<div class="text-xs color-text3">Your price: ${fmtN(p.seller_price)} <span aria-hidden="true">•</span> +20% BUYSELL commission</div>` : '<div class="text-xs color-text3">Buyer price includes BUYSELL commission</div>'}
+  ${Number(p.seller_price) > 0 ? `<div class="text-xs color-text3">Your price: ${fmtN(p.seller_price)} <span aria-hidden="true">•</span> +${commissionPercentForSellerPrice(p.seller_price)}% BUYSELL commission</div>` : '<div class="text-xs color-text3">Buyer price includes BUYSELL commission</div>'}
  <div class="text-xs color-text3">BUYSELL delivery fee: ${fmtN(itemShippingFee(p))}</div>
  <div class="prod-list-meta">
  <span class="badge badge-${p.status==='active'?'green':'gray'}">${p.status}</span>
@@ -8373,7 +8384,7 @@ function renderDropshipSection() {
     <p class="src-muted">Paste a 1688 link or the page's copied code. BUYSELL fills in the details for a listing; buyers' orders are sourced and delivered by BUYSELL.</p>
     <textarea id="ds-1688-url" class="form-textarea" rows="3" placeholder="https://detail.1688.com/offer/..."></textarea>
     <div class="form-grid form-grid-2">
-     <div class="form-group"><label class="form-label">Your seller price (₦)</label><input id="ds-1688-sell-price" class="form-input" type="number" inputmode="numeric" placeholder="e.g. 35000" oninput="updateDropshipCalculator()"><small class="form-hint">Buyers see this plus BUYSELL's 20%.</small></div>
+     <div class="form-group"><label class="form-label">Your seller price (₦)</label><input id="ds-1688-sell-price" class="form-input" type="number" inputmode="numeric" placeholder="e.g. 35000" oninput="updateDropshipCalculator()"><small class="form-hint">Buyers see this plus BUYSELL's commission (8% below ₦300,000, 6% to ₦1M, 4% from ₦1M).</small></div>
      <div class="form-group"><label class="form-label">Quantity</label><input id="ds-1688-qty" class="form-input" type="number" min="1" value="1" inputmode="numeric"></div>
     </div>
     <div class="src-row">
@@ -8839,7 +8850,7 @@ async function publish1688Product(event) {
  try {
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-dark"></span> Publishing...'; }
   await callEdge('manage-product', { action: 'create', data: productData });
-   toast('1688 Listing Published', `Buyers see ${fmtN(buyerFacingPriceForSellerPrice(price))}, including BUYSELL's 20% commission.`, 'success');
+   toast('1688 Listing Published', `Buyers see ${fmtN(buyerFacingPriceForSellerPrice(price))}, including BUYSELL's ${commissionPercentForSellerPrice(price)}% commission.`, 'success');
   loadDropshipData();
   loadSellerProds();
  } catch (error) {
@@ -9831,7 +9842,7 @@ function bogoPromoPanelMarkup() {
     <div>
      <span class="admin-command-kicker"><i class="fa-solid fa-tags"></i> Promotions &amp; Discounts</span>
      <h3 class="mb-1">Commission-funded promotions</h3>
-     <p class="text-xs color-text3">BOGO and delivery subsidies are calculated from private seller prices and the platform's 20% commission.</p>
+     <p class="text-xs color-text3">BOGO and delivery subsidies are paid from BUYSELL's commission (8%, 6% or 4% of the seller price). Each item's share is capped at its own commission.</p>
     </div>
     <span class="badge badge-gray" data-bogo-promo-status>Loading…</span>
    </div>
@@ -9840,7 +9851,7 @@ function bogoPromoPanelMarkup() {
     <label class="bogo-toggle" aria-label="Enable commission-funded BOGO promo"><input type="checkbox" data-bogo-promo-enabled><span></span></label>
    </div>
     <div class="form-grid form-grid-2 mt-3">
-    <div class="form-group"><label class="form-label">Platform profit share for gift (%)</label><input type="number" min="0" max="20" step="0.01" inputmode="decimal" class="form-input" data-bogo-profit-share placeholder="10"><p class="text-xs color-text3 mt-1">Maximum 20% because customer pricing has a 20% markup.</p></div>
+    <div class="form-group"><label class="form-label">Platform profit share for gift (%)</label><input type="number" min="0" max="8" step="0.01" inputmode="decimal" class="form-input" data-bogo-profit-share placeholder="5"><p class="text-xs color-text3 mt-1">Maximum 8%, the highest commission. Each item gives at most its own commission (8%, 6% or 4%).</p></div>
     <div class="form-group"><label class="form-label">Minimum qualifying order value (₦)</label><input type="number" min="0" step="1" inputmode="numeric" class="form-input" data-bogo-min-order placeholder="0"><p class="text-xs color-text3 mt-1">Optional customer merchandise threshold before delivery.</p></div>
     </div>
     <hr style="border:0;border-top:1px solid var(--border);margin:1.25rem 0">
@@ -9854,7 +9865,7 @@ function bogoPromoPanelMarkup() {
     </div>
     <div class="form-grid form-grid-2 mt-3">
      <div class="form-group"><label class="form-label">Free-shipping mode</label><select class="form-select" data-free-shipping-mode><option value="HYBRID">Hybrid — full at threshold, capped below</option><option value="FULL_THRESHOLD">Full only after threshold</option><option value="PERCENTAGE_CAP">Percentage cap only</option></select></div>
-     <div class="form-group"><label class="form-label">Platform commission share for shipping (%)</label><input type="number" min="0" max="20" step="0.01" inputmode="decimal" class="form-input" data-free-shipping-profit-share placeholder="10"><p class="text-xs color-text3 mt-1">Maximum 20% of the main item's seller price.</p></div>
+     <div class="form-group"><label class="form-label">Platform commission share for shipping (%)</label><input type="number" min="0" max="8" step="0.01" inputmode="decimal" class="form-input" data-free-shipping-profit-share placeholder="3"><p class="text-xs color-text3 mt-1">Maximum 8% of the main item's seller price, and never more than that item's commission.</p></div>
      <div class="form-group"><label class="form-label">Minimum customer merchandise total (â‚¦)</label><input type="number" min="0" step="1" inputmode="numeric" class="form-input" data-free-shipping-min-order placeholder="100"><p class="text-xs color-text3 mt-1">Used for full threshold and hybrid modes.</p></div>
      <div class="form-group"><label class="form-label">Promotion stacking</label><label class="flex items-center gap-2 text-sm" style="min-height:42px"><input type="checkbox" data-allow-promo-stacking> Allow BOGO and free shipping together</label><p class="text-xs color-text3 mt-1">When off, selecting a BOGO gift disables the shipping subsidy.</p></div>
     </div>
@@ -9975,8 +9986,8 @@ async function saveAdminBogoPromo() {
   const freeShippingShare = bogoNumber(freeShippingShareInput?.value, NaN);
   const freeShippingMinimum = bogoNumber(freeShippingMinimumInput?.value, NaN);
   const freeShippingMode = String(freeShippingModeInput?.value || '').toUpperCase();
- if (!Number.isFinite(profitShare) || profitShare < 0 || profitShare > 20) {
-  toast('Invalid profit share', 'Enter a value from 0 to 20%.', 'warn');
+ if (!Number.isFinite(profitShare) || profitShare < 0 || profitShare > 8) {
+  toast('Invalid profit share', 'Enter a value from 0 to 8% (the highest commission).', 'warn');
   return;
  }
  if (!Number.isFinite(minimumOrderValue) || minimumOrderValue < 0) {
@@ -9987,8 +9998,8 @@ async function saveAdminBogoPromo() {
    toast('Invalid free-shipping mode', 'Choose full threshold, percentage cap, or hybrid.', 'warn');
    return;
   }
-  if (!Number.isFinite(freeShippingShare) || freeShippingShare < 0 || freeShippingShare > 20) {
-   toast('Invalid shipping share', 'Enter a value from 0 to 20%.', 'warn');
+  if (!Number.isFinite(freeShippingShare) || freeShippingShare < 0 || freeShippingShare > 8) {
+   toast('Invalid shipping share', 'Enter a value from 0 to 8% (the highest commission).', 'warn');
    return;
   }
   if (!Number.isFinite(freeShippingMinimum) || freeShippingMinimum < 0) {
@@ -10053,7 +10064,7 @@ function renderAdminWhatsAppListings(listings) {
   const canPause = !listing.deleted_at && !listing.sold_at && product.status === 'active';
   const sourcePrice = Number(listing.source_price);
   const pricingLine = Number.isFinite(sourcePrice) && sourcePrice > 0
-  ? `Source ${fmtN(sourcePrice)} + ₦${fmtNum(listing.price_markup ?? Math.round(sourcePrice * 0.20))} = <b>${fmtN(product.price)}</b>`
+  ? `Source ${fmtN(sourcePrice)} + ₦${fmtNum(listing.price_markup ?? (buyerFacingPriceForSellerPrice(sourcePrice) - sourcePrice))} = <b>${fmtN(product.price)}</b>`
   : `Buyer price: <b>${fmtN(product.price)}</b>`;
   return `<article class="whatsapp-admin-listing-row">
    <div class="whatsapp-admin-product-thumb">${cover ? `<img src="${escAttr(cover)}" alt="">` : '<i class="fa-solid fa-image"></i>'}</div>
@@ -11571,11 +11582,11 @@ async function importCsvProducts() {
  try {
   for (let i = 0; i < toCreate.length; i += BATCH) {
    // Server-side pricing is required for every row. The Edge Function stores
-   // the seller price privately and writes the 20%-inclusive buyer price.
+   // the seller price privately and writes the commission-inclusive buyer price.
    const result = await callEdge('manage-product', { action: 'bulk_create', products: toCreate.slice(i, i + BATCH) });
    imported += Number(result?.count || 0);
   }
-  toast(`${imported} Products Imported! `, 'Buyer prices include BUYSELL\'s 20% commission.', 'success');
+  toast(`${imported} Products Imported! `, 'Buyer prices include BUYSELL\'s commission (8%, 6% or 4% by price).', 'success');
   csvRows = [];
   document.getElementById('csv-file').value = '';
   document.getElementById('csv-preview').classList.add('hidden');

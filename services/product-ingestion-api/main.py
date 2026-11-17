@@ -41,6 +41,25 @@ def required(name: str) -> str:
     return value
 
 
+# BUYSELL's commission on the seller's price for one item: 8% below N300,000,
+# 6% up to N999,999 and 4% from N1,000,000. The same rule is in
+# supabase/functions/_shared/commission.ts and app.js; change them together.
+COMMISSION_TIERS = ((300_000, 8), (1_000_000, 6))
+TOP_COMMISSION_PERCENT = 4
+
+
+def commission_percent_for_seller_price(seller_price: int) -> int:
+    for below, percent in COMMISSION_TIERS:
+        if seller_price < below:
+            return percent
+    return TOP_COMMISSION_PERCENT
+
+
+def commission_for_seller_price(seller_price: int) -> int:
+    # Half up, as JavaScript's Math.round does on the website and server.
+    return int(seller_price * commission_percent_for_seller_price(seller_price) / 100 + 0.5)
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     supabase_url: str
@@ -49,7 +68,6 @@ class Settings:
     whatsapp_seller_id: str
     telegram_seller_id: str
     media_bucket: str
-    markup_percent: int
     whatsapp_shipping_fee: int
     default_location: str
     allowed_media_hosts: frozenset[str]
@@ -79,7 +97,6 @@ class Settings:
             whatsapp_seller_id=required("WHATSAPP_LISTINGS_SELLER_ID"),
             telegram_seller_id=required("TELEGRAM_LISTINGS_SELLER_ID"),
             media_bucket=os.getenv("PRODUCT_MEDIA_BUCKET", "product-media").strip() or "product-media",
-            markup_percent=max(0, min(100, int(os.getenv("INGESTION_PRICE_MARKUP_PERCENT", "20")))),
             whatsapp_shipping_fee=max(0, int(os.getenv("WHATSAPP_LISTING_SHIPPING_FEE", "2500"))),
             default_location=(os.getenv("INGESTION_DEFAULT_LOCATION", "Nigeria").strip() or "Nigeria")[:100],
             allowed_media_hosts=hosts,
@@ -267,7 +284,7 @@ class SupabaseGateway:
             table = "telegram_product_submissions"
             body = {"product_id": product_id, "telegram_id": int(payload.sender_id), "telegram_username": payload.sender_username or None,
                     "source_listing_id": payload.source_message_id, "seller_price": source_price,
-                    "price_markup_percent": self.settings.markup_percent}
+                    "price_markup_percent": commission_percent_for_seller_price(source_price)}
         response = await self.client.post(
             f"{self.settings.supabase_url}/rest/v1/{table}", headers={**self.headers, "Content-Type": "application/json"}, json=body,
         )
@@ -451,7 +468,7 @@ async def ingest_product(request: Request) -> dict[str, Any]:
     ))
     image_urls = [url for url, item in zip(uploads, media, strict=True) if item.kind == "image"]
     video_urls = [url for url, item in zip(uploads, media, strict=True) if item.kind == "video"]
-    markup = round(seller_price * settings.markup_percent / 100)
+    markup = commission_for_seller_price(seller_price)
     seller_id = settings.whatsapp_seller_id if payload.source_platform == "whatsapp" else settings.telegram_seller_id
     product = await store.insert_product({
         "seller_id": seller_id, "name": title[:300], "description": description[:2000],
