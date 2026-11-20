@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import BrandLogo from '../components/BrandLogo.jsx';
 import { money } from '../lib/format.js';
-import { LISTING_CATEGORIES, STATE_LABELS, listingRequest, useNoIndex } from '../lib/whatsappListings.js';
+import { STATE_LABELS, listingCategoryOptions, listingRequest, useNoIndex } from '../lib/whatsappListings.js';
 import WhatsAppCatalog from './WhatsAppCatalog.jsx';
 
 // /manage?catalog=<token> is a seller's catalog of everything the BUYSELL bot
@@ -130,7 +130,7 @@ function SingleListing({ productId, token }) {
               <label>Your price (₦)<input name="price" value={form.price ?? ''} type="number" min="1" max="100000000" step="1" onChange={updateForm} disabled={busy || closed} required /></label>
               <label>Category
                 <select name="category" value={form.category || 'other'} onChange={updateForm} disabled={busy || closed}>
-                  {LISTING_CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  {listingCategoryOptions(form.category).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </label>
               <label>Condition

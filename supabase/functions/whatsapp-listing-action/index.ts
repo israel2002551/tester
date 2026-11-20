@@ -9,7 +9,12 @@ const corsHeaders = {
 };
 
 const PRODUCT_COLUMNS = "id,seller_id,name,description,price,original_price,shipping_fee,shipping_cost,category,condition,location,images,videos,image_url,video_url,has_video,stock_quantity,status,created_at,negotiable";
-const NATIVE_CATEGORIES = new Set(["electronics", "fashion", "home", "phones", "beauty", "sports", "arts", "dropship", "other"]);
+// Built-in categories, plus the ones created when the "Other" products were
+// sorted (20261120000000_recategorise_other_products.sql).
+const NATIVE_CATEGORIES = new Set([
+  "electronics", "fashion", "home", "phones", "beauty", "sports", "arts", "dropship",
+  "toys & games", "musical instruments", "services", "vehicles", "other",
+]);
 const NATIVE_CONDITIONS = new Set(["new", "used-like-new", "used-good"]);
 // Shop cards say "Only N left" at 5 or fewer, so imported listings start above that.
 const IMPORTED_STOCK_QUANTITY = 10;
@@ -422,12 +427,14 @@ function nativeCategory(input: unknown) {
   const aliases: Record<string, string> = {
     "phones & tablets": "phones",
     "computers & laptops": "electronics",
-    vehicles: "other",
     "home & furniture": "home",
     "beauty & health": "beauty",
     "arts & crafts": "arts",
     "arts and crafts": "arts",
-    services: "other",
+    "services & classes": "services",
+    toys: "toys & games",
+    "toys and games": "toys & games",
+    "musical instrument": "musical instruments",
   };
   const mapped = aliases[raw] || raw;
   return NATIVE_CATEGORIES.has(mapped) ? mapped : "other";

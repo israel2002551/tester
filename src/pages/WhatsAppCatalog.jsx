@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import BrandLogo from '../components/BrandLogo.jsx';
 import { dateLabel, money } from '../lib/format.js';
 import { cloudinaryImage } from '../lib/productData.js';
-import { LISTING_CATEGORIES, STATE_LABELS, listingRequest } from '../lib/whatsappListings.js';
+import { STATE_LABELS, listingCategoryOptions, listingRequest } from '../lib/whatsappListings.js';
 import '../styles/seller-catalog.css';
 
 const PAGE_SIZE = 48;
@@ -275,7 +275,7 @@ function CatalogItem({ item, token, onClose, onChange }) {
           <label>Your price (₦)<input name="price" value={form.price} type="number" inputMode="numeric" min="1" max="100000000" step="1" onChange={update} disabled={busy || closed} required /></label>
           <label>Category
             <select name="category" value={form.category} onChange={update} disabled={busy || closed}>
-              {LISTING_CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {listingCategoryOptions(form.category).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
           <label className="wa-manage-form__wide">Location<input name="location" value={form.location} maxLength="100" onChange={update} disabled={busy || closed} placeholder="e.g. Yaba, Lagos" /></label>

@@ -31,9 +31,22 @@ export const LISTING_CATEGORIES = [
   ['beauty', 'Beauty & health'],
   ['sports', 'Sports'],
   ['arts', 'Arts & crafts'],
+  ['toys & games', 'Toys & games'],
+  ['musical instruments', 'Musical instruments'],
+  ['vehicles', 'Vehicles'],
+  ['services', 'Services & classes'],
   ['dropship', 'Dropship'],
-  ['other', 'Other'],
 ];
+
+// The categories to offer for a listing. One that is not in the list (a new
+// import still in "other", or a category BUYSELL gave it) stays selected,
+// shown as "Choose a category" or by its own name, so saving keeps it.
+export function listingCategoryOptions(current) {
+  const value = String(current || 'other');
+  if (LISTING_CATEGORIES.some(([key]) => key === value)) return LISTING_CATEGORIES;
+  const label = value === 'other' ? 'Choose a category' : value.replace(/\b\w/g, letter => letter.toUpperCase());
+  return [[value, label], ...LISTING_CATEGORIES];
+}
 
 export const STATE_LABELS = {
   pending: 'In review',
