@@ -7,6 +7,13 @@ import {
   commissionPercentForSellerPrice,
   sellerPriceForBuyerPrice,
 } from "../_shared/commission.ts";
+import {
+  choiceSummary,
+  cleanOrderChoice,
+  type OrderChoice,
+  photoOptionsFor,
+  resolveOrderChoices,
+} from "../_shared/orderChoices.ts";
 
 /**
  * The promotion pricing lives in this file. BUYSELL's commission comes from
@@ -302,7 +309,9 @@ const BUYSELL_DELIVERY_FEE = 2_500;
 const MAX_CART_ITEMS = 100;
 const MAX_GIFT_RESULTS = 100;
 
-type InputCartItem = { id: string; qty: number };
+// `choices`: the size, photo and note the buyer picked for each cart line of
+// this product (lines of one product are priced together).
+type InputCartItem = { id: string; qty: number; choices: OrderChoice[] };
 
 type PricedProduct = SellerPricedItem & {
   name: string;
@@ -310,6 +319,8 @@ type PricedProduct = SellerPricedItem & {
   category: string | null;
   public_price: number;
   stock_quantity: number;
+  photo_options: string[];
+  choices?: OrderChoice[];
 };
 
 type CheckoutQuote = {
@@ -373,6 +384,7 @@ function normaliseCart(input: unknown): InputCartItem[] {
   }
 
   const grouped = new Map<string, number>();
+  const choicesById = new Map<string, OrderChoice[]>();
   for (const rawItem of input) {
     const item = asRecord(rawItem);
     const id = normaliseProductId(item.id ?? item.product_id);
@@ -384,10 +396,12 @@ function normaliseCart(input: unknown): InputCartItem[] {
     const nextQuantity = (grouped.get(id) || 0) + qty;
     if (nextQuantity > 99) throw new RequestError("A product quantity cannot exceed 99.");
     grouped.set(id, nextQuantity);
+    const choice = cleanOrderChoice(item.choices, qty);
+    if (choice) choicesById.set(id, [...(choicesById.get(id) || []), choice]);
   }
 
   if (!grouped.size || grouped.size > MAX_CART_ITEMS) throw new RequestError("Your cart is invalid.");
-  return Array.from(grouped, ([id, qty]) => ({ id, qty }));
+  return Array.from(grouped, ([id, qty]) => ({ id, qty, choices: choicesById.get(id) || [] }));
 }
 
 function deliveryModeFor(body: Record<string, unknown>): "delivery" | "pickup" {
@@ -537,6 +551,7 @@ async function loadPricedProducts(admin: ReturnType<typeof createClient>, ids: s
       category: cleanString(product.category, 80) || null,
       public_price: wholeNaira(product.price),
       stock_quantity: stock,
+      photo_options: photoOptionsFor(product),
     });
   }
   return result;
@@ -562,7 +577,7 @@ async function buildCheckoutQuote(admin: ReturnType<typeof createClient>, body: 
     if (cartItem.qty > product.stock_quantity) {
       throw new RequestError("The requested quantity is no longer in stock.", 409);
     }
-    return { ...product, qty: cartItem.qty };
+    return { ...product, qty: cartItem.qty, choices: resolveOrderChoices(cartItem.choices, product.photo_options) };
   });
 
   const primaryItemId = (requestedPrimaryId && paidItems.some((item) => item.id === requestedPrimaryId))
@@ -601,8 +616,9 @@ async function buildCheckoutQuote(admin: ReturnType<typeof createClient>, body: 
 }
 
 function quoteItems(quote: CheckoutQuote) {
-  const items = quote.paid_items.map((item) => {
+  const items: Array<Record<string, unknown>> = quote.paid_items.map((item) => {
     const unitPrice = customerPriceForSellerPrice(item.seller_price);
+    const choices = item.choices || [];
     return {
       ...publicProduct(item),
       product_id: item.id,
@@ -612,6 +628,9 @@ function quoteItems(quote: CheckoutQuote) {
       unit_price: unitPrice,
       total: unitPrice * item.qty,
       is_bogo_gift: false,
+      // What the buyer chose (size, photo, note), so the seller sends the
+      // exact item: shown on orders, sale alerts and seller emails.
+      ...(choices.length ? { choices, choice_summary: choiceSummary(choices, item.qty) } : {}),
     };
   });
   if (quote.free_gift) {

@@ -107,7 +107,11 @@ function summarizeItems(items: unknown) {
 
     return parsedItems
       .slice(0, 3)
-      .map((item: any) => `${item.name || "Product"} x ${item.qty || 1}`)
+      // With the size/photo the buyer chose: "Sandals x 2 (Size 40 · Option 2)".
+      .map((item: any) => {
+        const summary = typeof item.choice_summary === "string" ? item.choice_summary.trim() : "";
+        return `${item.name || "Product"} x ${item.qty || 1}${summary ? ` (${summary})` : ""}`;
+      })
       .join(", ");
   } catch (error) {
     console.warn("Failed to parse order items:", error);

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { normalizeCart, normalizeCartItem } from '../lib/cart.js';
 import { readJson, writeCheckoutCartHandoff, writeJson } from '../lib/storage.js';
 import { money } from '../lib/format.js';
+import { choiceSummary, missingChoices } from '../lib/productChoices.js';
 
 function cartQuantity(items) {
   return normalizeCart(items).reduce((sum, item) => sum + item.qty, 0);
@@ -41,10 +42,10 @@ export default function CartDrawer({ isOpen, onClose, onCartChange }) {
 
   if (!isOpen) return null;
 
-  const changeQty = (id, delta) => {
+  const changeQty = (lineKey, delta) => {
     const updated = items
       .map(item => {
-        if (item.id !== id) return item;
+        if (item.line_key !== lineKey) return item;
         const nextQuantity = item.qty + delta;
         return nextQuantity > 0 ? normalizeCartItem({ ...item, qty: nextQuantity }) : null;
       })
@@ -55,8 +56,8 @@ export default function CartDrawer({ isOpen, onClose, onCartChange }) {
     notifyCartChange(normalized);
   };
 
-  const removeItem = id => {
-    const updated = items.filter(item => item.id !== id);
+  const removeItem = lineKey => {
+    const updated = items.filter(item => item.line_key !== lineKey);
     writeJson('bs_cart', updated);
     setItems(updated);
     notifyCartChange(updated);
@@ -65,7 +66,10 @@ export default function CartDrawer({ isOpen, onClose, onCartChange }) {
   // The cart shows the items' subtotal only; checkout shows the amount to pay.
   const productTotal = items.reduce((sum, item) => sum + Number(item.price || 0) * (Number(item.qty) || 1), 0);
   const quantity = cartQuantity(items);
+  // Lines added before sizes and photo choices existed may still need them.
+  const incomplete = items.filter(item => missingChoices(item).length);
   const proceedToCheckout = () => {
+    if (incomplete.length) return;
     // Checkout loads the classic marketplace in a new document. Persist both
     // durable and session-scoped copies before closing this React drawer.
     const normalized = normalizeCart(items);
@@ -108,20 +112,26 @@ export default function CartDrawer({ isOpen, onClose, onCartChange }) {
           ) : (
             <ul className="cart-drawer__items">
               {items.map(item => (
-                <li className="cart-drawer__item" key={item.id}>
+                <li className="cart-drawer__item" key={item.line_key}>
                   <img src={item.image_url || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=200'} alt="" />
                   <div className="cart-drawer__item-main">
                     <h3>{item.name || 'Product'}</h3>
                     <p>{money(item.price)} each</p>
+                    {choiceSummary(item.choices) ? <p className="cart-drawer__choices">{choiceSummary(item.choices)}</p> : null}
+                    {missingChoices(item).length ? (
+                      <a className="cart-drawer__choose" href={`/product.html?id=${encodeURIComponent(item.id)}`}>
+                        <i className="fa-solid fa-circle-exclamation" /> Choose your {missingChoices(item).map(part => (part === 'size' ? 'size' : 'option')).join(' and ')}
+                      </a>
+                    ) : null}
                     <div className="cart-drawer__quantity" aria-label={`Quantity for ${item.name || 'product'}`}>
-                      <button onClick={() => changeQty(item.id, -1)} aria-label={`Decrease quantity of ${item.name || 'product'}`} type="button"><i className="fa-solid fa-minus" /></button>
+                      <button onClick={() => changeQty(item.line_key, -1)} aria-label={`Decrease quantity of ${item.name || 'product'}`} type="button"><i className="fa-solid fa-minus" /></button>
                       <strong aria-live="polite">{item.qty || 1}</strong>
-                      <button onClick={() => changeQty(item.id, 1)} aria-label={`Increase quantity of ${item.name || 'product'}`} type="button"><i className="fa-solid fa-plus" /></button>
+                      <button onClick={() => changeQty(item.line_key, 1)} aria-label={`Increase quantity of ${item.name || 'product'}`} type="button"><i className="fa-solid fa-plus" /></button>
                     </div>
                   </div>
                   <div className="cart-drawer__item-total">
                     <strong>{money(Number(item.price || 0) * (Number(item.qty) || 1))}</strong>
-                    <button onClick={() => removeItem(item.id)} aria-label={`Remove ${item.name || 'product'} from cart`} type="button"><i className="fa-solid fa-trash-can" /></button>
+                    <button onClick={() => removeItem(item.line_key)} aria-label={`Remove ${item.name || 'product'} from cart`} type="button"><i className="fa-solid fa-trash-can" /></button>
                   </div>
                 </li>
               ))}
@@ -134,9 +144,15 @@ export default function CartDrawer({ isOpen, onClose, onCartChange }) {
             <dl className="cart-drawer__summary">
               <div className="cart-drawer__grand-total"><dt>Subtotal</dt><dd>{money(productTotal)}</dd></div>
             </dl>
+            {incomplete.length ? (
+              <p className="cart-drawer__notice" role="alert">
+                <i className="fa-solid fa-circle-exclamation" /> Choose a size or option for {incomplete.length === 1 ? 'one item' : `${incomplete.length} items`} before checkout.
+              </p>
+            ) : null}
             <button
               className="btn btn-primary cart-drawer__checkout"
               onClick={proceedToCheckout}
+              disabled={Boolean(incomplete.length)}
               type="button"
             >
               <i className="fa-solid fa-lock" /> Proceed to checkout

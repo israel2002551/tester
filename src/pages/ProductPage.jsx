@@ -6,8 +6,11 @@ import { createSupabaseClient } from '../lib/browserConfig.js';
 import { money } from '../lib/format.js';
 import { categoryLabel, cloudinaryImage, productColumns, productMedia, shippingFee } from '../lib/productData.js';
 import { readJson, writeJson } from '../lib/storage.js';
+import { cartLineKey, choiceSummary, cleanChoices, photoOptions, requiredChoices, sizeGuide } from '../lib/productChoices.js';
 
 const productColumnFallbacks = [
+  // `audience` tells kids' clothes apart, for the sizes offered.
+  `${productColumns},audience`,
   productColumns,
   'id,seller_id,name,description,price,original_price,shipping_fee,shipping_cost,category,condition,location,images,videos,image_url,video_url,has_video,stock_quantity,status,created_at,avg_rating,review_count,negotiable',
   'id,seller_id,name,description,price,original_price,category,condition,location,images,image_url,stock_quantity,status,created_at,avg_rating,review_count',
@@ -110,6 +113,12 @@ export default function ProductPage() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [relatedProducts, setRelatedProducts] = useState([]);
+  // What the buyer chooses before ordering (src/lib/productChoices.js).
+  const [size, setSize] = useState('');
+  const [customSize, setCustomSize] = useState('');
+  const [option, setOption] = useState(0);
+  const [note, setNote] = useState('');
+  const [choiceError, setChoiceError] = useState('');
   const productId = new URLSearchParams(window.location.search).get('id') || new URLSearchParams(window.location.search).get('product');
 
   const sliderRef = useRef(null);
@@ -141,6 +150,11 @@ export default function ProductPage() {
   useEffect(() => {
     setActiveMedia(0);
     setQuantity(1);
+    setSize('');
+    setCustomSize('');
+    setOption(0);
+    setNote('');
+    setChoiceError('');
     sliderRef.current?.scrollTo({ left: 0, behavior: 'auto' });
   }, [productId]);
 
@@ -205,6 +219,14 @@ export default function ProductPage() {
   const rating = Number(product?.avg_rating || 0);
   const maxQuantity = Number.isFinite(stock) && stock > 0 ? Math.min(stock, 99) : 1;
   const galleryDots = useMemo(() => visibleGalleryDots(media.length, activeMedia), [media.length, activeMedia]);
+  const guide = useMemo(() => sizeGuide(product || {}), [product]);
+  const photos = useMemo(() => photoOptions(product || {}), [product]);
+  const chosenSize = size === '__other' ? customSize.trim() : size;
+
+  // A listing with one stated size ("Size 38") has nothing to choose.
+  useEffect(() => {
+    if (guide?.options.length === 1) setSize(current => current || guide.options[0]);
+  }, [guide]);
 
   const handleSliderScroll = () => {
     if (!sliderRef.current || sliderFrameRef.current) return;
@@ -232,10 +254,34 @@ export default function ProductPage() {
     }
   };
 
+  // Picking a photo also shows it in the gallery.
+  function choosePhoto(index) {
+    setOption(index + 1);
+    setChoiceError('');
+    const mediaIndex = media.findIndex(item => item.type === 'image' && item.url === photos[index]);
+    if (mediaIndex >= 0) scrollToSlide(mediaIndex);
+  }
+
+  // A size and a photo, where the listing needs them, before anything is ordered.
+  function choicesReady() {
+    const missing = [];
+    if (photos.length && !option) missing.push('the one you want');
+    if (guide && !chosenSize) missing.push(`your ${guide.label.charAt(0).toLowerCase()}${guide.label.slice(1)}`);
+    if (!missing.length) {
+      setChoiceError('');
+      return true;
+    }
+    setChoiceError(`Choose ${missing.join(' and ')} before ordering.`);
+    (document.querySelector('.product-choices') || purchaseRef.current)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return false;
+  }
+
   function addToCart(quantity = 1) {
-    if (!product?.id) return;
+    if (!product?.id) return false;
+    if (!choicesReady()) return false;
     const cart = readJson('bs_cart', []);
-    const image = media.find(item => item.type === 'image')?.url || product.image_url || '';
+    const choices = cleanChoices({ size: chosenSize, option, option_image: option ? photos[option - 1] : '', note });
+    const image = choices.option_image || media.find(item => item.type === 'image')?.url || product.image_url || '';
     const item = {
       id: product.id,
       name: product.name,
@@ -246,21 +292,25 @@ export default function ProductPage() {
       image_url: image,
       seller_id: product.seller_id,
       profiles: seller,
+      choices,
+      required_choices: requiredChoices(product),
     };
-    const existing = cart.find(entry => entry.id === product.id);
+    item.line_key = cartLineKey(item);
+    const existing = cart.find(entry => (entry.line_key || cartLineKey(entry)) === item.line_key);
     if (existing) existing.qty = (Number(existing.qty) || 1) + quantity;
     else cart.push({ ...item, qty: quantity });
     writeJson('bs_cart', cart);
     window.dispatchEvent(new Event('bs:cart-change'));
     setCount(cartCount());
-    setToast('Added to cart');
+    const summary = choiceSummary(choices);
+    setToast(summary ? `Added to cart: ${summary}` : 'Added to cart');
     window.clearTimeout(addToCart.timer);
-    addToCart.timer = window.setTimeout(() => setToast(''), 2200);
+    addToCart.timer = window.setTimeout(() => setToast(''), 2600);
+    return true;
   }
 
   function buyNow() {
-    addToCart(quantity);
-    setIsCartOpen(true);
+    if (addToCart(quantity)) setIsCartOpen(true);
   }
 
   async function shareProduct() {
@@ -505,6 +555,68 @@ export default function ProductPage() {
               <span><i className="fa-solid fa-location-dot" /> {product.location || 'Nigeria'}</span>
               <span><i className="fa-solid fa-shield-heart" /> Buyer support</span>
             </div>
+            {photos.length || guide ? (
+              <section className="product-choices" aria-label="Your choice">
+                {photos.length ? (
+                  <fieldset className="product-choice">
+                    <legend>Choose the one you want <em>Required</em></legend>
+                    <p>These photos can show different colours or designs. Tap the one you want.</p>
+                    <div className="product-choice-photos" role="radiogroup" aria-label="Choose a photo">
+                      {photos.map((url, index) => (
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={option === index + 1}
+                          aria-label={`Option ${index + 1}`}
+                          className={option === index + 1 ? 'active' : ''}
+                          onClick={() => choosePhoto(index)}
+                          key={url}
+                        >
+                          <img src={cloudinaryImage(url, 160, { square: true }) || url} alt="" loading="lazy" />
+                          <span>{index + 1}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                ) : null}
+                {guide ? (
+                  <fieldset className="product-choice">
+                    <legend>{guide.label} <em>Required</em></legend>
+                    <div className="product-choice-sizes" role="radiogroup" aria-label={guide.label}>
+                      {[...guide.options, '__other'].map(value => (
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={size === value}
+                          className={size === value ? 'active' : ''}
+                          onClick={() => { setSize(value); setChoiceError(''); }}
+                          key={value}
+                        >
+                          {value === '__other' ? 'Other' : value}
+                        </button>
+                      ))}
+                    </div>
+                    {size === '__other' ? (
+                      <input
+                        className="form-input product-choice-other"
+                        value={customSize}
+                        maxLength={30}
+                        placeholder="Type your size"
+                        aria-label="Your size"
+                        onChange={event => { setCustomSize(event.target.value); setChoiceError(''); }}
+                        autoFocus
+                      />
+                    ) : null}
+                    {!guide.fromListing ? <p>The seller confirms your size is in stock before delivery.</p> : null}
+                  </fieldset>
+                ) : null}
+              </section>
+            ) : null}
+            <label className="product-choice-note">
+              <span>Anything the seller should know? <em>Optional</em></span>
+              <input className="form-input" value={note} maxLength={200} placeholder="Colour, design or fit" onChange={event => setNote(event.target.value)} />
+            </label>
+            {choiceError ? <p className="product-choice-error" role="alert"><i className="fa-solid fa-circle-exclamation" /> {choiceError}</p> : null}
             <section className="product-purchase-block" aria-label="Purchase options" ref={purchaseRef}>
               <div className="product-quantity-control">
                 <span>Quantity</span>

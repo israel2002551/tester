@@ -1056,6 +1056,24 @@ async function sellerPhones(admin: ReturnType<typeof createClient>, req: Request
   return json({ updated });
 }
 
+// "Sandals x2" plus what the buyer chose (size, photo, note) and a link to
+// each photo they picked, for the admin's sale alert.
+function saleProductLine(item: any) {
+  const name = String(item?.name || item?.title || "Marketplace Product");
+  const qty = Math.floor(Number(item?.qty || item?.quantity || 1));
+  const lines = [qty > 1 ? `${name} x${qty}` : name];
+  const summary = typeof item?.choice_summary === "string" ? item.choice_summary.trim() : "";
+  if (summary) lines.push(`🎯 *Buyer chose:* ${summary}`);
+  const choices = Array.isArray(item?.choices) ? item.choices : [];
+  choices.forEach((choice: any) => {
+    const photo = typeof choice?.option_image === "string" ? choice.option_image.trim() : "";
+    if (photo.startsWith("https://") && choice?.option) {
+      lines.push(`🖼️ *Option ${choice.option} photo:* ${photo}`);
+    }
+  });
+  return lines.join("\n");
+}
+
 async function orderWhatsAppSales(admin: ReturnType<typeof createClient>, req: Request, _body: Record<string, unknown>) {
   const ingestSecret = Deno.env.get("WHATSAPP_INGEST_SECRET") || "";
   if (!ingestSecret || req.headers.get("x-whatsapp-ingest-secret") !== ingestSecret) {
@@ -1108,7 +1126,10 @@ async function orderWhatsAppSales(admin: ReturnType<typeof createClient>, req: R
         sales.push({
           order_id: order.id,
           product_id: pid,
-          product_name: item?.name || item?.title || "Marketplace Product",
+          // Bot 1 prints product_name as is, so the size and photo the buyer
+          // chose ride along with it.
+          product_name: saleProductLine(item),
+          choice_summary: typeof item?.choice_summary === "string" ? item.choice_summary : "",
           paid_price: item?.price || order.total_amount,
           group_jid: meta.group_jid,
           group_name: groupNameMap.get(meta.group_jid) || "WhatsApp Seller Group",

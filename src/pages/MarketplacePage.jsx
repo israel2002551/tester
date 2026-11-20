@@ -6,10 +6,13 @@ import { authReady, getSession, isProtectedMarketplaceRoute, requireAuth } from 
 import { enhanceLegacyTabs } from '../lib/viewTransitions.js';
 import * as productSearch from '../lib/productSearch.js';
 import * as imageSearch from '../lib/imageSearch.js';
+import * as productChoices from '../lib/productChoices.js';
 
-// app.js is a classic script, so it reaches the shared product and photo search through window.
+// app.js is a classic script, so it reaches the shared product search, photo
+// search and size/photo choices through window.
 window.BuysellSearch = productSearch;
 window.BuysellImageSearch = imageSearch;
+window.BuysellChoices = productChoices;
 
 let runtimePromise;
 
@@ -76,7 +79,7 @@ export function loadMarketplaceRuntime() {
   if (!runtimePromise) {
     // Version the classic runtime explicitly so an application deploy also
     // refreshes service-worker and notification-route safeguards immediately.
-    const appScriptUrl = import.meta.env.DEV ? `/app.js?t=${Date.now()}` : '/app.js?v=10.68';
+    const appScriptUrl = import.meta.env.DEV ? `/app.js?t=${Date.now()}` : '/app.js?v=10.69';
     runtimePromise = authReady
       .then(() => ensureRuntimeConfig())
       .then(() => loadClassicScript(appScriptUrl))

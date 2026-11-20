@@ -1,3 +1,7 @@
+import { cartLineKey } from './productChoices.js';
+
+// A cart line is a product plus what the buyer chose (size, photo, note), so
+// the same product can sit in the cart twice with different choices.
 export function normalizeCartItem(item = {}) {
   const rawQuantity = Number(item.qty ?? item.quantity);
   const qty = Number.isFinite(rawQuantity) && rawQuantity > 0 ? Math.floor(rawQuantity) : 1;
@@ -14,6 +18,7 @@ export function normalizeCartItem(item = {}) {
     seller_id: sellerId,
     sellerId,
     store_id: item.store_id || sellerId,
+    line_key: item.line_key || cartLineKey(item),
   };
 }
 

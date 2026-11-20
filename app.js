@@ -67,6 +67,13 @@ function readCheckoutCartHandoff() {
 
 // Keep the classic checkout compatible with the React drawer. Both surfaces
 // store the same normalized fields in `bs_cart` and the session handoff.
+// A cart line is a product plus what the buyer chose, so the same product can
+// be in the cart twice with different sizes (src/lib/productChoices.js).
+function cartLineKeyFor(item = {}) {
+ const choices = item.choices || {};
+ return [item.id, choices.size || '', choices.option || '', String(choices.note || '').toLowerCase()].join('|');
+}
+
 function normalizeCartItem(item = {}) {
  const rawQuantity = Number(item.qty ?? item.quantity);
  const qty = Number.isFinite(rawQuantity) && rawQuantity > 0 ? Math.floor(rawQuantity) : 1;
@@ -82,6 +89,7 @@ function normalizeCartItem(item = {}) {
   seller_id: sellerId,
   sellerId,
   store_id: item.store_id || sellerId,
+  line_key: item.line_key || cartLineKeyFor(item),
  };
 }
 
@@ -4909,6 +4917,12 @@ function checkoutCartItems(includeDetails = false) {
  qty: item.qty || item.quantity || 1,
  shipping_fee: chargedShipping,
  shipping_cost: chargedShipping,
+ // The server turns the option number into the product's photo.
+ choices: {
+  size: item.choices?.size || '',
+  option: item.choices?.option || null,
+  note: item.choices?.note || '',
+ },
  };
  if (!includeDetails) return base;
  return {
@@ -5510,46 +5524,99 @@ function updateCheckoutTotals() {
  }
 }
 
+// A product that needs a size or a photo choice (src/lib/productChoices.js),
+// looked up with its full details when the caller only has a few fields.
+function productNeedingChoices(prod) {
+ const choicesApi = window.BuysellChoices;
+ if (!choicesApi || !prod?.id) return null;
+ const full = (Array.isArray(products) && products.find(item => item.id === prod.id)) || prod;
+ return choicesApi.needsChoices(full) ? full : null;
+}
+
+// Cart lines that still need a size or photo choice, including lines added
+// before choices existed (judged from the product's details).
+function cartLinesMissingChoices() {
+ const choicesApi = window.BuysellChoices;
+ if (!choicesApi) return [];
+ return cart.filter(line => {
+  let required = line.required_choices;
+  if (!required) {
+   const full = Array.isArray(products) ? products.find(item => item.id === line.id) : null;
+   required = full ? choicesApi.requiredChoices(full) : null;
+  }
+  return required ? choicesApi.missingChoices({ ...line, required_choices: required }).length > 0 : false;
+ });
+}
+
+// An order item and what the buyer chose: "Sandals x2 (Size 40 · Option 2)".
+function orderItemLabel(item = {}) {
+ const summary = item.choice_summary || '';
+ return `${item.name || 'Item'} x${item.qty || 1}${summary ? ` (${summary})` : ''}`;
+}
+
+// The photos buyers chose, so sellers and admins see exactly which one to send.
+function orderItemChoicePhotos(items = []) {
+ const photos = [];
+ (Array.isArray(items) ? items : []).forEach(item => {
+  (Array.isArray(item?.choices) ? item.choices : []).forEach(choice => {
+   if (!choice?.option_image) return;
+   const label = `${item.name || 'Item'}: option ${choice.option}${choice.size ? `, size ${choice.size}` : ''}`;
+   photos.push({ url: sanitizeUrl(choice.option_image), label });
+  });
+ });
+ if (!photos.length) return '';
+ return `<div class="order-choice-photos">${photos.map(photo => `<a href="${escAttr(photo.url)}" target="_blank" rel="noopener" title="${escAttr(photo.label)}"><img src="${escAttr(photo.url)}" alt="${escAttr(photo.label)}" loading="lazy"><span>${escHtml(photo.label)}</span></a>`).join('')}</div>`;
+}
+
 // options.quiet skips the toast, for callers that add several items and say so once.
+// A product needing a size or photo choice opens its page instead, where the
+// buyer picks them; lines from there arrive with `choices`.
 function addToCart(prod, options = {}) {
- if (!prod?.id) return;
+ if (!prod?.id) return false;
+ if (!prod.choices && productNeedingChoices(prod)) {
+  if (!options.quiet) toast('Choose your size or option', 'Pick it on the product page, then add it to your cart.', 'info', 3500);
+  openProduct(prod.id);
+  return false;
+ }
  cart = normalizeCartItems(cart);
  const shippingFee = itemShippingFee(prod);
+ const line = normalizeCartItem({ ...prod, shipping_fee: shippingFee, shipping_cost: shippingFee, qty: 1 });
 
- const existing = cart.find(c => c.id === prod.id);
+ const existing = cart.find(c => c.line_key === line.line_key);
 
  if (existing) {
  // Increment quantity
  existing.qty = (existing.qty || existing.quantity || 1) + 1;
  existing.quantity = existing.qty;
- 
+
  // IMPORTANT: Update the price to the current one passed in (in case it changed)
  // This ensures if a user adds a flash sale item, the price is locked correctly.
- existing.price = prod.price; 
+ existing.price = prod.price;
  existing.shipping_fee = shippingFee;
  existing.shipping_cost = shippingFee;
- existing.is_flash = prod.is_flash; 
+ existing.is_flash = prod.is_flash;
  } else {
  // Add new item with the provided price (which is the flash price if active)
- cart.push(normalizeCartItem({ ...prod, shipping_fee: shippingFee, shipping_cost: shippingFee, qty: 1 }));
+ cart.push(line);
  }
 
  saveCart();
- 
- trackAnalytics({ 
- event_type: 'add_to_cart', 
- product_id: prod.id, 
- seller_id: prod.seller_id, 
- amount: prod.price || 0 
+
+ trackAnalytics({
+ event_type: 'add_to_cart',
+ product_id: prod.id,
+ seller_id: prod.seller_id,
+ amount: prod.price || 0
  });
- 
+
  if (!options.quiet) toast('Added to Cart!', prod.name, 'success', 2000);
+ return true;
 }
 
-function removeFromCart(id) { cart = cart.filter(c => c.id !== id); saveCart(); renderCartItems(); }
+function removeFromCart(lineKey) { cart = cart.filter(c => c.line_key !== lineKey); saveCart(); renderCartItems(); }
 
-function changeCartQty(id, delta) {
- const item = cart.find(c => c.id === id);
+function changeCartQty(lineKey, delta) {
+ const item = cart.find(c => c.line_key === lineKey);
  if (!item) return;
  item.qty = Math.max(1, (item.qty || item.quantity || 1) + delta);
  item.quantity = item.qty;
@@ -5599,23 +5666,29 @@ function renderCartItems() {
  empty.classList.add('hidden'); summary.classList.remove('hidden');
  // The cart shows the items' subtotal only; checkout shows the amount to pay.
  const productTotal = cartProductTotal();
- list.innerHTML = cart.map(c => `
+ const incomplete = new Set(cartLinesMissingChoices().map(line => line.line_key));
+ list.innerHTML = cart.map(c => {
+  const summary = window.BuysellChoices?.choiceSummary(c.choices) || '';
+  return `
  <div class="cart-item">
  <img src="${c.image_url||'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=200'}" alt="${escHtml(c.name)}" loading="lazy">
  <div style="flex:1;min-width:0">
  <div class="font-600 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px">${escHtml(c.name)}</div>
  <div class="color-green font-bold">${fmtN(c.price)}</div>
+ ${summary ? `<div class="cart-item-choices">${escHtml(summary)}</div>` : ''}
+ ${incomplete.has(c.line_key) ? `<a class="cart-item-choose" href="/product.html?id=${encodeURIComponent(c.id)}"><i class="fa-solid fa-circle-exclamation"></i> Choose your size or option</a>` : ''}
  <div class="flex items-center gap-2 mt-1">
- <button onclick="changeCartQty(${jsArg(c.id)},-1)" class="btn btn-outline btn-sm" style="padding:.2rem .5rem">-</button>
+ <button onclick="changeCartQty(${jsArg(c.line_key)},-1)" class="btn btn-outline btn-sm" style="padding:.2rem .5rem">-</button>
  <span class="text-sm font-bold">${c.qty||1}</span>
- <button onclick="changeCartQty(${jsArg(c.id)},1)" class="btn btn-outline btn-sm" style="padding:.2rem .5rem">+</button>
+ <button onclick="changeCartQty(${jsArg(c.line_key)},1)" class="btn btn-outline btn-sm" style="padding:.2rem .5rem">+</button>
  </div>
  </div>
  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.4rem">
  <span class="font-bold text-sm">${fmtN(c.price*(c.qty||1))}</span>
- <button onclick="removeFromCart(${jsArg(c.id)})" class="btn btn-sm" style="background:#fee2e2;color:var(--danger);padding:.28rem .62rem"><i class="fa-solid fa-trash"></i></button>
+ <button onclick="removeFromCart(${jsArg(c.line_key)})" class="btn btn-sm" style="background:#fee2e2;color:var(--danger);padding:.28rem .62rem"><i class="fa-solid fa-trash"></i></button>
  </div>
- </div>`).join('');
+ </div>`;
+ }).join('');
  document.getElementById('cart-subtotal').textContent = fmtN(productTotal);
 }
 
@@ -5672,6 +5745,14 @@ async function getSellerAvailableRevenue(sellerId = currentUser?.id) {
 }
 
 async function startCheckout(options = {}) {
+ // Lines still needing a size or photo choice go back to the cart first,
+ // before sign-in.
+ const incompleteLines = cartLinesMissingChoices();
+ if (incompleteLines.length) {
+  toast('Choose your size or option', `${incompleteLines[0].name || 'An item'} needs a size or option before checkout.`, 'warn', 4500);
+  openCart();
+  return;
+ }
  if (!currentUser) {
   await ensureCurrentUser();
  }
@@ -6598,7 +6679,7 @@ async function __legacyDuplicate_loadBuyerOrders_3766() {
  <span class="font-bold color-green">${fmtN(o.total_amount)}</span>
  </div>
  </div>
- <div class="flex gap-1 flex-wrap mb-2">${(o.items||[]).map(i=>`<span class="text-xs badge badge-gray">${escHtml(i.name)} x${i.qty}</span>`).join('')}</div>
+ <div class="flex gap-1 flex-wrap mb-2">${(o.items||[]).map(i=>`<span class="text-xs badge badge-gray">${escHtml(orderItemLabel(i))}</span>`).join('')}</div>
  <div class="flex gap-2 flex-wrap">
  ${o.status==='delivered'?`<button class="btn btn-outline btn-sm" onclick="openDisputeModal(${jsArg(o.id)})"><i class="fa-solid fa-exclamation-triangle"></i> Dispute</button>`:''}
  <a href="https://wa.me/2348116833356?text=Order ${o.id}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-whatsapp"></i> Track</a>
@@ -6630,7 +6711,7 @@ async function loadBuyerOrders() {
  const firstItem = orderItems[0] || {};
  const productId = firstItem.id || firstItem.product_id || '';
  const itemHtml = orderItems.length
- ? orderItems.map(i => `<span class="text-xs badge badge-gray">${escHtml(i.name || 'Item')} x${i.qty || 1}</span>`).join('')
+ ? orderItems.map(i => `<span class="text-xs badge badge-gray">${escHtml(orderItemLabel(i))}</span>`).join('')
  : '<span class="text-xs color-text3">Order item history is still saved for newer orders; this older order may not include item details.</span>';
  const proofUrl = o.proof_url || o.payment_proof_url || '';
  const paymentMethod = o.payment_method ? ` - ${escHtml(o.payment_method)}` : '';
@@ -7384,7 +7465,8 @@ async function loadSellerOrders() {
  <div><div class="font-bold">${o.id}</div><div class="text-xs color-text3">${fmtDate(o.created_at)}</div></div>
   <span class="badge ${statusColors[o.status]||'badge-gray'}">${escHtml(orderStatusLabel(o.status))}</span>
  </div>
- <div class="mb-2">${(o.items||[]).map(i=>`<span class="text-sm">${escHtml(i.name)} x${i.qty}</span>`).join(', ')}</div>
+ <div class="mb-2">${(o.items||[]).map(i=>`<span class="text-sm">${escHtml(orderItemLabel(i))}</span>`).join(', ')}</div>
+ ${orderItemChoicePhotos(o.items)}
  <div class="flex justify-between items-center flex-wrap gap-2">
  <div>
  <div class="text-sm"><i class="fa-solid fa-user color-text3"></i> ${escHtml(o.delivery_name||'Buyer')}</div>
@@ -10636,7 +10718,8 @@ async function loadAdminOrders() {
  <div>
  <div class="font-bold text-sm">${escHtml(o.id)}</div>
  <div class="text-xs color-text3">${fmtDate(o.created_at)} - ${escHtml(o.payment_method||'')}</div>
- <div class="text-xs mt-1">${(o.items||[]).map(i=>`${escHtml(i.name)} x${i.qty}`).join(', ')}</div>
+ <div class="text-xs mt-1">${(o.items||[]).map(i=>escHtml(orderItemLabel(i))).join(', ')}</div>
+ ${orderItemChoicePhotos(o.items)}
  </div>
  <div class="text-right">
  <div class="font-bold color-green">${fmtN(o.total_amount)}</div>
@@ -11676,7 +11759,7 @@ async function handleDeepLink() {
 function sendWhatsAppOrderNotification(order, sellerWa) {
  if (!sellerWa) return;
  const phone = sellerWa.replace(/\D/g,'');
- const items = (order.items||[]).map(i=>`${i.name} x${i.qty}`).join(', ');
+ const items = (order.items||[]).map(orderItemLabel).join(', ');
  const msg = encodeURIComponent(
  ` NEW ORDER on BUYSELL!\n\n` +
  `Order ID: ${order.id}\n` +
@@ -13520,14 +13603,26 @@ function openWishlistProduct(id) {
 function addWishlistItemToCart(id) {
  const product = wishlistLoadedItems.find(item => item.id === id);
  if (!product || wishlistSoldOut(product)) return;
+ if (window.BuysellChoices?.needsChoices(product)) {
+  toast('Choose your size or option', 'Pick it on the product page, then add it to your cart.', 'info', 3500);
+  openWishlistProduct(id);
+  return;
+ }
  addToCart(wishlistCartItem(product));
 }
 
 function addAllWishlistToCart() {
  const available = wishlistLoadedItems.filter(product => !wishlistSoldOut(product));
  if (!available.length) return;
- available.forEach(product => addToCart(wishlistCartItem(product), { quiet: true }));
- toast('Added to cart', `${available.length} saved ${available.length === 1 ? 'product' : 'products'} added`, 'success', 2500);
+ // Products that need a size or photo choice are chosen on their own page.
+ const needChoice = available.filter(product => window.BuysellChoices?.needsChoices(product));
+ const ready = available.filter(product => !needChoice.includes(product));
+ ready.forEach(product => addToCart(wishlistCartItem(product), { quiet: true }));
+ if (!ready.length) {
+  toast('Choose sizes or options first', 'Open each saved product to pick your size or the one you want.', 'info', 4500);
+  return;
+ }
+ toast('Added to cart', `${ready.length} saved ${ready.length === 1 ? 'product' : 'products'} added${needChoice.length ? `. ${needChoice.length} need a size or option: open them to choose.` : ''}`, 'success', 4500);
  closeModal('wishlist-modal');
  if (typeof openCart === 'function') openCart();
 }
