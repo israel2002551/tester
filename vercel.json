@@ -53,6 +53,26 @@
       "permanent": true
     },
     {
+      "source": "/category-toys-games",
+      "destination": "/category/toys-games",
+      "permanent": true
+    },
+    {
+      "source": "/category-musical-instruments",
+      "destination": "/category/musical-instruments",
+      "permanent": true
+    },
+    {
+      "source": "/category-services",
+      "destination": "/category/services",
+      "permanent": true
+    },
+    {
+      "source": "/category-vehicles",
+      "destination": "/category/vehicles",
+      "permanent": true
+    },
+    {
       "source": "/category-dropship",
       "destination": "/category/dropship",
       "permanent": true
@@ -197,6 +217,22 @@
     {
       "source": "/category/arts",
       "destination": "/category-arts.html"
+    },
+    {
+      "source": "/category/toys-games",
+      "destination": "/category-toys-games.html"
+    },
+    {
+      "source": "/category/musical-instruments",
+      "destination": "/category-musical-instruments.html"
+    },
+    {
+      "source": "/category/services",
+      "destination": "/category-services.html"
+    },
+    {
+      "source": "/category/vehicles",
+      "destination": "/category-vehicles.html"
     },
     {
       "source": "/category/dropship",

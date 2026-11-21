@@ -141,7 +141,10 @@ export function sizeGuide(product = {}) {
   if (FREE_SIZE.test(all)) return null;
   const kind = kindFor(name, description);
   if (!kind) return null;
-  const kids = String(product.audience || '').toLowerCase() === 'kids' || KIDS.test(name);
+  // "Baby tee", "babydoll dress", "baby pink" and "big girl" (a stylish
+  // woman) are not children's sizes.
+  const kids = String(product.audience || '').toLowerCase() === 'kids'
+    || KIDS.test(name.replace(/\bbaby[ -]?(tees?|t-shirts?|dolls?|pink|blue)\b|\bbig girls?\b/g, ''));
 
   if (kind === 'shoe') {
     const low = kids ? 16 : 30;

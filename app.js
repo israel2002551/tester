@@ -2556,7 +2556,10 @@ function setupProductCategoryField() {
 // Fashion, beauty and sellers' own categories say who a product is for, which
 // lists it on the Men or Women page. Left on "Pick from the name", the database
 // reads it from the name and description (public.buysell_audience_from_text).
-const CATEGORIES_WITHOUT_AUDIENCE = new Set(['electronics', 'home', 'phones', 'sports', 'arts', 'dropship', 'other']);
+const CATEGORIES_WITHOUT_AUDIENCE = new Set(['electronics', 'home', 'phones', 'sports', 'arts', 'toys & games', 'musical instruments', 'services', 'vehicles', 'dropship', 'other']);
+// Categories the database keeps as the seller chose them, whatever the name
+// suggests (see buysell_products_assign_category).
+const CATEGORIES_KEPT_AS_CHOSEN = new Set(['dropship', 'arts', 'toys & games', 'musical instruments', 'services', 'vehicles']);
 
 function productCategoryHasAudience(category) {
  return !CATEGORIES_WITHOUT_AUDIENCE.has(normalizeProductCategory(category));
@@ -2631,8 +2634,7 @@ async function suggestProductCategory() {
   select.value = suggested;
   select.onchange?.();
   showProductCategoryHint(`Category picked from the name: ${label}. Change it if that's wrong.`);
- } else if (select.value !== suggested && select.value !== 'dropship' && select.value !== 'arts') {
-  // Dropship and Arts & Crafts are kept as chosen (see buysell_products_assign_category).
+ } else if (select.value !== suggested && !CATEGORIES_KEPT_AS_CHOSEN.has(select.value)) {
   showProductCategoryHint(`From its name this is ${label}, so it will be listed there. You can change it after publishing.`);
  } else {
   showProductCategoryHint('');
@@ -3729,6 +3731,10 @@ const CATEGORY_PAGE_LABELS = {
  beauty: 'Beauty & Health',
  sports: 'Sports',
  arts: 'Arts & Crafts',
+ 'toys & games': 'Toys & Games',
+ 'musical instruments': 'Musical Instruments',
+ 'services': 'Services & Classes',
+ 'vehicles': 'Vehicles',
  dropship: 'Dropshipping Products',
  upcoming: 'Upcoming Products',
 };
@@ -3745,12 +3751,17 @@ const CATEGORY_PAGE_URLS = {
  beauty: '/category/beauty',
  sports: '/category/sports',
  arts: '/category/arts',
+ 'toys & games': '/category/toys-games',
+ 'musical instruments': '/category/musical-instruments',
+ 'services': '/category/services',
+ 'vehicles': '/category/vehicles',
  dropship: '/category/dropship',
  upcoming: '/upcoming',
 };
 
 const MARKETPLACE_BUILTIN_CATEGORIES = new Set([
- 'all', 'trending', 'electronics', 'phones', 'fashion', 'women', 'men', 'home', 'beauty', 'sports', 'arts', 'dropship', 'upcoming'
+ 'all', 'trending', 'electronics', 'phones', 'fashion', 'women', 'men', 'home', 'beauty', 'sports', 'arts',
+ 'toys & games', 'musical instruments', 'services', 'vehicles', 'dropship', 'upcoming'
 ]);
 
 function normalizeProductCategory(value = '') {
@@ -7159,7 +7170,7 @@ async function submitProduct(e) {
  const condVal = document.getElementById('p-condition').value;
  const locVal = document.getElementById('p-location').value.trim();
 
- const VALID_CATS = ['electronics','fashion','home','phones','beauty','sports','arts','dropship','other'];
+ const VALID_CATS = ['electronics','fashion','home','phones','beauty','sports','arts','toys & games','musical instruments','services','vehicles','dropship','other'];
  const VALID_CONDS = ['new','used-like-new','used-good'];
 
  if (!nameVal || nameVal.length < 3) { toast('Invalid name','Product name must be at least 3 characters','warn'); return; }// Change this line inside submitProduct(e)

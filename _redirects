@@ -10,6 +10,10 @@
 /category-beauty.html /category/beauty 301
 /category-sports.html /category/sports 301
 /category-arts.html /category/arts 301
+/category-toys-games.html /category/toys-games 301
+/category-musical-instruments.html /category/musical-instruments 301
+/category-services.html /category/services 301
+/category-vehicles.html /category/vehicles 301
 /category-dropship.html /category/dropship 301
 /category-trending /category/trending 301
 /category-phones /category/phones 301
@@ -19,6 +23,10 @@
 /category-beauty /category/beauty 301
 /category-sports /category/sports 301
 /category-arts /category/arts 301
+/category-toys-games /category/toys-games 301
+/category-musical-instruments /category/musical-instruments 301
+/category-services /category/services 301
+/category-vehicles /category/vehicles 301
 /category-dropship /category/dropship 301
 /products /products.html 200
 /upcoming /upcoming.html 200
@@ -33,5 +41,9 @@
 /category/beauty /category-beauty.html 200
 /category/sports /category-sports.html 200
 /category/arts /category-arts.html 200
+/category/toys-games /category-toys-games.html 200
+/category/musical-instruments /category-musical-instruments.html 200
+/category/services /category-services.html 200
+/category/vehicles /category-vehicles.html 200
 /category/dropship /category-dropship.html 200
 /manage /index.html 200

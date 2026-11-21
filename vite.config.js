@@ -19,6 +19,10 @@ const htmlEntries = {
   'category-beauty': 'category-beauty.html',
   'category-sports': 'category-sports.html',
   'category-arts': 'category-arts.html',
+  'category-toys-games': 'category-toys-games.html',
+  'category-musical-instruments': 'category-musical-instruments.html',
+  'category-services': 'category-services.html',
+  'category-vehicles': 'category-vehicles.html',
   'category-dropship': 'category-dropship.html',
 };
 

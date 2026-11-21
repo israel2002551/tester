@@ -37,6 +37,10 @@ const cleanRouteCopies = [
   ['category-beauty.html', 'category/beauty/index.html'],
   ['category-sports.html', 'category/sports/index.html'],
   ['category-arts.html', 'category/arts/index.html'],
+  ['category-toys-games.html', 'category/toys-games/index.html'],
+  ['category-musical-instruments.html', 'category/musical-instruments/index.html'],
+  ['category-services.html', 'category/services/index.html'],
+  ['category-vehicles.html', 'category/vehicles/index.html'],
   ['category-dropship.html', 'category/dropship/index.html'],
 ];
 

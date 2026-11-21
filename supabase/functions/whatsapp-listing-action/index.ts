@@ -9,8 +9,8 @@ const corsHeaders = {
 };
 
 const PRODUCT_COLUMNS = "id,seller_id,name,description,price,original_price,shipping_fee,shipping_cost,category,condition,location,images,videos,image_url,video_url,has_video,stock_quantity,status,created_at,negotiable";
-// Built-in categories, plus the ones created when the "Other" products were
-// sorted (20261120000000_recategorise_other_products.sql).
+// The marketplace's categories, each with its own page (src/lib/categoryData.js).
+// "other" is for what the importer cannot place.
 const NATIVE_CATEGORIES = new Set([
   "electronics", "fashion", "home", "phones", "beauty", "sports", "arts", "dropship",
   "toys & games", "musical instruments", "services", "vehicles", "other",
@@ -445,6 +445,22 @@ function nativeCategory(input: unknown) {
     toys: "toys & games",
     "toys and games": "toys & games",
     "musical instrument": "musical instruments",
+    "health & beauty": "beauty",
+    furniture: "home",
+    "kitchen & appliances": "home",
+    "home appliances": "home",
+    laptops: "electronics",
+    computers: "electronics",
+    gaming: "electronics",
+    "sports & fitness": "sports",
+    "sports & outdoors": "sports",
+    clothing: "fashion",
+    shoes: "fashion",
+    bags: "fashion",
+    watches: "fashion",
+    jewelry: "fashion",
+    jewellery: "fashion",
+    accessories: "fashion",
   };
   const mapped = aliases[raw] || raw;
   return NATIVE_CATEGORIES.has(mapped) ? mapped : "other";

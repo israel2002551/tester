@@ -67,6 +67,30 @@ export const categoryConfig = {
     icon: 'fa-palette',
     searchPlaceholder: 'Search arts and crafts...',
   },
+  'toys & games': {
+    title: 'Toys & Games',
+    subtitle: 'Toys, games, puzzles, and learning toys for children.',
+    icon: 'fa-puzzle-piece',
+    searchPlaceholder: 'Search toys and games...',
+  },
+  'musical instruments': {
+    title: 'Musical Instruments',
+    subtitle: 'Guitars, keyboards, drums, and studio gear.',
+    icon: 'fa-guitar',
+    searchPlaceholder: 'Search musical instruments...',
+  },
+  'services': {
+    title: 'Services & Classes',
+    subtitle: 'Classes, repairs, events, and other services from BUYSELL sellers.',
+    icon: 'fa-handshake',
+    searchPlaceholder: 'Search services...',
+  },
+  'vehicles': {
+    title: 'Vehicles',
+    subtitle: 'Cars, motorcycles, and vehicle parts.',
+    icon: 'fa-car',
+    searchPlaceholder: 'Search vehicles...',
+  },
   dropship: {
     title: '1688 & Dropship Deals',
     subtitle: 'Sourcing-ready products for bulk orders and resellers.',
@@ -93,6 +117,10 @@ export const categoryLinks = [
   ['Beauty', '/category/beauty', 'beauty'],
   ['Sports', '/category/sports', 'sports'],
   ['Arts & Crafts', '/category/arts', 'arts'],
+  ['Toys & Games', '/category/toys-games', 'toys & games'],
+  ['Musical Instruments', '/category/musical-instruments', 'musical instruments'],
+  ['Services & Classes', '/category/services', 'services'],
+  ['Vehicles', '/category/vehicles', 'vehicles'],
   ['Dropship', '/category/dropship', 'dropship'],
   ['Upcoming', '/upcoming', 'upcoming'],
 ];
@@ -110,6 +138,10 @@ export const categoryImages = {
   beauty: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=1200&h=900&fit=crop&q=80',
   sports: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=1200&h=900&fit=crop&q=80',
   arts: 'https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=1200&h=900&fit=crop&q=80',
+  'toys & games': 'https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?w=1200&h=900&fit=crop&q=80',
+  'musical instruments': 'https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=1200&h=900&fit=crop&q=80',
+  'services': 'https://images.unsplash.com/photo-1521791136064-7986c2920216?w=1200&h=900&fit=crop&q=80',
+  'vehicles': 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=1200&h=900&fit=crop&q=80',
   dropship: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1200&h=900&fit=crop&q=80',
   upcoming: 'https://images.unsplash.com/photo-1556742502-ec7c0e9f34b1?w=1200&h=900&fit=crop&q=80',
 };
