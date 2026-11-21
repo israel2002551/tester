@@ -144,13 +144,23 @@ async function requireDashboardAdmin(admin: ReturnType<typeof createClient>, req
   return { id: user.id, email };
 }
 
-function safeUrl(input: unknown, expectedCloudName = "") {
+// BUYSELL's Cloudinary accounts: tlulgsk1 holds the older media, dgxodmnp the
+// newer uploads (from 2026-11-21). Media from either, or from the account the
+// secrets name, is accepted, so switching accounts never drops an import.
+function allowedCloudNames() {
+  const extra = value(Deno.env.get("CLOUDINARY_ALLOWED_CLOUD_NAMES"), 500).split(",");
+  return [...new Set(["tlulgsk1", "dgxodmnp", value(Deno.env.get("CLOUDINARY_CLOUD_NAME"), 120), ...extra]
+    .map((name) => name.trim())
+    .filter(Boolean))];
+}
+
+function safeUrl(input: unknown, allowedClouds: string[] = []) {
   const text = value(input, 2_000);
   try {
     const url = new URL(text);
     if (url.protocol !== "https:") return "";
-    if (expectedCloudName && url.hostname !== "res.cloudinary.com") return "";
-    if (expectedCloudName && !url.pathname.startsWith(`/${expectedCloudName}/`)) return "";
+    if (allowedClouds.length && url.hostname !== "res.cloudinary.com") return "";
+    if (allowedClouds.length && !allowedClouds.some((cloud) => url.pathname.startsWith(`/${cloud}/`))) return "";
     return url.toString();
   } catch {
     return "";
@@ -162,7 +172,7 @@ function requireCollectorSecret(req: Request) {
   return Boolean(ingestSecret && req.headers.get("x-whatsapp-ingest-secret") === ingestSecret);
 }
 
-function queuePayload(input: unknown, cloudName: string) {
+function queuePayload(input: unknown, cloudName: string[]) {
   const raw = input && typeof input === "object" ? input as Record<string, unknown> : {};
   const rawMedia = Array.isArray(raw.media) ? raw.media : [];
   const media = rawMedia.slice(0, 30).map((item) => {
@@ -213,7 +223,7 @@ async function queueListingJob(admin: ReturnType<typeof createClient>, req: Requ
   const dedupeKey = value(body.dedupe_key, 300);
   const rawMessageIds = Array.isArray(body.message_ids) ? body.message_ids : [];
   const messageIds = [...new Set(rawMessageIds.map((id) => value(id, 300)).filter(Boolean))].slice(0, 100);
-  const cloudName = value(Deno.env.get("CLOUDINARY_CLOUD_NAME"), 120) || "tlulgsk1";
+  const cloudName = allowedCloudNames();
   const payload = queuePayload(body.payload, cloudName);
 
   if (!validGroupJid(groupJid) || !senderJid || dedupeKey.length < 16 || messageIds.length === 0) {
@@ -540,7 +550,7 @@ async function ingest(admin: ReturnType<typeof createClient>, req: Request, body
     return json({ error: "This WhatsApp group is not approved for BUYSELL imports." }, 403);
   }
 
-  const cloudName = value(Deno.env.get("CLOUDINARY_CLOUD_NAME"), 120) || "tlulgsk1";
+  const cloudName = allowedCloudNames();
   const rawMedia = Array.isArray(body.media) ? body.media : [];
   const media = rawMedia.slice(0, 30).map((item) => {
     const row = item && typeof item === "object" ? item as Record<string, unknown> : {};

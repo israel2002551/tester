@@ -3616,7 +3616,10 @@ function productThumbnail(product = {}, size = 600) {
  const videos = Array.isArray(product.videos) ? product.videos.filter(Boolean) : [];
  const video = String(product.video_url || videos[0] || '');
  if (!video.includes('res.cloudinary.com/') || !video.includes('/video/upload/')) return '';
- const still = video.replace('/video/upload/', `/video/upload/so_auto,c_fill,w_${size},h_${size},q_auto/`).split('?')[0];
+ // Two sizes only (Cloudinary bills each resized copy), in the format the
+ // React pages use, so both share one copy.
+ const width = Number(size) <= 200 ? 160 : 480;
+ const still = video.replace('/video/upload/', `/video/upload/so_auto,q_auto,c_fill,w_${width},h_${width}/`).split('?')[0];
  return /\.(mp4|mov|webm|m4v|avi|mkv)$/i.test(still) ? still.replace(/\.[a-z0-9]+$/i, '.jpg') : `${still}.jpg`;
 }
 
@@ -4153,7 +4156,8 @@ function closeMarketplaceSuggest() {
 function marketplaceSuggestThumb(product) {
  const source = productThumbnail(product, 96) || PRODUCT_PLACEHOLDER_IMAGE;
  if (!source.includes('res.cloudinary.com/') || !source.includes('/image/upload/')) return source;
- return source.replace('/image/upload/', '/image/upload/f_auto,q_auto,c_fill,g_auto,w_96,h_96/');
+ // The product page's 160 px thumbnail, so no extra copy is made.
+ return source.replace('/image/upload/', '/image/upload/f_auto,q_auto:good,dpr_auto,c_fill,g_auto,w_160,h_160/');
 }
 
 function marketplaceDisplayPrice(product) {

@@ -32,12 +32,6 @@ function isConfigError(error) {
   return message.includes('invalid api key') || message.includes('supabase config unavailable') || message.includes('jwt');
 }
 
-function cloudinarySrcSet(url, widths = [640, 960, 1280]) {
-  const source = String(url || '');
-  if (!source.includes('res.cloudinary.com/') || !source.includes('/upload/')) return undefined;
-  return widths.map(width => `${cloudinaryImage(source, width)} ${width}w`).join(', ');
-}
-
 async function fetchSellerProfile(db, sellerId) {
   if (!sellerId) return null;
   for (const columns of profileColumnFallbacks) {
@@ -439,9 +433,7 @@ export default function ProductPage() {
                       </div>
                     ) : (
                       <img 
-                        src={cloudinaryImage(item.url, 1280) || item.url} 
-                        srcSet={cloudinarySrcSet(item.url)} 
-                        sizes="(max-width: 640px) 100vw, 55vw" 
+                        src={cloudinaryImage(item.url, 1280) || item.url}
                         alt={`${product.name || 'Product'} - media ${index + 1}`} 
                         loading={index === 0 ? 'eager' : 'lazy'}
                         decoding="async" 

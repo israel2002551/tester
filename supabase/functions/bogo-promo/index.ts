@@ -427,7 +427,9 @@ function publicImage(product: Record<string, unknown>) {
   const videos = Array.isArray(product.videos) ? product.videos : [];
   const video = cleanString(product.video_url, 1_500) || cleanString(videos[0], 1_500);
   if (!video.includes("res.cloudinary.com/") || !video.includes("/video/upload/")) return null;
-  const still = video.replace("/video/upload/", "/video/upload/so_auto,c_fill,w_600,h_600,q_auto/").split("?")[0];
+  // The 480 px still the site's cards use (src/lib/productData.js), so
+  // Cloudinary makes no extra copy.
+  const still = video.replace("/video/upload/", "/video/upload/so_auto,q_auto,c_fill,w_480,h_480/").split("?")[0];
   return /\.(mp4|mov|webm|m4v|avi|mkv)$/i.test(still) ? still.replace(/\.[a-z0-9]+$/i, ".jpg") : `${still}.jpg`;
 }
 

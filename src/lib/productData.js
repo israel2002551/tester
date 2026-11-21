@@ -14,10 +14,19 @@ export function shippingFee(product = {}) {
   return Math.max(0, Number(product.shipping_fee ?? product.shipping_cost ?? product.shipping ?? 0) || 0);
 }
 
+// Cloudinary bills each resized copy it makes, so every picture comes in only
+// three sizes: 160 px and 480 px squares, and 1280 px full pictures. app.js
+// (productThumbnail) and bogo-promo use the same video-still sizes.
+function standardWidth(requested, square) {
+  if (!square) return 1280;
+  return Number(requested) <= 200 ? 160 : 480;
+}
+
 // Cloudinary rejects image transforms (f_auto, g_auto) on /video/upload/, so videos get a first-frame JPG poster.
-export function cloudinaryImage(url, width, { square = false } = {}) {
+export function cloudinaryImage(url, requestedWidth, { square = false } = {}) {
   const source = String(url || '');
   if (!source.includes('res.cloudinary.com/') || !source.includes('/upload/')) return source;
+  const width = standardWidth(requestedWidth, square);
   if (source.includes('/video/upload/')) {
     const crop = square ? `c_fill,w_${width},h_${width}` : `c_limit,w_${width}`;
     return source
